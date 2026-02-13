@@ -181,48 +181,165 @@ function calculate() {
     volumeL *= GALLONS_TO_LITERS;
   }
 
-  // Read source water from dropdown/preset
-  const sourceWater = getSourceWater();
-  // Convert source bicarbonate to alkalinity as CaCO3: alk = HCO3 * (50.045 / 61.017)
-  const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * (50.045 / 61.017);
-
-  // Mineral deltas (target - source), floored at 0
-  const deltaCa = Math.max(0, (parseFloat(targetCa.value) || 0) - (sourceWater.calcium || 0));
-  const deltaMg = Math.max(0, (parseFloat(targetMg.value) || 0) - (sourceWater.magnesium || 0));
-  const deltaAlk = Math.max(0, (parseFloat(targetAlk.value) || 0) - sourceAlkAsCaCO3);
-
-  // Grams of each salt needed per liter, then scaled to volume
-  const epsomPerL = (deltaMg * MG_TO_EPSOM) / 1000; // convert mg to g
-  const cacl2PerL = (deltaCa * CA_TO_CACL2) / 1000;
-
-  let bufferPerL;
-  if (currentBuffer === "potassium-bicarb") {
-    bufferPerL = (deltaAlk * ALK_TO_POTASSIUM_BICARB) / 1000;
-  } else {
-    bufferPerL = (deltaAlk * ALK_TO_BAKING_SODA) / 1000;
+  // Guard against divide-by-zero / nonsense volume
+  if (!volumeL || volumeL <= 0) {
+    resultEpsom.textContent = "0.00 g";
+    resultBuffer.textContent = "0.00 g";
+    resultCaCl2.textContent = "0.00 g";
+    resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
+    return;
   }
 
+  // Read source water from dropdown/preset
+  const sourceWater = getSourceWater();
+
+  // ---------------------------
+  // Conversions & constants
+  // ---------------------------
+  // Fractions by mass for each salt form
+  // CaCl2·2H2O (MW 147.01): Ca 40.078, Cl2 70.906
+  const FRAC_CA_IN_CACL2_2H2O = 40.078 / 147.01; // ~0.2725
+  const FRAC_CL_IN_CACL2_2H2O = 70.906 / 147.01; // ~0.4820
+
+  // MgSO4·7H2O (MW 246.47): Mg 24.305, SO4 96.06
+  const FRAC_MG_IN_MGSO4_7H2O = 24.305 / 246.47; // ~0.0986
+  const FRAC_SO4_IN_MGSO4_7H2O = 96.06 / 246.47; // ~0.3896
+
+  // KHCO3 (MW 100.115): K 39.0983, HCO3 61.017
+  const FRAC_K_IN_KHCO3 = 39.0983 / 100.115; // ~0.3909
+  const FRAC_HCO3_IN_KHCO3 = 61.017 / 100.115; // ~0.6091
+
+  // NaHCO3 (MW 84.007): Na 22.989, HCO3 61.017
+  const FRAC_NA_IN_NAHCO3 = 22.989 / 84.007; // ~0.2737
+  const FRAC_HCO3_IN_NAHCO3 = 61.017 / 84.007; // ~0.7263
+
+  // Hardness/alkalinity conversions (ppm as CaCO3)
+  const CA_TO_CACO3 = 2.497; // Ca ppm -> GH contribution (as CaCO3)
+  const MG_TO_CACO3 = 4.118; // Mg ppm -> GH contribution (as CaCO3)
+  const HCO3_TO_CACO3 = 50.045 / 61.017; // ~0.8197 (HCO3 ppm -> alkalinity as CaCO3)
+
+  // Convert source bicarbonate to alkalinity as CaCO3: alk_as_CaCO3 = HCO3 * (50.045 / 61.017)
+  const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
+
+  // ---------------------------
+  // Targets (UI)
+  // ---------------------------
+  // NOTE: In the existing UI, targetAlk is "alkalinity as CaCO3" (mg/L as CaCO3)
+  const targetCaMgL = parseFloat(targetCa.value) || 0; // mg/L Ca
+  const targetMgMgL = parseFloat(targetMg.value) || 0; // mg/L Mg
+  const targetAlkAsCaCO3 = parseFloat(targetAlk.value) || 0; // mg/L as CaCO3
+
+  // Mineral deltas (target - source), floored at 0
+  const deltaCa = Math.max(0, targetCaMgL - (sourceWater.calcium || 0));
+  const deltaMg = Math.max(0, targetMgMgL - (sourceWater.magnesium || 0));
+  const deltaAlkAsCaCO3 = Math.max(0, targetAlkAsCaCO3 - sourceAlkAsCaCO3);
+
+  // ---------------------------
+  // Compute salt dosing (per L)
+  // ---------------------------
+  // To get X mg/L of Mg, need X * (MW_salt / MW_element) mg/L of salt
+  // MG_TO_EPSOM and CA_TO_CACL2 are defined earlier in the file
+  const epsomPerL = (deltaMg * MG_TO_EPSOM) / 1000; // grams per liter
+  const cacl2PerL = (deltaCa * CA_TO_CACL2) / 1000; // grams per liter
+
+  // Buffer dosing:
+  // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
+  let bufferPerL;
+  if (currentBuffer === "potassium-bicarb") {
+    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_POTASSIUM_BICARB) / 1000; // grams per liter
+  } else {
+    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_BAKING_SODA) / 1000; // grams per liter
+  }
+
+  // Total grams for the full volume
   const epsomTotal = epsomPerL * volumeL;
   const bufferTotal = bufferPerL * volumeL;
   const cacl2Total = cacl2PerL * volumeL;
 
-  // Display results
+  // Display grams
   resultEpsom.textContent = formatGrams(epsomTotal);
   resultBuffer.textContent = formatGrams(bufferTotal);
   resultCaCl2.textContent = formatGrams(cacl2Total);
 
-  // Summary
-  const totalTDS = (parseFloat(targetCa.value) || 0) +
-                   (parseFloat(targetMg.value) || 0) +
-                   (parseFloat(targetAlk.value) || 0);
+  // ---------------------------
+  // Compute resulting ions (mg/L)
+  // ---------------------------
+  // Final Ca and Mg are simply source + delta (since we only add minerals)
+  const finalCa = (sourceWater.calcium || 0) + deltaCa; // mg/L
+  const finalMg = (sourceWater.magnesium || 0) + deltaMg; // mg/L
 
+  // Convert salt grams/L to mg/L of salt
+  const mgL_epsom = epsomPerL * 1000;
+  const mgL_cacl2 = cacl2PerL * 1000;
+  const mgL_buffer = bufferPerL * 1000;
+
+  // Ions contributed by added salts (source presets do not track these, assume 0 in source)
+  const addedCl = mgL_cacl2 * FRAC_CL_IN_CACL2_2H2O;
+  const addedSO4 = mgL_epsom * FRAC_SO4_IN_MGSO4_7H2O;
+
+  // Buffer ions (either K + HCO3 or Na + HCO3)
+  const addedHCO3 =
+    currentBuffer === "potassium-bicarb"
+      ? mgL_buffer * FRAC_HCO3_IN_KHCO3
+      : mgL_buffer * FRAC_HCO3_IN_NAHCO3;
+
+  const addedK = currentBuffer === "potassium-bicarb" ? mgL_buffer * FRAC_K_IN_KHCO3 : 0;
+  const addedNa = currentBuffer === "baking-soda" ? mgL_buffer * FRAC_NA_IN_NAHCO3 : 0;
+
+  // Final bicarbonate (mg/L) is source bicarbonate + added bicarbonate
+  const finalHCO3 = (sourceWater.bicarbonate || 0) + addedHCO3;
+
+  // Final other ions (mg/L)
+  const finalCl = addedCl;
+  const finalSO4 = addedSO4;
+  const finalK = addedK;
+  const finalNa = addedNa;
+
+  // ---------------------------
+  // GH / KH
+  // ---------------------------
+  const GH_asCaCO3 = finalCa * CA_TO_CACO3 + finalMg * MG_TO_CACO3;
+  const KH_asCaCO3 = finalHCO3 * HCO3_TO_CACO3;
+
+  // ---------------------------
+  // TDS reporting
+  // ---------------------------
+  // 1) Added-salts, mass-based "TDS" (mg/L of salts added)
+  const TDS_added_salts = mgL_epsom + mgL_cacl2 + mgL_buffer;
+
+  // 2) Ion-sum approximation (sum of major ions we track), mg/L
+  // This is NOT the same as conductivity-based TDS meters, but it is intuitive.
+  const TDS_ion_sum =
+    finalCa + finalMg + finalHCO3 + finalCl + finalSO4 + finalK + finalNa;
+
+  // Sulfate:Chloride ratio
+  const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
+
+  const bufferLabel = currentBuffer === "potassium-bicarb" ? "K" : "Na";
+  const bufferIonPpm = currentBuffer === "potassium-bicarb" ? finalK : finalNa;
+
+  // Summary HTML
   resultSummary.innerHTML =
-    `<strong>Estimated TDS:</strong> ~${Math.round(totalTDS)} mg/L &nbsp;|&nbsp; ` +
-    `<strong>Hardness:</strong> ~${Math.round(deltaCa * 2.5 + deltaMg * 4.1)} mg/L as CaCO\u2083 &nbsp;|&nbsp; ` +
-    `<strong>Buffer:</strong> ~${Math.round(deltaAlk)} mg/L as CaCO\u2083`;
+    `<div style="line-height:1.5">` +
+      `<div><strong>TDS (added salts, mass-based):</strong> ~${Math.round(TDS_added_salts)} mg/L</div>` +
+      `<div><strong>TDS (ion-sum approx):</strong> ~${Math.round(TDS_ion_sum)} mg/L</div>` +
+      `<div><strong>GH:</strong> ~${Math.round(GH_asCaCO3)} mg/L as CaCO\u2083</div>` +
+      `<div><strong>KH:</strong> ~${Math.round(KH_asCaCO3)} mg/L as CaCO\u2083</div>` +
+      `<div><strong>SO\u2084:Cl ratio:</strong> ${so4ToCl === null ? "—" : so4ToCl.toFixed(2)}</div>` +
+      `<hr style="border:none;border-top:1px solid #ddd;margin:8px 0" />` +
+      `<div><strong>Final ions (mg/L):</strong> ` +
+        `Ca ${finalCa.toFixed(2)} | ` +
+        `Mg ${finalMg.toFixed(2)} | ` +
+        `HCO\u2083 ${finalHCO3.toFixed(2)} | ` +
+        `SO\u2084 ${finalSO4.toFixed(2)} | ` +
+        `Cl ${finalCl.toFixed(2)} | ` +
+        `${bufferLabel} ${bufferIonPpm.toFixed(2)}` +
+      `</div>` +
+    `</div>`;
 }
 
 function formatGrams(g) {
+  if (!isFinite(g) || g <= 0) return "0.00 g";
   if (g < 0.01) return "0.00 g";
   if (g < 1) return g.toFixed(2) + " g";
   return g.toFixed(2) + " g";
