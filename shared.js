@@ -1,0 +1,176 @@
+// ============================================
+// Shared utilities across all pages
+// ============================================
+
+// --- Mineral database ---
+// Each mineral salt and the ions it contributes per gram dissolved in 1 liter
+const MINERAL_DB = {
+  "calcium-chloride": {
+    name: "Calcium Chloride",
+    formula: "CaCl\u2082\u00b72H\u2082O",
+    mw: 147.01,
+    description: "Adds calcium and chloride. Increases sweetness and body.",
+    ions: {
+      calcium:  40.078  / 147.01,  // g Ca per g salt
+      chloride: 70.906  / 147.01   // g Cl per g salt (2 * 35.453)
+    }
+  },
+  "epsom-salt": {
+    name: "Epsom Salt",
+    formula: "MgSO\u2084\u00b77H\u2082O",
+    mw: 246.47,
+    description: "Adds magnesium and sulfate. Enhances fruity notes and clarity.",
+    ions: {
+      magnesium: 24.305  / 246.47,
+      sulfate:   96.06   / 246.47
+    }
+  },
+  "baking-soda": {
+    name: "Baking Soda",
+    formula: "NaHCO\u2083",
+    mw: 84.007,
+    description: "Adds sodium and bicarbonate (alkalinity/KH). Buffers acidity.",
+    ions: {
+      sodium:      22.99   / 84.007,
+      bicarbonate: 61.017  / 84.007
+    }
+  },
+  "potassium-bicarbonate": {
+    name: "Potassium Bicarbonate",
+    formula: "KHCO\u2083",
+    mw: 100.115,
+    description: "Sodium-free alkalinity source. Adds potassium and bicarbonate.",
+    ions: {
+      potassium:   39.098  / 100.115,
+      bicarbonate: 61.017  / 100.115
+    }
+  },
+  "magnesium-chloride": {
+    name: "Magnesium Chloride",
+    formula: "MgCl\u2082\u00b76H\u2082O",
+    mw: 203.30,
+    description: "Adds magnesium and chloride. Fruity notes with added body.",
+    ions: {
+      magnesium: 24.305  / 203.30,
+      chloride:  70.906  / 203.30
+    }
+  },
+  "gypsum": {
+    name: "Gypsum",
+    formula: "CaSO\u2084\u00b72H\u2082O",
+    mw: 172.17,
+    description: "Adds calcium and sulfate. Sweetness with crisp clarity.",
+    ions: {
+      calcium: 40.078  / 172.17,
+      sulfate: 96.06   / 172.17
+    }
+  },
+  "potassium-chloride": {
+    name: "Potassium Chloride",
+    formula: "KCl",
+    mw: 74.551,
+    description: "Adds potassium and chloride. Salt substitute, adds body.",
+    ions: {
+      potassium: 39.098  / 74.551,
+      chloride:  35.453  / 74.551
+    }
+  },
+  "sodium-chloride": {
+    name: "Sodium Chloride",
+    formula: "NaCl",
+    mw: 58.44,
+    description: "Table salt. Adds sodium and chloride. Small amounts enhance sweetness.",
+    ions: {
+      sodium:   22.99   / 58.44,
+      chloride: 35.453  / 58.44
+    }
+  }
+};
+
+// --- localStorage helpers ---
+function saveSourceWater(profile) {
+  localStorage.setItem("cw_source_water", JSON.stringify(profile));
+}
+
+function loadSourceWater() {
+  const saved = localStorage.getItem("cw_source_water");
+  if (saved) {
+    return JSON.parse(saved);
+  }
+  return { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+}
+
+function saveSelectedMinerals(mineralIds) {
+  localStorage.setItem("cw_selected_minerals", JSON.stringify(mineralIds));
+}
+
+function loadSelectedMinerals() {
+  const saved = localStorage.getItem("cw_selected_minerals");
+  if (saved) {
+    return JSON.parse(saved);
+  }
+  // Default selection
+  return ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+}
+
+// --- Navigation ---
+function injectNav() {
+  const currentPage = window.location.pathname.split("/").pop() || "index.html";
+  const pages = [
+    { href: "index.html",    label: "Profiles" },
+    { href: "minerals.html", label: "Settings" },
+    { href: "taste.html",    label: "Taste Tuner" },
+    { href: "recipe.html",   label: "Recipe Builder" }
+  ];
+
+  const nav = document.createElement("nav");
+  nav.className = "site-nav";
+  nav.innerHTML = pages.map(p =>
+    `<a href="${p.href}" class="${currentPage === p.href ? "active" : ""}">${p.label}</a>`
+  ).join("");
+
+  document.body.insertBefore(nav, document.body.firstChild);
+}
+
+// --- Ion calculation from grams of minerals ---
+// Given an object { mineralId: gramsPerLiter, ... }, returns ion PPMs
+function calculateIonPPMs(mineralGrams) {
+  const ions = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0
+  };
+
+  for (const [mineralId, grams] of Object.entries(mineralGrams)) {
+    const mineral = MINERAL_DB[mineralId];
+    if (!mineral) continue;
+    for (const [ion, fraction] of Object.entries(mineral.ions)) {
+      ions[ion] += grams * fraction * 1000; // g/L * fraction * 1000 = mg/L
+    }
+  }
+
+  return ions;
+}
+
+// --- Derived water metrics ---
+function calculateMetrics(ions) {
+  // GH (General Hardness) as mg/L CaCO3
+  const gh = ions.calcium * (100.09 / 40.078) + ions.magnesium * (100.09 / 24.305);
+
+  // KH (Carbonate Hardness) as mg/L CaCO3
+  // 1 mg/L HCO3 = (50.045 / 61.017) mg/L as CaCO3
+  const kh = ions.bicarbonate * (50.045 / 61.017);
+
+  // TDS — sum of all ions
+  const tds = ions.calcium + ions.magnesium + ions.potassium +
+              ions.sodium + ions.sulfate + ions.chloride + ions.bicarbonate;
+
+  return { gh, kh, tds };
+}
+
+// --- Run nav injection on load ---
+document.addEventListener("DOMContentLoaded", injectNav);

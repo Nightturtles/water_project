@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Coffee Water Calculator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Coffee Water Calculator</h1>
+    <p class="subtitle">Dial in your water chemistry for better coffee</p>
+  </header>
+
+  <main>
+    <!-- Step 1: Volume -->
+    <section class="card">
+      <h2>1. How much water?</h2>
+      <div class="input-group">
+        <label for="volume">Volume</label>
+        <div class="input-with-unit">
+          <input type="number" id="volume" value="1" min="0.1" step="0.1">
+          <select id="volume-unit">
+            <option value="liters">Liters</option>
+            <option value="gallons">Gallons</option>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Source Water -->
+    <section class="card">
+      <h2>2. Starting water</h2>
+      <p class="hint">If using distilled or reverse osmosis water, leave these at 0.</p>
+      <div class="input-row">
+        <div class="input-group">
+          <label for="source-calcium">Calcium (mg/L)</label>
+          <input type="number" id="source-calcium" value="0" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="source-magnesium">Magnesium (mg/L)</label>
+          <input type="number" id="source-magnesium" value="0" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="source-alkalinity">Alkalinity (mg/L as CaCO3)</label>
+          <input type="number" id="source-alkalinity" value="0" min="0" step="1">
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 3: Target Profile -->
+    <section class="card">
+      <h2>3. Target water profile</h2>
+      <div class="profile-buttons">
+        <button class="profile-btn active" data-profile="sca">SCA Standard</button>
+        <button class="profile-btn" data-profile="rao">Rao Water</button>
+        <button class="profile-btn" data-profile="hendon-light">Light Roast</button>
+        <button class="profile-btn" data-profile="hendon-espresso">Espresso</button>
+        <button class="profile-btn" data-profile="custom">Custom</button>
+      </div>
+      <div class="input-row target-inputs">
+        <div class="input-group">
+          <label for="target-calcium">Calcium (mg/L)</label>
+          <input type="number" id="target-calcium" value="51" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="target-magnesium">Magnesium (mg/L)</label>
+          <input type="number" id="target-magnesium" value="17" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="target-alkalinity">Alkalinity (mg/L as CaCO3)</label>
+          <input type="number" id="target-alkalinity" value="40" min="0" step="1">
+        </div>
+      </div>
+      <p class="profile-description" id="profile-description">
+        SCA recommended range for brewing water. Balanced body and clarity.
+      </p>
+    </section>
+
+    <!-- Step 4: Buffer Source -->
+    <section class="card">
+      <h2>4. Buffer (alkalinity source)</h2>
+      <div class="profile-buttons">
+        <button class="buffer-btn active" data-buffer="baking-soda">Baking Soda</button>
+        <button class="buffer-btn" data-buffer="potassium-bicarb">Potassium Bicarbonate</button>
+      </div>
+      <p class="buffer-description" id="buffer-description">
+        Sodium bicarbonate (NaHCO3) — cheap and easy to find at any grocery store.
+      </p>
+    </section>
+
+    <!-- Results -->
+    <section class="card results-card">
+      <h2>Add to your water</h2>
+      <p class="hint">Using distilled/RO water as your base, add these mineral salts:</p>
+      <div class="results">
+        <div class="result-item">
+          <div class="result-info">
+            <span class="result-name">Epsom Salt</span>
+            <span class="result-detail">Magnesium sulfate (MgSO4 &middot; 7H2O)</span>
+          </div>
+          <span class="result-value" id="result-epsom">0.00 g</span>
+        </div>
+        <div class="result-item" id="buffer-result">
+          <div class="result-info">
+            <span class="result-name" id="buffer-result-name">Baking Soda</span>
+            <span class="result-detail" id="buffer-result-detail">Sodium bicarbonate (NaHCO3)</span>
+          </div>
+          <span class="result-value" id="result-buffer">0.00 g</span>
+        </div>
+        <div class="result-item">
+          <div class="result-info">
+            <span class="result-name">Calcium Chloride</span>
+            <span class="result-detail">CaCl2 &middot; 2H2O (food-grade flakes)</span>
+          </div>
+          <span class="result-value" id="result-calcium-chloride">0.00 g</span>
+        </div>
+      </div>
+      <div class="result-summary" id="result-summary"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>
+  </footer>
+
+  <script src="shared.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

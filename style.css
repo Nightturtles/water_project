@@ -1,0 +1,705 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  --blue-50: #eff6ff;
+  --blue-100: #dbeafe;
+  --blue-500: #3b82f6;
+  --blue-600: #2563eb;
+  --blue-700: #1d4ed8;
+  --green-600: #16a34a;
+  --red-600: #dc2626;
+  --gray-50: #f9fafb;
+  --gray-100: #f3f4f6;
+  --gray-200: #e5e7eb;
+  --gray-300: #d1d5db;
+  --gray-500: #6b7280;
+  --gray-700: #374151;
+  --gray-900: #111827;
+  --radius: 12px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--gray-50);
+  color: var(--gray-900);
+  line-height: 1.6;
+  min-height: 100vh;
+}
+
+/* ========================
+   Navigation
+   ======================== */
+.site-nav {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.75rem 1rem;
+  background: white;
+  border-bottom: 1px solid var(--gray-200);
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+
+.site-nav a {
+  padding: 0.4rem 0.85rem;
+  border-radius: 8px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  transition: all 0.15s ease;
+}
+
+.site-nav a:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.site-nav a.active {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  font-weight: 600;
+}
+
+/* ========================
+   Header
+   ======================== */
+header {
+  text-align: center;
+  padding: 1.5rem 1rem 1rem;
+}
+
+header h1 {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.subtitle {
+  color: var(--gray-500);
+  font-size: 0.95rem;
+  margin-top: 0.25rem;
+}
+
+/* ========================
+   Layout
+   ======================== */
+main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 0 1rem 2rem;
+}
+
+/* ========================
+   Cards
+   ======================== */
+.card {
+  background: white;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--gray-200);
+}
+
+.card h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+}
+
+.hint {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  margin-bottom: 0.75rem;
+}
+
+.hint a {
+  color: var(--blue-600);
+}
+
+/* ========================
+   Inputs
+   ======================== */
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.input-group label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
+.input-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.source-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+input[type="number"],
+select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: white;
+  color: var(--gray-900);
+  width: 100%;
+}
+
+input[type="number"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.input-with-unit {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.input-with-unit input {
+  flex: 1;
+}
+
+.input-with-unit select {
+  width: 120px;
+  flex-shrink: 0;
+}
+
+/* ========================
+   Buttons (profiles, buffers, presets)
+   ======================== */
+.profile-buttons,
+.source-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.profile-btn,
+.buffer-btn,
+.preset-btn,
+.taste-preset-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: white;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: var(--gray-700);
+}
+
+.profile-btn:hover,
+.buffer-btn:hover,
+.preset-btn:hover,
+.taste-preset-btn:hover {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+}
+
+.profile-btn.active,
+.buffer-btn.active,
+.preset-btn.active,
+.taste-preset-btn.active {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+  color: var(--blue-700);
+  font-weight: 500;
+}
+
+.profile-description,
+.buffer-description {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  font-style: italic;
+}
+
+.target-inputs {
+  margin-bottom: 0.75rem;
+}
+
+/* ========================
+   Results (index page)
+   ======================== */
+.results-card {
+  border-color: var(--blue-500);
+  border-width: 2px;
+}
+
+.results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+}
+
+.result-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.result-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.result-detail {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.result-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--blue-600);
+  white-space: nowrap;
+}
+
+.result-summary {
+  margin-top: 1rem;
+  padding: 0.75rem;
+  background: var(--blue-50);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--gray-700);
+  line-height: 1.5;
+}
+
+.result-summary:empty {
+  display: none;
+}
+
+/* ========================
+   Minerals page
+   ======================== */
+.mineral-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mineral-item {
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 0.75rem;
+  transition: all 0.15s ease;
+}
+
+.mineral-item.selected {
+  border-color: var(--blue-500);
+  background: var(--blue-50);
+}
+
+.mineral-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.mineral-label input[type="checkbox"] {
+  margin-top: 0.25rem;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--blue-600);
+  flex-shrink: 0;
+}
+
+.mineral-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.mineral-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.mineral-formula {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  font-family: "Georgia", serif;
+}
+
+.mineral-desc {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  margin-top: 0.15rem;
+}
+
+/* Save status toast */
+.save-status {
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--green-600);
+  margin-top: 0.75rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.save-status.visible {
+  opacity: 1;
+}
+
+/* ========================
+   Taste Tuner page — Sliders
+   ======================== */
+.slider-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.slider-item {
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.slider-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.25rem;
+}
+
+.slider-header label {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.slider-value {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: var(--blue-600);
+  min-width: 2rem;
+  text-align: right;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  margin-bottom: 0.35rem;
+}
+
+input[type="range"] {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--gray-200);
+  border-radius: 3px;
+  outline: none;
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blue-600);
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+input[type="range"]::-moz-range-thumb {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--blue-600);
+  cursor: pointer;
+  border: 3px solid white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.slider-hint {
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-style: italic;
+  margin-top: 0.35rem;
+}
+
+/* Taste result grid */
+.result-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.result-cell {
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+}
+
+.result-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+
+.result-ppm {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.result-unit {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+.result-delta {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-height: 1.1em;
+}
+
+.result-delta.positive {
+  color: var(--green-600);
+}
+
+.result-delta.negative {
+  color: var(--red-600);
+}
+
+/* ========================
+   Metrics row (GH, KH, TDS)
+   ======================== */
+.metrics-row {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.metric {
+  flex: 1;
+  text-align: center;
+  padding: 0.75rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+}
+
+.metric.highlight {
+  background: var(--blue-50);
+}
+
+.metric-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.metric-value {
+  display: block;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--blue-700);
+}
+
+.metric-unit {
+  display: block;
+  font-size: 0.65rem;
+  color: var(--gray-500);
+}
+
+/* ========================
+   Recipe Builder page
+   ======================== */
+.base-water-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.base-tag {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  background: var(--gray-100);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--gray-700);
+}
+
+.mineral-inputs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.mineral-input-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+}
+
+.mineral-input-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.mineral-input-name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.mineral-input-formula {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.mineral-input-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.mineral-input-field input {
+  width: 90px;
+  text-align: right;
+}
+
+.mineral-input-unit {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  white-space: nowrap;
+}
+
+/* PPM grid */
+.ppm-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.ppm-cell {
+  text-align: center;
+  padding: 0.75rem 0.5rem;
+  background: var(--gray-50);
+  border-radius: 8px;
+}
+
+.ppm-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-weight: 500;
+}
+
+.ppm-value {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--gray-900);
+}
+
+.ppm-unit {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+/* ========================
+   Footer
+   ======================== */
+footer {
+  text-align: center;
+  padding: 1rem;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+/* ========================
+   Responsive
+   ======================== */
+@media (max-width: 500px) {
+  .input-row {
+    grid-template-columns: 1fr;
+  }
+
+  .source-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .profile-buttons,
+  .source-presets {
+    flex-direction: column;
+  }
+
+  .profile-btn,
+  .buffer-btn,
+  .preset-btn,
+  .taste-preset-btn {
+    width: 100%;
+    text-align: center;
+  }
+
+  .result-value {
+    font-size: 1.1rem;
+  }
+
+  .result-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ppm-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .site-nav {
+    flex-wrap: wrap;
+  }
+
+  .metrics-row {
+    flex-direction: column;
+  }
+}

@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Taste Tuner - Coffee Water Calculator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Taste Tuner</h1>
+    <p class="subtitle">Start from a water profile and adjust by taste</p>
+  </header>
+
+  <main>
+    <!-- Current Water Profile -->
+    <section class="card">
+      <h2>Current Water Profile</h2>
+      <p class="hint">Enter the water recipe you're currently using, or start from a preset.</p>
+
+      <div class="profile-buttons">
+        <button class="taste-preset-btn active" data-preset="sca">SCA Standard</button>
+        <button class="taste-preset-btn" data-preset="rao">Rao Water</button>
+        <button class="taste-preset-btn" data-preset="light">Light Roast</button>
+        <button class="taste-preset-btn" data-preset="custom">Custom</button>
+      </div>
+
+      <div class="source-grid">
+        <div class="input-group">
+          <label for="cur-calcium">Calcium (mg/L)</label>
+          <input type="number" id="cur-calcium" value="51" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-magnesium">Magnesium (mg/L)</label>
+          <input type="number" id="cur-magnesium" value="17" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-potassium">Potassium (mg/L)</label>
+          <input type="number" id="cur-potassium" value="0" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-sodium">Sodium (mg/L)</label>
+          <input type="number" id="cur-sodium" value="10" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-sulfate">Sulfate (mg/L)</label>
+          <input type="number" id="cur-sulfate" value="17" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-chloride">Chloride (mg/L)</label>
+          <input type="number" id="cur-chloride" value="35" min="0" step="1">
+        </div>
+        <div class="input-group">
+          <label for="cur-bicarbonate">Bicarbonate (mg/L)</label>
+          <input type="number" id="cur-bicarbonate" value="49" min="0" step="1">
+        </div>
+      </div>
+    </section>
+
+    <!-- Taste Sliders -->
+    <section class="card">
+      <h2>How do you want to change it?</h2>
+      <p class="hint">Move the sliders based on what you want more or less of in the cup. Center = no change.</p>
+
+      <div class="slider-group">
+        <div class="slider-item">
+          <div class="slider-header">
+            <label>Acidity / Brightness</label>
+            <span class="slider-value" id="val-acidity">0</span>
+          </div>
+          <div class="slider-labels">
+            <span>Mellow / Flat</span>
+            <span>Bright / Acidic</span>
+          </div>
+          <input type="range" id="slider-acidity" min="-5" max="5" value="0" step="1">
+          <p class="slider-hint">Lower KH = more brightness and perceived acidity</p>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-header">
+            <label>Flavor Separation / Clarity</label>
+            <span class="slider-value" id="val-clarity">0</span>
+          </div>
+          <div class="slider-labels">
+            <span>Blended / Muddled</span>
+            <span>Separated / Clear</span>
+          </div>
+          <input type="range" id="slider-clarity" min="-5" max="5" value="0" step="1">
+          <p class="slider-hint">More Mg + sulfate, less chloride = more clarity and separation</p>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-header">
+            <label>Fruitiness</label>
+            <span class="slider-value" id="val-fruit">0</span>
+          </div>
+          <div class="slider-labels">
+            <span>Less Fruit</span>
+            <span>More Fruit</span>
+          </div>
+          <input type="range" id="slider-fruit" min="-5" max="5" value="0" step="1">
+          <p class="slider-hint">More Mg = more fruit expression; excess Ca/Cl can mute fruitiness</p>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-header">
+            <label>Sweetness</label>
+            <span class="slider-value" id="val-sweet">0</span>
+          </div>
+          <div class="slider-labels">
+            <span>Less Sweet</span>
+            <span>More Sweet</span>
+          </div>
+          <input type="range" id="slider-sweet" min="-5" max="5" value="0" step="1">
+          <p class="slider-hint">More calcium = more perceived sweetness</p>
+        </div>
+
+        <div class="slider-item">
+          <div class="slider-header">
+            <label>Body</label>
+            <span class="slider-value" id="val-body">0</span>
+          </div>
+          <div class="slider-labels">
+            <span>Lighter / Thinner</span>
+            <span>Heavier / Fuller</span>
+          </div>
+          <input type="range" id="slider-body" min="-5" max="5" value="0" step="1">
+          <p class="slider-hint">More Ca + Cl = heavier body; more Mg + SO4 = lighter body</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Adjusted Result -->
+    <section class="card results-card">
+      <h2>Adjusted Water Profile</h2>
+      <p class="hint">Your new target water profile after taste adjustments:</p>
+
+      <div class="result-grid">
+        <div class="result-cell">
+          <span class="result-label">Calcium</span>
+          <span class="result-ppm" id="res-calcium">51</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-calcium"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Magnesium</span>
+          <span class="result-ppm" id="res-magnesium">17</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-magnesium"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Potassium</span>
+          <span class="result-ppm" id="res-potassium">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-potassium"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Sodium</span>
+          <span class="result-ppm" id="res-sodium">10</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-sodium"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Sulfate</span>
+          <span class="result-ppm" id="res-sulfate">17</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-sulfate"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Chloride</span>
+          <span class="result-ppm" id="res-chloride">35</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-chloride"></span>
+        </div>
+        <div class="result-cell">
+          <span class="result-label">Bicarbonate</span>
+          <span class="result-ppm" id="res-bicarbonate">49</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta" id="delta-bicarbonate"></span>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="metric">
+          <span class="metric-label">GH</span>
+          <span class="metric-value" id="res-gh">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">KH</span>
+          <span class="metric-value" id="res-kh">--</span>
+        </div>
+        <div class="metric">
+          <span class="metric-label">TDS</span>
+          <span class="metric-value" id="res-tds">--</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
+  </footer>
+
+  <script src="shared.js"></script>
+  <script>
+    // --- Taste presets ---
+    const TASTE_PRESETS = {
+      sca: {
+        calcium: 51, magnesium: 17, potassium: 0, sodium: 10,
+        sulfate: 17, chloride: 35, bicarbonate: 49
+      },
+      rao: {
+        calcium: 39, magnesium: 16, potassium: 0, sodium: 11,
+        sulfate: 16, chloride: 27, bicarbonate: 49
+      },
+      light: {
+        calcium: 25, magnesium: 35, potassium: 0, sodium: 0,
+        sulfate: 35, chloride: 0, bicarbonate: 25
+      }
+    };
+
+    const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
+    const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
+
+    // --- Slider adjustment factors ---
+    // Each slider step adjusts ions by these amounts (mg/L per step)
+    // Positive slider = more of the taste attribute
+    const SLIDER_EFFECTS = {
+      acidity: {
+        // More brightness = less KH (bicarbonate)
+        bicarbonate: -6
+      },
+      clarity: {
+        // More clarity = more Mg, more sulfate, less chloride
+        magnesium: 2,
+        sulfate: 4,
+        chloride: -3
+      },
+      fruit: {
+        // More fruit = more Mg; reduce Ca and Cl slightly
+        magnesium: 3,
+        calcium: -2,
+        chloride: -2
+      },
+      sweet: {
+        // More sweetness = more calcium
+        calcium: 4
+      },
+      body: {
+        // More body = more Ca + Cl, less Mg + SO4
+        calcium: 3,
+        chloride: 4,
+        magnesium: -2,
+        sulfate: -3
+      }
+    };
+
+    // --- Preset buttons ---
+    document.querySelectorAll(".taste-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        const preset = btn.dataset.preset;
+        if (preset === "custom") return;
+
+        const values = TASTE_PRESETS[preset];
+        ION_FIELDS.forEach(ion => {
+          document.getElementById("cur-" + ion).value = values[ion];
+        });
+        recalculate();
+      });
+    });
+
+    // --- Input change handlers ---
+    ION_FIELDS.forEach(ion => {
+      document.getElementById("cur-" + ion).addEventListener("input", () => {
+        document.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
+        document.querySelector('[data-preset="custom"]').classList.add("active");
+        recalculate();
+      });
+    });
+
+    // --- Slider handlers ---
+    SLIDERS.forEach(slider => {
+      const el = document.getElementById("slider-" + slider);
+      const valEl = document.getElementById("val-" + slider);
+      el.addEventListener("input", () => {
+        const v = parseInt(el.value);
+        valEl.textContent = (v > 0 ? "+" : "") + v;
+        recalculate();
+      });
+    });
+
+    // --- Core recalculation ---
+    function recalculate() {
+      // Start with base profile
+      const base = {};
+      ION_FIELDS.forEach(ion => {
+        base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
+      });
+
+      // Apply slider adjustments
+      const adjusted = { ...base };
+      SLIDERS.forEach(slider => {
+        const val = parseInt(document.getElementById("slider-" + slider).value) || 0;
+        const effects = SLIDER_EFFECTS[slider];
+        for (const [ion, perStep] of Object.entries(effects)) {
+          adjusted[ion] += val * perStep;
+        }
+      });
+
+      // Floor at 0
+      ION_FIELDS.forEach(ion => {
+        adjusted[ion] = Math.max(0, Math.round(adjusted[ion]));
+      });
+
+      // Display adjusted values and deltas
+      ION_FIELDS.forEach(ion => {
+        document.getElementById("res-" + ion).textContent = adjusted[ion];
+        const delta = adjusted[ion] - Math.round(base[ion]);
+        const deltaEl = document.getElementById("delta-" + ion);
+        if (delta > 0) {
+          deltaEl.textContent = "+" + delta;
+          deltaEl.className = "result-delta positive";
+        } else if (delta < 0) {
+          deltaEl.textContent = delta;
+          deltaEl.className = "result-delta negative";
+        } else {
+          deltaEl.textContent = "";
+          deltaEl.className = "result-delta";
+        }
+      });
+
+      // Metrics
+      const metrics = calculateMetrics(adjusted);
+      document.getElementById("res-gh").textContent = Math.round(metrics.gh) + " mg/L";
+      document.getElementById("res-kh").textContent = Math.round(metrics.kh) + " mg/L";
+      document.getElementById("res-tds").textContent = Math.round(metrics.tds) + " mg/L";
+    }
+
+    // --- Initial calculation ---
+    recalculate();
+  </script>
+</body>
+</html>

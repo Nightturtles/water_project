@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - Coffee Water Calculator</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>Settings</h1>
+    <p class="subtitle">Select the minerals you have on hand and set your starting water</p>
+  </header>
+
+  <main>
+    <!-- Available Minerals -->
+    <section class="card">
+      <h2>Available Minerals</h2>
+      <p class="hint">Check the minerals you have. These will appear on the other pages.</p>
+      <div class="mineral-list" id="mineral-list">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Source Water Profile -->
+    <section class="card">
+      <h2>My Starting Water</h2>
+      <p class="hint">Enter your tap or base water profile. This will be used as the starting point across all pages. If using distilled or RO water, leave everything at 0.</p>
+
+      <div class="source-presets">
+        <button class="preset-btn active" data-preset="distilled">Distilled / RO</button>
+        <button class="preset-btn" data-preset="soft-tap">Soft Tap Water</button>
+        <button class="preset-btn" data-preset="hard-tap">Hard Tap Water</button>
+        <button class="preset-btn" data-preset="custom">Custom</button>
+      </div>
+
+      <div class="source-grid">
+        <div class="input-group">
+          <label for="src-calcium">Calcium (mg/L)</label>
+          <input type="number" id="src-calcium" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-magnesium">Magnesium (mg/L)</label>
+          <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-potassium">Potassium (mg/L)</label>
+          <input type="number" id="src-potassium" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-sodium">Sodium (mg/L)</label>
+          <input type="number" id="src-sodium" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-sulfate">Sulfate (mg/L)</label>
+          <input type="number" id="src-sulfate" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-chloride">Chloride (mg/L)</label>
+          <input type="number" id="src-chloride" value="0" min="0" step="0.1">
+        </div>
+        <div class="input-group">
+          <label for="src-bicarbonate">Bicarbonate (mg/L)</label>
+          <input type="number" id="src-bicarbonate" value="0" min="0" step="0.1">
+        </div>
+      </div>
+
+      <div class="save-status" id="save-status"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Your selections are saved automatically and shared across all pages.</p>
+  </footer>
+
+  <script src="shared.js"></script>
+  <script>
+    // --- Source water presets ---
+    const SOURCE_PRESETS = {
+      distilled: {
+        calcium: 0, magnesium: 0, potassium: 0, sodium: 0,
+        sulfate: 0, chloride: 0, bicarbonate: 0
+      },
+      "soft-tap": {
+        calcium: 15, magnesium: 3, potassium: 1, sodium: 10,
+        sulfate: 5, chloride: 12, bicarbonate: 30
+      },
+      "hard-tap": {
+        calcium: 60, magnesium: 15, potassium: 2, sodium: 20,
+        sulfate: 25, chloride: 30, bicarbonate: 120
+      }
+    };
+
+    const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
+
+    // --- Populate mineral list ---
+    const mineralListEl = document.getElementById("mineral-list");
+    const selectedMinerals = loadSelectedMinerals();
+
+    for (const [id, mineral] of Object.entries(MINERAL_DB)) {
+      const checked = selectedMinerals.includes(id);
+      const div = document.createElement("div");
+      div.className = "mineral-item" + (checked ? " selected" : "");
+      div.innerHTML = `
+        <label class="mineral-label">
+          <input type="checkbox" value="${id}" ${checked ? "checked" : ""}>
+          <div class="mineral-info">
+            <span class="mineral-name">${mineral.name}</span>
+            <span class="mineral-formula">${mineral.formula}</span>
+            <span class="mineral-desc">${mineral.description}</span>
+          </div>
+        </label>
+      `;
+      mineralListEl.appendChild(div);
+    }
+
+    // --- Handle mineral selection ---
+    mineralListEl.addEventListener("change", (e) => {
+      if (e.target.type !== "checkbox") return;
+      const item = e.target.closest(".mineral-item");
+      item.classList.toggle("selected", e.target.checked);
+
+      const checked = mineralListEl.querySelectorAll("input:checked");
+      const ids = Array.from(checked).map(cb => cb.value);
+      saveSelectedMinerals(ids);
+      showSaved();
+    });
+
+    // --- Load and populate source water ---
+    const sourceWater = loadSourceWater();
+    ION_FIELDS.forEach(ion => {
+      const input = document.getElementById("src-" + ion);
+      input.value = sourceWater[ion] || 0;
+    });
+
+    // --- Source water input changes ---
+    ION_FIELDS.forEach(ion => {
+      const input = document.getElementById("src-" + ion);
+      input.addEventListener("input", () => {
+        // Switch to custom preset
+        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+        document.querySelector('[data-preset="custom"]').classList.add("active");
+        saveCurrentSource();
+      });
+    });
+
+    // --- Preset buttons ---
+    document.querySelectorAll(".preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+
+        const preset = btn.dataset.preset;
+        if (preset === "custom") return;
+
+        const values = SOURCE_PRESETS[preset];
+        ION_FIELDS.forEach(ion => {
+          document.getElementById("src-" + ion).value = values[ion];
+        });
+        saveCurrentSource();
+      });
+    });
+
+    function saveCurrentSource() {
+      const profile = {};
+      ION_FIELDS.forEach(ion => {
+        profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      });
+      saveSourceWater(profile);
+      showSaved();
+    }
+
+    function showSaved() {
+      const el = document.getElementById("save-status");
+      el.textContent = "Saved!";
+      el.classList.add("visible");
+      setTimeout(() => el.classList.remove("visible"), 1500);
+    }
+  </script>
+</body>
+</html>
