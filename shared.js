@@ -87,6 +87,28 @@ const MINERAL_DB = {
   }
 };
 
+// --- Source water presets ---
+const SOURCE_PRESETS = {
+  distilled: {
+    label: "Distilled / RO",
+    calcium: 0, magnesium: 0, potassium: 0, sodium: 0,
+    sulfate: 0, chloride: 0, bicarbonate: 0
+  },
+  "soft-tap": {
+    label: "Soft Tap Water",
+    calcium: 15, magnesium: 3, potassium: 1, sodium: 10,
+    sulfate: 5, chloride: 12, bicarbonate: 30
+  },
+  "hard-tap": {
+    label: "Hard Tap Water",
+    calcium: 60, magnesium: 15, potassium: 2, sodium: 20,
+    sulfate: 25, chloride: 30, bicarbonate: 120
+  },
+  custom: {
+    label: "Custom"
+  }
+};
+
 // --- localStorage helpers ---
 function saveSourceWater(profile) {
   localStorage.setItem("cw_source_water", JSON.stringify(profile));
@@ -98,6 +120,63 @@ function loadSourceWater() {
     return JSON.parse(saved);
   }
   return { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+}
+
+function saveSourcePresetName(name) {
+  localStorage.setItem("cw_source_preset", name);
+}
+
+function loadSourcePresetName() {
+  return localStorage.getItem("cw_source_preset") || "distilled";
+}
+
+// --- Custom profile helpers ---
+function slugify(name) {
+  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function loadCustomProfiles() {
+  const saved = localStorage.getItem("cw_custom_profiles");
+  return saved ? JSON.parse(saved) : {};
+}
+
+function saveCustomProfiles(profiles) {
+  localStorage.setItem("cw_custom_profiles", JSON.stringify(profiles));
+}
+
+function deleteCustomProfile(key) {
+  const profiles = loadCustomProfiles();
+  delete profiles[key];
+  saveCustomProfiles(profiles);
+}
+
+// Returns built-in presets merged with saved custom profiles.
+// Custom profiles are inserted before the "custom" entry.
+function getAllPresets() {
+  const custom = loadCustomProfiles();
+  const result = {};
+  for (const [key, value] of Object.entries(SOURCE_PRESETS)) {
+    if (key === "custom") {
+      // Insert custom profiles before the "Custom" entry
+      for (const [ck, cv] of Object.entries(custom)) {
+        result[ck] = cv;
+      }
+    }
+    result[key] = value;
+  }
+  return result;
+}
+
+// Returns the ion values for a given preset name (or custom from localStorage)
+function getSourceWaterByPreset(presetName) {
+  if (presetName === "custom") {
+    return loadSourceWater();
+  }
+  // Check built-in presets first, then custom profiles
+  const preset = SOURCE_PRESETS[presetName] || loadCustomProfiles()[presetName];
+  if (!preset) return loadSourceWater();
+  const { label, ...ions } = preset;
+  return ions;
 }
 
 function saveSelectedMinerals(mineralIds) {

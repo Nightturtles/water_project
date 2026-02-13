@@ -72,9 +72,8 @@ let currentBuffer = "baking-soda";
 // --- DOM elements ---
 const volumeInput = document.getElementById("volume");
 const volumeUnit = document.getElementById("volume-unit");
-const sourceCa = document.getElementById("source-calcium");
-const sourceMg = document.getElementById("source-magnesium");
-const sourceAlk = document.getElementById("source-alkalinity");
+const sourcePresetSelect = document.getElementById("source-preset");
+const sourceWaterTags = document.getElementById("source-water-tags");
 const targetCa = document.getElementById("target-calcium");
 const targetMg = document.getElementById("target-magnesium");
 const targetAlk = document.getElementById("target-alkalinity");
@@ -86,6 +85,30 @@ const resultEpsom = document.getElementById("result-epsom");
 const resultBuffer = document.getElementById("result-buffer");
 const resultCaCl2 = document.getElementById("result-calcium-chloride");
 const resultSummary = document.getElementById("result-summary");
+
+// --- Populate source water dropdown ---
+Object.entries(getAllPresets()).forEach(([key, preset]) => {
+  const opt = document.createElement("option");
+  opt.value = key;
+  opt.textContent = preset.label;
+  sourcePresetSelect.appendChild(opt);
+});
+sourcePresetSelect.value = loadSourcePresetName();
+
+function getSourceWater() {
+  return getSourceWaterByPreset(sourcePresetSelect.value);
+}
+
+function updateSourceWaterTags() {
+  const water = getSourceWater();
+  const ions = ["calcium", "magnesium", "bicarbonate"];
+  const labels = { calcium: "Ca", magnesium: "Mg", bicarbonate: "HCO\u2083" };
+  sourceWaterTags.innerHTML = ions
+    .map(ion => `<span class="base-tag">${labels[ion]}: ${water[ion] || 0} mg/L</span>`)
+    .join("");
+}
+
+updateSourceWaterTags();
 
 // --- Profile button handling ---
 document.querySelectorAll(".profile-btn").forEach(btn => {
@@ -137,8 +160,15 @@ document.querySelectorAll(".buffer-btn").forEach(btn => {
   });
 });
 
+// --- Source water dropdown change ---
+sourcePresetSelect.addEventListener("change", () => {
+  saveSourcePresetName(sourcePresetSelect.value);
+  updateSourceWaterTags();
+  calculate();
+});
+
 // --- Recalculate on any input change ---
-[volumeInput, volumeUnit, sourceCa, sourceMg, sourceAlk].forEach(el => {
+[volumeInput, volumeUnit].forEach(el => {
   el.addEventListener("input", calculate);
   el.addEventListener("change", calculate);
 });
@@ -151,10 +181,15 @@ function calculate() {
     volumeL *= GALLONS_TO_LITERS;
   }
 
+  // Read source water from dropdown/preset
+  const sourceWater = getSourceWater();
+  // Convert source bicarbonate to alkalinity as CaCO3: alk = HCO3 * (50.045 / 61.017)
+  const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * (50.045 / 61.017);
+
   // Mineral deltas (target - source), floored at 0
-  const deltaCa = Math.max(0, (parseFloat(targetCa.value) || 0) - (parseFloat(sourceCa.value) || 0));
-  const deltaMg = Math.max(0, (parseFloat(targetMg.value) || 0) - (parseFloat(sourceMg.value) || 0));
-  const deltaAlk = Math.max(0, (parseFloat(targetAlk.value) || 0) - (parseFloat(sourceAlk.value) || 0));
+  const deltaCa = Math.max(0, (parseFloat(targetCa.value) || 0) - (sourceWater.calcium || 0));
+  const deltaMg = Math.max(0, (parseFloat(targetMg.value) || 0) - (sourceWater.magnesium || 0));
+  const deltaAlk = Math.max(0, (parseFloat(targetAlk.value) || 0) - sourceAlkAsCaCO3);
 
   // Grams of each salt needed per liter, then scaled to volume
   const epsomPerL = (deltaMg * MG_TO_EPSOM) / 1000; // convert mg to g

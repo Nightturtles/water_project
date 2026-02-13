@@ -28,15 +28,17 @@
       </div>
     </section>
 
-    <!-- Base Water (from minerals page) -->
+    <!-- Base Water -->
     <section class="card">
       <h2>Base Water</h2>
-      <p class="hint">
-        Loaded from your <a href="minerals.html">Settings</a> page.
-      </p>
-      <div class="base-water-summary" id="base-water-summary">
-        <!-- Populated by JS -->
+      <p class="hint">Select your base water. Configure custom values on the <a href="minerals.html">Settings</a> page.</p>
+      <div class="input-group">
+        <label for="source-preset">Source Water</label>
+        <select id="source-preset">
+          <!-- Populated by JS from SOURCE_PRESETS -->
+        </select>
       </div>
+      <div class="source-water-tags" id="source-water-tags"></div>
     </section>
 
     <!-- Mineral Additions -->
@@ -115,18 +117,40 @@
     const GALLONS_TO_LITERS = 3.78541;
     const ION_NAMES = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
 
-    // --- Load base water ---
-    const baseWater = loadSourceWater();
-    const baseSummaryEl = document.getElementById("base-water-summary");
+    // --- Source water dropdown ---
+    const sourcePresetSelect = document.getElementById("source-preset");
+    const sourceWaterTags = document.getElementById("source-water-tags");
 
-    const nonZeroIons = ION_NAMES.filter(ion => baseWater[ion] > 0);
-    if (nonZeroIons.length === 0) {
-      baseSummaryEl.innerHTML = '<span class="base-tag">Distilled / RO (all zeros)</span>';
-    } else {
-      baseSummaryEl.innerHTML = ION_NAMES
-        .map(ion => `<span class="base-tag">${capitalize(ion)}: ${baseWater[ion]} mg/L</span>`)
-        .join("");
+    Object.entries(getAllPresets()).forEach(([key, preset]) => {
+      const opt = document.createElement("option");
+      opt.value = key;
+      opt.textContent = preset.label;
+      sourcePresetSelect.appendChild(opt);
+    });
+    sourcePresetSelect.value = loadSourcePresetName();
+
+    let baseWater = getSourceWaterByPreset(sourcePresetSelect.value);
+
+    function updateSourceWaterTags() {
+      const water = baseWater;
+      const nonZeroIons = ION_NAMES.filter(ion => water[ion] > 0);
+      if (nonZeroIons.length === 0) {
+        sourceWaterTags.innerHTML = '<span class="base-tag">All zeros</span>';
+      } else {
+        sourceWaterTags.innerHTML = ION_NAMES
+          .filter(ion => water[ion] > 0)
+          .map(ion => `<span class="base-tag">${capitalize(ion)}: ${water[ion]} mg/L</span>`)
+          .join("");
+      }
     }
+    updateSourceWaterTags();
+
+    sourcePresetSelect.addEventListener("change", () => {
+      saveSourcePresetName(sourcePresetSelect.value);
+      baseWater = getSourceWaterByPreset(sourcePresetSelect.value);
+      updateSourceWaterTags();
+      recalculate();
+    });
 
     // --- Load selected minerals and build inputs ---
     const selectedMinerals = loadSelectedMinerals();

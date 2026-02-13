@@ -31,21 +31,14 @@
     <!-- Step 2: Source Water -->
     <section class="card">
       <h2>2. Starting water</h2>
-      <p class="hint">If using distilled or reverse osmosis water, leave these at 0.</p>
-      <div class="input-row">
-        <div class="input-group">
-          <label for="source-calcium">Calcium (mg/L)</label>
-          <input type="number" id="source-calcium" value="0" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="source-magnesium">Magnesium (mg/L)</label>
-          <input type="number" id="source-magnesium" value="0" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="source-alkalinity">Alkalinity (mg/L as CaCO3)</label>
-          <input type="number" id="source-alkalinity" value="0" min="0" step="1">
-        </div>
+      <p class="hint">Select your base water. Configure custom values on the <a href="minerals.html">Settings</a> page.</p>
+      <div class="input-group">
+        <label for="source-preset">Source Water</label>
+        <select id="source-preset">
+          <!-- Populated by JS from SOURCE_PRESETS -->
+        </select>
       </div>
+      <div class="source-water-tags" id="source-water-tags"></div>
     </section>
 
     <!-- Step 3: Target Profile -->

@@ -34,6 +34,11 @@
         <button class="preset-btn" data-preset="custom">Custom</button>
       </div>
 
+      <div class="save-bar" id="save-bar" style="display:none;">
+        <input type="text" id="profile-name" placeholder="Name this profile..." maxlength="40">
+        <button id="save-profile-btn" class="preset-btn">Save</button>
+      </div>
+
       <div class="source-grid">
         <div class="input-group">
           <label for="src-calcium">Calcium (mg/L)</label>
@@ -75,23 +80,11 @@
 
   <script src="shared.js"></script>
   <script>
-    // --- Source water presets ---
-    const SOURCE_PRESETS = {
-      distilled: {
-        calcium: 0, magnesium: 0, potassium: 0, sodium: 0,
-        sulfate: 0, chloride: 0, bicarbonate: 0
-      },
-      "soft-tap": {
-        calcium: 15, magnesium: 3, potassium: 1, sodium: 10,
-        sulfate: 5, chloride: 12, bicarbonate: 30
-      },
-      "hard-tap": {
-        calcium: 60, magnesium: 15, potassium: 2, sodium: 20,
-        sulfate: 25, chloride: 30, bicarbonate: 120
-      }
-    };
-
     const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
+    const presetsContainer = document.querySelector(".source-presets");
+    const saveBar = document.getElementById("save-bar");
+    const profileNameInput = document.getElementById("profile-name");
+    const saveProfileBtn = document.getElementById("save-profile-btn");
 
     // --- Populate mineral list ---
     const mineralListEl = document.getElementById("mineral-list");
@@ -127,38 +120,137 @@
     });
 
     // --- Load and populate source water ---
+    const savedPreset = loadSourcePresetName();
     const sourceWater = loadSourceWater();
     ION_FIELDS.forEach(ion => {
       const input = document.getElementById("src-" + ion);
       input.value = sourceWater[ion] || 0;
     });
 
+    // --- Render saved custom profile buttons on load ---
+    function renderCustomButtons() {
+      // Remove existing custom profile buttons
+      presetsContainer.querySelectorAll(".preset-btn[data-custom]").forEach(b => b.remove());
+      const customBtn = presetsContainer.querySelector('[data-preset="custom"]');
+      const profiles = loadCustomProfiles();
+      for (const [key, profile] of Object.entries(profiles)) {
+        const btn = createCustomPresetButton(key, profile.label);
+        presetsContainer.insertBefore(btn, customBtn);
+      }
+    }
+
+    function createCustomPresetButton(key, label) {
+      const btn = document.createElement("button");
+      btn.className = "preset-btn";
+      btn.dataset.preset = key;
+      btn.dataset.custom = "true";
+      btn.innerHTML = `${label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
+      btn.addEventListener("click", (e) => {
+        if (e.target.classList.contains("preset-delete")) return;
+        activatePreset(key);
+      });
+      return btn;
+    }
+
+    renderCustomButtons();
+
+    // Highlight the saved preset button
+    function highlightPreset(presetName) {
+      presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+      const btn = presetsContainer.querySelector(`[data-preset="${presetName}"]`);
+      if (btn) btn.classList.add("active");
+      // Show/hide save bar
+      saveBar.style.display = presetName === "custom" ? "flex" : "none";
+    }
+    highlightPreset(savedPreset);
+
+    // --- Activate a preset (built-in or custom) ---
+    function activatePreset(presetName) {
+      presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+      const btn = presetsContainer.querySelector(`[data-preset="${presetName}"]`);
+      if (btn) btn.classList.add("active");
+
+      saveSourcePresetName(presetName);
+      saveBar.style.display = presetName === "custom" ? "flex" : "none";
+
+      if (presetName === "custom") return;
+
+      const values = getSourceWaterByPreset(presetName);
+      ION_FIELDS.forEach(ion => {
+        document.getElementById("src-" + ion).value = values[ion] || 0;
+      });
+      saveCurrentSource();
+    }
+
     // --- Source water input changes ---
     ION_FIELDS.forEach(ion => {
       const input = document.getElementById("src-" + ion);
       input.addEventListener("input", () => {
         // Switch to custom preset
-        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
-        document.querySelector('[data-preset="custom"]').classList.add("active");
+        presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
+        presetsContainer.querySelector('[data-preset="custom"]').classList.add("active");
+        saveSourcePresetName("custom");
+        saveBar.style.display = "flex";
         saveCurrentSource();
       });
     });
 
-    // --- Preset buttons ---
-    document.querySelectorAll(".preset-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
-
-        const preset = btn.dataset.preset;
-        if (preset === "custom") return;
-
-        const values = SOURCE_PRESETS[preset];
-        ION_FIELDS.forEach(ion => {
-          document.getElementById("src-" + ion).value = values[ion];
-        });
-        saveCurrentSource();
+    // --- Built-in preset buttons ---
+    presetsContainer.querySelectorAll(".preset-btn:not([data-custom])").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        activatePreset(btn.dataset.preset);
       });
+    });
+
+    // --- Delete custom profile ---
+    presetsContainer.addEventListener("click", (e) => {
+      const deleteTarget = e.target.dataset.delete;
+      if (!deleteTarget) return;
+      e.stopPropagation();
+      deleteCustomProfile(deleteTarget);
+      const btn = presetsContainer.querySelector(`[data-preset="${deleteTarget}"]`);
+      if (btn) btn.remove();
+      // If the deleted profile was active, fall back to distilled
+      if (loadSourcePresetName() === deleteTarget) {
+        activatePreset("distilled");
+      }
+    });
+
+    // --- Save custom profile ---
+    saveProfileBtn.addEventListener("click", () => {
+      const name = profileNameInput.value.trim();
+      if (!name) return;
+
+      const key = slugify(name);
+      if (!key || SOURCE_PRESETS[key]) return; // Don't overwrite built-in presets
+
+      // Read current ion values
+      const profile = { label: name };
+      ION_FIELDS.forEach(ion => {
+        profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      });
+
+      // Save to localStorage
+      const profiles = loadCustomProfiles();
+      profiles[key] = profile;
+      saveCustomProfiles(profiles);
+
+      // Re-render custom buttons
+      renderCustomButtons();
+
+      // Activate the new profile
+      activatePreset(key);
+
+      // Reset custom inputs to zeros and save
+      ION_FIELDS.forEach(ion => {
+        document.getElementById("src-" + ion).value = 0;
+      });
+      saveSourceWater({ calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 });
+
+      // Clear name input
+      profileNameInput.value = "";
+
+      showSaved();
     });
 
     function saveCurrentSource() {
