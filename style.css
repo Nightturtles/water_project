@@ -5,20 +5,21 @@
 }
 
 :root {
-  --blue-50: #eff6ff;
-  --blue-100: #dbeafe;
+  --blue-50: #1e293b;
+  --blue-100: #1e3a5f;
   --blue-500: #3b82f6;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-  --green-600: #16a34a;
-  --red-600: #dc2626;
-  --gray-50: #f9fafb;
-  --gray-100: #f3f4f6;
-  --gray-200: #e5e7eb;
-  --gray-300: #d1d5db;
-  --gray-500: #6b7280;
-  --gray-700: #374151;
-  --gray-900: #111827;
+  --blue-600: #60a5fa;
+  --blue-700: #93bbfd;
+  --green-600: #4ade80;
+  --red-600: #f87171;
+  --gray-50: #0f172a;
+  --gray-100: #1e293b;
+  --gray-200: #334155;
+  --gray-300: #475569;
+  --gray-500: #94a3b8;
+  --gray-700: #cbd5e1;
+  --gray-900: #f1f5f9;
+  --surface: #1e293b;
   --radius: 12px;
 }
 
@@ -38,7 +39,7 @@ body {
   justify-content: center;
   gap: 0.25rem;
   padding: 0.75rem 1rem;
-  background: white;
+  background: var(--surface);
   border-bottom: 1px solid var(--gray-200);
   position: sticky;
   top: 0;
@@ -99,7 +100,7 @@ main {
    Cards
    ======================== */
 .card {
-  background: white;
+  background: var(--surface);
   border-radius: var(--radius);
   padding: 1.5rem;
   margin-bottom: 1rem;
@@ -155,7 +156,7 @@ select {
   border: 1px solid var(--gray-300);
   border-radius: 8px;
   font-size: 1rem;
-  background: white;
+  background: var(--gray-50);
   color: var(--gray-900);
   width: 100%;
 }
@@ -164,7 +165,7 @@ input[type="number"]:focus,
 select:focus {
   outline: none;
   border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
 .input-with-unit {
@@ -199,7 +200,7 @@ select:focus {
   padding: 0.5rem 1rem;
   border: 1px solid var(--gray-300);
   border-radius: 8px;
-  background: white;
+  background: var(--gray-50);
   font-size: 0.9rem;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -366,14 +367,14 @@ select:focus {
   border: 1px solid var(--gray-300);
   border-radius: 8px;
   font-size: 0.9rem;
-  background: white;
+  background: var(--gray-50);
   color: var(--gray-900);
 }
 
 .save-bar input[type="text"]:focus {
   outline: none;
   border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
 
 /* Delete button on custom preset buttons */
@@ -469,8 +470,8 @@ input[type="range"]::-webkit-slider-thumb {
   border-radius: 50%;
   background: var(--blue-600);
   cursor: pointer;
-  border: 3px solid white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 input[type="range"]::-moz-range-thumb {
@@ -479,8 +480,8 @@ input[type="range"]::-moz-range-thumb {
   border-radius: 50%;
   background: var(--blue-600);
   cursor: pointer;
-  border: 3px solid white;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border: 3px solid var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
 }
 
 .slider-hint {
