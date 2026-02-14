@@ -109,9 +109,11 @@
           <span class="ppm-value" id="ppm-bicarbonate">0</span>
           <span class="ppm-unit">mg/L</span>
         </div>
+        <div class="metric highlight metric-box recipe-ratio-cell">
+          <span class="metric-label">SO₄:Cl</span>
+          <span class="metric-value" id="ratio-display">—</span>
+        </div>
       </div>
-
-      <div class="ratio-display" id="ratio-display">SO₄:Cl ratio: —</div>
 
       <div class="save-bar recipe-save-target">
         <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
@@ -249,8 +251,7 @@
 
       // SO4:Cl ratio
       const so4ToCl = totalIons.chloride > 0 ? totalIons.sulfate / totalIons.chloride : null;
-      document.getElementById("ratio-display").textContent =
-        "SO\u2084:Cl ratio: " + (so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2));
+      document.getElementById("ratio-display").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
     }
 
     // --- Save Final Water Profile as Target Water Profile ---

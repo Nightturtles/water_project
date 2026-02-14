@@ -191,6 +191,10 @@
           <span class="result-unit">mg/L</span>
           <span class="result-delta" id="delta-bicarbonate"></span>
         </div>
+        <div class="metric highlight metric-box result-ratio-cell">
+          <span class="metric-label">SO₄:Cl</span>
+          <span class="metric-value" id="res-so4cl">—</span>
+        </div>
       </div>
 
       <div class="save-bar">
@@ -421,6 +425,10 @@
       document.getElementById("res-gh").textContent = Math.round(metrics.gh) + " mg/L";
       document.getElementById("res-kh").textContent = Math.round(metrics.kh) + " mg/L";
       document.getElementById("res-tds").textContent = Math.round(metrics.tds) + " mg/L";
+
+      // SO4:Cl ratio (sulfate / chloride; undefined when chloride is 0)
+      const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
+      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "—" : so4ToCl.toFixed(2);
     }
 
     // --- Save as Target Profile ---

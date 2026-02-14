@@ -311,9 +311,9 @@ function injectNav() {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
   const pages = [
     { href: "index.html",    label: "Calculator" },
-    { href: "minerals.html", label: "Settings" },
+    { href: "recipe.html",   label: "Recipe Builder" },
     { href: "taste.html",    label: "Taste Tuner" },
-    { href: "recipe.html",   label: "Recipe Builder" }
+    { href: "minerals.html", label: "Settings" }
   ];
 
   const nav = document.createElement("nav");
@@ -324,6 +324,9 @@ function injectNav() {
 
   document.body.insertBefore(nav, document.body.firstChild);
 }
+
+// --- Unit conversion ---
+const GALLONS_TO_LITERS = 3.78541;
 
 // --- Conversion constants (single source of truth for GH/KH/TDS) ---
 // CaCO3 MW = 100.09; equivalent weights for hardness/alkalinity

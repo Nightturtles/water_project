@@ -667,6 +667,21 @@ input[type="range"]::-moz-range-thumb {
   color: var(--red-600);
 }
 
+/* SO4:Cl ratio box in result-grid (Taste Tuner) and ppm-grid (Recipe Builder) — matches ion cell colors */
+.result-ratio-cell,
+.recipe-ratio-cell {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: var(--gray-50) !important;
+  border: none !important;
+}
+.result-ratio-cell .metric-value,
+.recipe-ratio-cell .metric-value {
+  color: var(--gray-900);
+}
+
 /* ========================
    Metrics row (GH, KH, TDS)
    ======================== */
