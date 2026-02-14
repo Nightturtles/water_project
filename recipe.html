@@ -44,7 +44,7 @@
     <!-- Mineral Additions -->
     <section class="card">
       <h2>Add Minerals</h2>
-      <p class="hint">Enter grams of each mineral to add per liter. Only your selected minerals are shown.</p>
+      <p class="hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
       <div class="mineral-inputs" id="mineral-inputs">
         <!-- Populated by JS -->
       </div>
@@ -172,7 +172,7 @@
           </div>
           <div class="mineral-input-field">
             <input type="number" id="add-${id}" value="0" min="0" step="0.01" data-mineral="${id}">
-            <span class="mineral-input-unit">g/L</span>
+            <span class="mineral-input-unit">g</span>
           </div>
         `;
         mineralInputsEl.appendChild(div);
@@ -190,23 +190,24 @@
     volumeUnit.addEventListener("change", recalculate);
 
     function recalculate() {
-      // Get volume in liters (used for display context but PPM is per-liter)
+      // Get volume in liters (mineral inputs are total grams for this volume)
       let volumeL = parseFloat(volumeInput.value) || 0;
       if (volumeUnit.value === "gallons") {
         volumeL *= GALLONS_TO_LITERS;
       }
+      if (volumeL <= 0) volumeL = 1; // avoid division by zero
 
-      // Collect grams per liter of each mineral
-      const mineralGrams = {};
+      // Collect total grams of each mineral, convert to grams per liter for ion calculation
+      const mineralGramsPerLiter = {};
       document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
-        const grams = parseFloat(input.value) || 0;
-        if (grams > 0) {
-          mineralGrams[input.dataset.mineral] = grams;
+        const totalGrams = parseFloat(input.value) || 0;
+        if (totalGrams > 0) {
+          mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
         }
       });
 
-      // Calculate ion contributions from minerals
-      const addedIons = calculateIonPPMs(mineralGrams);
+      // Calculate ion contributions from minerals (calculateIonPPMs expects g/L)
+      const addedIons = calculateIonPPMs(mineralGramsPerLiter);
 
       // Combine with base water
       const totalIons = {};

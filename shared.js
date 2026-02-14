@@ -150,19 +150,41 @@ function deleteCustomProfile(key) {
   saveCustomProfiles(profiles);
 }
 
+// --- Deleted preset tracking (for hiding built-in presets) ---
+function loadDeletedPresets() {
+  const saved = localStorage.getItem("cw_deleted_presets");
+  return saved ? JSON.parse(saved) : [];
+}
+
+function addDeletedPreset(key) {
+  const deleted = loadDeletedPresets();
+  if (!deleted.includes(key)) {
+    deleted.push(key);
+    localStorage.setItem("cw_deleted_presets", JSON.stringify(deleted));
+  }
+}
+
 // Returns built-in presets merged with saved custom profiles.
-// Custom profiles are inserted before the "custom" entry.
+// Built-in presets can be overridden by custom profiles with the same key.
+// Deleted built-in presets are filtered out.
+// Custom-only profiles are inserted before the "custom" entry.
 function getAllPresets() {
   const custom = loadCustomProfiles();
+  const deleted = loadDeletedPresets();
   const result = {};
   for (const [key, value] of Object.entries(SOURCE_PRESETS)) {
     if (key === "custom") {
-      // Insert custom profiles before the "Custom" entry
+      // Insert custom-only profiles before the "Custom" entry
       for (const [ck, cv] of Object.entries(custom)) {
-        result[ck] = cv;
+        if (!SOURCE_PRESETS[ck]) {
+          result[ck] = cv;
+        }
       }
+      result[key] = value;
+      continue;
     }
-    result[key] = value;
+    if (deleted.includes(key)) continue;
+    result[key] = custom[key] || value;
   }
   return result;
 }
@@ -172,8 +194,9 @@ function getSourceWaterByPreset(presetName) {
   if (presetName === "custom") {
     return loadSourceWater();
   }
-  // Check built-in presets first, then custom profiles
-  const preset = SOURCE_PRESETS[presetName] || loadCustomProfiles()[presetName];
+  // Check custom profiles first (overrides), then built-in presets
+  const customProfiles = loadCustomProfiles();
+  const preset = customProfiles[presetName] || SOURCE_PRESETS[presetName];
   if (!preset) return loadSourceWater();
   const { label, ...ions } = preset;
   return ions;
@@ -196,7 +219,7 @@ function loadSelectedMinerals() {
 function injectNav() {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
   const pages = [
-    { href: "index.html",    label: "Profiles" },
+    { href: "index.html",    label: "Calculator" },
     { href: "minerals.html", label: "Settings" },
     { href: "taste.html",    label: "Taste Tuner" },
     { href: "recipe.html",   label: "Recipe Builder" }

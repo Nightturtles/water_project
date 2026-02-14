@@ -27,16 +27,17 @@
       <h2>My Starting Water</h2>
       <p class="hint">Enter your tap or base water profile. This will be used as the starting point across all pages. If using distilled or RO water, leave everything at 0.</p>
 
-      <div class="source-presets">
-        <button class="preset-btn active" data-preset="distilled">Distilled / RO</button>
-        <button class="preset-btn" data-preset="soft-tap">Soft Tap Water</button>
-        <button class="preset-btn" data-preset="hard-tap">Hard Tap Water</button>
-        <button class="preset-btn" data-preset="custom">Custom</button>
+      <div class="source-presets" id="source-presets">
+        <!-- Populated by JS -->
       </div>
 
       <div class="save-bar" id="save-bar" style="display:none;">
         <input type="text" id="profile-name" placeholder="Name this profile..." maxlength="40">
         <button id="save-profile-btn" class="preset-btn">Save</button>
+      </div>
+
+      <div class="edit-bar" id="edit-bar" style="display:none;">
+        <button id="save-changes-btn" class="preset-btn">Save Changes</button>
       </div>
 
       <div class="source-grid">
@@ -74,6 +75,16 @@
     </section>
   </main>
 
+  <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
+    <div class="confirm-dialog">
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="preset-btn">Yes</button>
+        <button id="confirm-no" class="preset-btn">No</button>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <p>Your selections are saved automatically and shared across all pages.</p>
   </footer>
@@ -81,10 +92,18 @@
   <script src="shared.js"></script>
   <script>
     const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
-    const presetsContainer = document.querySelector(".source-presets");
+    const presetsContainer = document.getElementById("source-presets");
     const saveBar = document.getElementById("save-bar");
+    const editBar = document.getElementById("edit-bar");
     const profileNameInput = document.getElementById("profile-name");
     const saveProfileBtn = document.getElementById("save-profile-btn");
+    const saveChangesBtn = document.getElementById("save-changes-btn");
+    const confirmOverlay = document.getElementById("confirm-overlay");
+    const confirmMessage = document.getElementById("confirm-message");
+    const confirmYesBtn = document.getElementById("confirm-yes");
+    const confirmNoBtn = document.getElementById("confirm-no");
+
+    let activePreset = loadSourcePresetName();
 
     // --- Populate mineral list ---
     const mineralListEl = document.getElementById("mineral-list");
@@ -119,59 +138,36 @@
       showSaved();
     });
 
-    // --- Load and populate source water ---
-    const savedPreset = loadSourcePresetName();
-    const sourceWater = loadSourceWater();
-    ION_FIELDS.forEach(ion => {
-      const input = document.getElementById("src-" + ion);
-      input.value = sourceWater[ion] || 0;
-    });
-
-    // --- Render saved custom profile buttons on load ---
-    function renderCustomButtons() {
-      // Remove existing custom profile buttons
-      presetsContainer.querySelectorAll(".preset-btn[data-custom]").forEach(b => b.remove());
-      const customBtn = presetsContainer.querySelector('[data-preset="custom"]');
-      const profiles = loadCustomProfiles();
-      for (const [key, profile] of Object.entries(profiles)) {
-        const btn = createCustomPresetButton(key, profile.label);
-        presetsContainer.insertBefore(btn, customBtn);
+    // --- Render all preset buttons dynamically ---
+    function renderPresetButtons() {
+      presetsContainer.innerHTML = "";
+      const allPresets = getAllPresets();
+      for (const [key, preset] of Object.entries(allPresets)) {
+        const btn = document.createElement("button");
+        btn.className = "preset-btn";
+        btn.dataset.preset = key;
+        if (key === "custom") {
+          btn.textContent = preset.label;
+        } else {
+          btn.innerHTML = `${preset.label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
+        }
+        presetsContainer.appendChild(btn);
       }
+      highlightPreset(activePreset);
     }
 
-    function createCustomPresetButton(key, label) {
-      const btn = document.createElement("button");
-      btn.className = "preset-btn";
-      btn.dataset.preset = key;
-      btn.dataset.custom = "true";
-      btn.innerHTML = `${label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
-      btn.addEventListener("click", (e) => {
-        if (e.target.classList.contains("preset-delete")) return;
-        activatePreset(key);
-      });
-      return btn;
-    }
-
-    renderCustomButtons();
-
-    // Highlight the saved preset button
     function highlightPreset(presetName) {
       presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
       const btn = presetsContainer.querySelector(`[data-preset="${presetName}"]`);
       if (btn) btn.classList.add("active");
-      // Show/hide save bar
       saveBar.style.display = presetName === "custom" ? "flex" : "none";
+      editBar.style.display = "none";
     }
-    highlightPreset(savedPreset);
 
-    // --- Activate a preset (built-in or custom) ---
     function activatePreset(presetName) {
-      presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
-      const btn = presetsContainer.querySelector(`[data-preset="${presetName}"]`);
-      if (btn) btn.classList.add("active");
-
+      activePreset = presetName;
+      highlightPreset(presetName);
       saveSourcePresetName(presetName);
-      saveBar.style.display = presetName === "custom" ? "flex" : "none";
 
       if (presetName === "custom") return;
 
@@ -182,76 +178,137 @@
       saveCurrentSource();
     }
 
+    // --- Detect unsaved changes vs active profile ---
+    function hasUnsavedChanges() {
+      if (activePreset === "custom") return false;
+      const presetValues = getSourceWaterByPreset(activePreset);
+      return ION_FIELDS.some(ion => {
+        const current = parseFloat(document.getElementById("src-" + ion).value) || 0;
+        return current !== (presetValues[ion] || 0);
+      });
+    }
+
+    // --- Event delegation for preset buttons ---
+    presetsContainer.addEventListener("click", (e) => {
+      // Handle delete
+      const deleteKey = e.target.dataset.delete;
+      if (deleteKey) {
+        e.stopPropagation();
+        showConfirm("Are you sure you want to delete this profile?", () => {
+          if (SOURCE_PRESETS[deleteKey]) {
+            addDeletedPreset(deleteKey);
+          }
+          deleteCustomProfile(deleteKey);
+          renderPresetButtons();
+          if (activePreset === deleteKey) {
+            const remaining = Object.keys(getAllPresets());
+            const fallback = remaining.find(k => k !== "custom") || "custom";
+            activatePreset(fallback);
+          }
+        });
+        return;
+      }
+
+      // Handle preset click
+      const btn = e.target.closest(".preset-btn");
+      if (!btn) return;
+      activatePreset(btn.dataset.preset);
+    });
+
     // --- Source water input changes ---
     ION_FIELDS.forEach(ion => {
       const input = document.getElementById("src-" + ion);
       input.addEventListener("input", () => {
-        // Switch to custom preset
-        presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
-        presetsContainer.querySelector('[data-preset="custom"]').classList.add("active");
-        saveSourcePresetName("custom");
-        saveBar.style.display = "flex";
+        if (activePreset !== "custom") {
+          editBar.style.display = hasUnsavedChanges() ? "flex" : "none";
+        }
         saveCurrentSource();
       });
     });
 
-    // --- Built-in preset buttons ---
-    presetsContainer.querySelectorAll(".preset-btn:not([data-custom])").forEach(btn => {
-      btn.addEventListener("click", (e) => {
-        activatePreset(btn.dataset.preset);
+    // --- Save changes to existing profile (with confirmation) ---
+    saveChangesBtn.addEventListener("click", () => {
+      showConfirm("Are you sure you want to change this profile?", () => {
+        const allPresets = getAllPresets();
+        const profile = { label: allPresets[activePreset].label };
+        ION_FIELDS.forEach(ion => {
+          profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+        });
+        const profiles = loadCustomProfiles();
+        profiles[activePreset] = profile;
+        saveCustomProfiles(profiles);
+        editBar.style.display = "none";
+        renderPresetButtons();
+        showSaved();
       });
     });
 
-    // --- Delete custom profile ---
-    presetsContainer.addEventListener("click", (e) => {
-      const deleteTarget = e.target.dataset.delete;
-      if (!deleteTarget) return;
-      e.stopPropagation();
-      deleteCustomProfile(deleteTarget);
-      const btn = presetsContainer.querySelector(`[data-preset="${deleteTarget}"]`);
-      if (btn) btn.remove();
-      // If the deleted profile was active, fall back to distilled
-      if (loadSourcePresetName() === deleteTarget) {
-        activatePreset("distilled");
-      }
-    });
-
-    // --- Save custom profile ---
+    // --- Save new custom profile ---
     saveProfileBtn.addEventListener("click", () => {
       const name = profileNameInput.value.trim();
       if (!name) return;
 
       const key = slugify(name);
-      if (!key || SOURCE_PRESETS[key]) return; // Don't overwrite built-in presets
+      if (!key || SOURCE_PRESETS[key]) return;
 
-      // Read current ion values
       const profile = { label: name };
       ION_FIELDS.forEach(ion => {
         profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
       });
 
-      // Save to localStorage
       const profiles = loadCustomProfiles();
       profiles[key] = profile;
       saveCustomProfiles(profiles);
 
-      // Re-render custom buttons
-      renderCustomButtons();
-
-      // Activate the new profile
+      renderPresetButtons();
       activatePreset(key);
 
-      // Reset custom inputs to zeros and save
       ION_FIELDS.forEach(ion => {
         document.getElementById("src-" + ion).value = 0;
       });
       saveSourceWater({ calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 });
 
-      // Clear name input
       profileNameInput.value = "";
-
       showSaved();
     });
+
+    // --- Confirmation modal ---
+    function showConfirm(message, onYes) {
+      confirmMessage.textContent = message;
+      confirmOverlay.style.display = "flex";
+
+      function yesHandler() {
+        confirmOverlay.style.display = "none";
+        cleanup();
+        onYes();
+      }
+      function noHandler() {
+        confirmOverlay.style.display = "none";
+        cleanup();
+      }
+      function cleanup() {
+        confirmYesBtn.removeEventListener("click", yesHandler);
+        confirmNoBtn.removeEventListener("click", noHandler);
+      }
+
+      confirmYesBtn.addEventListener("click", yesHandler);
+      confirmNoBtn.addEventListener("click", noHandler);
+    }
+
+    // --- Initialize ---
+    const sourceWater = loadSourceWater();
+    ION_FIELDS.forEach(ion => {
+      document.getElementById("src-" + ion).value = sourceWater[ion] || 0;
+    });
+
+    renderPresetButtons();
+
+    // If saved preset was deleted, fall back
+    const allPresets = getAllPresets();
+    if (!allPresets[activePreset]) {
+      const fallback = Object.keys(allPresets).find(k => k !== "custom") || "custom";
+      activatePreset(fallback);
+    }
 
     function saveCurrentSource() {
       const profile = {};
@@ -259,7 +316,6 @@
         profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
       });
       saveSourceWater(profile);
-      showSaved();
     }
 
     function showSaved() {

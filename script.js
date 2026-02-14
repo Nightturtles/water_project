@@ -326,7 +326,7 @@ function calculate() {
       `<div><strong>GH:</strong> ~${Math.round(GH_asCaCO3)} mg/L as CaCO\u2083</div>` +
       `<div><strong>KH:</strong> ~${Math.round(KH_asCaCO3)} mg/L as CaCO\u2083</div>` +
       `<div><strong>SO\u2084:Cl ratio:</strong> ${so4ToCl === null ? "—" : so4ToCl.toFixed(2)}</div>` +
-      `<hr style="border:none;border-top:1px solid #ddd;margin:8px 0" />` +
+      `<hr style="border:none;border-top:1px solid var(--gray-300);margin:8px 0" />` +
       `<div><strong>Final ions (mg/L):</strong> ` +
         `Ca ${finalCa.toFixed(2)} | ` +
         `Mg ${finalMg.toFixed(2)} | ` +
