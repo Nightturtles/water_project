@@ -617,6 +617,7 @@ input[type="range"]::-moz-range-thumb {
   display: flex;
   gap: 0.75rem;
   margin-top: 1rem;
+  margin-bottom: 1rem;
 }
 
 .metric {
@@ -629,6 +630,11 @@ input[type="range"]::-moz-range-thumb {
 
 .metric.highlight {
   background: var(--blue-50);
+}
+
+.metric-box {
+  border: 1px solid var(--gray-300);
+  border-radius: 0.5rem;
 }
 
 .metric-label {
