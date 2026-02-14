@@ -373,6 +373,11 @@ targetSaveBtn.addEventListener("click", () => {
     showTargetSaveStatus("A profile with this name already exists.", true);
     return;
   }
+  const existingLabels = getExistingTargetProfileLabels();
+  if (existingLabels.has(name.trim().toLowerCase())) {
+    showTargetSaveStatus("A profile with this name already exists.", true);
+    return;
+  }
 
   profiles[key] = {
     label: name,

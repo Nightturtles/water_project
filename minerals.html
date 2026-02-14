@@ -290,6 +290,11 @@
         showSaveStatus("A profile with this name already exists.", true);
         return;
       }
+      const existingLabels = getExistingSourceProfileLabels();
+      if (existingLabels.has(name.trim().toLowerCase())) {
+        showSaveStatus("A profile with this name already exists.", true);
+        return;
+      }
 
       const profile = { label: name };
       ION_FIELDS.forEach(ion => {

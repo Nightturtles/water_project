@@ -171,6 +171,13 @@ function addDeletedPreset(key) {
 // --- Custom target profile helpers ---
 // Built-in target profile keys (from script.js PROFILES) — custom saves must not use these
 const BUILTIN_TARGET_KEYS = ["sca", "rao", "hendon-light", "hendon-espresso"];
+// Built-in target profile display labels (for uniqueness check across built-in + custom)
+const BUILTIN_TARGET_LABELS = {
+  "sca": "SCA Standard",
+  "rao": "Rao Water",
+  "hendon-light": "Light Roast",
+  "hendon-espresso": "Espresso"
+};
 
 function loadCustomTargetProfiles() {
   const saved = localStorage.getItem("cw_custom_target_profiles");
@@ -198,6 +205,36 @@ function addDeletedTargetPreset(key) {
     deleted.push(key);
     localStorage.setItem("cw_deleted_target_presets", JSON.stringify(deleted));
   }
+}
+
+// Returns a Set of lowercased display names for existing target profiles (built-in non-deleted + custom). Used to enforce unique names.
+function getExistingTargetProfileLabels() {
+  const deleted = loadDeletedTargetPresets();
+  const custom = loadCustomTargetProfiles();
+  const labels = new Set();
+  for (const key of BUILTIN_TARGET_KEYS) {
+    if (!deleted.includes(key) && BUILTIN_TARGET_LABELS[key]) {
+      labels.add(BUILTIN_TARGET_LABELS[key].trim().toLowerCase());
+    }
+  }
+  for (const profile of Object.values(custom)) {
+    if (profile && profile.label) {
+      labels.add(profile.label.trim().toLowerCase());
+    }
+  }
+  return labels;
+}
+
+// Returns a Set of lowercased display names for existing source/starting water profiles. Used to enforce unique names.
+function getExistingSourceProfileLabels() {
+  const allPresets = getAllPresets();
+  const labels = new Set();
+  for (const profile of Object.values(allPresets)) {
+    if (profile && profile.label) {
+      labels.add(profile.label.trim().toLowerCase());
+    }
+  }
+  return labels;
 }
 
 function saveTargetPresetName(name) {
