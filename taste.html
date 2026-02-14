@@ -18,11 +18,8 @@
       <h2>Current Water Profile</h2>
       <p class="hint">Enter the water recipe you're currently using, or start from a preset.</p>
 
-      <div class="profile-buttons">
-        <button class="taste-preset-btn active" data-preset="sca">SCA Standard</button>
-        <button class="taste-preset-btn" data-preset="rao">Rao Water</button>
-        <button class="taste-preset-btn" data-preset="light">Light Roast</button>
-        <button class="taste-preset-btn" data-preset="custom">Custom</button>
+      <div class="profile-buttons" id="taste-presets">
+        <!-- Populated by JS -->
       </div>
 
       <div class="source-grid">
@@ -194,6 +191,12 @@
           <span class="metric-value" id="res-tds">--</span>
         </div>
       </div>
+
+      <div class="save-bar">
+        <input type="text" id="taste-profile-name" placeholder="Name this profile..." maxlength="40">
+        <button id="taste-save-btn" class="preset-btn">Save as Target Profile</button>
+      </div>
+      <div class="save-status" id="taste-save-status" aria-live="polite"></div>
     </section>
   </main>
 
@@ -206,16 +209,24 @@
     // --- Taste presets ---
     const TASTE_PRESETS = {
       sca: {
+        label: "SCA Standard",
         calcium: 51, magnesium: 17, potassium: 0, sodium: 10,
         sulfate: 17, chloride: 35, bicarbonate: 49
       },
       rao: {
+        label: "Rao Water",
         calcium: 39, magnesium: 16, potassium: 0, sodium: 11,
         sulfate: 16, chloride: 27, bicarbonate: 49
       },
       light: {
+        label: "Light Roast",
         calcium: 25, magnesium: 35, potassium: 0, sodium: 0,
         sulfate: 35, chloride: 0, bicarbonate: 25
+      },
+      espresso: {
+        label: "Espresso",
+        calcium: 70, magnesium: 20, potassium: 0, sodium: 13,
+        sulfate: 20, chloride: 48, bicarbonate: 61
       }
     };
 
@@ -255,28 +266,81 @@
       }
     };
 
-    // --- Preset buttons ---
-    document.querySelectorAll(".taste-preset-btn").forEach(btn => {
-      btn.addEventListener("click", () => {
-        document.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
-        btn.classList.add("active");
+    // --- Convert target profile (Ca/Mg/Alk) to 7-ion profile ---
+    function targetProfileToIons(profile) {
+      return {
+        calcium: profile.calcium || 0,
+        magnesium: profile.magnesium || 0,
+        potassium: 0,
+        sodium: 0,
+        sulfate: 0,
+        chloride: 0,
+        bicarbonate: Math.round((profile.alkalinity || 0) * (61.017 / 50.045))
+      };
+    }
 
-        const preset = btn.dataset.preset;
-        if (preset === "custom") return;
+    // --- Dynamic preset buttons ---
+    const tastePresetsContainer = document.getElementById("taste-presets");
 
-        const values = TASTE_PRESETS[preset];
+    function renderTastePresets() {
+      tastePresetsContainer.innerHTML = "";
+      for (const [key, preset] of Object.entries(TASTE_PRESETS)) {
+        const btn = document.createElement("button");
+        btn.className = "taste-preset-btn";
+        btn.dataset.preset = key;
+        btn.textContent = preset.label;
+        tastePresetsContainer.appendChild(btn);
+      }
+      const customTargets = loadCustomTargetProfiles();
+      for (const [key, profile] of Object.entries(customTargets)) {
+        const btn = document.createElement("button");
+        btn.className = "taste-preset-btn";
+        btn.dataset.preset = "target-" + key;
+        btn.dataset.targetKey = key;
+        btn.textContent = profile.label;
+        tastePresetsContainer.appendChild(btn);
+      }
+      const customBtn = document.createElement("button");
+      customBtn.className = "taste-preset-btn";
+      customBtn.dataset.preset = "custom";
+      customBtn.textContent = "Custom";
+      tastePresetsContainer.appendChild(customBtn);
+      const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
+      if (firstBtn) firstBtn.classList.add("active");
+    }
+
+    // --- Preset click handler (event delegation) ---
+    tastePresetsContainer.addEventListener("click", (e) => {
+      const btn = e.target.closest(".taste-preset-btn");
+      if (!btn) return;
+      tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const preset = btn.dataset.preset;
+      if (preset === "custom") return;
+
+      let values;
+      if (btn.dataset.targetKey) {
+        const profiles = loadCustomTargetProfiles();
+        const profile = profiles[btn.dataset.targetKey];
+        if (profile) values = targetProfileToIons(profile);
+      } else {
+        values = TASTE_PRESETS[preset];
+      }
+
+      if (values) {
         ION_FIELDS.forEach(ion => {
-          document.getElementById("cur-" + ion).value = values[ion];
+          document.getElementById("cur-" + ion).value = values[ion] || 0;
         });
         recalculate();
-      });
+      }
     });
 
     // --- Input change handlers ---
     ION_FIELDS.forEach(ion => {
       document.getElementById("cur-" + ion).addEventListener("input", () => {
-        document.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
-        document.querySelector('[data-preset="custom"]').classList.add("active");
+        tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
+        tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
         recalculate();
       });
     });
@@ -292,15 +356,12 @@
       });
     });
 
-    // --- Core recalculation ---
-    function recalculate() {
-      // Start with base profile
+    // --- Get current adjusted profile (used for display and save) ---
+    function getAdjustedProfile() {
       const base = {};
       ION_FIELDS.forEach(ion => {
         base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
       });
-
-      // Apply slider adjustments
       const adjusted = { ...base };
       SLIDERS.forEach(slider => {
         const val = parseInt(document.getElementById("slider-" + slider).value) || 0;
@@ -309,11 +370,19 @@
           adjusted[ion] += val * perStep;
         }
       });
-
-      // Floor at 0
       ION_FIELDS.forEach(ion => {
         adjusted[ion] = Math.max(0, Math.round(adjusted[ion]));
       });
+      return adjusted;
+    }
+
+    // --- Core recalculation ---
+    function recalculate() {
+      const base = {};
+      ION_FIELDS.forEach(ion => {
+        base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
+      });
+      const adjusted = getAdjustedProfile();
 
       // Display adjusted values and deltas
       ION_FIELDS.forEach(ion => {
@@ -339,7 +408,48 @@
       document.getElementById("res-tds").textContent = Math.round(metrics.tds) + " mg/L";
     }
 
-    // --- Initial calculation ---
+    // --- Save as Target Profile ---
+    const tasteSaveBtn = document.getElementById("taste-save-btn");
+    const tasteProfileNameInput = document.getElementById("taste-profile-name");
+    const tasteSaveStatus = document.getElementById("taste-save-status");
+
+    tasteSaveBtn.addEventListener("click", () => {
+      const name = tasteProfileNameInput.value.trim();
+      if (!name) return;
+
+      const key = slugify(name);
+      if (!key || BUILTIN_TARGET_KEYS.includes(key)) {
+        tasteSaveStatus.textContent = "Choose a different name (reserved).";
+        tasteSaveStatus.classList.add("visible");
+        setTimeout(() => tasteSaveStatus.classList.remove("visible"), 2000);
+        return;
+      }
+
+      const adjusted = getAdjustedProfile();
+      const metrics = calculateMetrics(adjusted);
+      const alkalinity = Math.round(metrics.kh);
+
+      const profile = {
+        label: name,
+        calcium: adjusted.calcium,
+        magnesium: adjusted.magnesium,
+        alkalinity: alkalinity,
+        description: ""
+      };
+
+      const profiles = loadCustomTargetProfiles();
+      profiles[key] = profile;
+      saveCustomTargetProfiles(profiles);
+      renderTastePresets();
+
+      tasteProfileNameInput.value = "";
+      tasteSaveStatus.textContent = "Saved! Use it on the Calculator page.";
+      tasteSaveStatus.classList.add("visible");
+      setTimeout(() => tasteSaveStatus.classList.remove("visible"), 2500);
+    });
+
+    // --- Initialize ---
+    renderTastePresets();
     recalculate();
   </script>
 </body>

@@ -244,6 +244,10 @@ select:focus {
   border-width: 2px;
 }
 
+.results-card .save-bar {
+  margin-top: 1.5rem;
+}
+
 .results {
   display: flex;
   flex-direction: column;
@@ -442,6 +446,10 @@ select:focus {
 
 .save-status.visible {
   opacity: 1;
+}
+
+.save-status.error {
+  color: var(--red-600);
 }
 
 /* ========================

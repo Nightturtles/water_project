@@ -121,13 +121,22 @@
     const sourcePresetSelect = document.getElementById("source-preset");
     const sourceWaterTags = document.getElementById("source-water-tags");
 
-    Object.entries(getAllPresets()).forEach(([key, preset]) => {
+    const presetEntries = Object.entries(getAllPresets());
+    presetEntries.forEach(([key, preset]) => {
       const opt = document.createElement("option");
       opt.value = key;
       opt.textContent = preset.label;
       sourcePresetSelect.appendChild(opt);
     });
-    sourcePresetSelect.value = loadSourcePresetName();
+    const savedPreset = loadSourcePresetName();
+    const validKeys = presetEntries.map(([k]) => k);
+    if (!validKeys.includes(savedPreset)) {
+      const fallback = validKeys.find(k => k !== "custom") || validKeys[0];
+      sourcePresetSelect.value = fallback;
+      saveSourcePresetName(fallback);
+    } else {
+      sourcePresetSelect.value = savedPreset;
+    }
 
     let baseWater = getSourceWaterByPreset(sourcePresetSelect.value);
 

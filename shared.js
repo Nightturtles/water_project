@@ -165,6 +165,9 @@ function addDeletedPreset(key) {
 }
 
 // --- Custom target profile helpers ---
+// Built-in target profile keys (from script.js PROFILES) — custom saves must not use these
+const BUILTIN_TARGET_KEYS = ["sca", "rao", "hendon-light", "hendon-espresso"];
+
 function loadCustomTargetProfiles() {
   const saved = localStorage.getItem("cw_custom_target_profiles");
   return saved ? JSON.parse(saved) : {};

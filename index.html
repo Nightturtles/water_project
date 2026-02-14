@@ -90,29 +90,9 @@
     <!-- Results -->
     <section class="card results-card">
       <h2>Add to your water</h2>
-      <p class="hint">Using distilled/RO water as your base, add these mineral salts:</p>
-      <div class="results">
-        <div class="result-item">
-          <div class="result-info">
-            <span class="result-name">Epsom Salt</span>
-            <span class="result-detail">Magnesium sulfate (MgSO4 &middot; 7H2O)</span>
-          </div>
-          <span class="result-value" id="result-epsom">0.00 g</span>
-        </div>
-        <div class="result-item" id="buffer-result">
-          <div class="result-info">
-            <span class="result-name" id="buffer-result-name">Baking Soda</span>
-            <span class="result-detail" id="buffer-result-detail">Sodium bicarbonate (NaHCO3)</span>
-          </div>
-          <span class="result-value" id="result-buffer">0.00 g</span>
-        </div>
-        <div class="result-item">
-          <div class="result-info">
-            <span class="result-name">Calcium Chloride</span>
-            <span class="result-detail">CaCl2 &middot; 2H2O (food-grade flakes)</span>
-          </div>
-          <span class="result-value" id="result-calcium-chloride">0.00 g</span>
-        </div>
+      <p class="hint" id="results-hint">Using distilled/RO water as your base, add these mineral salts:</p>
+      <div class="results" id="results-container">
+        <!-- Populated by JS from selected minerals in Settings -->
       </div>
       <div class="result-summary" id="result-summary"></div>
     </section>

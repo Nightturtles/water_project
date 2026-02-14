@@ -86,12 +86,8 @@ const targetMg = document.getElementById("target-magnesium");
 const targetAlk = document.getElementById("target-alkalinity");
 const profileDesc = document.getElementById("profile-description");
 const bufferDesc = document.getElementById("buffer-description");
-const bufferResultName = document.getElementById("buffer-result-name");
-const bufferResultDetail = document.getElementById("buffer-result-detail");
-const resultEpsom = document.getElementById("result-epsom");
-const resultBuffer = document.getElementById("result-buffer");
-const resultCaCl2 = document.getElementById("result-calcium-chloride");
 const resultSummary = document.getElementById("result-summary");
+const resultsContainer = document.getElementById("results-container");
 const profileButtonsContainer = document.getElementById("profile-buttons");
 const targetSaveBar = document.getElementById("target-save-bar");
 const targetEditBar = document.getElementById("target-edit-bar");
@@ -104,13 +100,22 @@ const confirmYesBtn = document.getElementById("confirm-yes");
 const confirmNoBtn = document.getElementById("confirm-no");
 
 // --- Populate source water dropdown ---
-Object.entries(getAllPresets()).forEach(([key, preset]) => {
+const presetEntries = Object.entries(getAllPresets());
+presetEntries.forEach(([key, preset]) => {
   const opt = document.createElement("option");
   opt.value = key;
   opt.textContent = preset.label;
   sourcePresetSelect.appendChild(opt);
 });
-sourcePresetSelect.value = loadSourcePresetName();
+const savedPreset = loadSourcePresetName();
+const validKeys = presetEntries.map(([k]) => k);
+if (!validKeys.includes(savedPreset)) {
+  const fallback = validKeys.find(k => k !== "custom") || validKeys[0];
+  sourcePresetSelect.value = fallback;
+  saveSourcePresetName(fallback);
+} else {
+  sourcePresetSelect.value = savedPreset;
+}
 
 function getSourceWater() {
   return getSourceWaterByPreset(sourcePresetSelect.value);
@@ -123,9 +128,56 @@ function updateSourceWaterTags() {
   sourceWaterTags.innerHTML = ions
     .map(ion => `<span class="base-tag">${labels[ion]}: ${water[ion] || 0} mg/L</span>`)
     .join("");
+  const resultsHint = document.getElementById("results-hint");
+  if (resultsHint) {
+    const preset = getAllPresets()[sourcePresetSelect.value];
+    const name = preset ? preset.label : "your water";
+    resultsHint.textContent = `Using ${name} as your base, add these mineral salts:`;
+  }
 }
 
 updateSourceWaterTags();
+
+// --- Result items: show only minerals selected in Settings ---
+// Calculator uses: epsom-salt (Mg), calcium-chloride (Ca), baking-soda or potassium-bicarbonate (alkalinity)
+const BUFFER_TO_MINERAL = { "baking-soda": "baking-soda", "potassium-bicarb": "potassium-bicarbonate" };
+
+function renderResultItems() {
+  const selected = loadSelectedMinerals();
+  const bufferMineralId = BUFFER_TO_MINERAL[currentBuffer];
+
+  const toShow = [
+    { id: "epsom-salt", order: 0 },
+    { id: bufferMineralId, order: 1 },
+    { id: "calcium-chloride", order: 2 }
+  ].filter(item => selected.includes(item.id))
+   .sort((a, b) => a.order - b.order);
+
+  resultsContainer.innerHTML = "";
+  if (toShow.length === 0) {
+    resultsContainer.innerHTML = '<p class="hint">Select minerals in <a href="minerals.html">Settings</a> to see what to add.</p>';
+    return;
+  }
+  for (const { id } of toShow) {
+    const mineral = MINERAL_DB[id];
+    if (!mineral) continue;
+    const isBuffer = id === "baking-soda" || id === "potassium-bicarbonate";
+    const info = isBuffer ? BUFFER_INFO[id === "potassium-bicarbonate" ? "potassium-bicarb" : "baking-soda"] : null;
+    const name = info ? info.name : mineral.name;
+    const detail = info ? info.detail : mineral.formula;
+    const div = document.createElement("div");
+    div.className = "result-item";
+    div.dataset.mineral = id;
+    div.innerHTML = `
+      <div class="result-info">
+        <span class="result-name">${name}</span>
+        <span class="result-detail">${detail}</span>
+      </div>
+      <span class="result-value">0.00 g</span>
+    `;
+    resultsContainer.appendChild(div);
+  }
+}
 
 // --- Target profile helpers ---
 function getAllTargetPresets() {
@@ -241,9 +293,8 @@ document.querySelectorAll(".buffer-btn").forEach(btn => {
     currentBuffer = btn.dataset.buffer;
     const info = BUFFER_INFO[currentBuffer];
     bufferDesc.textContent = info.description;
-    bufferResultName.textContent = info.name;
-    bufferResultDetail.textContent = info.detail;
 
+    renderResultItems();
     calculate();
   });
 });
@@ -291,7 +342,7 @@ targetSaveBtn.addEventListener("click", () => {
   if (!name) return;
 
   const key = slugify(name);
-  if (!key || PROFILES[key]) return;
+  if (!key || BUILTIN_TARGET_KEYS.includes(key)) return;
 
   const profile = {
     label: name,
@@ -356,9 +407,7 @@ function calculate() {
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
-    resultEpsom.textContent = "0.00 g";
-    resultBuffer.textContent = "0.00 g";
-    resultCaCl2.textContent = "0.00 g";
+    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, [BUFFER_TO_MINERAL[currentBuffer]]: 0 });
     resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
     return;
   }
@@ -429,10 +478,12 @@ function calculate() {
   const bufferTotal = bufferPerL * volumeL;
   const cacl2Total = cacl2PerL * volumeL;
 
-  // Display grams
-  resultEpsom.textContent = formatGrams(epsomTotal);
-  resultBuffer.textContent = formatGrams(bufferTotal);
-  resultCaCl2.textContent = formatGrams(cacl2Total);
+  // Display grams (only update elements that exist for selected minerals)
+  updateResultValues({
+    "epsom-salt": epsomTotal,
+    "calcium-chloride": cacl2Total,
+    [BUFFER_TO_MINERAL[currentBuffer]]: bufferTotal
+  });
 
   // ---------------------------
   // Compute resulting ions (mg/L)
@@ -462,11 +513,11 @@ function calculate() {
   // Final bicarbonate (mg/L) is source bicarbonate + added bicarbonate
   const finalHCO3 = (sourceWater.bicarbonate || 0) + addedHCO3;
 
-  // Final other ions (mg/L)
-  const finalCl = addedCl;
-  const finalSO4 = addedSO4;
-  const finalK = addedK;
-  const finalNa = addedNa;
+  // Final other ions (mg/L) — include source water contributions
+  const finalCl = (sourceWater.chloride || 0) + addedCl;
+  const finalSO4 = (sourceWater.sulfate || 0) + addedSO4;
+  const finalK = (sourceWater.potassium || 0) + addedK;
+  const finalNa = (sourceWater.sodium || 0) + addedNa;
 
   // ---------------------------
   // GH / KH
@@ -518,7 +569,18 @@ function formatGrams(g) {
   return g.toFixed(2) + " g";
 }
 
+function updateResultValues(valuesByMineral) {
+  for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
+    const item = resultsContainer.querySelector(`[data-mineral="${mineralId}"]`);
+    if (item) {
+      const valEl = item.querySelector(".result-value");
+      if (valEl) valEl.textContent = formatGrams(grams);
+    }
+  }
+}
+
 // --- Initialize ---
+renderResultItems();
 renderProfileButtons();
 const allTargetPresets = getAllTargetPresets();
 if (!allTargetPresets[currentProfile]) {
