@@ -44,12 +44,17 @@
     <!-- Step 3: Target Profile -->
     <section class="card">
       <h2>3. Target water profile</h2>
-      <div class="profile-buttons">
-        <button class="profile-btn active" data-profile="sca">SCA Standard</button>
-        <button class="profile-btn" data-profile="rao">Rao Water</button>
-        <button class="profile-btn" data-profile="hendon-light">Light Roast</button>
-        <button class="profile-btn" data-profile="hendon-espresso">Espresso</button>
-        <button class="profile-btn" data-profile="custom">Custom</button>
+      <div class="profile-buttons" id="profile-buttons">
+        <!-- Populated by JS -->
+      </div>
+
+      <div class="save-bar" id="target-save-bar" style="display:none;">
+        <input type="text" id="target-profile-name" placeholder="Name this profile..." maxlength="40">
+        <button id="target-save-btn" class="preset-btn">Save</button>
+      </div>
+
+      <div class="edit-bar" id="target-edit-bar" style="display:none;">
+        <button id="target-save-changes-btn" class="preset-btn">Save Changes</button>
       </div>
       <div class="input-row target-inputs">
         <div class="input-group">
@@ -112,6 +117,16 @@
       <div class="result-summary" id="result-summary"></div>
     </section>
   </main>
+
+  <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
+    <div class="confirm-dialog">
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="preset-btn">Yes</button>
+        <button id="confirm-no" class="preset-btn">No</button>
+      </div>
+    </div>
+  </div>
 
   <footer>
     <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>

@@ -5,30 +5,37 @@
 // --- Water profiles (target mineral concentrations in mg/L) ---
 const PROFILES = {
   sca: {
+    label: "SCA Standard",
     calcium: 51,
     magnesium: 17,
     alkalinity: 40,
     description: "SCA recommended range for brewing water. Balanced body and clarity."
   },
   rao: {
+    label: "Rao Water",
     calcium: 39,
     magnesium: 16,
     alkalinity: 40,
     description: "Scott Rao's recipe. Clean, sweet, and well-balanced for most coffees."
   },
   "hendon-light": {
+    label: "Light Roast",
     calcium: 25,
     magnesium: 35,
     alkalinity: 25,
     description: "Higher magnesium for light roasts. Enhances fruity and floral notes."
   },
   "hendon-espresso": {
+    label: "Espresso",
     calcium: 70,
     magnesium: 20,
     alkalinity: 50,
     description: "Higher hardness for espresso. More body and texture in the cup."
   }
 };
+
+// SCA Standard and Rao Water can be deleted but not edited
+const NON_EDITABLE_PROFILES = ["sca", "rao"];
 
 // --- Buffer descriptions ---
 const BUFFER_INFO = {
@@ -66,7 +73,7 @@ const CA_TO_CACL2 = 147.01 / 40.078; // ~3.667
 const GALLONS_TO_LITERS = 3.78541;
 
 // --- State ---
-let currentProfile = "sca";
+let currentProfile = loadTargetPresetName();
 let currentBuffer = "baking-soda";
 
 // --- DOM elements ---
@@ -85,6 +92,16 @@ const resultEpsom = document.getElementById("result-epsom");
 const resultBuffer = document.getElementById("result-buffer");
 const resultCaCl2 = document.getElementById("result-calcium-chloride");
 const resultSummary = document.getElementById("result-summary");
+const profileButtonsContainer = document.getElementById("profile-buttons");
+const targetSaveBar = document.getElementById("target-save-bar");
+const targetEditBar = document.getElementById("target-edit-bar");
+const targetProfileNameInput = document.getElementById("target-profile-name");
+const targetSaveBtn = document.getElementById("target-save-btn");
+const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
+const confirmOverlay = document.getElementById("confirm-overlay");
+const confirmMessage = document.getElementById("confirm-message");
+const confirmYesBtn = document.getElementById("confirm-yes");
+const confirmNoBtn = document.getElementById("confirm-no");
 
 // --- Populate source water dropdown ---
 Object.entries(getAllPresets()).forEach(([key, preset]) => {
@@ -110,27 +127,109 @@ function updateSourceWaterTags() {
 
 updateSourceWaterTags();
 
-// --- Profile button handling ---
-document.querySelectorAll(".profile-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-
-    const profile = btn.dataset.profile;
-    currentProfile = profile;
-
-    if (profile === "custom") {
-      profileDesc.textContent = "Enter your own target values above.";
-    } else {
-      const p = PROFILES[profile];
-      targetCa.value = p.calcium;
-      targetMg.value = p.magnesium;
-      targetAlk.value = p.alkalinity;
-      profileDesc.textContent = p.description;
+// --- Target profile helpers ---
+function getAllTargetPresets() {
+  const custom = loadCustomTargetProfiles();
+  const deleted = loadDeletedTargetPresets();
+  const result = {};
+  for (const [key, value] of Object.entries(PROFILES)) {
+    if (deleted.includes(key)) continue;
+    result[key] = custom[key] || value;
+  }
+  for (const [ck, cv] of Object.entries(custom)) {
+    if (!PROFILES[ck]) {
+      result[ck] = cv;
     }
+  }
+  result["custom"] = { label: "Custom" };
+  return result;
+}
 
+function getTargetProfileByKey(key) {
+  if (key === "custom") return null;
+  const custom = loadCustomTargetProfiles();
+  return custom[key] || PROFILES[key] || null;
+}
+
+// --- Dynamic profile buttons ---
+function renderProfileButtons() {
+  profileButtonsContainer.innerHTML = "";
+  const allProfiles = getAllTargetPresets();
+  for (const [key, profile] of Object.entries(allProfiles)) {
+    const btn = document.createElement("button");
+    btn.className = "profile-btn";
+    btn.dataset.profile = key;
+    if (key === "custom") {
+      btn.textContent = profile.label;
+    } else {
+      btn.innerHTML = `${profile.label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
+    }
+    profileButtonsContainer.appendChild(btn);
+  }
+  highlightProfile(currentProfile);
+}
+
+function highlightProfile(profileName) {
+  profileButtonsContainer.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
+  const btn = profileButtonsContainer.querySelector(`[data-profile="${profileName}"]`);
+  if (btn) btn.classList.add("active");
+  targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
+  targetEditBar.style.display = "none";
+}
+
+function activateProfile(profileName) {
+  currentProfile = profileName;
+  highlightProfile(profileName);
+  saveTargetPresetName(profileName);
+
+  if (profileName === "custom") {
+    profileDesc.textContent = "Enter your own target values above.";
     calculate();
-  });
+    return;
+  }
+
+  const profile = getTargetProfileByKey(profileName);
+  if (profile) {
+    targetCa.value = profile.calcium;
+    targetMg.value = profile.magnesium;
+    targetAlk.value = profile.alkalinity;
+    profileDesc.textContent = profile.description || "";
+  }
+  calculate();
+}
+
+function hasUnsavedTargetChanges() {
+  if (currentProfile === "custom") return false;
+  const profile = getTargetProfileByKey(currentProfile);
+  if (!profile) return false;
+  return (parseFloat(targetCa.value) || 0) !== (profile.calcium || 0) ||
+         (parseFloat(targetMg.value) || 0) !== (profile.magnesium || 0) ||
+         (parseFloat(targetAlk.value) || 0) !== (profile.alkalinity || 0);
+}
+
+// --- Event delegation for profile buttons ---
+profileButtonsContainer.addEventListener("click", (e) => {
+  const deleteKey = e.target.dataset.delete;
+  if (deleteKey) {
+    e.stopPropagation();
+    showConfirm("Are you sure you want to delete this profile?", () => {
+      if (PROFILES[deleteKey]) {
+        addDeletedTargetPreset(deleteKey);
+      }
+      deleteCustomTargetProfile(deleteKey);
+      renderProfileButtons();
+      if (currentProfile === deleteKey) {
+        const remaining = Object.keys(getAllTargetPresets());
+        const fallback = remaining.find(k => k !== "custom") || "custom";
+        activateProfile(fallback);
+      }
+    });
+    return;
+  }
+
+  const btn = e.target.closest(".profile-btn");
+  if (!btn) return;
+  activateProfile(btn.dataset.profile);
 });
 
 // --- Buffer button handling ---
@@ -149,15 +248,66 @@ document.querySelectorAll(".buffer-btn").forEach(btn => {
   });
 });
 
-// --- When user manually edits target values, switch to "Custom" ---
+// --- Target input handling ---
 [targetCa, targetMg, targetAlk].forEach(input => {
   input.addEventListener("input", () => {
-    document.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
-    document.querySelector('[data-profile="custom"]').classList.add("active");
-    currentProfile = "custom";
-    profileDesc.textContent = "Enter your own target values above.";
+    if (currentProfile !== "custom") {
+      if (NON_EDITABLE_PROFILES.includes(currentProfile)) {
+        currentProfile = "custom";
+        highlightProfile("custom");
+        saveTargetPresetName("custom");
+        profileDesc.textContent = "Enter your own target values above.";
+      } else {
+        targetEditBar.style.display = hasUnsavedTargetChanges() ? "flex" : "none";
+      }
+    }
     calculate();
   });
+});
+
+// --- Save changes to existing target profile ---
+targetSaveChangesBtn.addEventListener("click", () => {
+  showConfirm("Are you sure you want to change this profile?", () => {
+    const allProfiles = getAllTargetPresets();
+    const existing = allProfiles[currentProfile];
+    const profile = {
+      label: existing.label,
+      calcium: parseFloat(targetCa.value) || 0,
+      magnesium: parseFloat(targetMg.value) || 0,
+      alkalinity: parseFloat(targetAlk.value) || 0,
+      description: existing.description || ""
+    };
+    const profiles = loadCustomTargetProfiles();
+    profiles[currentProfile] = profile;
+    saveCustomTargetProfiles(profiles);
+    targetEditBar.style.display = "none";
+    renderProfileButtons();
+  });
+});
+
+// --- Save new custom target profile ---
+targetSaveBtn.addEventListener("click", () => {
+  const name = targetProfileNameInput.value.trim();
+  if (!name) return;
+
+  const key = slugify(name);
+  if (!key || PROFILES[key]) return;
+
+  const profile = {
+    label: name,
+    calcium: parseFloat(targetCa.value) || 0,
+    magnesium: parseFloat(targetMg.value) || 0,
+    alkalinity: parseFloat(targetAlk.value) || 0,
+    description: ""
+  };
+
+  const profiles = loadCustomTargetProfiles();
+  profiles[key] = profile;
+  saveCustomTargetProfiles(profiles);
+
+  renderProfileButtons();
+  activateProfile(key);
+  targetProfileNameInput.value = "";
 });
 
 // --- Source water dropdown change ---
@@ -172,6 +322,29 @@ sourcePresetSelect.addEventListener("change", () => {
   el.addEventListener("input", calculate);
   el.addEventListener("change", calculate);
 });
+
+// --- Confirmation modal ---
+function showConfirm(message, onYes) {
+  confirmMessage.textContent = message;
+  confirmOverlay.style.display = "flex";
+
+  function yesHandler() {
+    confirmOverlay.style.display = "none";
+    cleanup();
+    onYes();
+  }
+  function noHandler() {
+    confirmOverlay.style.display = "none";
+    cleanup();
+  }
+  function cleanup() {
+    confirmYesBtn.removeEventListener("click", yesHandler);
+    confirmNoBtn.removeEventListener("click", noHandler);
+  }
+
+  confirmYesBtn.addEventListener("click", yesHandler);
+  confirmNoBtn.addEventListener("click", noHandler);
+}
 
 // --- Core calculation ---
 function calculate() {
@@ -325,7 +498,7 @@ function calculate() {
       `<div><strong>TDS (ion-sum approx):</strong> ~${Math.round(TDS_ion_sum)} mg/L</div>` +
       `<div><strong>GH:</strong> ~${Math.round(GH_asCaCO3)} mg/L as CaCO\u2083</div>` +
       `<div><strong>KH:</strong> ~${Math.round(KH_asCaCO3)} mg/L as CaCO\u2083</div>` +
-      `<div><strong>SO\u2084:Cl ratio:</strong> ${so4ToCl === null ? "—" : so4ToCl.toFixed(2)}</div>` +
+      `<div><strong>SO\u2084:Cl ratio:</strong> ${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</div>` +
       `<hr style="border:none;border-top:1px solid var(--gray-300);margin:8px 0" />` +
       `<div><strong>Final ions (mg/L):</strong> ` +
         `Ca ${finalCa.toFixed(2)} | ` +
@@ -345,5 +518,11 @@ function formatGrams(g) {
   return g.toFixed(2) + " g";
 }
 
-// --- Initial calculation ---
-calculate();
+// --- Initialize ---
+renderProfileButtons();
+const allTargetPresets = getAllTargetPresets();
+if (!allTargetPresets[currentProfile]) {
+  currentProfile = Object.keys(allTargetPresets).find(k => k !== "custom") || "custom";
+  saveTargetPresetName(currentProfile);
+}
+activateProfile(currentProfile);

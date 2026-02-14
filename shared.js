@@ -164,6 +164,43 @@ function addDeletedPreset(key) {
   }
 }
 
+// --- Custom target profile helpers ---
+function loadCustomTargetProfiles() {
+  const saved = localStorage.getItem("cw_custom_target_profiles");
+  return saved ? JSON.parse(saved) : {};
+}
+
+function saveCustomTargetProfiles(profiles) {
+  localStorage.setItem("cw_custom_target_profiles", JSON.stringify(profiles));
+}
+
+function deleteCustomTargetProfile(key) {
+  const profiles = loadCustomTargetProfiles();
+  delete profiles[key];
+  saveCustomTargetProfiles(profiles);
+}
+
+function loadDeletedTargetPresets() {
+  const saved = localStorage.getItem("cw_deleted_target_presets");
+  return saved ? JSON.parse(saved) : [];
+}
+
+function addDeletedTargetPreset(key) {
+  const deleted = loadDeletedTargetPresets();
+  if (!deleted.includes(key)) {
+    deleted.push(key);
+    localStorage.setItem("cw_deleted_target_presets", JSON.stringify(deleted));
+  }
+}
+
+function saveTargetPresetName(name) {
+  localStorage.setItem("cw_target_preset", name);
+}
+
+function loadTargetPresetName() {
+  return localStorage.getItem("cw_target_preset") || "sca";
+}
+
 // Returns built-in presets merged with saved custom profiles.
 // Built-in presets can be overridden by custom profiles with the same key.
 // Deleted built-in presets are filtered out.
