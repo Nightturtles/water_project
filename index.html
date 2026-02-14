@@ -47,6 +47,10 @@
       <div class="profile-buttons" id="profile-buttons">
         <!-- Populated by JS -->
       </div>
+      <div class="restore-bar" id="restore-target-bar" style="display:none;">
+        <span>Some built-in presets were deleted.</span>
+        <a href="#" id="restore-target-defaults">Restore defaults</a>
+      </div>
 
       <div class="save-bar" id="target-save-bar" style="display:none;">
         <input type="text" id="target-profile-name" placeholder="Name this profile..." maxlength="40">
@@ -83,6 +87,7 @@
       <div class="results" id="results-container">
         <!-- Populated by JS from selected minerals in Settings -->
       </div>
+      <div class="result-warnings" id="result-warnings"></div>
       <div class="result-summary" id="result-summary"></div>
     </section>
   </main>

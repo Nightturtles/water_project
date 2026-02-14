@@ -307,6 +307,18 @@ select:focus {
   display: none;
 }
 
+.result-warnings {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  font-style: italic;
+  line-height: 1.6;
+}
+
+.result-warnings:empty {
+  display: none;
+}
+
 /* ========================
    Minerals page
    ======================== */
@@ -404,6 +416,48 @@ select:focus {
   outline: none;
   border-color: var(--blue-500);
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}
+
+/* Reset button (Taste Tuner sliders) */
+.reset-btn {
+  background: none;
+  border: 1px solid var(--gray-300);
+  border-radius: 6px;
+  color: var(--gray-500);
+  font-size: 0.8rem;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+  margin-bottom: 1rem;
+  transition: all 0.15s ease;
+}
+
+.reset-btn:hover {
+  color: var(--blue-600);
+  border-color: var(--blue-500);
+}
+
+/* Ratio display (Recipe Builder) */
+.ratio-display {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  text-align: center;
+  margin: 0.75rem 0;
+}
+
+/* Restore bar (Settings) */
+.restore-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--gray-500);
+  margin-bottom: 0.5rem;
+}
+
+.restore-bar a {
+  color: var(--blue-600);
 }
 
 /* Delete button on custom preset buttons */
@@ -665,12 +719,6 @@ input[type="range"]::-moz-range-thumb {
 /* ========================
    Recipe Builder page
    ======================== */
-.base-water-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
 .base-tag {
   display: inline-block;
   padding: 0.25rem 0.75rem;

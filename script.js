@@ -41,13 +41,11 @@ const NON_EDITABLE_PROFILES = ["sca", "rao"];
 const BUFFER_INFO = {
   "baking-soda": {
     name: "Baking Soda",
-    detail: "Sodium bicarbonate (NaHCO3)",
-    description: "Sodium bicarbonate (NaHCO3) \u2014 cheap and easy to find at any grocery store."
+    detail: "Sodium bicarbonate (NaHCO3)"
   },
   "potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
-    detail: "Potassium bicarbonate (KHCO3)",
-    description: "Potassium bicarbonate (KHCO3) \u2014 sodium-free alternative, preferred by many coffee pros."
+    detail: "Potassium bicarbonate (KHCO3)"
   }
 };
 
@@ -69,8 +67,6 @@ const ALK_TO_POTASSIUM_BICARB = (2 * 100.115) / 100.09; // ~2.001
 // Calcium chloride dihydrate: CaCl2 * 2H2O, MW = 147.01, provides Ca (MW = 40.078)
 // To get X mg/L of Ca, need X * (147.01 / 40.078) mg/L of CaCl2·2H2O
 const CA_TO_CACL2 = 147.01 / 40.078; // ~3.667
-
-const GALLONS_TO_LITERS = 3.78541;
 
 // --- Mass fraction constants for ion calculations ---
 const FRAC_CA_IN_CACL2_2H2O = 40.078 / 147.01;
@@ -251,6 +247,19 @@ function renderProfileButtons() {
   highlightProfile(currentProfile);
 }
 
+// --- Restore defaults for target presets ---
+function updateRestoreTargetBar() {
+  const deleted = loadDeletedTargetPresets();
+  document.getElementById("restore-target-bar").style.display = deleted.length > 0 ? "flex" : "none";
+}
+
+document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
+  e.preventDefault();
+  localStorage.removeItem("cw_deleted_target_presets");
+  renderProfileButtons();
+  updateRestoreTargetBar();
+});
+
 function highlightProfile(profileName) {
   profileButtonsContainer.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
   const btn = profileButtonsContainer.querySelector(`[data-profile="${profileName}"]`);
@@ -300,6 +309,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
       }
       deleteCustomTargetProfile(deleteKey);
       renderProfileButtons();
+      updateRestoreTargetBar();
       if (currentProfile === deleteKey) {
         const remaining = Object.keys(getAllTargetPresets());
         const fallback = remaining.find(k => k !== "custom") || "custom";
@@ -476,9 +486,20 @@ function calculate() {
   const targetAlkAsCaCO3 = parseFloat(targetAlk.value) || 0; // mg/L as CaCO3
 
   // Mineral deltas (target - source), floored at 0
-  const deltaCa = Math.max(0, targetCaMgL - (sourceWater.calcium || 0));
-  const deltaMg = Math.max(0, targetMgMgL - (sourceWater.magnesium || 0));
-  const deltaAlkAsCaCO3 = Math.max(0, targetAlkAsCaCO3 - sourceAlkAsCaCO3);
+  const rawDeltaCa = targetCaMgL - (sourceWater.calcium || 0);
+  const rawDeltaMg = targetMgMgL - (sourceWater.magnesium || 0);
+  const rawDeltaAlk = targetAlkAsCaCO3 - sourceAlkAsCaCO3;
+  const deltaCa = Math.max(0, rawDeltaCa);
+  const deltaMg = Math.max(0, rawDeltaMg);
+  const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
+
+  // Warn when source exceeds target
+  const warnings = [];
+  if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
+  if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
+  if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
+  const warningsEl = document.getElementById("result-warnings");
+  if (warningsEl) warningsEl.textContent = warnings.join(" ");
 
   // ---------------------------
   // Compute salt dosing (per L)
@@ -602,6 +623,7 @@ function updateResultValues(valuesByMineral) {
 // --- Initialize ---
 renderResultItems();
 renderProfileButtons();
+updateRestoreTargetBar();
 const allTargetPresets = getAllTargetPresets();
 if (!allTargetPresets[currentProfile]) {
   currentProfile = Object.keys(allTargetPresets).find(k => k !== "custom") || "custom";

@@ -111,6 +111,8 @@
         </div>
       </div>
 
+      <div class="ratio-display" id="ratio-display">SO₄:Cl ratio: —</div>
+
       <div class="save-bar recipe-save-target">
         <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
         <button id="recipe-save-target-btn" class="preset-btn">Save as Target Profile</button>
@@ -125,8 +127,6 @@
 
   <script src="shared.js"></script>
   <script>
-    const GALLONS_TO_LITERS = 3.78541;
-
     // --- Source water dropdown ---
     const sourcePresetSelect = document.getElementById("source-preset");
     const sourceWaterTags = document.getElementById("source-water-tags");
@@ -246,6 +246,11 @@
       document.getElementById("ppm-gh").textContent = Math.round(metrics.gh);
       document.getElementById("ppm-kh").textContent = Math.round(metrics.kh);
       document.getElementById("ppm-tds").textContent = Math.round(metrics.tds);
+
+      // SO4:Cl ratio
+      const so4ToCl = totalIons.chloride > 0 ? totalIons.sulfate / totalIons.chloride : null;
+      document.getElementById("ratio-display").textContent =
+        "SO\u2084:Cl ratio: " + (so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2));
     }
 
     // --- Save Final Water Profile as Target Water Profile ---

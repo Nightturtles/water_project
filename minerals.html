@@ -36,6 +36,7 @@
           <span>Potassium Bicarbonate (KHCO₃)</span>
         </label>
       </div>
+      <p class="hint error" id="alkalinity-warning" style="display:none; margin-top:0.75rem;">No alkalinity source is selected above. The Calculator needs at least Baking Soda or Potassium Bicarbonate checked.</p>
     </section>
 
     <!-- Source Water Profile -->
@@ -45,6 +46,10 @@
 
       <div class="source-presets" id="source-presets">
         <!-- Populated by JS -->
+      </div>
+      <div class="restore-bar" id="restore-source-bar" style="display:none;">
+        <span>Some built-in presets were deleted.</span>
+        <a href="#" id="restore-source-defaults">Restore defaults</a>
       </div>
 
       <div class="save-bar" id="save-bar" style="display:none;">
@@ -142,6 +147,13 @@
     }
 
     // --- Handle mineral selection ---
+    function updateAlkalinityWarning() {
+      const checked = mineralListEl.querySelectorAll("input:checked");
+      const ids = Array.from(checked).map(cb => cb.value);
+      const hasAlk = ids.includes("baking-soda") || ids.includes("potassium-bicarbonate");
+      document.getElementById("alkalinity-warning").style.display = hasAlk ? "none" : "block";
+    }
+
     mineralListEl.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
       const item = e.target.closest(".mineral-item");
@@ -150,6 +162,7 @@
       const checked = mineralListEl.querySelectorAll("input:checked");
       const ids = Array.from(checked).map(cb => cb.value);
       saveSelectedMinerals(ids);
+      updateAlkalinityWarning();
       showSaved();
     });
 
@@ -161,6 +174,20 @@
         saveAlkalinitySource(radio.value);
         showSaved();
       });
+    });
+
+    // --- Restore defaults for source water presets ---
+    function updateRestoreSourceBar() {
+      const deleted = loadDeletedPresets();
+      document.getElementById("restore-source-bar").style.display = deleted.length > 0 ? "flex" : "none";
+    }
+
+    document.getElementById("restore-source-defaults").addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("cw_deleted_presets");
+      renderPresetButtons();
+      updateRestoreSourceBar();
+      showSaved();
     });
 
     // --- Render all preset buttons dynamically ---
@@ -225,6 +252,7 @@
           }
           deleteCustomProfile(deleteKey);
           renderPresetButtons();
+          updateRestoreSourceBar();
           if (activePreset === deleteKey) {
             const remaining = Object.keys(getAllPresets());
             const fallback = remaining.find(k => k !== "custom") || "custom";
@@ -341,6 +369,8 @@
     });
 
     renderPresetButtons();
+    updateRestoreSourceBar();
+    updateAlkalinityWarning();
 
     // If saved preset was deleted, fall back
     const allPresets = getAllPresets();

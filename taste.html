@@ -58,6 +58,7 @@
     <section class="card">
       <h2>How do you want to change it?</h2>
       <p class="hint">Move the sliders based on what you want more or less of in the cup. Center = no change.</p>
+      <button class="reset-btn" id="reset-sliders-btn">Reset sliders</button>
 
       <div class="slider-group">
         <div class="slider-item">
@@ -331,6 +332,7 @@
         ION_FIELDS.forEach(ion => {
           document.getElementById("cur-" + ion).value = values[ion] || 0;
         });
+        resetSliders();
         recalculate();
       }
     });
@@ -353,6 +355,20 @@
         valEl.textContent = (v > 0 ? "+" : "") + v;
         recalculate();
       });
+    });
+
+    // --- Reset all sliders to zero ---
+    function resetSliders() {
+      SLIDERS.forEach(slider => {
+        const el = document.getElementById("slider-" + slider);
+        el.value = 0;
+        document.getElementById("val-" + slider).textContent = "0";
+      });
+    }
+
+    document.getElementById("reset-sliders-btn").addEventListener("click", () => {
+      resetSliders();
+      recalculate();
     });
 
     // --- Get current adjusted profile (used for display and save) ---
