@@ -230,7 +230,6 @@
       }
     };
 
-    const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
     // --- Slider adjustment factors ---
@@ -413,15 +412,34 @@
     const tasteProfileNameInput = document.getElementById("taste-profile-name");
     const tasteSaveStatus = document.getElementById("taste-save-status");
 
+    function showTasteSaveStatus(message, isError) {
+      tasteSaveStatus.textContent = message;
+      tasteSaveStatus.classList.toggle("error", isError);
+      tasteSaveStatus.classList.add("visible");
+      setTimeout(() => {
+        tasteSaveStatus.classList.remove("visible", "error");
+      }, isError ? 3000 : 1500);
+    }
+
     tasteSaveBtn.addEventListener("click", () => {
       const name = tasteProfileNameInput.value.trim();
-      if (!name) return;
+      if (!name) {
+        showTasteSaveStatus("Enter a profile name.", true);
+        return;
+      }
 
       const key = slugify(name);
-      if (!key || BUILTIN_TARGET_KEYS.includes(key)) {
-        tasteSaveStatus.textContent = "Choose a different name (reserved).";
-        tasteSaveStatus.classList.add("visible");
-        setTimeout(() => tasteSaveStatus.classList.remove("visible"), 2000);
+      if (!key) {
+        showTasteSaveStatus("Enter a valid name.", true);
+        return;
+      }
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        showTasteSaveStatus("That name is reserved. Choose a different name.", true);
+        return;
+      }
+      const profiles = loadCustomTargetProfiles();
+      if (profiles[key]) {
+        showTasteSaveStatus("A profile with this name already exists.", true);
         return;
       }
 
@@ -429,23 +447,18 @@
       const metrics = calculateMetrics(adjusted);
       const alkalinity = Math.round(metrics.kh);
 
-      const profile = {
+      profiles[key] = {
         label: name,
         calcium: adjusted.calcium,
         magnesium: adjusted.magnesium,
         alkalinity: alkalinity,
         description: ""
       };
-
-      const profiles = loadCustomTargetProfiles();
-      profiles[key] = profile;
       saveCustomTargetProfiles(profiles);
       renderTastePresets();
 
       tasteProfileNameInput.value = "";
-      tasteSaveStatus.textContent = "Saved! Use it on the Calculator page.";
-      tasteSaveStatus.classList.add("visible");
-      setTimeout(() => tasteSaveStatus.classList.remove("visible"), 2500);
+      showTasteSaveStatus("Saved! Use it on the Calculator page.", false);
     });
 
     // --- Initialize ---

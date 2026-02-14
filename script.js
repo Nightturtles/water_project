@@ -44,7 +44,7 @@ const BUFFER_INFO = {
     detail: "Sodium bicarbonate (NaHCO3)",
     description: "Sodium bicarbonate (NaHCO3) \u2014 cheap and easy to find at any grocery store."
   },
-  "potassium-bicarb": {
+  "potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
     detail: "Potassium bicarbonate (KHCO3)",
     description: "Potassium bicarbonate (KHCO3) \u2014 sodium-free alternative, preferred by many coffee pros."
@@ -72,6 +72,16 @@ const CA_TO_CACL2 = 147.01 / 40.078; // ~3.667
 
 const GALLONS_TO_LITERS = 3.78541;
 
+// --- Mass fraction constants for ion calculations ---
+const FRAC_CA_IN_CACL2_2H2O = 40.078 / 147.01;
+const FRAC_CL_IN_CACL2_2H2O = 70.906 / 147.01;
+const FRAC_MG_IN_MGSO4_7H2O = 24.305 / 246.47;
+const FRAC_SO4_IN_MGSO4_7H2O = 96.06 / 246.47;
+const FRAC_K_IN_KHCO3 = 39.098 / 100.115;
+const FRAC_HCO3_IN_KHCO3 = 61.017 / 100.115;
+const FRAC_NA_IN_NAHCO3 = 22.99 / 84.007;
+const FRAC_HCO3_IN_NAHCO3 = 61.017 / 84.007;
+
 // --- State ---
 let currentProfile = loadTargetPresetName();
 
@@ -92,6 +102,7 @@ const targetEditBar = document.getElementById("target-edit-bar");
 const targetProfileNameInput = document.getElementById("target-profile-name");
 const targetSaveBtn = document.getElementById("target-save-btn");
 const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
+const targetSaveStatus = document.getElementById("target-save-status");
 const confirmOverlay = document.getElementById("confirm-overlay");
 const confirmMessage = document.getElementById("confirm-message");
 const confirmYesBtn = document.getElementById("confirm-yes");
@@ -121,11 +132,14 @@ function getSourceWater() {
 
 function updateSourceWaterTags() {
   const water = getSourceWater();
-  const ions = ["calcium", "magnesium", "bicarbonate"];
-  const labels = { calcium: "Ca", magnesium: "Mg", bicarbonate: "HCO\u2083" };
-  sourceWaterTags.innerHTML = ions
-    .map(ion => `<span class="base-tag">${labels[ion]}: ${water[ion] || 0} mg/L</span>`)
-    .join("");
+  const nonZero = ION_FIELDS.filter(ion => water[ion] > 0);
+  if (nonZero.length === 0) {
+    sourceWaterTags.innerHTML = '<span class="base-tag">All zeros</span>';
+  } else {
+    sourceWaterTags.innerHTML = nonZero
+      .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
+      .join("");
+  }
   const resultsHint = document.getElementById("results-hint");
   if (resultsHint) {
     const preset = getAllPresets()[sourcePresetSelect.value];
@@ -138,19 +152,17 @@ updateSourceWaterTags();
 
 // --- Result items: show only minerals selected in Settings ---
 // Calculator uses: epsom-salt (Mg), calcium-chloride (Ca), baking-soda or potassium-bicarbonate (alkalinity)
-const BUFFER_TO_MINERAL = { "baking-soda": "baking-soda", "potassium-bicarb": "potassium-bicarbonate" };
 
-// Returns "baking-soda" | "potassium-bicarb" | null. null means no alkalinity source selected in Settings.
+// Returns "baking-soda" | "potassium-bicarbonate" | null. null means no alkalinity source selected in Settings.
 function getAlkalinitySource() {
   const selected = loadSelectedMinerals();
   const hasBakingSoda = selected.includes("baking-soda");
   const hasPotBicarb = selected.includes("potassium-bicarbonate");
   if (!hasBakingSoda && !hasPotBicarb) return null;
   if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
-  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarb";
+  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarbonate";
   // Both selected: use Settings preference
-  const pref = loadAlkalinitySource();
-  return pref === "potassium-bicarbonate" ? "potassium-bicarb" : "baking-soda";
+  return loadAlkalinitySource();
 }
 
 function renderResultItems() {
@@ -162,7 +174,7 @@ function renderResultItems() {
   }
 
   const selected = loadSelectedMinerals();
-  const bufferMineralId = BUFFER_TO_MINERAL[alkalinitySource];
+  const bufferMineralId = alkalinitySource;
 
   const toShow = [
     { id: "epsom-salt", order: 0 },
@@ -180,7 +192,7 @@ function renderResultItems() {
     const mineral = MINERAL_DB[id];
     if (!mineral) continue;
     const isBuffer = id === "baking-soda" || id === "potassium-bicarbonate";
-    const info = isBuffer ? BUFFER_INFO[id === "potassium-bicarbonate" ? "potassium-bicarb" : "baking-soda"] : null;
+    const info = isBuffer ? BUFFER_INFO[id] : null;
     const name = info ? info.name : mineral.name;
     const detail = info ? info.detail : mineral.formula;
     const div = document.createElement("div");
@@ -342,27 +354,49 @@ targetSaveChangesBtn.addEventListener("click", () => {
 // --- Save new custom target profile ---
 targetSaveBtn.addEventListener("click", () => {
   const name = targetProfileNameInput.value.trim();
-  if (!name) return;
+  if (!name) {
+    showTargetSaveStatus("Enter a profile name.", true);
+    return;
+  }
 
   const key = slugify(name);
-  if (!key || BUILTIN_TARGET_KEYS.includes(key)) return;
+  if (!key) {
+    showTargetSaveStatus("Enter a valid name.", true);
+    return;
+  }
+  if (BUILTIN_TARGET_KEYS.includes(key)) {
+    showTargetSaveStatus("That name is reserved. Choose a different name.", true);
+    return;
+  }
+  const profiles = loadCustomTargetProfiles();
+  if (profiles[key]) {
+    showTargetSaveStatus("A profile with this name already exists.", true);
+    return;
+  }
 
-  const profile = {
+  profiles[key] = {
     label: name,
     calcium: parseFloat(targetCa.value) || 0,
     magnesium: parseFloat(targetMg.value) || 0,
     alkalinity: parseFloat(targetAlk.value) || 0,
     description: ""
   };
-
-  const profiles = loadCustomTargetProfiles();
-  profiles[key] = profile;
   saveCustomTargetProfiles(profiles);
 
   renderProfileButtons();
   activateProfile(key);
   targetProfileNameInput.value = "";
+  showTargetSaveStatus("Saved!", false);
 });
+
+function showTargetSaveStatus(message, isError) {
+  targetSaveStatus.textContent = message;
+  targetSaveStatus.classList.toggle("error", isError);
+  targetSaveStatus.classList.add("visible");
+  setTimeout(() => {
+    targetSaveStatus.classList.remove("visible", "error");
+  }, isError ? 3000 : 1500);
+}
 
 // --- Source water dropdown change ---
 sourcePresetSelect.addEventListener("change", () => {
@@ -411,7 +445,7 @@ function calculate() {
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
     const alk = getAlkalinitySource();
-    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, ...(alk ? { [BUFFER_TO_MINERAL[alk]]: 0 } : {}) });
+    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, ...(alk ? { [alk]: 0 } : {}) });
     resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
     return;
   }
@@ -424,26 +458,6 @@ function calculate() {
 
   // Read source water from dropdown/preset
   const sourceWater = getSourceWater();
-
-  // ---------------------------
-  // Conversions & constants
-  // ---------------------------
-  // Fractions by mass for each salt form
-  // CaCl2·2H2O (MW 147.01): Ca 40.078, Cl2 70.906
-  const FRAC_CA_IN_CACL2_2H2O = 40.078 / 147.01; // ~0.2725
-  const FRAC_CL_IN_CACL2_2H2O = 70.906 / 147.01; // ~0.4820
-
-  // MgSO4·7H2O (MW 246.47): Mg 24.305, SO4 96.06
-  const FRAC_MG_IN_MGSO4_7H2O = 24.305 / 246.47; // ~0.0986
-  const FRAC_SO4_IN_MGSO4_7H2O = 96.06 / 246.47; // ~0.3896
-
-  // KHCO3 (MW 100.115): K 39.098, HCO3 61.017 — match MINERAL_DB
-  const FRAC_K_IN_KHCO3 = 39.098 / 100.115; // ~0.3909
-  const FRAC_HCO3_IN_KHCO3 = 61.017 / 100.115; // ~0.6091
-
-  // NaHCO3 (MW 84.007): Na 22.99, HCO3 61.017 — match MINERAL_DB
-  const FRAC_NA_IN_NAHCO3 = 22.99 / 84.007; // ~0.2737
-  const FRAC_HCO3_IN_NAHCO3 = 61.017 / 84.007; // ~0.7263
 
   // Convert source bicarbonate to alkalinity as CaCO3 (uses shared HCO3_TO_CACO3)
   const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
@@ -472,7 +486,7 @@ function calculate() {
   // Buffer dosing:
   // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
   let bufferPerL;
-  if (currentBuffer === "potassium-bicarb") {
+  if (currentBuffer === "potassium-bicarbonate") {
     bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_POTASSIUM_BICARB) / 1000; // grams per liter
   } else {
     bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_BAKING_SODA) / 1000; // grams per liter
@@ -487,7 +501,7 @@ function calculate() {
   updateResultValues({
     "epsom-salt": epsomTotal,
     "calcium-chloride": cacl2Total,
-    [BUFFER_TO_MINERAL[currentBuffer]]: bufferTotal
+    [currentBuffer]: bufferTotal
   });
 
   // ---------------------------
@@ -508,11 +522,11 @@ function calculate() {
 
   // Buffer ions (either K + HCO3 or Na + HCO3)
   const addedHCO3 =
-    currentBuffer === "potassium-bicarb"
+    currentBuffer === "potassium-bicarbonate"
       ? mgL_buffer * FRAC_HCO3_IN_KHCO3
       : mgL_buffer * FRAC_HCO3_IN_NAHCO3;
 
-  const addedK = currentBuffer === "potassium-bicarb" ? mgL_buffer * FRAC_K_IN_KHCO3 : 0;
+  const addedK = currentBuffer === "potassium-bicarbonate" ? mgL_buffer * FRAC_K_IN_KHCO3 : 0;
   const addedNa = currentBuffer === "baking-soda" ? mgL_buffer * FRAC_NA_IN_NAHCO3 : 0;
 
   // Final bicarbonate (mg/L) is source bicarbonate + added bicarbonate
@@ -542,8 +556,8 @@ function calculate() {
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
 
-  const bufferLabel = currentBuffer === "potassium-bicarb" ? "K" : "Na";
-  const bufferIonPpm = currentBuffer === "potassium-bicarb" ? finalK : finalNa;
+  const bufferLabel = currentBuffer === "potassium-bicarbonate" ? "K" : "Na";
+  const bufferIonPpm = currentBuffer === "potassium-bicarbonate" ? finalK : finalNa;
 
   // Summary HTML
   resultSummary.innerHTML =
@@ -566,9 +580,7 @@ function calculate() {
 }
 
 function formatGrams(g) {
-  if (!isFinite(g) || g <= 0) return "0.00 g";
-  if (g < 0.01) return "0.00 g";
-  if (g < 1) return g.toFixed(2) + " g";
+  if (!isFinite(g) || g < 0.01) return "0.00 g";
   return g.toFixed(2) + " g";
 }
 

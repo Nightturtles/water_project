@@ -189,6 +189,13 @@ select:focus {
 /* ========================
    Buttons (profiles, buffers, presets)
    ======================== */
+.source-water-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
 .profile-buttons,
 .source-presets {
   display: flex;
@@ -198,7 +205,6 @@ select:focus {
 }
 
 .profile-btn,
-.buffer-btn,
 .preset-btn,
 .taste-preset-btn {
   padding: 0.5rem 1rem;
@@ -212,7 +218,6 @@ select:focus {
 }
 
 .profile-btn:hover,
-.buffer-btn:hover,
 .preset-btn:hover,
 .taste-preset-btn:hover {
   border-color: var(--blue-500);
@@ -220,7 +225,6 @@ select:focus {
 }
 
 .profile-btn.active,
-.buffer-btn.active,
 .preset-btn.active,
 .taste-preset-btn.active {
   background: var(--blue-50);
@@ -229,8 +233,7 @@ select:focus {
   font-weight: 500;
 }
 
-.profile-description,
-.buffer-description {
+.profile-description {
   font-size: 0.85rem;
   color: var(--gray-500);
   font-style: italic;
@@ -788,7 +791,6 @@ footer {
   }
 
   .profile-btn,
-  .buffer-btn,
   .preset-btn,
   .taste-preset-btn {
     width: 100%;

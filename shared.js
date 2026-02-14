@@ -87,6 +87,10 @@ const MINERAL_DB = {
   }
 };
 
+// --- Shared ion field list and labels ---
+const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
+const ION_LABELS = { calcium: "Ca", magnesium: "Mg", potassium: "K", sodium: "Na", sulfate: "SO\u2084", chloride: "Cl", bicarbonate: "HCO\u2083" };
+
 // --- Source water presets ---
 const SOURCE_PRESETS = {
   distilled: {

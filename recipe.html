@@ -104,13 +104,18 @@
           <span class="ppm-value" id="ppm-chloride">0</span>
           <span class="ppm-unit">mg/L</span>
         </div>
+        <div class="ppm-cell">
+          <span class="ppm-label">Bicarbonate</span>
+          <span class="ppm-value" id="ppm-bicarbonate">0</span>
+          <span class="ppm-unit">mg/L</span>
+        </div>
       </div>
 
       <div class="save-bar recipe-save-target">
         <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
         <button id="recipe-save-target-btn" class="preset-btn">Save as Target Profile</button>
       </div>
-      <p class="hint save-target-hint" id="recipe-save-target-hint" style="display:none;"></p>
+      <div class="save-status" id="recipe-save-status"></div>
     </section>
   </main>
 
@@ -121,7 +126,6 @@
   <script src="shared.js"></script>
   <script>
     const GALLONS_TO_LITERS = 3.78541;
-    const ION_NAMES = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
 
     // --- Source water dropdown ---
     const sourcePresetSelect = document.getElementById("source-preset");
@@ -148,13 +152,12 @@
 
     function updateSourceWaterTags() {
       const water = baseWater;
-      const nonZeroIons = ION_NAMES.filter(ion => water[ion] > 0);
-      if (nonZeroIons.length === 0) {
+      const nonZero = ION_FIELDS.filter(ion => water[ion] > 0);
+      if (nonZero.length === 0) {
         sourceWaterTags.innerHTML = '<span class="base-tag">All zeros</span>';
       } else {
-        sourceWaterTags.innerHTML = ION_NAMES
-          .filter(ion => water[ion] > 0)
-          .map(ion => `<span class="base-tag">${capitalize(ion)}: ${water[ion]} mg/L</span>`)
+        sourceWaterTags.innerHTML = nonZero
+          .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
           .join("");
       }
     }
@@ -226,12 +229,12 @@
 
       // Combine with base water
       const totalIons = {};
-      ION_NAMES.forEach(ion => {
+      ION_FIELDS.forEach(ion => {
         totalIons[ion] = (baseWater[ion] || 0) + (addedIons[ion] || 0);
       });
 
       // Display ion PPMs
-      ION_NAMES.forEach(ion => {
+      ION_FIELDS.forEach(ion => {
         const el = document.getElementById("ppm-" + ion);
         if (el) {
           el.textContent = Math.round(totalIons[ion] * 10) / 10;
@@ -245,45 +248,53 @@
       document.getElementById("ppm-tds").textContent = Math.round(metrics.tds);
     }
 
-    function capitalize(str) {
-      return str.charAt(0).toUpperCase() + str.slice(1);
-    }
-
     // --- Save Final Water Profile as Target Water Profile ---
     const recipeTargetNameInput = document.getElementById("recipe-target-name");
     const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
-    const recipeSaveTargetHint = document.getElementById("recipe-save-target-hint");
+    const recipeSaveStatus = document.getElementById("recipe-save-status");
+
+    function showRecipeSaveStatus(message, isError) {
+      recipeSaveStatus.textContent = message;
+      recipeSaveStatus.classList.toggle("error", isError);
+      recipeSaveStatus.classList.add("visible");
+      setTimeout(() => {
+        recipeSaveStatus.classList.remove("visible", "error");
+      }, isError ? 3000 : 1500);
+    }
 
     recipeSaveTargetBtn.addEventListener("click", () => {
       const name = recipeTargetNameInput.value.trim();
-      recipeSaveTargetHint.style.display = "none";
       if (!name) {
-        recipeSaveTargetHint.textContent = "Enter a name for this profile.";
-        recipeSaveTargetHint.style.display = "block";
+        showRecipeSaveStatus("Enter a name for this profile.", true);
         return;
       }
       const key = slugify(name);
-      if (!key || BUILTIN_TARGET_KEYS.includes(key)) {
-        recipeSaveTargetHint.textContent = "Choose a different name (reserved for a built-in profile).";
-        recipeSaveTargetHint.style.display = "block";
+      if (!key) {
+        showRecipeSaveStatus("Enter a valid name.", true);
+        return;
+      }
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        showRecipeSaveStatus("That name is reserved. Choose a different name.", true);
+        return;
+      }
+      const profiles = loadCustomTargetProfiles();
+      if (profiles[key]) {
+        showRecipeSaveStatus("A profile with this name already exists.", true);
         return;
       }
       const calcium = Math.round(parseFloat(document.getElementById("ppm-calcium").textContent) || 0);
       const magnesium = Math.round(parseFloat(document.getElementById("ppm-magnesium").textContent) || 0);
       const alkalinity = Math.round(parseFloat(document.getElementById("ppm-kh").textContent) || 0);
-      const profile = {
+      profiles[key] = {
         label: name,
         calcium,
         magnesium,
         alkalinity,
         description: ""
       };
-      const profiles = loadCustomTargetProfiles();
-      profiles[key] = profile;
       saveCustomTargetProfiles(profiles);
       recipeTargetNameInput.value = "";
-      recipeSaveTargetHint.textContent = "Saved. Use it as a target on the Calculator.";
-      recipeSaveTargetHint.style.display = "block";
+      showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
     });
 
     // --- Initial calculation ---
