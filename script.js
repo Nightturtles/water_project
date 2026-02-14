@@ -74,7 +74,6 @@ const GALLONS_TO_LITERS = 3.78541;
 
 // --- State ---
 let currentProfile = loadTargetPresetName();
-let currentBuffer = "baking-soda";
 
 // --- DOM elements ---
 const volumeInput = document.getElementById("volume");
@@ -85,7 +84,6 @@ const targetCa = document.getElementById("target-calcium");
 const targetMg = document.getElementById("target-magnesium");
 const targetAlk = document.getElementById("target-alkalinity");
 const profileDesc = document.getElementById("profile-description");
-const bufferDesc = document.getElementById("buffer-description");
 const resultSummary = document.getElementById("result-summary");
 const resultsContainer = document.getElementById("results-container");
 const profileButtonsContainer = document.getElementById("profile-buttons");
@@ -142,9 +140,29 @@ updateSourceWaterTags();
 // Calculator uses: epsom-salt (Mg), calcium-chloride (Ca), baking-soda or potassium-bicarbonate (alkalinity)
 const BUFFER_TO_MINERAL = { "baking-soda": "baking-soda", "potassium-bicarb": "potassium-bicarbonate" };
 
-function renderResultItems() {
+// Returns "baking-soda" | "potassium-bicarb" | null. null means no alkalinity source selected in Settings.
+function getAlkalinitySource() {
   const selected = loadSelectedMinerals();
-  const bufferMineralId = BUFFER_TO_MINERAL[currentBuffer];
+  const hasBakingSoda = selected.includes("baking-soda");
+  const hasPotBicarb = selected.includes("potassium-bicarbonate");
+  if (!hasBakingSoda && !hasPotBicarb) return null;
+  if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
+  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarb";
+  // Both selected: use Settings preference
+  const pref = loadAlkalinitySource();
+  return pref === "potassium-bicarbonate" ? "potassium-bicarb" : "baking-soda";
+}
+
+function renderResultItems() {
+  const alkalinitySource = getAlkalinitySource();
+  if (alkalinitySource === null) {
+    resultsContainer.innerHTML = '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
+    resultSummary.innerHTML = "";
+    return;
+  }
+
+  const selected = loadSelectedMinerals();
+  const bufferMineralId = BUFFER_TO_MINERAL[alkalinitySource];
 
   const toShow = [
     { id: "epsom-salt", order: 0 },
@@ -284,21 +302,6 @@ profileButtonsContainer.addEventListener("click", (e) => {
   activateProfile(btn.dataset.profile);
 });
 
-// --- Buffer button handling ---
-document.querySelectorAll(".buffer-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".buffer-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-
-    currentBuffer = btn.dataset.buffer;
-    const info = BUFFER_INFO[currentBuffer];
-    bufferDesc.textContent = info.description;
-
-    renderResultItems();
-    calculate();
-  });
-});
-
 // --- Target input handling ---
 [targetCa, targetMg, targetAlk].forEach(input => {
   input.addEventListener("input", () => {
@@ -407,8 +410,15 @@ function calculate() {
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
-    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, [BUFFER_TO_MINERAL[currentBuffer]]: 0 });
+    const alk = getAlkalinitySource();
+    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, ...(alk ? { [BUFFER_TO_MINERAL[alk]]: 0 } : {}) });
     resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
+    return;
+  }
+
+  const currentBuffer = getAlkalinitySource();
+  if (currentBuffer === null) {
+    resultSummary.innerHTML = "";
     return;
   }
 

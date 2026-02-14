@@ -22,6 +22,22 @@
       </div>
     </section>
 
+    <!-- Alkalinity Source -->
+    <section class="card">
+      <h2>Alkalinity source</h2>
+      <p class="hint">Select which mineral to use for alkalinity. You must have at least one of these checked above.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="alkalinity-source" value="baking-soda">
+          <span>Baking Soda (NaHCO₃)</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="alkalinity-source" value="potassium-bicarbonate">
+          <span>Potassium Bicarbonate (KHCO₃)</span>
+        </label>
+      </div>
+    </section>
+
     <!-- Source Water Profile -->
     <section class="card">
       <h2>My Starting Water</h2>
@@ -136,6 +152,16 @@
       const ids = Array.from(checked).map(cb => cb.value);
       saveSelectedMinerals(ids);
       showSaved();
+    });
+
+    // --- Alkalinity source ---
+    const currentAlkSource = loadAlkalinitySource();
+    document.querySelector(`input[name="alkalinity-source"][value="${currentAlkSource}"]`).checked = true;
+    document.querySelectorAll('input[name="alkalinity-source"]').forEach(radio => {
+      radio.addEventListener("change", () => {
+        saveAlkalinitySource(radio.value);
+        showSaved();
+      });
     });
 
     // --- Render all preset buttons dynamically ---

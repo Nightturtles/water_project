@@ -246,6 +246,16 @@ function saveSelectedMinerals(mineralIds) {
   localStorage.setItem("cw_selected_minerals", JSON.stringify(mineralIds));
 }
 
+function saveAlkalinitySource(mineralId) {
+  localStorage.setItem("cw_alkalinity_source", mineralId);
+}
+
+function loadAlkalinitySource() {
+  const saved = localStorage.getItem("cw_alkalinity_source");
+  if (saved === "potassium-bicarbonate") return "potassium-bicarbonate";
+  return "baking-soda"; // default
+}
+
 function loadSelectedMinerals() {
   const saved = localStorage.getItem("cw_selected_minerals");
   if (saved) {
