@@ -427,20 +427,15 @@ function calculate() {
   const FRAC_MG_IN_MGSO4_7H2O = 24.305 / 246.47; // ~0.0986
   const FRAC_SO4_IN_MGSO4_7H2O = 96.06 / 246.47; // ~0.3896
 
-  // KHCO3 (MW 100.115): K 39.0983, HCO3 61.017
-  const FRAC_K_IN_KHCO3 = 39.0983 / 100.115; // ~0.3909
+  // KHCO3 (MW 100.115): K 39.098, HCO3 61.017 — match MINERAL_DB
+  const FRAC_K_IN_KHCO3 = 39.098 / 100.115; // ~0.3909
   const FRAC_HCO3_IN_KHCO3 = 61.017 / 100.115; // ~0.6091
 
-  // NaHCO3 (MW 84.007): Na 22.989, HCO3 61.017
-  const FRAC_NA_IN_NAHCO3 = 22.989 / 84.007; // ~0.2737
+  // NaHCO3 (MW 84.007): Na 22.99, HCO3 61.017 — match MINERAL_DB
+  const FRAC_NA_IN_NAHCO3 = 22.99 / 84.007; // ~0.2737
   const FRAC_HCO3_IN_NAHCO3 = 61.017 / 84.007; // ~0.7263
 
-  // Hardness/alkalinity conversions (ppm as CaCO3)
-  const CA_TO_CACO3 = 2.497; // Ca ppm -> GH contribution (as CaCO3)
-  const MG_TO_CACO3 = 4.118; // Mg ppm -> GH contribution (as CaCO3)
-  const HCO3_TO_CACO3 = 50.045 / 61.017; // ~0.8197 (HCO3 ppm -> alkalinity as CaCO3)
-
-  // Convert source bicarbonate to alkalinity as CaCO3: alk_as_CaCO3 = HCO3 * (50.045 / 61.017)
+  // Convert source bicarbonate to alkalinity as CaCO3 (uses shared HCO3_TO_CACO3)
   const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
 
   // ---------------------------
@@ -520,21 +515,19 @@ function calculate() {
   const finalNa = (sourceWater.sodium || 0) + addedNa;
 
   // ---------------------------
-  // GH / KH
+  // GH / KH / TDS — use shared calculateMetrics for consistency
   // ---------------------------
-  const GH_asCaCO3 = finalCa * CA_TO_CACO3 + finalMg * MG_TO_CACO3;
-  const KH_asCaCO3 = finalHCO3 * HCO3_TO_CACO3;
+  const finalIons = {
+    calcium: finalCa, magnesium: finalMg, potassium: finalK, sodium: finalNa,
+    sulfate: finalSO4, chloride: finalCl, bicarbonate: finalHCO3
+  };
+  const metrics = calculateMetrics(finalIons);
+  const GH_asCaCO3 = metrics.gh;
+  const KH_asCaCO3 = metrics.kh;
+  const TDS_ion_sum = metrics.tds;
 
-  // ---------------------------
-  // TDS reporting
-  // ---------------------------
-  // 1) Added-salts, mass-based "TDS" (mg/L of salts added)
+  // Added-salts, mass-based "TDS" (mg/L of salts added) — separate from ion-sum
   const TDS_added_salts = mgL_epsom + mgL_cacl2 + mgL_buffer;
-
-  // 2) Ion-sum approximation (sum of major ions we track), mg/L
-  // This is NOT the same as conductivity-based TDS meters, but it is intuitive.
-  const TDS_ion_sum =
-    finalCa + finalMg + finalHCO3 + finalCl + finalSO4 + finalK + finalNa;
 
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;

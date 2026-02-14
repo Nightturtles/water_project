@@ -275,7 +275,7 @@
         sodium: 0,
         sulfate: 0,
         chloride: 0,
-        bicarbonate: Math.round((profile.alkalinity || 0) * (61.017 / 50.045))
+        bicarbonate: Math.round((profile.alkalinity || 0) * CACO3_TO_HCO3)
       };
     }
 

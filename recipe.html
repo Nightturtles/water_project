@@ -105,6 +105,12 @@
           <span class="metric-unit">mg/L</span>
         </div>
       </div>
+
+      <div class="save-bar recipe-save-target">
+        <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
+        <button id="recipe-save-target-btn" class="preset-btn">Save as Target Profile</button>
+      </div>
+      <p class="hint save-target-hint" id="recipe-save-target-hint" style="display:none;"></p>
     </section>
   </main>
 
@@ -242,6 +248,43 @@
     function capitalize(str) {
       return str.charAt(0).toUpperCase() + str.slice(1);
     }
+
+    // --- Save Final Water Profile as Target Water Profile ---
+    const recipeTargetNameInput = document.getElementById("recipe-target-name");
+    const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
+    const recipeSaveTargetHint = document.getElementById("recipe-save-target-hint");
+
+    recipeSaveTargetBtn.addEventListener("click", () => {
+      const name = recipeTargetNameInput.value.trim();
+      recipeSaveTargetHint.style.display = "none";
+      if (!name) {
+        recipeSaveTargetHint.textContent = "Enter a name for this profile.";
+        recipeSaveTargetHint.style.display = "block";
+        return;
+      }
+      const key = slugify(name);
+      if (!key || BUILTIN_TARGET_KEYS.includes(key)) {
+        recipeSaveTargetHint.textContent = "Choose a different name (reserved for a built-in profile).";
+        recipeSaveTargetHint.style.display = "block";
+        return;
+      }
+      const calcium = Math.round(parseFloat(document.getElementById("ppm-calcium").textContent) || 0);
+      const magnesium = Math.round(parseFloat(document.getElementById("ppm-magnesium").textContent) || 0);
+      const alkalinity = Math.round(parseFloat(document.getElementById("ppm-kh").textContent) || 0);
+      const profile = {
+        label: name,
+        calcium,
+        magnesium,
+        alkalinity,
+        description: ""
+      };
+      const profiles = loadCustomTargetProfiles();
+      profiles[key] = profile;
+      saveCustomTargetProfiles(profiles);
+      recipeTargetNameInput.value = "";
+      recipeSaveTargetHint.textContent = "Saved. Use it as a target on the Calculator.";
+      recipeSaveTargetHint.style.display = "block";
+    });
 
     // --- Initial calculation ---
     recalculate();

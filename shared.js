@@ -274,6 +274,13 @@ function injectNav() {
   document.body.insertBefore(nav, document.body.firstChild);
 }
 
+// --- Conversion constants (single source of truth for GH/KH/TDS) ---
+// CaCO3 MW = 100.09; equivalent weights for hardness/alkalinity
+const CA_TO_CACO3 = 100.09 / 40.078;   // Ca ppm -> GH contribution (mg/L as CaCO3)
+const MG_TO_CACO3 = 100.09 / 24.305;   // Mg ppm -> GH contribution (mg/L as CaCO3)
+const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
+const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
+
 // --- Ion calculation from grams of minerals ---
 // Given an object { mineralId: gramsPerLiter, ... }, returns ion PPMs
 function calculateIonPPMs(mineralGrams) {
@@ -300,17 +307,10 @@ function calculateIonPPMs(mineralGrams) {
 
 // --- Derived water metrics ---
 function calculateMetrics(ions) {
-  // GH (General Hardness) as mg/L CaCO3
-  const gh = ions.calcium * (100.09 / 40.078) + ions.magnesium * (100.09 / 24.305);
-
-  // KH (Carbonate Hardness) as mg/L CaCO3
-  // 1 mg/L HCO3 = (50.045 / 61.017) mg/L as CaCO3
-  const kh = ions.bicarbonate * (50.045 / 61.017);
-
-  // TDS — sum of all ions
-  const tds = ions.calcium + ions.magnesium + ions.potassium +
-              ions.sodium + ions.sulfate + ions.chloride + ions.bicarbonate;
-
+  const gh = ions.calcium * CA_TO_CACO3 + ions.magnesium * MG_TO_CACO3;
+  const kh = (ions.bicarbonate || 0) * HCO3_TO_CACO3;
+  const tds = (ions.calcium || 0) + (ions.magnesium || 0) + (ions.potassium || 0) +
+              (ions.sodium || 0) + (ions.sulfate || 0) + (ions.chloride || 0) + (ions.bicarbonate || 0);
   return { gh, kh, tds };
 }
 
