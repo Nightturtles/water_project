@@ -403,16 +403,30 @@
       });
       const adjusted = getAdjustedProfile();
 
+      // Compute unclamped values to detect when clamping occurred
+      const unclamped = { ...base };
+      SLIDERS.forEach(slider => {
+        const val = parseInt(document.getElementById("slider-" + slider).value) || 0;
+        const effects = SLIDER_EFFECTS[slider];
+        for (const [ion, perStep] of Object.entries(effects)) {
+          unclamped[ion] = (unclamped[ion] || 0) + val * perStep;
+        }
+      });
+
       // Display adjusted values and deltas
       ION_FIELDS.forEach(ion => {
         document.getElementById("res-" + ion).textContent = adjusted[ion];
         const delta = adjusted[ion] - Math.round(base[ion]);
+        const wasClamped = unclamped[ion] < 0;
         const deltaEl = document.getElementById("delta-" + ion);
         if (delta > 0) {
           deltaEl.textContent = "+" + delta;
           deltaEl.className = "result-delta positive";
         } else if (delta < 0) {
-          deltaEl.textContent = delta;
+          deltaEl.textContent = delta + (wasClamped ? " (min)" : "");
+          deltaEl.className = "result-delta negative";
+        } else if (wasClamped) {
+          deltaEl.textContent = "0 (min)";
           deltaEl.className = "result-delta negative";
         } else {
           deltaEl.textContent = "";

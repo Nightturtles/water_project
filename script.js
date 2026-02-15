@@ -99,10 +99,7 @@ const targetProfileNameInput = document.getElementById("target-profile-name");
 const targetSaveBtn = document.getElementById("target-save-btn");
 const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
 const targetSaveStatus = document.getElementById("target-save-status");
-const confirmOverlay = document.getElementById("confirm-overlay");
-const confirmMessage = document.getElementById("confirm-message");
-const confirmYesBtn = document.getElementById("confirm-yes");
-const confirmNoBtn = document.getElementById("confirm-no");
+
 
 // --- Populate source water dropdown ---
 const presetEntries = Object.entries(getAllPresets());
@@ -426,29 +423,6 @@ sourcePresetSelect.addEventListener("change", () => {
   el.addEventListener("change", calculate);
 });
 
-// --- Confirmation modal ---
-function showConfirm(message, onYes) {
-  confirmMessage.textContent = message;
-  confirmOverlay.style.display = "flex";
-
-  function yesHandler() {
-    confirmOverlay.style.display = "none";
-    cleanup();
-    onYes();
-  }
-  function noHandler() {
-    confirmOverlay.style.display = "none";
-    cleanup();
-  }
-  function cleanup() {
-    confirmYesBtn.removeEventListener("click", yesHandler);
-    confirmNoBtn.removeEventListener("click", noHandler);
-  }
-
-  confirmYesBtn.addEventListener("click", yesHandler);
-  confirmNoBtn.addEventListener("click", noHandler);
-}
-
 // --- Core calculation ---
 function calculate() {
   // Get volume in liters
@@ -498,16 +472,21 @@ function calculate() {
   if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
   if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
   if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
+  // Check which minerals the user actually has
+  const selected = loadSelectedMinerals();
+  const hasEpsom = selected.includes("epsom-salt");
+  const hasCaCl2 = selected.includes("calcium-chloride");
+  if (!hasEpsom && deltaMg > 0) warnings.push("You need Epsom Salt to add magnesium. Enable it in Settings.");
+  if (!hasCaCl2 && deltaCa > 0) warnings.push("You need Calcium Chloride to add calcium. Enable it in Settings.");
+
   const warningsEl = document.getElementById("result-warnings");
   if (warningsEl) warningsEl.textContent = warnings.join(" ");
 
   // ---------------------------
   // Compute salt dosing (per L)
   // ---------------------------
-  // To get X mg/L of Mg, need X * (MW_salt / MW_element) mg/L of salt
-  // MG_TO_EPSOM and CA_TO_CACL2 are defined earlier in the file
-  const epsomPerL = (deltaMg * MG_TO_EPSOM) / 1000; // grams per liter
-  const cacl2PerL = (deltaCa * CA_TO_CACL2) / 1000; // grams per liter
+  const epsomPerL = hasEpsom ? (deltaMg * MG_TO_EPSOM) / 1000 : 0;
+  const cacl2PerL = hasCaCl2 ? (deltaCa * CA_TO_CACL2) / 1000 : 0;
 
   // Buffer dosing:
   // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
@@ -533,9 +512,9 @@ function calculate() {
   // ---------------------------
   // Compute resulting ions (mg/L)
   // ---------------------------
-  // Final Ca and Mg are simply source + delta (since we only add minerals)
-  const finalCa = (sourceWater.calcium || 0) + deltaCa; // mg/L
-  const finalMg = (sourceWater.magnesium || 0) + deltaMg; // mg/L
+  // Final Ca and Mg: only add delta if the required mineral is available
+  const finalCa = (sourceWater.calcium || 0) + (hasCaCl2 ? deltaCa : 0);
+  const finalMg = (sourceWater.magnesium || 0) + (hasEpsom ? deltaMg : 0);
 
   // Convert salt grams/L to mg/L of salt
   const mgL_epsom = epsomPerL * 1000;

@@ -118,10 +118,7 @@
     const profileNameInput = document.getElementById("profile-name");
     const saveProfileBtn = document.getElementById("save-profile-btn");
     const saveChangesBtn = document.getElementById("save-changes-btn");
-    const confirmOverlay = document.getElementById("confirm-overlay");
-    const confirmMessage = document.getElementById("confirm-message");
-    const confirmYesBtn = document.getElementById("confirm-yes");
-    const confirmNoBtn = document.getElementById("confirm-no");
+
 
     let activePreset = loadSourcePresetName();
 
@@ -150,8 +147,27 @@
     function updateAlkalinityWarning() {
       const checked = mineralListEl.querySelectorAll("input:checked");
       const ids = Array.from(checked).map(cb => cb.value);
-      const hasAlk = ids.includes("baking-soda") || ids.includes("potassium-bicarbonate");
+      const hasBs = ids.includes("baking-soda");
+      const hasPb = ids.includes("potassium-bicarbonate");
+      const hasAlk = hasBs || hasPb;
       document.getElementById("alkalinity-warning").style.display = hasAlk ? "none" : "block";
+
+      // Sync radio button enabled state with mineral checkboxes
+      const bsRadio = document.querySelector('input[name="alkalinity-source"][value="baking-soda"]');
+      const pbRadio = document.querySelector('input[name="alkalinity-source"][value="potassium-bicarbonate"]');
+      bsRadio.disabled = !hasBs;
+      pbRadio.disabled = !hasPb;
+      bsRadio.closest(".alkalinity-option").style.opacity = hasBs ? "1" : "0.4";
+      pbRadio.closest(".alkalinity-option").style.opacity = hasPb ? "1" : "0.4";
+
+      // Auto-switch if current selection was unchecked
+      if (bsRadio.checked && !hasBs && hasPb) {
+        pbRadio.checked = true;
+        saveAlkalinitySource("potassium-bicarbonate");
+      } else if (pbRadio.checked && !hasPb && hasBs) {
+        bsRadio.checked = true;
+        saveAlkalinitySource("baking-soda");
+      }
     }
 
     mineralListEl.addEventListener("change", (e) => {
@@ -338,29 +354,6 @@
       profileNameInput.value = "";
       showSaveStatus("Saved!", false);
     });
-
-    // --- Confirmation modal ---
-    function showConfirm(message, onYes) {
-      confirmMessage.textContent = message;
-      confirmOverlay.style.display = "flex";
-
-      function yesHandler() {
-        confirmOverlay.style.display = "none";
-        cleanup();
-        onYes();
-      }
-      function noHandler() {
-        confirmOverlay.style.display = "none";
-        cleanup();
-      }
-      function cleanup() {
-        confirmYesBtn.removeEventListener("click", yesHandler);
-        confirmNoBtn.removeEventListener("click", noHandler);
-      }
-
-      confirmYesBtn.addEventListener("click", yesHandler);
-      confirmNoBtn.addEventListener("click", noHandler);
-    }
 
     // --- Initialize ---
     const sourceWater = loadSourceWater();

@@ -368,5 +368,33 @@ function calculateMetrics(ions) {
   return { gh, kh, tds };
 }
 
+// --- Confirmation modal (shared across pages) ---
+function showConfirm(message, onYes) {
+  const overlay = document.getElementById("confirm-overlay");
+  const msgEl = document.getElementById("confirm-message");
+  const yesBtn = document.getElementById("confirm-yes");
+  const noBtn = document.getElementById("confirm-no");
+
+  msgEl.textContent = message;
+  overlay.style.display = "flex";
+
+  function close() {
+    overlay.style.display = "none";
+    yesBtn.removeEventListener("click", yesHandler);
+    noBtn.removeEventListener("click", noHandler);
+    document.removeEventListener("keydown", keyHandler);
+    overlay.removeEventListener("click", overlayClickHandler);
+  }
+  function yesHandler() { close(); onYes(); }
+  function noHandler() { close(); }
+  function keyHandler(e) { if (e.key === "Escape") noHandler(); }
+  function overlayClickHandler(e) { if (e.target === overlay) noHandler(); }
+
+  yesBtn.addEventListener("click", yesHandler);
+  noBtn.addEventListener("click", noHandler);
+  document.addEventListener("keydown", keyHandler);
+  overlay.addEventListener("click", overlayClickHandler);
+}
+
 // --- Run nav injection on load ---
 document.addEventListener("DOMContentLoaded", injectNav);

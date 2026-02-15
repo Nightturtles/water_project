@@ -310,9 +310,12 @@ select:focus {
 .result-warnings {
   margin-top: 0.75rem;
   font-size: 0.85rem;
-  color: var(--gray-500);
-  font-style: italic;
+  color: var(--red-600);
+  font-weight: 500;
   line-height: 1.6;
+  padding: 0.5rem 0.75rem;
+  background: rgba(248, 113, 113, 0.1);
+  border-radius: 8px;
 }
 
 .result-warnings:empty {
