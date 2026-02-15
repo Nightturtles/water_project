@@ -555,9 +555,6 @@ function calculate() {
   const KH_asCaCO3 = metrics.kh;
   const TDS_ion_sum = metrics.tds;
 
-  // Added-salts, mass-based "TDS" (mg/L of salts added) — separate from ion-sum
-  const TDS_added_salts = mgL_epsom + mgL_cacl2 + mgL_buffer;
-
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
 
@@ -567,7 +564,6 @@ function calculate() {
   // Summary HTML
   resultSummary.innerHTML =
     `<div style="line-height:1.5">` +
-      `<div><strong>TDS (added salts, mass-based):</strong> ~${Math.round(TDS_added_salts)} mg/L</div>` +
       `<div><strong>TDS (ion-sum approx):</strong> ~${Math.round(TDS_ion_sum)} mg/L</div>` +
       `<div><strong>GH:</strong> ~${Math.round(GH_asCaCO3)} mg/L as CaCO\u2083</div>` +
       `<div><strong>KH:</strong> ~${Math.round(KH_asCaCO3)} mg/L as CaCO\u2083</div>` +
