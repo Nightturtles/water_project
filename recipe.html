@@ -215,16 +215,16 @@
       if (volumeUnit.value === "gallons") {
         volumeL *= GALLONS_TO_LITERS;
       }
-      if (volumeL <= 0) volumeL = 1; // avoid division by zero
-
       // Collect total grams of each mineral, convert to grams per liter for ion calculation
       const mineralGramsPerLiter = {};
-      document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
-        const totalGrams = parseFloat(input.value) || 0;
-        if (totalGrams > 0) {
-          mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
-        }
-      });
+      if (volumeL > 0) {
+        document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
+          const totalGrams = Math.max(0, parseFloat(input.value) || 0);
+          if (totalGrams > 0) {
+            mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
+          }
+        });
+      }
 
       // Calculate ion contributions from minerals (calculateIonPPMs expects g/L)
       const addedIons = calculateIonPPMs(mineralGramsPerLiter);
@@ -310,6 +310,11 @@
 
     // --- Initial calculation ---
     recalculate();
+
+    // --- Refresh on bfcache restore ---
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) location.reload();
+    });
   </script>
 </body>
 </html>

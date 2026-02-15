@@ -343,6 +343,7 @@ targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {
     const allProfiles = getAllTargetPresets();
     const existing = allProfiles[currentProfile];
+    if (!existing) return;
     const profile = {
       label: existing.label,
       calcium: parseFloat(targetCa.value) || 0,
@@ -485,8 +486,8 @@ function calculate() {
   // ---------------------------
   // Compute salt dosing (per L)
   // ---------------------------
-  const epsomPerL = hasEpsom ? (deltaMg * MG_TO_EPSOM) / 1000 : 0;
-  const cacl2PerL = hasCaCl2 ? (deltaCa * CA_TO_CACL2) / 1000 : 0;
+  let epsomPerL = hasEpsom ? (deltaMg * MG_TO_EPSOM) / 1000 : 0;
+  let cacl2PerL = hasCaCl2 ? (deltaCa * CA_TO_CACL2) / 1000 : 0;
 
   // Buffer dosing:
   // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
@@ -502,6 +503,11 @@ function calculate() {
   const bufferTotal = bufferPerL * volumeL;
   const cacl2Total = cacl2PerL * volumeL;
 
+  // Zero out sub-threshold amounts so ion summary matches displayed grams
+  if (epsomTotal < 0.01) epsomPerL = 0;
+  if (cacl2Total < 0.01) cacl2PerL = 0;
+  if (bufferTotal < 0.01) bufferPerL = 0;
+
   // Display grams (only update elements that exist for selected minerals)
   updateResultValues({
     "epsom-salt": epsomTotal,
@@ -512,9 +518,9 @@ function calculate() {
   // ---------------------------
   // Compute resulting ions (mg/L)
   // ---------------------------
-  // Final Ca and Mg: only add delta if the required mineral is available
-  const finalCa = (sourceWater.calcium || 0) + (hasCaCl2 ? deltaCa : 0);
-  const finalMg = (sourceWater.magnesium || 0) + (hasEpsom ? deltaMg : 0);
+  // Final Ca and Mg: only add delta if the mineral is available and above display threshold
+  const finalCa = (sourceWater.calcium || 0) + (cacl2PerL > 0 ? deltaCa : 0);
+  const finalMg = (sourceWater.magnesium || 0) + (epsomPerL > 0 ? deltaMg : 0);
 
   // Convert salt grams/L to mg/L of salt
   const mgL_epsom = epsomPerL * 1000;
@@ -558,9 +564,6 @@ function calculate() {
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
 
-  const bufferLabel = currentBuffer === "potassium-bicarbonate" ? "K" : "Na";
-  const bufferIonPpm = currentBuffer === "potassium-bicarbonate" ? finalK : finalNa;
-
   // Summary HTML
   resultSummary.innerHTML =
     `<div style="line-height:1.5">` +
@@ -572,10 +575,11 @@ function calculate() {
       `<div><strong>Final ions (mg/L):</strong> ` +
         `Ca ${finalCa.toFixed(2)} | ` +
         `Mg ${finalMg.toFixed(2)} | ` +
+        `K ${finalK.toFixed(2)} | ` +
+        `Na ${finalNa.toFixed(2)} | ` +
         `HCO\u2083 ${finalHCO3.toFixed(2)} | ` +
         `SO\u2084 ${finalSO4.toFixed(2)} | ` +
-        `Cl ${finalCl.toFixed(2)} | ` +
-        `${bufferLabel} ${bufferIonPpm.toFixed(2)}` +
+        `Cl ${finalCl.toFixed(2)}` +
       `</div>` +
     `</div>`;
 }
@@ -605,3 +609,8 @@ if (!allTargetPresets[currentProfile]) {
   saveTargetPresetName(currentProfile);
 }
 activateProfile(currentProfile);
+
+// --- Refresh on bfcache restore ---
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted) location.reload();
+});

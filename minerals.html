@@ -299,7 +299,9 @@
     saveChangesBtn.addEventListener("click", () => {
       showConfirm("Are you sure you want to change this profile?", () => {
         const allPresets = getAllPresets();
-        const profile = { label: allPresets[activePreset].label };
+        const existing = allPresets[activePreset];
+        if (!existing) return;
+        const profile = { label: existing.label };
         ION_FIELDS.forEach(ion => {
           profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
         });
