@@ -359,33 +359,64 @@ targetSaveChangesBtn.addEventListener("click", () => {
   });
 });
 
+// --- Duplicate name error below name input (target profile) ---
+function updateTargetProfileNameError() {
+  const errEl = document.getElementById("target-profile-name-error");
+  const name = targetProfileNameInput.value.trim();
+  if (!name) {
+    errEl.textContent = "";
+    targetSaveBtn.disabled = false;
+    return;
+  }
+  const key = slugify(name);
+  if (BUILTIN_TARGET_KEYS.includes(key)) {
+    errEl.textContent = "That name is reserved. Choose a different name.";
+    targetSaveBtn.disabled = true;
+    return;
+  }
+  const existingLabels = getExistingTargetProfileLabels();
+  if (existingLabels.has(name.toLowerCase())) {
+    errEl.textContent = "A profile with this name already exists.";
+    targetSaveBtn.disabled = true;
+    return;
+  }
+  errEl.textContent = "";
+  targetSaveBtn.disabled = false;
+}
+
+targetProfileNameInput.addEventListener("input", updateTargetProfileNameError);
+
 // --- Save new custom target profile ---
 targetSaveBtn.addEventListener("click", () => {
   const name = targetProfileNameInput.value.trim();
   if (!name) {
+    document.getElementById("target-profile-name-error").textContent = "";
     showTargetSaveStatus("Enter a profile name.", true);
     return;
   }
 
   const key = slugify(name);
   if (!key) {
+    document.getElementById("target-profile-name-error").textContent = "";
     showTargetSaveStatus("Enter a valid name.", true);
     return;
   }
   if (BUILTIN_TARGET_KEYS.includes(key)) {
-    showTargetSaveStatus("That name is reserved. Choose a different name.", true);
+    updateTargetProfileNameError();
     return;
   }
   const profiles = loadCustomTargetProfiles();
   if (profiles[key]) {
-    showTargetSaveStatus("A profile with this name already exists.", true);
+    updateTargetProfileNameError();
     return;
   }
   const existingLabels = getExistingTargetProfileLabels();
   if (existingLabels.has(name.trim().toLowerCase())) {
-    showTargetSaveStatus("A profile with this name already exists.", true);
+    updateTargetProfileNameError();
     return;
   }
+
+  document.getElementById("target-profile-name-error").textContent = "";
 
   profiles[key] = {
     label: name,
@@ -399,8 +430,10 @@ targetSaveBtn.addEventListener("click", () => {
   renderProfileButtons();
   activateProfile(key);
   targetProfileNameInput.value = "";
+  updateTargetProfileNameError();
   showTargetSaveStatus("Saved!", false);
 });
+
 
 function showTargetSaveStatus(message, isError) {
   targetSaveStatus.textContent = message;

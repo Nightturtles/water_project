@@ -198,7 +198,10 @@
       </div>
 
       <div class="save-bar">
-        <input type="text" id="taste-profile-name" placeholder="Name this profile..." maxlength="40">
+        <div class="name-field">
+          <input type="text" id="taste-profile-name" placeholder="Name this profile..." maxlength="40">
+          <div class="profile-name-error" id="taste-profile-name-error" aria-live="polite"></div>
+        </div>
         <button id="taste-save-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="taste-save-status" aria-live="polite"></div>
@@ -450,6 +453,32 @@
     const tasteProfileNameInput = document.getElementById("taste-profile-name");
     const tasteSaveStatus = document.getElementById("taste-save-status");
 
+    function updateTasteProfileNameError() {
+      const errEl = document.getElementById("taste-profile-name-error");
+      const name = tasteProfileNameInput.value.trim();
+      if (!name) {
+        errEl.textContent = "";
+        tasteSaveBtn.disabled = false;
+        return;
+      }
+      const key = slugify(name);
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        errEl.textContent = "That name is reserved. Choose a different name.";
+        tasteSaveBtn.disabled = true;
+        return;
+      }
+      const existingLabels = getExistingTargetProfileLabels();
+      if (existingLabels.has(name.toLowerCase())) {
+        errEl.textContent = "A profile with this name already exists.";
+        tasteSaveBtn.disabled = true;
+        return;
+      }
+      errEl.textContent = "";
+      tasteSaveBtn.disabled = false;
+    }
+
+    tasteProfileNameInput.addEventListener("input", updateTasteProfileNameError);
+
     function showTasteSaveStatus(message, isError) {
       tasteSaveStatus.textContent = message;
       tasteSaveStatus.classList.toggle("error", isError);
@@ -462,29 +491,33 @@
     tasteSaveBtn.addEventListener("click", () => {
       const name = tasteProfileNameInput.value.trim();
       if (!name) {
+        document.getElementById("taste-profile-name-error").textContent = "";
         showTasteSaveStatus("Enter a profile name.", true);
         return;
       }
 
       const key = slugify(name);
       if (!key) {
+        document.getElementById("taste-profile-name-error").textContent = "";
         showTasteSaveStatus("Enter a valid name.", true);
         return;
       }
       if (BUILTIN_TARGET_KEYS.includes(key)) {
-        showTasteSaveStatus("That name is reserved. Choose a different name.", true);
+        updateTasteProfileNameError();
         return;
       }
       const profiles = loadCustomTargetProfiles();
       if (profiles[key]) {
-        showTasteSaveStatus("A profile with this name already exists.", true);
+        updateTasteProfileNameError();
         return;
       }
       const existingLabels = getExistingTargetProfileLabels();
       if (existingLabels.has(name.trim().toLowerCase())) {
-        showTasteSaveStatus("A profile with this name already exists.", true);
+        updateTasteProfileNameError();
         return;
       }
+
+      document.getElementById("taste-profile-name-error").textContent = "";
 
       const adjusted = getAdjustedProfile();
       const metrics = calculateMetrics(adjusted);
@@ -501,6 +534,7 @@
       renderTastePresets();
 
       tasteProfileNameInput.value = "";
+      updateTasteProfileNameError();
       showTasteSaveStatus("Saved! Use it on the Calculator page.", false);
     });
 

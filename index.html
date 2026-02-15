@@ -53,7 +53,10 @@
       </div>
 
       <div class="save-bar" id="target-save-bar" style="display:none;">
-        <input type="text" id="target-profile-name" placeholder="Name this profile..." maxlength="40">
+        <div class="name-field">
+          <input type="text" id="target-profile-name" placeholder="Name this profile..." maxlength="40">
+          <div class="profile-name-error" id="target-profile-name-error" aria-live="polite"></div>
+        </div>
         <button id="target-save-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="target-save-status"></div>

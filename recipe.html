@@ -116,7 +116,10 @@
       </div>
 
       <div class="save-bar recipe-save-target">
-        <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
+        <div class="name-field">
+          <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
+          <div class="profile-name-error" id="recipe-target-name-error" aria-live="polite"></div>
+        </div>
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status"></div>
@@ -259,6 +262,32 @@
     const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
     const recipeSaveStatus = document.getElementById("recipe-save-status");
 
+    function updateRecipeTargetNameError() {
+      const errEl = document.getElementById("recipe-target-name-error");
+      const name = recipeTargetNameInput.value.trim();
+      if (!name) {
+        errEl.textContent = "";
+        recipeSaveTargetBtn.disabled = false;
+        return;
+      }
+      const key = slugify(name);
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        errEl.textContent = "That name is reserved. Choose a different name.";
+        recipeSaveTargetBtn.disabled = true;
+        return;
+      }
+      const existingLabels = getExistingTargetProfileLabels();
+      if (existingLabels.has(name.toLowerCase())) {
+        errEl.textContent = "A profile with this name already exists.";
+        recipeSaveTargetBtn.disabled = true;
+        return;
+      }
+      errEl.textContent = "";
+      recipeSaveTargetBtn.disabled = false;
+    }
+
+    recipeTargetNameInput.addEventListener("input", updateRecipeTargetNameError);
+
     function showRecipeSaveStatus(message, isError) {
       recipeSaveStatus.textContent = message;
       recipeSaveStatus.classList.toggle("error", isError);
@@ -271,28 +300,33 @@
     recipeSaveTargetBtn.addEventListener("click", () => {
       const name = recipeTargetNameInput.value.trim();
       if (!name) {
+        document.getElementById("recipe-target-name-error").textContent = "";
         showRecipeSaveStatus("Enter a name for this profile.", true);
         return;
       }
       const key = slugify(name);
       if (!key) {
+        document.getElementById("recipe-target-name-error").textContent = "";
         showRecipeSaveStatus("Enter a valid name.", true);
         return;
       }
       if (BUILTIN_TARGET_KEYS.includes(key)) {
-        showRecipeSaveStatus("That name is reserved. Choose a different name.", true);
+        updateRecipeTargetNameError();
         return;
       }
       const profiles = loadCustomTargetProfiles();
       if (profiles[key]) {
-        showRecipeSaveStatus("A profile with this name already exists.", true);
+        updateRecipeTargetNameError();
         return;
       }
       const existingLabels = getExistingTargetProfileLabels();
       if (existingLabels.has(name.trim().toLowerCase())) {
-        showRecipeSaveStatus("A profile with this name already exists.", true);
+        updateRecipeTargetNameError();
         return;
       }
+
+      document.getElementById("recipe-target-name-error").textContent = "";
+
       const calcium = Math.round(parseFloat(document.getElementById("ppm-calcium").textContent) || 0);
       const magnesium = Math.round(parseFloat(document.getElementById("ppm-magnesium").textContent) || 0);
       const alkalinity = Math.round(parseFloat(document.getElementById("ppm-kh").textContent) || 0);
@@ -305,6 +339,7 @@
       };
       saveCustomTargetProfiles(profiles);
       recipeTargetNameInput.value = "";
+      updateRecipeTargetNameError();
       showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
     });
 
