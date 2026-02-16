@@ -405,6 +405,10 @@ select:focus {
   margin-bottom: 1rem;
 }
 
+#current-save-bar {
+  margin-top: 1.5rem;
+}
+
 .save-bar .name-field {
   flex: 1;
   display: flex;
@@ -508,8 +512,15 @@ select:focus {
 /* Edit bar (save changes to existing profile) */
 .edit-bar {
   display: flex;
+  align-items: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
+}
+
+.edit-bar .edit-bar-label {
+  margin-right: 0.25rem;
+  color: var(--gray-600);
+  font-size: 0.9rem;
 }
 
 /* Confirmation modal */

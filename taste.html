@@ -52,6 +52,21 @@
           <input type="number" id="cur-bicarbonate" value="49" min="0" step="1">
         </div>
       </div>
+
+      <div class="save-bar" id="current-save-bar">
+        <div class="name-field">
+          <input type="text" id="current-profile-name" placeholder="Name this profile to save..." maxlength="40">
+          <div class="profile-name-error" id="current-profile-name-error" aria-live="polite"></div>
+        </div>
+        <button id="current-save-btn" class="preset-btn">Save current</button>
+      </div>
+      <div class="save-status" id="current-save-status" aria-live="polite"></div>
+
+      <div class="edit-bar" id="current-edit-bar" style="display:none;">
+        <span class="edit-bar-label" id="current-edit-bar-label">Editing:</span>
+        <button id="current-update-btn" class="preset-btn">Update this profile</button>
+        <button id="current-delete-btn" class="preset-btn">Delete</button>
+      </div>
     </section>
 
     <!-- Taste Sliders -->
@@ -212,6 +227,16 @@
     <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
   </footer>
 
+  <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
+    <div class="confirm-dialog">
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="preset-btn">Yes</button>
+        <button id="confirm-no" class="preset-btn">No</button>
+      </div>
+    </div>
+  </div>
+
   <script src="shared.js"></script>
   <script>
     // --- Taste presets ---
@@ -314,6 +339,32 @@
       tastePresetsContainer.appendChild(customBtn);
       const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
       if (firstBtn) firstBtn.classList.add("active");
+      updateCurrentEditBar();
+    }
+
+    // --- Get current water profile ions from the Current Water Profile grid ---
+    function getCurrentProfileIons() {
+      const ions = {};
+      ION_FIELDS.forEach(ion => {
+        ions[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
+      });
+      return ions;
+    }
+
+    // --- Show/hide edit bar when a custom profile is selected ---
+    function updateCurrentEditBar() {
+      const editBar = document.getElementById("current-edit-bar");
+      const labelEl = document.getElementById("current-edit-bar-label");
+      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const targetKey = activeBtn && activeBtn.dataset.targetKey;
+      if (targetKey) {
+        const profiles = loadCustomTargetProfiles();
+        const profile = profiles[targetKey];
+        editBar.style.display = "flex";
+        if (labelEl) labelEl.textContent = "Editing: " + (profile && profile.label ? profile.label : targetKey);
+      } else {
+        editBar.style.display = "none";
+      }
     }
 
     // --- Preset click handler (event delegation) ---
@@ -342,6 +393,7 @@
         resetSliders();
         recalculate();
       }
+      updateCurrentEditBar();
     });
 
     // --- Input change handlers ---
@@ -349,6 +401,7 @@
       document.getElementById("cur-" + ion).addEventListener("input", () => {
         tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
         tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
+        updateCurrentEditBar();
         recalculate();
       });
     });
@@ -536,6 +589,136 @@
       tasteProfileNameInput.value = "";
       updateTasteProfileNameError();
       showTasteSaveStatus("Saved! Use it on the Calculator page.", false);
+    });
+
+    // --- Save current water profile (from Current Water Profile section) ---
+    const currentProfileNameInput = document.getElementById("current-profile-name");
+    const currentSaveBtn = document.getElementById("current-save-btn");
+    const currentSaveStatus = document.getElementById("current-save-status");
+
+    function updateCurrentProfileNameError() {
+      const errEl = document.getElementById("current-profile-name-error");
+      const name = currentProfileNameInput.value.trim();
+      if (!name) {
+        errEl.textContent = "";
+        currentSaveBtn.disabled = false;
+        return;
+      }
+      const key = slugify(name);
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        errEl.textContent = "That name is reserved. Choose a different name.";
+        currentSaveBtn.disabled = true;
+        return;
+      }
+      const existingLabels = getExistingTargetProfileLabels();
+      if (existingLabels.has(name.toLowerCase())) {
+        errEl.textContent = "A profile with this name already exists.";
+        currentSaveBtn.disabled = true;
+        return;
+      }
+      errEl.textContent = "";
+      currentSaveBtn.disabled = false;
+    }
+
+    currentProfileNameInput.addEventListener("input", updateCurrentProfileNameError);
+
+    function showCurrentSaveStatus(message, isError) {
+      currentSaveStatus.textContent = message;
+      currentSaveStatus.classList.toggle("error", isError);
+      currentSaveStatus.classList.add("visible");
+      setTimeout(() => {
+        currentSaveStatus.classList.remove("visible", "error");
+      }, isError ? 3000 : 1500);
+    }
+
+    currentSaveBtn.addEventListener("click", () => {
+      const name = currentProfileNameInput.value.trim();
+      if (!name) {
+        document.getElementById("current-profile-name-error").textContent = "";
+        showCurrentSaveStatus("Enter a profile name.", true);
+        return;
+      }
+      const key = slugify(name);
+      if (!key) {
+        showCurrentSaveStatus("Enter a valid name.", true);
+        return;
+      }
+      if (BUILTIN_TARGET_KEYS.includes(key)) {
+        updateCurrentProfileNameError();
+        return;
+      }
+      const profiles = loadCustomTargetProfiles();
+      if (profiles[key]) {
+        document.getElementById("current-profile-name-error").textContent = "A profile with this name already exists.";
+        return;
+      }
+      const existingLabels = getExistingTargetProfileLabels();
+      if (existingLabels.has(name.toLowerCase())) {
+        updateCurrentProfileNameError();
+        return;
+      }
+      document.getElementById("current-profile-name-error").textContent = "";
+
+      const ions = getCurrentProfileIons();
+      const metrics = calculateMetrics(ions);
+      const alkalinity = Math.round(metrics.kh);
+
+      profiles[key] = {
+        label: name,
+        calcium: ions.calcium,
+        magnesium: ions.magnesium,
+        alkalinity: alkalinity,
+        description: ""
+      };
+      saveCustomTargetProfiles(profiles);
+      renderTastePresets();
+
+      currentProfileNameInput.value = "";
+      updateCurrentProfileNameError();
+      showCurrentSaveStatus("Saved! Use it as a preset or on the Calculator page.", false);
+    });
+
+    // --- Update selected custom profile with current grid values ---
+    document.getElementById("current-update-btn").addEventListener("click", () => {
+      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const targetKey = activeBtn && activeBtn.dataset.targetKey;
+      if (!targetKey) return;
+      const profiles = loadCustomTargetProfiles();
+      const existing = profiles[targetKey];
+      if (!existing) return;
+
+      const ions = getCurrentProfileIons();
+      const metrics = calculateMetrics(ions);
+      const alkalinity = Math.round(metrics.kh);
+
+      profiles[targetKey] = {
+        label: existing.label,
+        calcium: ions.calcium,
+        magnesium: ions.magnesium,
+        alkalinity: alkalinity,
+        description: existing.description || ""
+      };
+      saveCustomTargetProfiles(profiles);
+      renderTastePresets();
+      showCurrentSaveStatus("Profile updated.", false);
+    });
+
+    // --- Delete selected custom profile ---
+    document.getElementById("current-delete-btn").addEventListener("click", () => {
+      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const targetKey = activeBtn && activeBtn.dataset.targetKey;
+      if (!targetKey) return;
+      const profiles = loadCustomTargetProfiles();
+      const profile = profiles[targetKey];
+      const label = profile && profile.label ? profile.label : targetKey;
+      showConfirm("Delete \u201c" + label + "\u201c? This cannot be undone.", () => {
+        deleteCustomTargetProfile(targetKey);
+        renderTastePresets();
+        const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
+        if (firstBtn) firstBtn.classList.add("active");
+        updateCurrentEditBar();
+        showCurrentSaveStatus("Profile deleted.", false);
+      });
     });
 
     // --- Initialize ---
