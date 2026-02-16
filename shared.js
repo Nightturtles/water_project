@@ -765,9 +765,41 @@ function showConfirm(message, onYes) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
+// --- Theme (Light/Dark/System) ---
+const THEME_KEY = "cw_theme";
+
+function loadThemePreference() {
+  const saved = localStorage.getItem(THEME_KEY);
+  if (saved === "light" || saved === "dark" || saved === "system") return saved;
+  return "system";
+}
+
+function saveThemePreference(mode) {
+  localStorage.setItem(THEME_KEY, mode);
+}
+
+function getResolvedTheme() {
+  const pref = loadThemePreference();
+  if (pref === "light") return "light";
+  if (pref === "dark") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function applyTheme() {
+  document.documentElement.setAttribute("data-theme", getResolvedTheme());
+}
+
+function initThemeListeners() {
+  const mq = window.matchMedia("(prefers-color-scheme: dark)");
+  mq.addEventListener("change", () => {
+    if (loadThemePreference() === "system") applyTheme();
+  });
+}
+
 // --- Run shared UI setup on load ---
 applyMineralDisplayMode();
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
   applyMineralDisplayMode();
+  initThemeListeners();
 });

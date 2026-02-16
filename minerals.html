@@ -6,6 +6,9 @@
   <title>Settings - Coffee Water Calculator</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
+  <script>
+    (function(){var p=localStorage.getItem("cw_theme")||"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);})();
+  </script>
 </head>
 <body>
   <header>
@@ -146,6 +149,26 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2>Theme</h2>
+      <p class="hint">Choose light, dark, or follow your device setting.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="theme" value="light">
+          <span>Light Mode</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="theme" value="dark">
+          <span>Dark Mode</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="theme" value="system">
+          <span>System</span>
+        </label>
+      </div>
+      <p class="theme-helper" id="theme-system-helper">Follows your device setting.</p>
+    </section>
+
   </main>
 
   <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
@@ -276,6 +299,18 @@
       saveSelectedMinerals(ids);
       updateMineralSourceWarnings();
       showSaved();
+    });
+
+    // --- Theme ---
+    const themeInputs = document.querySelectorAll('input[name="theme"]');
+    const currentTheme = loadThemePreference();
+    document.querySelector(`input[name="theme"][value="${currentTheme}"]`).checked = true;
+    themeInputs.forEach(radio => {
+      radio.addEventListener("change", () => {
+        saveThemePreference(radio.value);
+        applyTheme();
+        showSaved();
+      });
     });
 
     const currentDisplayMode = loadMineralDisplayMode();
