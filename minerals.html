@@ -14,79 +14,6 @@
   </header>
 
   <main>
-    <!-- Available Minerals -->
-    <section class="card">
-      <h2>Available Minerals</h2>
-      <p class="hint">Check the minerals you have. These will appear on the other pages.</p>
-      <div class="mineral-list" id="mineral-list">
-        <!-- Populated by JS -->
-      </div>
-    </section>
-
-    <section class="card">
-      <h2>Mineral Display Mode</h2>
-      <p class="hint">Choose how much detail to show across the app.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
-          <input type="radio" name="mineral-display-mode" value="standard">
-          <span>Standard Minerals</span>
-        </label>
-        <label class="alkalinity-option">
-          <input type="radio" name="mineral-display-mode" value="advanced">
-          <span>Advanced Minerals</span>
-        </label>
-      </div>
-    </section>
-
-    <!-- Alkalinity Source -->
-    <section class="card">
-      <h2>Alkalinity source</h2>
-      <p class="hint">Select which mineral to use for alkalinity. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
-          <input type="radio" name="alkalinity-source" value="baking-soda">
-          <span>Baking Soda (NaHCO₃)</span>
-        </label>
-        <label class="alkalinity-option">
-          <input type="radio" name="alkalinity-source" value="potassium-bicarbonate">
-          <span>Potassium Bicarbonate (KHCO₃)</span>
-        </label>
-      </div>
-      <p class="hint error" id="alkalinity-warning" style="display:none; margin-top:0.75rem;">No alkalinity source is selected above. The Calculator needs at least Baking Soda or Potassium Bicarbonate checked.</p>
-    </section>
-
-    <section class="card">
-      <h2>Calcium source</h2>
-      <p class="hint">Select which mineral to use for calcium. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
-          <input type="radio" name="calcium-source" value="calcium-chloride">
-          <span>Calcium Chloride (CaCl₂·2H₂O)</span>
-        </label>
-        <label class="alkalinity-option">
-          <input type="radio" name="calcium-source" value="gypsum">
-          <span>Gypsum (CaSO₄·2H₂O)</span>
-        </label>
-      </div>
-      <p class="hint error" id="calcium-warning" style="display:none; margin-top:0.75rem;">No calcium source is selected above. The Calculator needs at least Calcium Chloride or Gypsum checked.</p>
-    </section>
-
-    <section class="card">
-      <h2>Magnesium source</h2>
-      <p class="hint">Select which mineral to use for magnesium. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
-          <input type="radio" name="magnesium-source" value="epsom-salt">
-          <span>Epsom Salt (MgSO₄·7H₂O)</span>
-        </label>
-        <label class="alkalinity-option">
-          <input type="radio" name="magnesium-source" value="magnesium-chloride">
-          <span>Magnesium Chloride (MgCl₂·6H₂O)</span>
-        </label>
-      </div>
-      <p class="hint error" id="magnesium-warning" style="display:none; margin-top:0.75rem;">No magnesium source is selected above. The Calculator needs at least Epsom Salt or Magnesium Chloride checked.</p>
-    </section>
-
     <!-- Source Water Profile -->
     <section class="card">
       <h2>My Starting Water</h2>
@@ -145,6 +72,80 @@
 
       <div class="save-status" id="save-status" aria-live="polite"></div>
     </section>
+
+    <!-- Available Minerals -->
+    <section class="card">
+      <h2>Available Minerals</h2>
+      <p class="hint">Check the minerals you have. These will appear on the other pages.</p>
+      <div class="mineral-list" id="mineral-list">
+        <!-- Populated by JS -->
+      </div>
+    </section>
+
+    <!-- Alkalinity Source -->
+    <section class="card">
+      <h2>Alkalinity source</h2>
+      <p class="hint">Select which mineral to use for alkalinity. You must have at least one of these checked above.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="alkalinity-source" value="baking-soda">
+          <span>Baking Soda (NaHCO₃)</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="alkalinity-source" value="potassium-bicarbonate">
+          <span>Potassium Bicarbonate (KHCO₃)</span>
+        </label>
+      </div>
+      <p class="hint error" id="alkalinity-warning" style="display:none; margin-top:0.75rem;">No alkalinity source is selected above. The Calculator needs at least Baking Soda or Potassium Bicarbonate checked.</p>
+    </section>
+
+    <section class="card">
+      <h2>Calcium source</h2>
+      <p class="hint">Select which mineral to use for calcium. You must have at least one of these checked above.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="calcium-source" value="calcium-chloride">
+          <span>Calcium Chloride (CaCl₂·2H₂O)</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="calcium-source" value="gypsum">
+          <span>Gypsum (CaSO₄·2H₂O)</span>
+        </label>
+      </div>
+      <p class="hint error" id="calcium-warning" style="display:none; margin-top:0.75rem;">No calcium source is selected above. The Calculator needs at least Calcium Chloride or Gypsum checked.</p>
+    </section>
+
+    <section class="card">
+      <h2>Magnesium source</h2>
+      <p class="hint">Select which mineral to use for magnesium. You must have at least one of these checked above.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="magnesium-source" value="epsom-salt">
+          <span>Epsom Salt (MgSO₄·7H₂O)</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="magnesium-source" value="magnesium-chloride">
+          <span>Magnesium Chloride (MgCl₂·6H₂O)</span>
+        </label>
+      </div>
+      <p class="hint error" id="magnesium-warning" style="display:none; margin-top:0.75rem;">No magnesium source is selected above. The Calculator needs at least Epsom Salt or Magnesium Chloride checked.</p>
+    </section>
+
+    <section class="card">
+      <h2>Mineral Display Mode</h2>
+      <p class="hint">Choose how much detail to show across the app.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="mineral-display-mode" value="standard">
+          <span>Standard Minerals</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="mineral-display-mode" value="advanced">
+          <span>Advanced Minerals</span>
+        </label>
+      </div>
+    </section>
+
   </main>
 
   <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
