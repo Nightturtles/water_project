@@ -193,6 +193,39 @@ function createStatusHandler(statusEl, options = {}) {
   };
 }
 
+function saveVolumePreference(pageKey, value, unit) {
+  if (!pageKey) return;
+  const key = "cw_volume_" + pageKey;
+  const payload = {
+    value: String(value ?? ""),
+    unit: unit === "gallons" ? "gallons" : "liters"
+  };
+  localStorage.setItem(key, JSON.stringify(payload));
+}
+
+function loadVolumePreference(pageKey, defaults = {}) {
+  const fallback = {
+    value: String(defaults.value ?? "1"),
+    unit: defaults.unit === "gallons" ? "gallons" : "liters"
+  };
+  if (!pageKey) return fallback;
+  const key = "cw_volume_" + pageKey;
+  const parsed = safeParse(localStorage.getItem(key), fallback);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
+  const value = String(parsed.value ?? fallback.value);
+  const unit = parsed.unit === "gallons" ? "gallons" : "liters";
+  return { value, unit };
+}
+
+function bindEnterToClick(inputEl, buttonEl) {
+  if (!inputEl || !buttonEl) return;
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    buttonEl.click();
+  });
+}
+
 // --- Custom profile helpers ---
 function slugify(name) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -451,6 +484,26 @@ function loadAlkalinitySource() {
   return "baking-soda"; // default
 }
 
+function saveCalciumSource(mineralId) {
+  localStorage.setItem("cw_calcium_source", mineralId);
+}
+
+function loadCalciumSource() {
+  const saved = localStorage.getItem("cw_calcium_source");
+  if (saved === "gypsum") return "gypsum";
+  return "calcium-chloride"; // default
+}
+
+function saveMagnesiumSource(mineralId) {
+  localStorage.setItem("cw_magnesium_source", mineralId);
+}
+
+function loadMagnesiumSource() {
+  const saved = localStorage.getItem("cw_magnesium_source");
+  if (saved === "magnesium-chloride") return "magnesium-chloride";
+  return "epsom-salt"; // default
+}
+
 function loadSelectedMinerals() {
   const parsed = safeParse(localStorage.getItem("cw_selected_minerals"), null);
   if (Array.isArray(parsed)) return parsed;
@@ -549,6 +602,26 @@ function getEffectiveAlkalinitySource() {
   if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
   if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarbonate";
   return loadAlkalinitySource();
+}
+
+function getEffectiveCalciumSource() {
+  const selected = loadSelectedMinerals();
+  const hasCaCl2 = selected.includes("calcium-chloride");
+  const hasGypsum = selected.includes("gypsum");
+  if (!hasCaCl2 && !hasGypsum) return null;
+  if (hasCaCl2 && !hasGypsum) return "calcium-chloride";
+  if (!hasCaCl2 && hasGypsum) return "gypsum";
+  return loadCalciumSource();
+}
+
+function getEffectiveMagnesiumSource() {
+  const selected = loadSelectedMinerals();
+  const hasEpsom = selected.includes("epsom-salt");
+  const hasMgCl2 = selected.includes("magnesium-chloride");
+  if (!hasEpsom && !hasMgCl2) return null;
+  if (hasEpsom && !hasMgCl2) return "epsom-salt";
+  if (!hasEpsom && hasMgCl2) return "magnesium-chloride";
+  return loadMagnesiumSource();
 }
 
 // --- Get all target presets (built-in + custom, respecting deletions) ---

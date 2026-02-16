@@ -3,8 +3,6 @@
 // ============================================
 
 // --- Conversion factors (derived from MINERAL_DB) ---
-const MG_TO_EPSOM = 1 / MINERAL_DB["epsom-salt"].ions.magnesium;
-const CA_TO_CACL2 = 1 / MINERAL_DB["calcium-chloride"].ions.calcium;
 const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
 const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
 
@@ -33,6 +31,9 @@ const targetSaveStatus = document.getElementById("target-save-status");
 
 // --- Populate source water dropdown ---
 initSourcePresetSelect(sourcePresetSelect);
+const savedVolume = loadVolumePreference("calculator", { value: volumeInput.value, unit: volumeUnit.value });
+volumeInput.value = savedVolume.value;
+volumeUnit.value = savedVolume.unit;
 
 function getSourceWater() {
   return getSourceWaterByPreset(sourcePresetSelect.value);
@@ -63,12 +64,14 @@ function renderResultItems() {
 
   const selected = loadSelectedMinerals();
   const bufferMineralId = alkalinitySource;
+  const mgSource = getEffectiveMagnesiumSource();
+  const caSource = getEffectiveCalciumSource();
 
   const toShow = [
-    { id: "epsom-salt", order: 0 },
+    { id: mgSource, order: 0 },
     { id: bufferMineralId, order: 1 },
-    { id: "calcium-chloride", order: 2 }
-  ].filter(item => selected.includes(item.id))
+    { id: caSource, order: 2 }
+  ].filter(item => item.id && selected.includes(item.id))
    .sort((a, b) => a.order - b.order);
 
   resultsContainer.innerHTML = "";
@@ -250,6 +253,7 @@ function updateTargetProfileNameError() {
 }
 
 targetProfileNameInput.addEventListener("input", updateTargetProfileNameError);
+bindEnterToClick(targetProfileNameInput, targetSaveBtn);
 
 // --- Save new custom target profile ---
 targetSaveBtn.addEventListener("click", () => {
@@ -298,9 +302,13 @@ sourcePresetSelect.addEventListener("change", () => {
 });
 
 // --- Recalculate on any input change ---
+function onVolumeChanged() {
+  saveVolumePreference("calculator", volumeInput.value, volumeUnit.value);
+  calculate();
+}
 [volumeInput, volumeUnit].forEach(el => {
-  el.addEventListener("input", calculate);
-  el.addEventListener("change", calculate);
+  el.addEventListener("input", onVolumeChanged);
+  el.addEventListener("change", onVolumeChanged);
 });
 
 // --- Core calculation ---
@@ -314,7 +322,13 @@ function calculate() {
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
     const alk = getEffectiveAlkalinitySource();
-    updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, ...(alk ? { [alk]: 0 } : {}) });
+    const mgSource = getEffectiveMagnesiumSource();
+    const caSource = getEffectiveCalciumSource();
+    updateResultValues({
+      ...(mgSource ? { [mgSource]: 0 } : {}),
+      ...(caSource ? { [caSource]: 0 } : {}),
+      ...(alk ? { [alk]: 0 } : {})
+    });
     resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
     return;
   }
@@ -324,6 +338,8 @@ function calculate() {
     resultSummary.innerHTML = "";
     return;
   }
+  const mgSource = getEffectiveMagnesiumSource();
+  const caSource = getEffectiveCalciumSource();
 
   // Read source water from dropdown/preset
   const sourceWater = getSourceWater();
@@ -352,12 +368,8 @@ function calculate() {
   if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
   if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
   if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
-  // Check which minerals the user actually has
-  const selected = loadSelectedMinerals();
-  const hasEpsom = selected.includes("epsom-salt");
-  const hasCaCl2 = selected.includes("calcium-chloride");
-  if (!hasEpsom && deltaMg > 0) warnings.push("You need Epsom Salt to add magnesium. Enable it in Settings.");
-  if (!hasCaCl2 && deltaCa > 0) warnings.push("You need Calcium Chloride to add calcium. Enable it in Settings.");
+  if (!mgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
+  if (!caSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
 
   const warningsEl = document.getElementById("result-warnings");
   if (warningsEl) warningsEl.textContent = warnings.join("\n");
@@ -365,8 +377,10 @@ function calculate() {
   // ---------------------------
   // Compute salt dosing (per L)
   // ---------------------------
-  let epsomPerL = hasEpsom ? (deltaMg * MG_TO_EPSOM) / 1000 : 0;
-  let cacl2PerL = hasCaCl2 ? (deltaCa * CA_TO_CACL2) / 1000 : 0;
+  const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
+  const caFraction = caSource ? (MINERAL_DB[caSource]?.ions?.calcium || 0) : 0;
+  let mgSaltPerL = mgFraction > 0 ? (deltaMg / mgFraction) / 1000 : 0;
+  let caSaltPerL = caFraction > 0 ? (deltaCa / caFraction) / 1000 : 0;
 
   // Buffer dosing:
   // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
@@ -378,63 +392,45 @@ function calculate() {
   }
 
   // Total grams for the full volume
-  const epsomTotal = epsomPerL * volumeL;
+  const mgSaltTotal = mgSaltPerL * volumeL;
   const bufferTotal = bufferPerL * volumeL;
-  const cacl2Total = cacl2PerL * volumeL;
+  const caSaltTotal = caSaltPerL * volumeL;
 
   // Zero out sub-threshold amounts so ion summary matches displayed grams
-  if (epsomTotal < 0.01) epsomPerL = 0;
-  if (cacl2Total < 0.01) cacl2PerL = 0;
+  if (mgSaltTotal < 0.01) mgSaltPerL = 0;
+  if (caSaltTotal < 0.01) caSaltPerL = 0;
   if (bufferTotal < 0.01) bufferPerL = 0;
 
   // Display grams (only update elements that exist for selected minerals)
   updateResultValues({
-    "epsom-salt": epsomTotal,
-    "calcium-chloride": cacl2Total,
+    ...(mgSource ? { [mgSource]: mgSaltTotal } : {}),
+    ...(caSource ? { [caSource]: caSaltTotal } : {}),
     [currentBuffer]: bufferTotal
   });
 
   // ---------------------------
   // Compute resulting ions (mg/L)
   // ---------------------------
-  // Final Ca and Mg: only add delta if the mineral is available and above display threshold
-  const finalCa = (sourceWater.calcium || 0) + (cacl2PerL > 0 ? deltaCa : 0);
-  const finalMg = (sourceWater.magnesium || 0) + (epsomPerL > 0 ? deltaMg : 0);
-
-  // Convert salt grams/L to mg/L of salt
-  const mgL_epsom = epsomPerL * 1000;
-  const mgL_cacl2 = cacl2PerL * 1000;
-  const mgL_buffer = bufferPerL * 1000;
-
-  // Ions contributed by added salts
-  const addedCl = mgL_cacl2 * MINERAL_DB["calcium-chloride"].ions.chloride;
-  const addedSO4 = mgL_epsom * MINERAL_DB["epsom-salt"].ions.sulfate;
-
-  // Buffer ions (either K + HCO3 or Na + HCO3)
-  const addedHCO3 =
-    currentBuffer === "potassium-bicarbonate"
-      ? mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.bicarbonate
-      : mgL_buffer * MINERAL_DB["baking-soda"].ions.bicarbonate;
-
-  const addedK = currentBuffer === "potassium-bicarbonate" ? mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.potassium : 0;
-  const addedNa = currentBuffer === "baking-soda" ? mgL_buffer * MINERAL_DB["baking-soda"].ions.sodium : 0;
-
-  // Final bicarbonate (mg/L) is source bicarbonate + added bicarbonate
-  const finalHCO3 = (sourceWater.bicarbonate || 0) + addedHCO3;
-
-  // Final other ions (mg/L) — include source water contributions
-  const finalCl = (sourceWater.chloride || 0) + addedCl;
-  const finalSO4 = (sourceWater.sulfate || 0) + addedSO4;
-  const finalK = (sourceWater.potassium || 0) + addedK;
-  const finalNa = (sourceWater.sodium || 0) + addedNa;
+  const mineralGramsPerL = {};
+  if (mgSource && mgSaltPerL > 0) mineralGramsPerL[mgSource] = mgSaltPerL;
+  if (caSource && caSaltPerL > 0) mineralGramsPerL[caSource] = caSaltPerL;
+  if (currentBuffer && bufferPerL > 0) mineralGramsPerL[currentBuffer] = bufferPerL;
+  const addedIons = calculateIonPPMs(mineralGramsPerL);
+  const finalIons = {};
+  ION_FIELDS.forEach((ion) => {
+    finalIons[ion] = (sourceWater[ion] || 0) + (addedIons[ion] || 0);
+  });
+  const finalCa = finalIons.calcium || 0;
+  const finalMg = finalIons.magnesium || 0;
+  const finalK = finalIons.potassium || 0;
+  const finalNa = finalIons.sodium || 0;
+  const finalHCO3 = finalIons.bicarbonate || 0;
+  const finalSO4 = finalIons.sulfate || 0;
+  const finalCl = finalIons.chloride || 0;
 
   // ---------------------------
   // GH / KH / TDS — use shared calculateMetrics for consistency
   // ---------------------------
-  const finalIons = {
-    calcium: finalCa, magnesium: finalMg, potassium: finalK, sodium: finalNa,
-    sulfate: finalSO4, chloride: finalCl, bicarbonate: finalHCO3
-  };
   const metrics = calculateMetrics(finalIons);
   const GH_asCaCO3 = metrics.gh;
   const KH_asCaCO3 = metrics.kh;

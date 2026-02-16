@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Taste Tuner - Coffee Water Calculator</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -476,6 +477,7 @@
     }
 
     tasteProfileNameInput.addEventListener("input", updateTasteProfileNameError);
+    bindEnterToClick(tasteProfileNameInput, tasteSaveBtn);
 
     const showTasteSaveStatus = createStatusHandler(tasteSaveStatus);
 
@@ -541,6 +543,7 @@
     }
 
     currentProfileNameInput.addEventListener("input", updateCurrentProfileNameError);
+    bindEnterToClick(currentProfileNameInput, currentSaveBtn);
 
     const showCurrentSaveStatus = createStatusHandler(currentSaveStatus);
 
