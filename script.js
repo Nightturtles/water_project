@@ -313,6 +313,8 @@ function onVolumeChanged() {
 
 // --- Core calculation ---
 function calculate() {
+  const warningsEl = document.getElementById("result-warnings");
+
   // Get volume in liters
   let volumeL = parseFloat(volumeInput.value) || 0;
   if (volumeUnit.value === "gallons") {
@@ -324,6 +326,7 @@ function calculate() {
     const alk = getEffectiveAlkalinitySource();
     const mgSource = getEffectiveMagnesiumSource();
     const caSource = getEffectiveCalciumSource();
+    if (warningsEl) warningsEl.textContent = "";
     updateResultValues({
       ...(mgSource ? { [mgSource]: 0 } : {}),
       ...(caSource ? { [caSource]: 0 } : {}),
@@ -335,6 +338,7 @@ function calculate() {
 
   const currentBuffer = getEffectiveAlkalinitySource();
   if (currentBuffer === null) {
+    if (warningsEl) warningsEl.textContent = "";
     resultSummary.innerHTML = "";
     return;
   }
@@ -371,7 +375,6 @@ function calculate() {
   if (!mgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
   if (!caSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
 
-  const warningsEl = document.getElementById("result-warnings");
   if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
   // ---------------------------
