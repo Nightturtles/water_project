@@ -167,7 +167,7 @@ function initSourcePresetSelect(selectEl) {
 
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
-  const nonZero = ION_FIELDS.filter(ion => (water && water[ion]) > 0);
+  const nonZero = getVisibleIonFields().filter(ion => (water && water[ion]) > 0);
   if (nonZero.length === 0) {
     tagsEl.innerHTML = '<span class="base-tag">All zeros</span>';
     return;
@@ -191,6 +191,33 @@ function createStatusHandler(statusEl, options = {}) {
       statusEl.classList.remove("visible", "error");
     }, isError ? errorMs : successMs);
   };
+}
+
+function saveMineralDisplayMode(mode) {
+  localStorage.setItem("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
+}
+
+function loadMineralDisplayMode() {
+  return localStorage.getItem("cw_mineral_display_mode") === "advanced" ? "advanced" : "standard";
+}
+
+function isAdvancedMineralDisplayMode() {
+  return loadMineralDisplayMode() === "advanced";
+}
+
+function getVisibleIonFields() {
+  if (isAdvancedMineralDisplayMode()) {
+    return ["calcium", "magnesium", "sodium", "potassium", "sulfate", "chloride"];
+  }
+  return ["calcium", "magnesium"];
+}
+
+function applyMineralDisplayMode() {
+  const body = document.body;
+  if (!body) return;
+  const advanced = isAdvancedMineralDisplayMode();
+  body.classList.toggle("advanced-minerals", advanced);
+  body.classList.toggle("standard-minerals", !advanced);
 }
 
 function saveVolumePreference(pageKey, value, unit) {
@@ -727,5 +754,9 @@ function showConfirm(message, onYes) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
-// --- Run nav injection on load ---
-document.addEventListener("DOMContentLoaded", injectNav);
+// --- Run shared UI setup on load ---
+applyMineralDisplayMode();
+document.addEventListener("DOMContentLoaded", () => {
+  injectNav();
+  applyMineralDisplayMode();
+});

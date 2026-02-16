@@ -435,6 +435,7 @@ function calculate() {
   const GH_asCaCO3 = metrics.gh;
   const KH_asCaCO3 = metrics.kh;
   const TDS_ion_sum = metrics.tds;
+  const advancedMode = isAdvancedMineralDisplayMode();
 
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
@@ -447,15 +448,15 @@ function calculate() {
         `<div class="metric highlight metric-box"><span class="metric-label">KH</span><span class="metric-value">${Math.round(KH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
         `<div class="metric highlight metric-box"><span class="metric-label">TDS</span><span class="metric-value">${Math.round(TDS_ion_sum)}</span><span class="metric-unit">mg/L</span></div>` +
       `</div>` +
-      `<div class="metric highlight metric-box result-ratio-cell" style="margin-bottom:8px;"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>` +
+      (advancedMode
+        ? `<div class="metric highlight metric-box result-ratio-cell" style="margin-bottom:8px;"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>`
+        : ``) +
       `<div><strong>Final ions (mg/L):</strong> ` +
         `Ca ${finalCa.toFixed(2)} | ` +
-        `Mg ${finalMg.toFixed(2)} | ` +
-        `K ${finalK.toFixed(2)} | ` +
-        `Na ${finalNa.toFixed(2)} | ` +
-        `HCO\u2083 ${finalHCO3.toFixed(2)} | ` +
-        `SO\u2084 ${finalSO4.toFixed(2)} | ` +
-        `Cl ${finalCl.toFixed(2)}` +
+        `Mg ${finalMg.toFixed(2)}` +
+        (advancedMode
+          ? ` | K ${finalK.toFixed(2)} | Na ${finalNa.toFixed(2)} | SO\u2084 ${finalSO4.toFixed(2)} | Cl ${finalCl.toFixed(2)}`
+          : ``) +
       `</div>` +
     `</div>`;
 }

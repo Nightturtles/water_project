@@ -23,6 +23,21 @@
       </div>
     </section>
 
+    <section class="card">
+      <h2>Mineral Display Mode</h2>
+      <p class="hint">Choose how much detail to show across the app.</p>
+      <div class="alkalinity-source-options">
+        <label class="alkalinity-option">
+          <input type="radio" name="mineral-display-mode" value="standard">
+          <span>Standard Minerals</span>
+        </label>
+        <label class="alkalinity-option">
+          <input type="radio" name="mineral-display-mode" value="advanced">
+          <span>Advanced Minerals</span>
+        </label>
+      </div>
+    </section>
+
     <!-- Alkalinity Source -->
     <section class="card">
       <h2>Alkalinity source</h2>
@@ -106,23 +121,23 @@
           <label for="src-magnesium">Magnesium (mg/L)</label>
           <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
         </div>
-        <div class="input-group">
+        <div class="input-group advanced-only">
           <label for="src-potassium">Potassium (mg/L)</label>
           <input type="number" id="src-potassium" value="0" min="0" step="0.1">
         </div>
-        <div class="input-group">
+        <div class="input-group advanced-only">
           <label for="src-sodium">Sodium (mg/L)</label>
           <input type="number" id="src-sodium" value="0" min="0" step="0.1">
         </div>
-        <div class="input-group">
+        <div class="input-group advanced-only">
           <label for="src-sulfate">Sulfate (mg/L)</label>
           <input type="number" id="src-sulfate" value="0" min="0" step="0.1">
         </div>
-        <div class="input-group">
+        <div class="input-group advanced-only">
           <label for="src-chloride">Chloride (mg/L)</label>
           <input type="number" id="src-chloride" value="0" min="0" step="0.1">
         </div>
-        <div class="input-group">
+        <div class="input-group always-hidden">
           <label for="src-bicarbonate">Bicarbonate (mg/L)</label>
           <input type="number" id="src-bicarbonate" value="0" min="0" step="0.1">
         </div>
@@ -154,6 +169,7 @@
     const profileNameInput = document.getElementById("profile-name");
     const saveProfileBtn = document.getElementById("save-profile-btn");
     const saveChangesBtn = document.getElementById("save-changes-btn");
+    const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
 
 
     let activePreset = loadSourcePresetName();
@@ -259,6 +275,16 @@
       saveSelectedMinerals(ids);
       updateMineralSourceWarnings();
       showSaved();
+    });
+
+    const currentDisplayMode = loadMineralDisplayMode();
+    document.querySelector(`input[name="mineral-display-mode"][value="${currentDisplayMode}"]`).checked = true;
+    mineralDisplayModeInputs.forEach(radio => {
+      radio.addEventListener("change", () => {
+        saveMineralDisplayMode(radio.value);
+        applyMineralDisplayMode();
+        showSaved();
+      });
     });
 
     // --- Alkalinity source ---

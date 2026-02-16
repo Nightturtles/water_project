@@ -31,6 +31,14 @@ body {
   min-height: 100vh;
 }
 
+.standard-minerals .advanced-only {
+  display: none !important;
+}
+
+.always-hidden {
+  display: none !important;
+}
+
 /* ========================
    Navigation
    ======================== */
