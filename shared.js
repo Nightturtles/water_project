@@ -168,13 +168,17 @@ function initSourcePresetSelect(selectEl) {
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
   const nonZero = getVisibleIonFields().filter(ion => (water && water[ion]) > 0);
+  const metrics = water ? calculateMetrics(water) : { kh: 0 };
+  const alk = metrics.kh;
+  const alkDisplay = (alk == null || alk !== alk) ? "\u2014" : Math.round(alk);
+  const alkTag = `<span class="base-tag">Alkalinity: ${alkDisplay} mg/L as CaCO\u2083</span>`;
   if (nonZero.length === 0) {
-    tagsEl.innerHTML = '<span class="base-tag">All zeros</span>';
+    tagsEl.innerHTML = '<span class="base-tag">All zeros</span>' + alkTag;
     return;
   }
   tagsEl.innerHTML = nonZero
     .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
-    .join("");
+    .join("") + alkTag;
 }
 
 function createStatusHandler(statusEl, options = {}) {

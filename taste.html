@@ -35,6 +35,10 @@
           <label for="cur-magnesium">Magnesium (mg/L)</label>
           <input type="number" id="cur-magnesium" value="17" min="0" step="1">
         </div>
+        <div class="input-group">
+          <label for="cur-alkalinity">Alkalinity (mg/L as CaCO₃)</label>
+          <input type="number" id="cur-alkalinity" value="0" min="0" step="1">
+        </div>
         <div class="input-group advanced-only">
           <label for="cur-potassium">Potassium (mg/L)</label>
           <input type="number" id="cur-potassium" value="0" min="0" step="1">
@@ -407,12 +411,28 @@
       return adjusted;
     }
 
+    // --- Alkalinity <-> Bicarbonate two-way sync ---
+    const curAlkalinityInput = document.getElementById("cur-alkalinity");
+    const curBicarbonateInput = document.getElementById("cur-bicarbonate");
+
+    function updateAlkFromBicarb() {
+      const bicarb = parseFloat(curBicarbonateInput.value) || 0;
+      curAlkalinityInput.value = Math.round(bicarb * HCO3_TO_CACO3);
+    }
+
+    curAlkalinityInput.addEventListener("input", () => {
+      const alkAsCaCO3 = parseFloat(curAlkalinityInput.value) || 0;
+      curBicarbonateInput.value = Math.round(alkAsCaCO3 * CACO3_TO_HCO3 * 10) / 10;
+      curBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
     // --- Core recalculation ---
     function recalculate() {
       const base = {};
       ION_FIELDS.forEach(ion => {
         base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
       });
+      updateAlkFromBicarb();
       const adjusted = getAdjustedProfile();
 
       // Compute unclamped values to detect when clamping occurred

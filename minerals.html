@@ -51,6 +51,10 @@
           <label for="src-magnesium">Magnesium (mg/L)</label>
           <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
         </div>
+        <div class="input-group">
+          <label for="src-alkalinity">Alkalinity (mg/L as CaCO₃)</label>
+          <input type="number" id="src-alkalinity" value="0" min="0" step="1">
+        </div>
         <div class="input-group advanced-only">
           <label for="src-potassium">Potassium (mg/L)</label>
           <input type="number" id="src-potassium" value="0" min="0" step="0.1">
@@ -390,6 +394,20 @@
       highlightPreset(activePreset);
     }
 
+    const srcAlkalinityInput = document.getElementById("src-alkalinity");
+    const srcBicarbonateInput = document.getElementById("src-bicarbonate");
+
+    function updateAlkalinityFromBicarbonate() {
+      const bicarb = parseFloat(srcBicarbonateInput.value) || 0;
+      srcAlkalinityInput.value = Math.round(bicarb * HCO3_TO_CACO3);
+    }
+
+    srcAlkalinityInput.addEventListener("input", () => {
+      const alkAsCaCO3 = parseFloat(srcAlkalinityInput.value) || 0;
+      srcBicarbonateInput.value = Math.round(alkAsCaCO3 * CACO3_TO_HCO3 * 10) / 10;
+      srcBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
     function highlightPreset(presetName) {
       presetsContainer.querySelectorAll(".preset-btn").forEach(b => b.classList.remove("active"));
       const btn = presetsContainer.querySelector(`[data-preset="${presetName}"]`);
@@ -410,6 +428,7 @@
         document.getElementById("src-" + ion).value = values[ion] || 0;
       });
       saveCurrentSource();
+      updateAlkalinityFromBicarbonate();
     }
 
     // --- Detect unsaved changes vs active profile ---
@@ -458,6 +477,7 @@
           editBar.style.display = hasUnsavedChanges() ? "flex" : "none";
         }
         saveCurrentSource();
+        updateAlkalinityFromBicarbonate();
       });
     });
 
@@ -554,6 +574,7 @@
     });
 
     renderPresetButtons();
+    updateAlkalinityFromBicarbonate();
     updateRestoreSourceBar();
     updateMineralSourceWarnings();
 
