@@ -514,7 +514,7 @@ function calculate() {
   if (!hasCaCl2 && deltaCa > 0) warnings.push("You need Calcium Chloride to add calcium. Enable it in Settings.");
 
   const warningsEl = document.getElementById("result-warnings");
-  if (warningsEl) warningsEl.textContent = warnings.join(" ");
+  if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
   // ---------------------------
   // Compute salt dosing (per L)

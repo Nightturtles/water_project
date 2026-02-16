@@ -13,22 +13,7 @@
   </header>
 
   <main>
-    <!-- Volume -->
-    <section class="card">
-      <h2>Water Volume</h2>
-      <div class="input-group">
-        <label for="recipe-volume">Volume</label>
-        <div class="input-with-unit">
-          <input type="number" id="recipe-volume" value="1" min="0.1" step="0.1">
-          <select id="recipe-volume-unit">
-            <option value="liters">Liters</option>
-            <option value="gallons">Gallons</option>
-          </select>
-        </div>
-      </div>
-    </section>
-
-    <!-- Base Water -->
+    <!-- Base Water (profile = main, volume = secondary) -->
     <section class="card">
       <h2>Base Water</h2>
       <p class="hint">Select your base water. Configure custom values on the <a href="minerals.html">Settings</a> page.</p>
@@ -39,6 +24,16 @@
         </select>
       </div>
       <div class="source-water-tags" id="source-water-tags"></div>
+      <div class="input-group volume-secondary">
+        <label for="recipe-volume">Volume</label>
+        <div class="input-with-unit">
+          <input type="number" id="recipe-volume" value="1" min="0.1" step="0.1">
+          <select id="recipe-volume-unit">
+            <option value="liters">Liters</option>
+            <option value="gallons">Gallons</option>
+          </select>
+        </div>
+      </div>
     </section>
 
     <!-- Mineral Additions -->
