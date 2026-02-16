@@ -203,7 +203,7 @@
 
     document.getElementById("restore-source-defaults").addEventListener("click", (e) => {
       e.preventDefault();
-      localStorage.removeItem("cw_deleted_presets");
+      restoreSourcePresetDefaults();
       renderPresetButtons();
       updateRestoreSourceBar();
       showSaved();

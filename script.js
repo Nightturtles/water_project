@@ -163,7 +163,7 @@ function updateRestoreTargetBar() {
 
 document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
   e.preventDefault();
-  localStorage.removeItem("cw_deleted_target_presets");
+  restoreTargetPresetDefaults();
   renderProfileButtons();
   updateRestoreTargetBar();
 });
@@ -280,7 +280,7 @@ function updateTargetProfileNameError() {
     return;
   }
   const key = slugify(name);
-  if (BUILTIN_TARGET_KEYS.includes(key)) {
+  if (isReservedTargetKey(key)) {
     errEl.textContent = "That name is reserved. Choose a different name.";
     targetSaveBtn.disabled = true;
     return;
@@ -312,7 +312,7 @@ targetSaveBtn.addEventListener("click", () => {
     showTargetSaveStatus("Enter a valid name.", true);
     return;
   }
-  if (BUILTIN_TARGET_KEYS.includes(key)) {
+  if (isReservedTargetKey(key)) {
     updateTargetProfileNameError();
     return;
   }

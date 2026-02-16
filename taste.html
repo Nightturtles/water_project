@@ -464,7 +464,7 @@
         return;
       }
       const key = slugify(name);
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         errEl.textContent = "That name is reserved. Choose a different name.";
         tasteSaveBtn.disabled = true;
         return;
@@ -506,7 +506,7 @@
         showTasteSaveStatus("Enter a valid name.", true);
         return;
       }
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         updateTasteProfileNameError();
         return;
       }
@@ -556,7 +556,7 @@
         return;
       }
       const key = slugify(name);
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         errEl.textContent = "That name is reserved. Choose a different name.";
         currentSaveBtn.disabled = true;
         return;
@@ -596,7 +596,7 @@
         showCurrentSaveStatus("Enter a valid name.", true);
         return;
       }
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         updateCurrentProfileNameError();
         return;
       }

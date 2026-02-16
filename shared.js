@@ -114,16 +114,24 @@ const SOURCE_PRESETS = {
 };
 
 // --- localStorage helpers ---
+function safeParse(json, fallback) {
+  if (!json) return fallback;
+  try {
+    const parsed = JSON.parse(json);
+    return parsed ?? fallback;
+  } catch (_) {
+    return fallback;
+  }
+}
+
 function saveSourceWater(profile) {
   localStorage.setItem("cw_source_water", JSON.stringify(profile));
 }
 
 function loadSourceWater() {
-  const saved = localStorage.getItem("cw_source_water");
-  if (saved) {
-    return JSON.parse(saved);
-  }
-  return { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+  const fallback = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+  const parsed = safeParse(localStorage.getItem("cw_source_water"), fallback);
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
 }
 
 function saveSourcePresetName(name) {
@@ -140,8 +148,8 @@ function slugify(name) {
 }
 
 function loadCustomProfiles() {
-  const saved = localStorage.getItem("cw_custom_profiles");
-  return saved ? JSON.parse(saved) : {};
+  const parsed = safeParse(localStorage.getItem("cw_custom_profiles"), {});
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
 function saveCustomProfiles(profiles) {
@@ -156,8 +164,8 @@ function deleteCustomProfile(key) {
 
 // --- Deleted preset tracking (for hiding built-in presets) ---
 function loadDeletedPresets() {
-  const saved = localStorage.getItem("cw_deleted_presets");
-  return saved ? JSON.parse(saved) : [];
+  const parsed = safeParse(localStorage.getItem("cw_deleted_presets"), []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function addDeletedPreset(key) {
@@ -204,14 +212,19 @@ const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 
 // --- Custom target profile helpers ---
 const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
+const RESERVED_TARGET_KEYS = new Set([...BUILTIN_TARGET_KEYS, "custom"]);
 const BUILTIN_TARGET_LABELS = {};
 for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
   BUILTIN_TARGET_LABELS[key] = preset.label;
 }
 
+function isReservedTargetKey(key) {
+  return RESERVED_TARGET_KEYS.has(key);
+}
+
 function loadCustomTargetProfiles() {
-  const saved = localStorage.getItem("cw_custom_target_profiles");
-  return saved ? JSON.parse(saved) : {};
+  const parsed = safeParse(localStorage.getItem("cw_custom_target_profiles"), {});
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
 function saveCustomTargetProfiles(profiles) {
@@ -225,8 +238,8 @@ function deleteCustomTargetProfile(key) {
 }
 
 function loadDeletedTargetPresets() {
-  const saved = localStorage.getItem("cw_deleted_target_presets");
-  return saved ? JSON.parse(saved) : [];
+  const parsed = safeParse(localStorage.getItem("cw_deleted_target_presets"), []);
+  return Array.isArray(parsed) ? parsed : [];
 }
 
 function addDeletedTargetPreset(key) {
@@ -328,12 +341,29 @@ function loadAlkalinitySource() {
 }
 
 function loadSelectedMinerals() {
-  const saved = localStorage.getItem("cw_selected_minerals");
-  if (saved) {
-    return JSON.parse(saved);
-  }
+  const parsed = safeParse(localStorage.getItem("cw_selected_minerals"), null);
+  if (Array.isArray(parsed)) return parsed;
   // Default selection
   return ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+}
+
+function restoreSourcePresetDefaults() {
+  localStorage.removeItem("cw_deleted_presets");
+  const custom = loadCustomProfiles();
+  for (const key of Object.keys(SOURCE_PRESETS)) {
+    if (key === "custom") continue;
+    delete custom[key];
+  }
+  saveCustomProfiles(custom);
+}
+
+function restoreTargetPresetDefaults() {
+  localStorage.removeItem("cw_deleted_target_presets");
+  const custom = loadCustomTargetProfiles();
+  for (const key of BUILTIN_TARGET_KEYS) {
+    delete custom[key];
+  }
+  saveCustomTargetProfiles(custom);
 }
 
 // --- Navigation ---

@@ -266,7 +266,7 @@
         return;
       }
       const key = slugify(name);
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         errEl.textContent = "That name is reserved. Choose a different name.";
         recipeSaveTargetBtn.disabled = true;
         return;
@@ -307,7 +307,7 @@
         showRecipeSaveStatus("Enter a valid name.", true);
         return;
       }
-      if (BUILTIN_TARGET_KEYS.includes(key)) {
+      if (isReservedTargetKey(key)) {
         updateRecipeTargetNameError();
         return;
       }
