@@ -161,16 +161,19 @@
           <span class="metric-label">GH</span>
           <span class="metric-value" id="res-gh">--</span>
           <span class="metric-unit">mg/L as CaCO3</span>
+          <span class="metric-delta" id="delta-res-gh" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">KH</span>
           <span class="metric-value" id="res-kh">--</span>
           <span class="metric-unit">mg/L as CaCO3</span>
+          <span class="metric-delta" id="delta-res-kh" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">TDS</span>
           <span class="metric-value" id="res-tds">--</span>
           <span class="metric-unit">mg/L</span>
+          <span class="metric-delta" id="delta-res-tds" aria-live="polite">—</span>
         </div>
       </div>
 
@@ -220,6 +223,7 @@
         <div class="metric highlight metric-box result-ratio-cell advanced-only">
           <span class="metric-label">SO₄:Cl</span>
           <span class="metric-value" id="res-so4cl">—</span>
+          <span class="metric-delta" id="delta-res-so4cl" aria-live="polite">—</span>
         </div>
       </div>
 
@@ -231,6 +235,7 @@
         <button id="taste-save-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="taste-save-status" aria-live="polite"></div>
+      <p class="hint">All deltas shown vs Current Profile.</p>
     </section>
   </main>
 
@@ -473,46 +478,47 @@
       });
       const adjusted = getAdjustedProfile();
 
-      // Compute unclamped values to detect when clamping occurred
-      const unclamped = { ...base };
-      SLIDERS.forEach(slider => {
-        const val = parseInt(document.getElementById("slider-" + slider).value) || 0;
-        const effects = SLIDER_EFFECTS[slider];
-        for (const [ion, perStep] of Object.entries(effects)) {
-          unclamped[ion] = (unclamped[ion] || 0) + val * perStep;
-        }
-      });
-
       // Display adjusted values and deltas
       ION_FIELDS.forEach(ion => {
         document.getElementById("res-" + ion).textContent = adjusted[ion];
-        const delta = adjusted[ion] - Math.round(base[ion]);
-        const wasClamped = unclamped[ion] < 0;
-        const deltaEl = document.getElementById("delta-" + ion);
-        if (delta > 0) {
-          deltaEl.textContent = "+" + delta;
-          deltaEl.className = "result-delta positive";
-        } else if (delta < 0) {
-          deltaEl.textContent = delta + (wasClamped ? " (min)" : "");
-          deltaEl.className = "result-delta negative";
-        } else if (wasClamped) {
-          deltaEl.textContent = "0 (min)";
-          deltaEl.className = "result-delta negative";
-        } else {
-          deltaEl.textContent = "";
-          deltaEl.className = "result-delta";
-        }
+        setDeltaText(document.getElementById("delta-" + ion), adjusted[ion] - Math.round(base[ion]), {
+          metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
+          unit: "mg/L",
+          baselineLabel: "current water profile"
+        });
       });
 
       // Metrics
+      const baselineMetrics = calculateMetrics(base);
       const metrics = calculateMetrics(adjusted);
       document.getElementById("res-gh").textContent = Math.round(metrics.gh);
       document.getElementById("res-kh").textContent = Math.round(metrics.kh);
       document.getElementById("res-tds").textContent = Math.round(metrics.tds);
+      setDeltaText(document.getElementById("delta-res-gh"), metrics.gh - baselineMetrics.gh, {
+        metricName: "GH",
+        unit: "mg/L as CaCO3",
+        baselineLabel: "current water profile"
+      });
+      setDeltaText(document.getElementById("delta-res-kh"), metrics.kh - baselineMetrics.kh, {
+        metricName: "KH",
+        unit: "mg/L as CaCO3",
+        baselineLabel: "current water profile"
+      });
+      setDeltaText(document.getElementById("delta-res-tds"), metrics.tds - baselineMetrics.tds, {
+        metricName: "TDS",
+        unit: "mg/L",
+        baselineLabel: "current water profile"
+      });
 
       // SO4:Cl ratio (sulfate / chloride; undefined when chloride is 0)
       const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
       document.getElementById("res-so4cl").textContent = so4ToCl === null ? "—" : so4ToCl.toFixed(2);
+      const baselineRatio = calculateSo4ClRatio(base);
+      setDeltaText(document.getElementById("delta-res-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
+        decimals: 2,
+        metricName: "SO4:Cl ratio",
+        baselineLabel: "current water profile"
+      });
     }
 
     // --- Save as Target Profile ---

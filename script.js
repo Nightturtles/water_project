@@ -453,16 +453,21 @@ function calculate() {
   const KH_asCaCO3 = metrics.kh;
   const TDS_ion_sum = metrics.tds;
   const advancedMode = isAdvancedMineralDisplayMode();
+  const baselineMetrics = calculateMetrics(sourceWater || {});
 
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
+  const baselineRatio = calculateSo4ClRatio(sourceWater || {});
 
   updateSummaryMetrics({
     gh: GH_asCaCO3,
     kh: KH_asCaCO3,
     tds: TDS_ion_sum,
     ions: finalIons,
+    baselineIons: sourceWater || {},
+    baselineMetrics,
     so4ToCl,
+    baselineRatio,
     advancedMode
   });
 }
@@ -472,20 +477,48 @@ function updateSummaryMetrics(payload) {
   const kh = payload.kh;
   const tds = payload.tds;
   const ions = payload.ions || {};
+  const baselineIons = payload.baselineIons || null;
+  const baselineMetrics = payload.baselineMetrics || null;
   const so4ToCl = payload.so4ToCl;
+  const baselineRatio = payload.baselineRatio;
   const advancedMode = !!payload.advancedMode;
 
   document.getElementById("calc-gh").textContent = Number.isFinite(gh) ? Math.round(gh) : 0;
   document.getElementById("calc-kh").textContent = Number.isFinite(kh) ? Math.round(kh) : 0;
   document.getElementById("calc-tds").textContent = Number.isFinite(tds) ? Math.round(tds) : 0;
+  setDeltaText(document.getElementById("calc-delta-gh"), baselineMetrics ? gh - baselineMetrics.gh : null, {
+    metricName: "GH",
+    unit: "mg/L as CaCO3",
+    baselineLabel: "source water"
+  });
+  setDeltaText(document.getElementById("calc-delta-kh"), baselineMetrics ? kh - baselineMetrics.kh : null, {
+    metricName: "KH",
+    unit: "mg/L as CaCO3",
+    baselineLabel: "source water"
+  });
+  setDeltaText(document.getElementById("calc-delta-tds"), baselineMetrics ? tds - baselineMetrics.tds : null, {
+    metricName: "TDS",
+    unit: "mg/L",
+    baselineLabel: "source water"
+  });
   ION_FIELDS.forEach((ion) => {
     const el = document.getElementById("calc-" + ion);
     if (!el) return;
     const v = ions[ion];
     el.textContent = Number.isFinite(v) ? Math.round(v) : 0;
+    setDeltaText(document.getElementById("calc-delta-" + ion), baselineIons ? v - (baselineIons[ion] || 0) : null, {
+      metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
+      unit: "mg/L",
+      baselineLabel: "source water"
+    });
   });
   document.getElementById("calc-so4cl").textContent =
     advancedMode ? (so4ToCl == null ? "—" : so4ToCl.toFixed(2)) : "—";
+  setDeltaText(document.getElementById("calc-delta-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
+    decimals: 2,
+    metricName: "SO4:Cl ratio",
+    baselineLabel: "source water"
+  });
 }
 
 function formatGrams(g) {

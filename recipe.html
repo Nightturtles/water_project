@@ -59,16 +59,19 @@
           <span class="metric-label">GH</span>
           <span class="metric-value" id="ppm-gh">0</span>
           <span class="metric-unit">mg/L as CaCO3</span>
+          <span class="metric-delta" id="delta-ppm-gh" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">KH</span>
           <span class="metric-value" id="ppm-kh">0</span>
           <span class="metric-unit">mg/L as CaCO3</span>
+          <span class="metric-delta" id="delta-ppm-kh" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">TDS</span>
           <span class="metric-value" id="ppm-tds">0</span>
           <span class="metric-unit">mg/L</span>
+          <span class="metric-delta" id="delta-ppm-tds" aria-live="polite">—</span>
         </div>
       </div>
 
@@ -118,6 +121,7 @@
         <div class="metric highlight metric-box result-ratio-cell advanced-only">
           <span class="metric-label">SO₄:Cl</span>
           <span class="metric-value" id="ratio-display">—</span>
+          <span class="metric-delta" id="delta-ratio-display" aria-live="polite">—</span>
         </div>
       </div>
 
@@ -129,6 +133,7 @@
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status" aria-live="polite"></div>
+      <p class="hint">All deltas shown vs Source Water.</p>
     </section>
   </main>
 
@@ -228,28 +233,49 @@
       // Display ion PPMs (integer, match Adjusted Water Profile template)
       ION_FIELDS.forEach(ion => {
         const el = document.getElementById("ppm-" + ion);
+        const val = totalIons[ion];
         if (el) {
-          const val = totalIons[ion];
           el.textContent = Math.round((val == null || val !== val) ? 0 : val);
         }
-        const deltaEl = document.getElementById("delta-ppm-" + ion);
-        if (deltaEl) {
-          const delta = Math.round((addedIons[ion] || 0) * 10) / 10;
-          deltaEl.textContent = "+" + delta;
-          deltaEl.className = "result-delta" + (delta > 0 ? " positive" : "");
-        }
+        setDeltaText(document.getElementById("delta-ppm-" + ion), val - (baseWater[ion] || 0), {
+          metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
+          unit: "mg/L",
+          baselineLabel: "source water"
+        });
       });
       lastTotalIons = totalIons;
 
       // Calculate and display metrics
       const metrics = calculateMetrics(totalIons);
+      const baselineMetrics = calculateMetrics(baseWater || {});
       document.getElementById("ppm-gh").textContent = Math.round(metrics.gh);
       document.getElementById("ppm-kh").textContent = Math.round(metrics.kh);
       document.getElementById("ppm-tds").textContent = Math.round(metrics.tds);
+      setDeltaText(document.getElementById("delta-ppm-gh"), metrics.gh - baselineMetrics.gh, {
+        metricName: "GH",
+        unit: "mg/L as CaCO3",
+        baselineLabel: "source water"
+      });
+      setDeltaText(document.getElementById("delta-ppm-kh"), metrics.kh - baselineMetrics.kh, {
+        metricName: "KH",
+        unit: "mg/L as CaCO3",
+        baselineLabel: "source water"
+      });
+      setDeltaText(document.getElementById("delta-ppm-tds"), metrics.tds - baselineMetrics.tds, {
+        metricName: "TDS",
+        unit: "mg/L",
+        baselineLabel: "source water"
+      });
 
       // SO4:Cl ratio
       const so4ToCl = totalIons.chloride > 0 ? totalIons.sulfate / totalIons.chloride : null;
       document.getElementById("ratio-display").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
+      const baselineRatio = calculateSo4ClRatio(baseWater || {});
+      setDeltaText(document.getElementById("delta-ratio-display"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
+        decimals: 2,
+        metricName: "SO4:Cl ratio",
+        baselineLabel: "source water"
+      });
     }
 
     // --- Save Final Water Profile as Target Water Profile ---

@@ -645,6 +645,62 @@ function calculateMetrics(ions) {
   return { gh, kh, tds };
 }
 
+function calculateSo4ClRatio(ions) {
+  if (!ions || typeof ions !== "object") return null;
+  const sulfate = Number(ions.sulfate);
+  const chloride = Number(ions.chloride);
+  if (!Number.isFinite(sulfate) || !Number.isFinite(chloride) || chloride <= 0) return null;
+  return sulfate / chloride;
+}
+
+function roundDelta(delta, decimals = 0) {
+  if (!Number.isFinite(delta)) return null;
+  if (decimals > 0) {
+    const p = Math.pow(10, decimals);
+    const rounded = Math.round(delta * p) / p;
+    return Object.is(rounded, -0) ? 0 : rounded;
+  }
+  const rounded = Math.round(delta);
+  return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function formatDelta(delta, decimals = 0) {
+  const rounded = roundDelta(delta, decimals);
+  if (rounded == null) return "—";
+  const abs = decimals > 0 ? Math.abs(rounded).toFixed(decimals) : String(Math.abs(rounded));
+  if (rounded > 0) return "+" + abs;
+  if (rounded < 0) return "-" + abs;
+  return decimals > 0 ? Number(0).toFixed(decimals) : "0";
+}
+
+function setDeltaText(el, delta, options = {}) {
+  if (!el) return;
+  const decimals = options.decimals || 0;
+  const metricName = options.metricName || "Value";
+  const baselineLabel = options.baselineLabel || "baseline";
+  const visibleBaselineLabel = options.visibleBaselineLabel || "";
+  const unit = options.unit ? " " + options.unit : "";
+  const rounded = roundDelta(delta, decimals);
+  const deltaText = formatDelta(delta, decimals);
+  el.textContent = visibleBaselineLabel ? `${deltaText} vs ${visibleBaselineLabel}` : deltaText;
+  el.classList.remove("positive", "negative");
+  if (rounded == null) {
+    el.setAttribute("aria-label", `${metricName} delta unavailable compared to ${baselineLabel}`);
+    return;
+  }
+  if (rounded > 0) {
+    el.classList.add("positive");
+    el.setAttribute("aria-label", `${metricName} increased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`);
+    return;
+  }
+  if (rounded < 0) {
+    el.classList.add("negative");
+    el.setAttribute("aria-label", `${metricName} decreased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`);
+    return;
+  }
+  el.setAttribute("aria-label", `${metricName} unchanged compared to ${baselineLabel}`);
+}
+
 // --- Determine effective alkalinity source based on mineral selections ---
 function getEffectiveAlkalinitySource() {
   const selected = loadSelectedMinerals();

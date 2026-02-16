@@ -850,6 +850,22 @@ input[type="range"]::-moz-range-thumb {
   color: var(--gray-500);
 }
 
+.metric-delta {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--gray-500);
+  min-height: 1.1em;
+}
+
+.metric-delta.positive {
+  color: var(--green-600);
+}
+
+.metric-delta.negative {
+  color: var(--red-600);
+}
+
 /* ========================
    Recipe Builder page
    ======================== */
