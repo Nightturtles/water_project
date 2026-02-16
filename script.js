@@ -18,7 +18,6 @@ const targetCa = document.getElementById("target-calcium");
 const targetMg = document.getElementById("target-magnesium");
 const targetAlk = document.getElementById("target-alkalinity");
 const profileDesc = document.getElementById("profile-description");
-const resultSummary = document.getElementById("result-summary");
 const resultsContainer = document.getElementById("results-container");
 const profileButtonsContainer = document.getElementById("profile-buttons");
 const targetSaveBar = document.getElementById("target-save-bar");
@@ -27,6 +26,8 @@ const targetProfileNameInput = document.getElementById("target-profile-name");
 const targetSaveBtn = document.getElementById("target-save-btn");
 const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
 const targetSaveStatus = document.getElementById("target-save-status");
+
+let lastCalculatedIons = null;
 
 
 // --- Populate source water dropdown ---
@@ -58,7 +59,8 @@ function renderResultItems() {
   const alkalinitySource = getEffectiveAlkalinitySource();
   if (alkalinitySource === null) {
     resultsContainer.innerHTML = '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
-    resultSummary.innerHTML = "";
+    lastCalculatedIons = null;
+    updateSummaryMetrics({});
     return;
   }
 
@@ -77,6 +79,8 @@ function renderResultItems() {
   resultsContainer.innerHTML = "";
   if (toShow.length === 0) {
     resultsContainer.innerHTML = '<p class="hint">Select minerals in <a href="minerals.html">Settings</a> to see what to add.</p>';
+    lastCalculatedIons = null;
+    updateSummaryMetrics({});
     return;
   }
   for (const { id } of toShow) {
@@ -219,11 +223,18 @@ targetSaveChangesBtn.addEventListener("click", () => {
     const allProfiles = getAllTargetPresets();
     const existing = allProfiles[currentProfile];
     if (!existing) return;
+    const ions = lastCalculatedIons || {};
+    const metrics = calculateMetrics(ions);
     const profile = {
       label: existing.label,
-      calcium: parseFloat(targetCa.value) || 0,
-      magnesium: parseFloat(targetMg.value) || 0,
-      alkalinity: parseFloat(targetAlk.value) || 0,
+      calcium: Math.round(ions.calcium || 0),
+      magnesium: Math.round(ions.magnesium || 0),
+      alkalinity: Math.round(metrics.kh || 0),
+      potassium: Math.round(ions.potassium || 0),
+      sodium: Math.round(ions.sodium || 0),
+      sulfate: Math.round(ions.sulfate || 0),
+      chloride: Math.round(ions.chloride || 0),
+      bicarbonate: Math.round(ions.bicarbonate || 0),
       description: existing.description || ""
     };
     const profiles = loadCustomTargetProfiles();
@@ -276,11 +287,18 @@ targetSaveBtn.addEventListener("click", () => {
   document.getElementById("target-profile-name-error").textContent = "";
 
   const profiles = loadCustomTargetProfiles();
+  const ions = lastCalculatedIons || {};
+  const metrics = calculateMetrics(ions);
   profiles[key] = {
     label: name,
-    calcium: parseFloat(targetCa.value) || 0,
-    magnesium: parseFloat(targetMg.value) || 0,
-    alkalinity: parseFloat(targetAlk.value) || 0,
+    calcium: Math.round(ions.calcium || 0),
+    magnesium: Math.round(ions.magnesium || 0),
+    alkalinity: Math.round(metrics.kh || 0),
+    potassium: Math.round(ions.potassium || 0),
+    sodium: Math.round(ions.sodium || 0),
+    sulfate: Math.round(ions.sulfate || 0),
+    chloride: Math.round(ions.chloride || 0),
+    bicarbonate: Math.round(ions.bicarbonate || 0),
     description: ""
   };
   saveCustomTargetProfiles(profiles);
@@ -306,10 +324,8 @@ function onVolumeChanged() {
   saveVolumePreference("calculator", volumeInput.value, volumeUnit.value);
   calculate();
 }
-[volumeInput, volumeUnit].forEach(el => {
-  el.addEventListener("input", onVolumeChanged);
-  el.addEventListener("change", onVolumeChanged);
-});
+volumeInput.addEventListener("input", onVolumeChanged);
+volumeUnit.addEventListener("change", onVolumeChanged);
 
 // --- Core calculation ---
 function calculate() {
@@ -327,19 +343,21 @@ function calculate() {
     const mgSource = getEffectiveMagnesiumSource();
     const caSource = getEffectiveCalciumSource();
     if (warningsEl) warningsEl.textContent = "";
+    lastCalculatedIons = null;
     updateResultValues({
       ...(mgSource ? { [mgSource]: 0 } : {}),
       ...(caSource ? { [caSource]: 0 } : {}),
       ...(alk ? { [alk]: 0 } : {})
     });
-    resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
+    updateSummaryMetrics({});
     return;
   }
 
   const currentBuffer = getEffectiveAlkalinitySource();
   if (currentBuffer === null) {
     if (warningsEl) warningsEl.textContent = "";
-    resultSummary.innerHTML = "";
+    lastCalculatedIons = null;
+    updateSummaryMetrics({});
     return;
   }
   const mgSource = getEffectiveMagnesiumSource();
@@ -423,11 +441,7 @@ function calculate() {
   ION_FIELDS.forEach((ion) => {
     finalIons[ion] = (sourceWater[ion] || 0) + (addedIons[ion] || 0);
   });
-  const finalCa = finalIons.calcium || 0;
-  const finalMg = finalIons.magnesium || 0;
-  const finalK = finalIons.potassium || 0;
-  const finalNa = finalIons.sodium || 0;
-  const finalHCO3 = finalIons.bicarbonate || 0;
+  lastCalculatedIons = finalIons;
   const finalSO4 = finalIons.sulfate || 0;
   const finalCl = finalIons.chloride || 0;
 
@@ -443,37 +457,35 @@ function calculate() {
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
 
-  // Full ion display names (match Adjusted Water Profile template)
-  const ION_DISPLAY_NAMES = { calcium: "Calcium", magnesium: "Magnesium", potassium: "Potassium", sodium: "Sodium", sulfate: "Sulfate", chloride: "Chloride", bicarbonate: "Bicarbonate" };
-  const advancedOnlyIons = ["potassium", "sodium", "sulfate", "chloride"];
+  updateSummaryMetrics({
+    gh: GH_asCaCO3,
+    kh: KH_asCaCO3,
+    tds: TDS_ion_sum,
+    ions: finalIons,
+    so4ToCl,
+    advancedMode
+  });
+}
 
-  function formatIonValue(v) {
-    if (v == null || v !== v) return 0;
-    return Math.round(v);
-  }
+function updateSummaryMetrics(payload) {
+  const gh = payload.gh;
+  const kh = payload.kh;
+  const tds = payload.tds;
+  const ions = payload.ions || {};
+  const so4ToCl = payload.so4ToCl;
+  const advancedMode = !!payload.advancedMode;
 
-  // Summary HTML — same structure as Adjusted Water Profile (Taste Tuner)
-  const ionCells = ION_FIELDS.map(ion => {
-    const name = ION_DISPLAY_NAMES[ion] || ion;
-    const extraClass = ion === "bicarbonate" ? " always-hidden" : (advancedOnlyIons.includes(ion) ? " advanced-only" : "");
-    const val = formatIonValue(finalIons[ion]);
-    return `<div class="result-cell${extraClass}"><span class="result-label">${name}</span><span class="result-ppm">${val}</span><span class="result-unit">mg/L</span><span class="result-delta"></span></div>`;
-  }).join("");
-
-  const ratioCell = advancedMode
-    ? `<div class="metric highlight metric-box result-ratio-cell advanced-only"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>`
-    : "";
-
-  resultSummary.innerHTML =
-    `<div class="metrics-row">` +
-      `<div class="metric highlight metric-box"><span class="metric-label">GH</span><span class="metric-value">${Math.round(GH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
-      `<div class="metric highlight metric-box"><span class="metric-label">KH</span><span class="metric-value">${Math.round(KH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
-      `<div class="metric highlight metric-box"><span class="metric-label">TDS</span><span class="metric-value">${Math.round(TDS_ion_sum)}</span><span class="metric-unit">mg/L</span></div>` +
-    `</div>` +
-    `<div class="result-grid">` +
-      ionCells +
-      ratioCell +
-    `</div>`;
+  document.getElementById("calc-gh").textContent = Number.isFinite(gh) ? Math.round(gh) : 0;
+  document.getElementById("calc-kh").textContent = Number.isFinite(kh) ? Math.round(kh) : 0;
+  document.getElementById("calc-tds").textContent = Number.isFinite(tds) ? Math.round(tds) : 0;
+  ION_FIELDS.forEach((ion) => {
+    const el = document.getElementById("calc-" + ion);
+    if (!el) return;
+    const v = ions[ion];
+    el.textContent = Number.isFinite(v) ? Math.round(v) : 0;
+  });
+  document.getElementById("calc-so4cl").textContent =
+    advancedMode ? (so4ToCl == null ? "—" : so4ToCl.toFixed(2)) : "—";
 }
 
 function formatGrams(g) {

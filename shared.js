@@ -248,6 +248,17 @@ function loadVolumePreference(pageKey, defaults = {}) {
   return { value, unit };
 }
 
+function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
+  const alkRounded = Math.round(parseFloat(alkAsCaCO3) || 0);
+  const candidate = Math.round(alkRounded * CACO3_TO_HCO3 * 10) / 10;
+  const existing = Math.round((parseFloat(existingBicarbonate) || 0) * 10) / 10;
+  const candidateAlk = Math.round(candidate * HCO3_TO_CACO3);
+  const existingAlk = Math.round(existing * HCO3_TO_CACO3);
+  if (existingAlk === alkRounded) return existing;
+  if (candidateAlk === alkRounded) return candidate;
+  return candidate;
+}
+
 function bindEnterToClick(inputEl, buttonEl) {
   if (!inputEl || !buttonEl) return;
   inputEl.addEventListener("keydown", (e) => {
@@ -262,13 +273,18 @@ function slugify(name) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+let customProfilesCache = null;
+
 function loadCustomProfiles() {
+  if (customProfilesCache) return customProfilesCache;
   const parsed = safeParse(localStorage.getItem("cw_custom_profiles"), {});
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  customProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  return customProfilesCache;
 }
 
 function saveCustomProfiles(profiles) {
   localStorage.setItem("cw_custom_profiles", JSON.stringify(profiles));
+  customProfilesCache = null;
   invalidateSourcePresetsCache();
 }
 
@@ -388,13 +404,18 @@ function validateTargetProfileName(rawName, options = {}) {
   });
 }
 
+let customTargetProfilesCache = null;
+
 function loadCustomTargetProfiles() {
+  if (customTargetProfilesCache) return customTargetProfilesCache;
   const parsed = safeParse(localStorage.getItem("cw_custom_target_profiles"), {});
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  customTargetProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  return customTargetProfilesCache;
 }
 
 function saveCustomTargetProfiles(profiles) {
   localStorage.setItem("cw_custom_target_profiles", JSON.stringify(profiles));
+  customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
 }
 
@@ -617,7 +638,7 @@ function calculateIonPPMs(mineralGrams) {
 
 // --- Derived water metrics ---
 function calculateMetrics(ions) {
-  const gh = ions.calcium * CA_TO_CACO3 + ions.magnesium * MG_TO_CACO3;
+  const gh = (ions.calcium || 0) * CA_TO_CACO3 + (ions.magnesium || 0) * MG_TO_CACO3;
   const kh = (ions.bicarbonate || 0) * HCO3_TO_CACO3;
   const tds = (ions.calcium || 0) + (ions.magnesium || 0) + (ions.potassium || 0) +
               (ions.sodium || 0) + (ions.sulfate || 0) + (ions.chloride || 0) + (ions.bicarbonate || 0);
@@ -688,6 +709,15 @@ function getTargetProfileByKey(key) {
 
 // --- Compute full 7-ion profile from a Ca/Mg/Alk target ---
 function computeFullProfile(target) {
+  const hasExplicitIons = target && ION_FIELDS.every((ion) => Number.isFinite(Number(target[ion])));
+  if (hasExplicitIons) {
+    const explicit = {};
+    ION_FIELDS.forEach((ion) => {
+      explicit[ion] = Math.round(Number(target[ion]) || 0);
+    });
+    return explicit;
+  }
+
   const sourceWater = getSourceWaterByPreset(loadSourcePresetName());
   const alkSource = getEffectiveAlkalinitySource();
   const caSource = getEffectiveCalciumSource();
@@ -801,7 +831,6 @@ function initThemeListeners() {
 }
 
 // --- Run shared UI setup on load ---
-applyMineralDisplayMode();
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
   applyMineralDisplayMode();

@@ -93,12 +93,12 @@
     <section class="card">
       <h2>Alkalinity source</h2>
       <p class="hint">Select which mineral to use for alkalinity. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
+      <div class="radio-group">
+        <label class="radio-option">
           <input type="radio" name="alkalinity-source" value="baking-soda">
           <span>Baking Soda (NaHCO₃)</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="alkalinity-source" value="potassium-bicarbonate">
           <span>Potassium Bicarbonate (KHCO₃)</span>
         </label>
@@ -109,12 +109,12 @@
     <section class="card">
       <h2>Calcium source</h2>
       <p class="hint">Select which mineral to use for calcium. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
+      <div class="radio-group">
+        <label class="radio-option">
           <input type="radio" name="calcium-source" value="calcium-chloride">
           <span>Calcium Chloride (CaCl₂·2H₂O)</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="calcium-source" value="gypsum">
           <span>Gypsum (CaSO₄·2H₂O)</span>
         </label>
@@ -125,12 +125,12 @@
     <section class="card">
       <h2>Magnesium source</h2>
       <p class="hint">Select which mineral to use for magnesium. You must have at least one of these checked above.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
+      <div class="radio-group">
+        <label class="radio-option">
           <input type="radio" name="magnesium-source" value="epsom-salt">
           <span>Epsom Salt (MgSO₄·7H₂O)</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="magnesium-source" value="magnesium-chloride">
           <span>Magnesium Chloride (MgCl₂·6H₂O)</span>
         </label>
@@ -141,12 +141,12 @@
     <section class="card">
       <h2>Mineral Display Mode</h2>
       <p class="hint">Choose how much detail to show across the app.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
+      <div class="radio-group">
+        <label class="radio-option">
           <input type="radio" name="mineral-display-mode" value="standard">
           <span>Standard Minerals</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="mineral-display-mode" value="advanced">
           <span>Advanced Minerals</span>
         </label>
@@ -156,16 +156,16 @@
     <section class="card">
       <h2>Theme</h2>
       <p class="hint">Choose light, dark, or follow your device setting.</p>
-      <div class="alkalinity-source-options">
-        <label class="alkalinity-option">
+      <div class="radio-group">
+        <label class="radio-option">
           <input type="radio" name="theme" value="light">
           <span>Light Mode</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="theme" value="dark">
           <span>Dark Mode</span>
         </label>
-        <label class="alkalinity-option">
+        <label class="radio-option">
           <input type="radio" name="theme" value="system">
           <span>System</span>
         </label>
@@ -237,8 +237,8 @@
       const pbRadio = document.querySelector('input[name="alkalinity-source"][value="potassium-bicarbonate"]');
       bsRadio.disabled = !hasBs;
       pbRadio.disabled = !hasPb;
-      bsRadio.closest(".alkalinity-option").style.opacity = hasBs ? "1" : "0.4";
-      pbRadio.closest(".alkalinity-option").style.opacity = hasPb ? "1" : "0.4";
+      bsRadio.closest(".radio-option").style.opacity = hasBs ? "1" : "0.4";
+      pbRadio.closest(".radio-option").style.opacity = hasPb ? "1" : "0.4";
       if (hasAlk) {
         const effectiveAlk = getEffectiveAlkalinitySource();
         if (effectiveAlk === "potassium-bicarbonate") {
@@ -258,8 +258,8 @@
       const gypsumRadio = document.querySelector('input[name="calcium-source"][value="gypsum"]');
       cacl2Radio.disabled = !hasCaCl2;
       gypsumRadio.disabled = !hasGypsum;
-      cacl2Radio.closest(".alkalinity-option").style.opacity = hasCaCl2 ? "1" : "0.4";
-      gypsumRadio.closest(".alkalinity-option").style.opacity = hasGypsum ? "1" : "0.4";
+      cacl2Radio.closest(".radio-option").style.opacity = hasCaCl2 ? "1" : "0.4";
+      gypsumRadio.closest(".radio-option").style.opacity = hasGypsum ? "1" : "0.4";
       if (hasCa) {
         const effectiveCa = getEffectiveCalciumSource();
         if (effectiveCa === "gypsum") {
@@ -279,8 +279,8 @@
       const mgcl2Radio = document.querySelector('input[name="magnesium-source"][value="magnesium-chloride"]');
       epsomRadio.disabled = !hasEpsom;
       mgcl2Radio.disabled = !hasMgCl2;
-      epsomRadio.closest(".alkalinity-option").style.opacity = hasEpsom ? "1" : "0.4";
-      mgcl2Radio.closest(".alkalinity-option").style.opacity = hasMgCl2 ? "1" : "0.4";
+      epsomRadio.closest(".radio-option").style.opacity = hasEpsom ? "1" : "0.4";
+      mgcl2Radio.closest(".radio-option").style.opacity = hasMgCl2 ? "1" : "0.4";
       if (hasMg) {
         const effectiveMg = getEffectiveMagnesiumSource();
         if (effectiveMg === "magnesium-chloride") {
@@ -404,7 +404,7 @@
 
     srcAlkalinityInput.addEventListener("input", () => {
       const alkAsCaCO3 = parseFloat(srcAlkalinityInput.value) || 0;
-      srcBicarbonateInput.value = Math.round(alkAsCaCO3 * CACO3_TO_HCO3 * 10) / 10;
+      srcBicarbonateInput.value = toStableBicarbonateFromAlkalinity(alkAsCaCO3, srcBicarbonateInput.value);
       srcBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
 

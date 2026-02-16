@@ -77,43 +77,43 @@
           <span class="result-label">Calcium</span>
           <span class="result-ppm" id="ppm-calcium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-calcium">+0</span>
         </div>
         <div class="result-cell">
           <span class="result-label">Magnesium</span>
           <span class="result-ppm" id="ppm-magnesium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-magnesium">+0</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Potassium</span>
           <span class="result-ppm" id="ppm-potassium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-potassium">+0</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sodium</span>
           <span class="result-ppm" id="ppm-sodium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-sodium">+0</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sulfate</span>
           <span class="result-ppm" id="ppm-sulfate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-sulfate">+0</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Chloride</span>
           <span class="result-ppm" id="ppm-chloride">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-chloride">+0</span>
         </div>
         <div class="result-cell always-hidden">
           <span class="result-label">Bicarbonate</span>
           <span class="result-ppm" id="ppm-bicarbonate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta"></span>
+          <span class="result-delta" id="delta-ppm-bicarbonate">+0</span>
         </div>
         <div class="metric highlight metric-box result-ratio-cell advanced-only">
           <span class="metric-label">SO₄:Cl</span>
@@ -141,6 +141,7 @@
     // --- Source water dropdown ---
     const sourcePresetSelect = document.getElementById("source-preset");
     const sourceWaterTags = document.getElementById("source-water-tags");
+    let lastTotalIons = null;
 
     initSourcePresetSelect(sourcePresetSelect);
 
@@ -231,7 +232,14 @@
           const val = totalIons[ion];
           el.textContent = Math.round((val == null || val !== val) ? 0 : val);
         }
+        const deltaEl = document.getElementById("delta-ppm-" + ion);
+        if (deltaEl) {
+          const delta = Math.round((addedIons[ion] || 0) * 10) / 10;
+          deltaEl.textContent = "+" + delta;
+          deltaEl.className = "result-delta" + (delta > 0 ? " positive" : "");
+        }
       });
+      lastTotalIons = totalIons;
 
       // Calculate and display metrics
       const metrics = calculateMetrics(totalIons);
@@ -291,14 +299,18 @@
       document.getElementById("recipe-target-name-error").textContent = "";
 
       const profiles = loadCustomTargetProfiles();
-      const calcium = Math.round(parseFloat(document.getElementById("ppm-calcium").textContent) || 0);
-      const magnesium = Math.round(parseFloat(document.getElementById("ppm-magnesium").textContent) || 0);
-      const alkalinity = Math.round(parseFloat(document.getElementById("ppm-kh").textContent) || 0);
+      const ions = lastTotalIons || {};
+      const metrics = calculateMetrics(ions);
       profiles[key] = {
         label: name,
-        calcium,
-        magnesium,
-        alkalinity,
+        calcium: Math.round(ions.calcium || 0),
+        magnesium: Math.round(ions.magnesium || 0),
+        alkalinity: Math.round(metrics.kh || 0),
+        potassium: Math.round(ions.potassium || 0),
+        sodium: Math.round(ions.sodium || 0),
+        sulfate: Math.round(ions.sulfate || 0),
+        chloride: Math.round(ions.chloride || 0),
+        bicarbonate: Math.round(ions.bicarbonate || 0),
         description: ""
       };
       saveCustomTargetProfiles(profiles);

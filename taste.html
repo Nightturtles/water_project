@@ -288,7 +288,37 @@
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
 
-    function renderTastePresets() {
+    function setCurrentProfileInputs(values) {
+      ION_FIELDS.forEach(ion => {
+        document.getElementById("cur-" + ion).value = values[ion] || 0;
+      });
+      updateAlkFromBicarb();
+    }
+
+    function activateTastePreset(presetKey, options = {}) {
+      const reset = options.resetSliders !== false;
+      tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.preset === presetKey);
+      });
+
+      if (presetKey === "custom") {
+        if (reset) resetSliders();
+        updateCurrentEditBar();
+        recalculate();
+        return;
+      }
+
+      const profile = getTargetProfileByKey(presetKey);
+      if (profile) {
+        const values = computeFullProfile(profile);
+        setCurrentProfileInputs(values);
+        if (reset) resetSliders();
+        recalculate();
+      }
+      updateCurrentEditBar();
+    }
+
+    function renderTastePresets(activePreset = null) {
       tastePresetsContainer.innerHTML = "";
       const allPresets = getAllTargetPresets();
       for (const [key, profile] of Object.entries(allPresets)) {
@@ -299,11 +329,20 @@
           btn.dataset.targetKey = key;
         }
         btn.textContent = profile.label;
+        if (key !== "custom") {
+          const del = document.createElement("span");
+          del.className = "preset-delete";
+          del.dataset.delete = key;
+          del.innerHTML = "&times;";
+          btn.appendChild(del);
+        }
         tastePresetsContainer.appendChild(btn);
       }
-      const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
-      if (firstBtn) firstBtn.classList.add("active");
-      updateCurrentEditBar();
+      const keys = Object.keys(allPresets);
+      const initialKey = (activePreset && keys.includes(activePreset))
+        ? activePreset
+        : (keys[0] || "custom");
+      if (initialKey) activateTastePreset(initialKey, { resetSliders: true });
     }
 
     // --- Get current water profile ions from the Current Water Profile grid ---
@@ -333,27 +372,26 @@
 
     // --- Preset click handler (event delegation) ---
     tastePresetsContainer.addEventListener("click", (e) => {
-      const btn = e.target.closest(".taste-preset-btn");
-      if (!btn) return;
-      tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      const preset = btn.dataset.preset;
-      if (preset === "custom") {
-        updateCurrentEditBar();
+      const deleteKey = e.target.dataset.delete;
+      if (deleteKey) {
+        e.stopPropagation();
+        showConfirm("Are you sure you want to delete this profile?", () => {
+          if (TARGET_PRESETS[deleteKey]) {
+            addDeletedTargetPreset(deleteKey);
+          } else {
+            deleteCustomTargetProfile(deleteKey);
+          }
+          const remaining = Object.keys(getAllTargetPresets());
+          const fallback = remaining[0] || "custom";
+          renderTastePresets(fallback);
+          showCurrentSaveStatus("Profile deleted.", false);
+        });
         return;
       }
 
-      const profile = getTargetProfileByKey(preset);
-      if (profile) {
-        const values = computeFullProfile(profile);
-        ION_FIELDS.forEach(ion => {
-          document.getElementById("cur-" + ion).value = values[ion] || 0;
-        });
-        resetSliders();
-        recalculate();
-      }
-      updateCurrentEditBar();
+      const btn = e.target.closest(".taste-preset-btn");
+      if (!btn) return;
+      activateTastePreset(btn.dataset.preset, { resetSliders: true });
     });
 
     // --- Input change handlers ---
@@ -422,17 +460,17 @@
 
     curAlkalinityInput.addEventListener("input", () => {
       const alkAsCaCO3 = parseFloat(curAlkalinityInput.value) || 0;
-      curBicarbonateInput.value = Math.round(alkAsCaCO3 * CACO3_TO_HCO3 * 10) / 10;
+      curBicarbonateInput.value = toStableBicarbonateFromAlkalinity(alkAsCaCO3, curBicarbonateInput.value);
       curBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
     });
 
     // --- Core recalculation ---
     function recalculate() {
+      updateAlkFromBicarb();
       const base = {};
       ION_FIELDS.forEach(ion => {
         base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
       });
-      updateAlkFromBicarb();
       const adjusted = getAdjustedProfile();
 
       // Compute unclamped values to detect when clamping occurred
@@ -504,6 +542,26 @@
 
     const showTasteSaveStatus = createStatusHandler(tasteSaveStatus);
 
+    function buildStoredTargetProfile(label, ions, description = "") {
+      const normalized = {};
+      ION_FIELDS.forEach((ion) => {
+        normalized[ion] = Math.round(parseFloat(ions[ion]) || 0);
+      });
+      const metrics = calculateMetrics(normalized);
+      return {
+        label,
+        calcium: normalized.calcium,
+        magnesium: normalized.magnesium,
+        alkalinity: Math.round(metrics.kh),
+        potassium: normalized.potassium,
+        sodium: normalized.sodium,
+        sulfate: normalized.sulfate,
+        chloride: normalized.chloride,
+        bicarbonate: normalized.bicarbonate,
+        description
+      };
+    }
+
     tasteSaveBtn.addEventListener("click", () => {
       const validation = validateTargetProfileName(tasteProfileNameInput.value);
       if (!validation.ok) {
@@ -525,18 +583,9 @@
 
       const profiles = loadCustomTargetProfiles();
       const adjusted = getAdjustedProfile();
-      const metrics = calculateMetrics(adjusted);
-      const alkalinity = Math.round(metrics.kh);
-
-      profiles[key] = {
-        label: name,
-        calcium: adjusted.calcium,
-        magnesium: adjusted.magnesium,
-        alkalinity: alkalinity,
-        description: ""
-      };
+      profiles[key] = buildStoredTargetProfile(name, adjusted, "");
       saveCustomTargetProfiles(profiles);
-      renderTastePresets();
+      renderTastePresets(key);
 
       tasteProfileNameInput.value = "";
       updateTasteProfileNameError();
@@ -590,18 +639,9 @@
 
       const profiles = loadCustomTargetProfiles();
       const ions = getCurrentProfileIons();
-      const metrics = calculateMetrics(ions);
-      const alkalinity = Math.round(metrics.kh);
-
-      profiles[key] = {
-        label: name,
-        calcium: ions.calcium,
-        magnesium: ions.magnesium,
-        alkalinity: alkalinity,
-        description: ""
-      };
+      profiles[key] = buildStoredTargetProfile(name, ions, "");
       saveCustomTargetProfiles(profiles);
-      renderTastePresets();
+      renderTastePresets(key);
 
       currentProfileNameInput.value = "";
       updateCurrentProfileNameError();
@@ -618,18 +658,9 @@
       if (!existing) return;
 
       const ions = getCurrentProfileIons();
-      const metrics = calculateMetrics(ions);
-      const alkalinity = Math.round(metrics.kh);
-
-      profiles[targetKey] = {
-        label: existing.label,
-        calcium: ions.calcium,
-        magnesium: ions.magnesium,
-        alkalinity: alkalinity,
-        description: existing.description || ""
-      };
+      profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "");
       saveCustomTargetProfiles(profiles);
-      renderTastePresets();
+      renderTastePresets(targetKey);
       showCurrentSaveStatus("Profile updated.", false);
     });
 
@@ -643,28 +674,15 @@
       const label = profile && profile.label ? profile.label : targetKey;
       showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
         deleteCustomTargetProfile(targetKey);
-        renderTastePresets();
-        const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
-        if (firstBtn) {
-          firstBtn.classList.add("active");
-          const profile = getTargetProfileByKey(firstBtn.dataset.preset);
-          if (profile) {
-            const values = computeFullProfile(profile);
-            ION_FIELDS.forEach(ion => {
-              document.getElementById("cur-" + ion).value = values[ion] || 0;
-            });
-          }
-          resetSliders();
-        }
-        updateCurrentEditBar();
-        recalculate();
+        const remaining = Object.keys(getAllTargetPresets());
+        const fallback = remaining[0] || "custom";
+        renderTastePresets(fallback);
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
 
     // --- Initialize ---
     renderTastePresets();
-    recalculate();
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {
