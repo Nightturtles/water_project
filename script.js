@@ -237,7 +237,12 @@ function renderProfileButtons() {
     if (key === "custom") {
       btn.textContent = profile.label;
     } else {
-      btn.innerHTML = `${profile.label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
+      btn.textContent = profile.label;
+      const del = document.createElement("span");
+      del.className = "preset-delete";
+      del.dataset.delete = key;
+      del.innerHTML = "&times;";
+      btn.appendChild(del);
     }
     profileButtonsContainer.appendChild(btn);
   }
@@ -435,11 +440,13 @@ targetSaveBtn.addEventListener("click", () => {
 });
 
 
+let targetSaveTimer = null;
 function showTargetSaveStatus(message, isError) {
+  clearTimeout(targetSaveTimer);
   targetSaveStatus.textContent = message;
   targetSaveStatus.classList.toggle("error", isError);
   targetSaveStatus.classList.add("visible");
-  setTimeout(() => {
+  targetSaveTimer = setTimeout(() => {
     targetSaveStatus.classList.remove("visible", "error");
   }, isError ? 3000 : 1500);
 }

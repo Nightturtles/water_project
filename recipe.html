@@ -283,11 +283,13 @@
 
     recipeTargetNameInput.addEventListener("input", updateRecipeTargetNameError);
 
+    let recipeSaveTimer = null;
     function showRecipeSaveStatus(message, isError) {
+      clearTimeout(recipeSaveTimer);
       recipeSaveStatus.textContent = message;
       recipeSaveStatus.classList.toggle("error", isError);
       recipeSaveStatus.classList.add("visible");
-      setTimeout(() => {
+      recipeSaveTimer = setTimeout(() => {
         recipeSaveStatus.classList.remove("visible", "error");
       }, isError ? 3000 : 1500);
     }

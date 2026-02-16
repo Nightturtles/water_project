@@ -375,7 +375,10 @@
       btn.classList.add("active");
 
       const preset = btn.dataset.preset;
-      if (preset === "custom") return;
+      if (preset === "custom") {
+        updateCurrentEditBar();
+        return;
+      }
 
       let values;
       if (btn.dataset.targetKey) {
@@ -532,11 +535,13 @@
 
     tasteProfileNameInput.addEventListener("input", updateTasteProfileNameError);
 
+    let tasteSaveTimer = null;
     function showTasteSaveStatus(message, isError) {
+      clearTimeout(tasteSaveTimer);
       tasteSaveStatus.textContent = message;
       tasteSaveStatus.classList.toggle("error", isError);
       tasteSaveStatus.classList.add("visible");
-      setTimeout(() => {
+      tasteSaveTimer = setTimeout(() => {
         tasteSaveStatus.classList.remove("visible", "error");
       }, isError ? 3000 : 1500);
     }
@@ -622,11 +627,13 @@
 
     currentProfileNameInput.addEventListener("input", updateCurrentProfileNameError);
 
+    let currentSaveTimer = null;
     function showCurrentSaveStatus(message, isError) {
+      clearTimeout(currentSaveTimer);
       currentSaveStatus.textContent = message;
       currentSaveStatus.classList.toggle("error", isError);
       currentSaveStatus.classList.add("visible");
-      setTimeout(() => {
+      currentSaveTimer = setTimeout(() => {
         currentSaveStatus.classList.remove("visible", "error");
       }, isError ? 3000 : 1500);
     }
@@ -711,12 +718,25 @@
       const profiles = loadCustomTargetProfiles();
       const profile = profiles[targetKey];
       const label = profile && profile.label ? profile.label : targetKey;
-      showConfirm("Delete \u201c" + label + "\u201c? This cannot be undone.", () => {
+      showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
         deleteCustomTargetProfile(targetKey);
         renderTastePresets();
         const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
-        if (firstBtn) firstBtn.classList.add("active");
+        if (firstBtn) {
+          firstBtn.classList.add("active");
+          const presetKey = firstBtn.dataset.preset;
+          const values = firstBtn.dataset.targetKey
+            ? targetProfileToIons(loadCustomTargetProfiles()[firstBtn.dataset.targetKey])
+            : TASTE_PRESETS[presetKey];
+          if (values) {
+            ION_FIELDS.forEach(ion => {
+              document.getElementById("cur-" + ion).value = values[ion] || 0;
+            });
+          }
+          resetSliders();
+        }
         updateCurrentEditBar();
+        recalculate();
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
@@ -724,6 +744,11 @@
     // --- Initialize ---
     renderTastePresets();
     recalculate();
+
+    // --- Refresh on bfcache restore ---
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) location.reload();
+    });
   </script>
 </body>
 </html>

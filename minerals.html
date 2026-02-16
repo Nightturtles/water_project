@@ -220,7 +220,12 @@
         if (key === "custom") {
           btn.textContent = preset.label;
         } else {
-          btn.innerHTML = `${preset.label}<span class="preset-delete" data-delete="${key}">&times;</span>`;
+          btn.textContent = preset.label;
+          const del = document.createElement("span");
+          del.className = "preset-delete";
+          del.dataset.delete = key;
+          del.innerHTML = "&times;";
+          btn.appendChild(del);
         }
         presetsContainer.appendChild(btn);
       }
@@ -417,12 +422,14 @@
       saveSourceWater(profile);
     }
 
+    let saveStatusTimer = null;
     function showSaveStatus(message, isError) {
+      clearTimeout(saveStatusTimer);
       const el = document.getElementById("save-status");
       el.textContent = message;
       el.classList.toggle("error", isError);
       el.classList.add("visible");
-      setTimeout(() => {
+      saveStatusTimer = setTimeout(() => {
         el.classList.remove("visible", "error");
       }, isError ? 3000 : 1500);
     }
