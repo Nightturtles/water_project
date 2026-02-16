@@ -325,21 +325,19 @@
     // --- Duplicate name error below name input ---
     function updateProfileNameError() {
       const errEl = document.getElementById("profile-name-error");
-      const name = profileNameInput.value.trim();
-      if (!name) {
+      const validation = validateProfileName(profileNameInput.value, {
+        allowEmpty: true,
+        builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
+        existingKeys: new Set(Object.keys(loadCustomProfiles())),
+        existingLabels: getExistingSourceProfileLabels()
+      });
+      if (validation.empty) {
         errEl.textContent = "";
         saveProfileBtn.disabled = false;
         return;
       }
-      const key = slugify(name);
-      if (SOURCE_PRESETS[key]) {
-        errEl.textContent = "That name is reserved. Choose a different name.";
-        saveProfileBtn.disabled = true;
-        return;
-      }
-      const existingLabels = getExistingSourceProfileLabels();
-      if (existingLabels.has(name.toLowerCase())) {
-        errEl.textContent = "A profile with this name already exists.";
+      if (!validation.ok) {
+        errEl.textContent = validation.message;
         saveProfileBtn.disabled = true;
         return;
       }
@@ -351,36 +349,29 @@
 
     // --- Save new custom profile ---
     saveProfileBtn.addEventListener("click", () => {
-      const name = profileNameInput.value.trim();
-      if (!name) {
+      const validation = validateProfileName(profileNameInput.value, {
+        builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
+        existingKeys: new Set(Object.keys(loadCustomProfiles())),
+        existingLabels: getExistingSourceProfileLabels()
+      });
+      if (!validation.ok) {
+        if (validation.code === "reserved" || validation.code === "duplicate") {
+          updateProfileNameError();
+          return;
+        }
         document.getElementById("profile-name-error").textContent = "";
-        showSaveStatus("Enter a profile name.", true);
+        showSaveStatus(validation.message, true);
         return;
       }
-
-      const key = slugify(name);
-      if (!key) {
-        document.getElementById("profile-name-error").textContent = "";
-        showSaveStatus("Enter a valid name.", true);
-        return;
-      }
-      if (SOURCE_PRESETS[key]) {
-        updateProfileNameError();
-        return;
-      }
-      const customProfiles = loadCustomProfiles();
-      if (customProfiles[key]) {
-        updateProfileNameError();
-        return;
-      }
-      const existingLabels = getExistingSourceProfileLabels();
-      if (existingLabels.has(name.trim().toLowerCase())) {
+      const { key, name } = validation;
+      if (!key || !name) {
         updateProfileNameError();
         return;
       }
 
       document.getElementById("profile-name-error").textContent = "";
 
+      const customProfiles = loadCustomProfiles();
       const profile = { label: name };
       ION_FIELDS.forEach(ion => {
         profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;

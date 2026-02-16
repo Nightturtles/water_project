@@ -205,6 +205,7 @@ function loadCustomProfiles() {
 
 function saveCustomProfiles(profiles) {
   localStorage.setItem("cw_custom_profiles", JSON.stringify(profiles));
+  invalidateSourcePresetsCache();
 }
 
 function deleteCustomProfile(key) {
@@ -224,6 +225,7 @@ function addDeletedPreset(key) {
   if (!deleted.includes(key)) {
     deleted.push(key);
     localStorage.setItem("cw_deleted_presets", JSON.stringify(deleted));
+    invalidateSourcePresetsCache();
   }
 }
 
@@ -273,34 +275,53 @@ function isReservedTargetKey(key) {
   return RESERVED_TARGET_KEYS.has(key);
 }
 
-function validateTargetProfileName(rawName, options = {}) {
+function validateProfileName(rawName, options = {}) {
   const allowEmpty = !!options.allowEmpty;
+  const emptyMessage = options.emptyMessage || "Enter a profile name.";
+  const invalidMessage = options.invalidMessage || "Enter a valid name.";
+  const reservedMessage = options.reservedMessage || "That name is reserved. Choose a different name.";
+  const duplicateMessage = options.duplicateMessage || "A profile with this name already exists.";
   const name = (rawName || "").trim();
+
   if (!name) {
     return allowEmpty
       ? { ok: true, key: "", name: "", empty: true }
-      : { ok: false, code: "empty", message: "Enter a profile name." };
+      : { ok: false, code: "empty", message: emptyMessage };
   }
 
   const key = slugify(name);
   if (!key) {
-    return { ok: false, code: "invalid", message: "Enter a valid name." };
-  }
-  if (isReservedTargetKey(key)) {
-    return { ok: false, code: "reserved", message: "That name is reserved. Choose a different name." };
+    return { ok: false, code: "invalid", message: invalidMessage };
   }
 
-  const profiles = loadCustomTargetProfiles();
-  if (profiles[key]) {
-    return { ok: false, code: "duplicate", message: "A profile with this name already exists." };
+  const builtinKeys = options.builtinKeys || [];
+  const builtinKeySet = builtinKeys instanceof Set ? builtinKeys : new Set(builtinKeys);
+  if (builtinKeySet.has(key)) {
+    return { ok: false, code: "reserved", message: reservedMessage };
   }
 
-  const existingLabels = getExistingTargetProfileLabels();
-  if (existingLabels.has(name.toLowerCase())) {
-    return { ok: false, code: "duplicate", message: "A profile with this name already exists." };
+  const existingKeys = options.existingKeys || [];
+  const existingKeySet = existingKeys instanceof Set ? existingKeys : new Set(existingKeys);
+  if (existingKeySet.has(key)) {
+    return { ok: false, code: "duplicate", message: duplicateMessage };
+  }
+
+  const existingLabels = options.existingLabels || [];
+  const existingLabelSet = existingLabels instanceof Set ? existingLabels : new Set(existingLabels);
+  if (existingLabelSet.has(name.toLowerCase())) {
+    return { ok: false, code: "duplicate", message: duplicateMessage };
   }
 
   return { ok: true, key, name };
+}
+
+function validateTargetProfileName(rawName, options = {}) {
+  return validateProfileName(rawName, {
+    allowEmpty: options.allowEmpty,
+    builtinKeys: RESERVED_TARGET_KEYS,
+    existingKeys: new Set(Object.keys(loadCustomTargetProfiles())),
+    existingLabels: getExistingTargetProfileLabels()
+  });
 }
 
 function loadCustomTargetProfiles() {
@@ -310,6 +331,7 @@ function loadCustomTargetProfiles() {
 
 function saveCustomTargetProfiles(profiles) {
   localStorage.setItem("cw_custom_target_profiles", JSON.stringify(profiles));
+  invalidateTargetPresetsCache();
 }
 
 function deleteCustomTargetProfile(key) {
@@ -328,6 +350,7 @@ function addDeletedTargetPreset(key) {
   if (!deleted.includes(key)) {
     deleted.push(key);
     localStorage.setItem("cw_deleted_target_presets", JSON.stringify(deleted));
+    invalidateTargetPresetsCache();
   }
 }
 
@@ -373,7 +396,13 @@ function loadTargetPresetName() {
 // Built-in presets can be overridden by custom profiles with the same key.
 // Deleted built-in presets are filtered out.
 // Custom-only profiles are inserted before the "custom" entry.
+let sourcePresetsCache = null;
+function invalidateSourcePresetsCache() {
+  sourcePresetsCache = null;
+}
+
 function getAllPresets() {
+  if (sourcePresetsCache) return sourcePresetsCache;
   const custom = loadCustomProfiles();
   const deleted = loadDeletedPresets();
   const result = {};
@@ -391,7 +420,8 @@ function getAllPresets() {
     if (deleted.includes(key)) continue;
     result[key] = custom[key] || value;
   }
-  return result;
+  sourcePresetsCache = result;
+  return sourcePresetsCache;
 }
 
 // Returns the ion values for a given preset name (or custom from localStorage)
@@ -522,7 +552,13 @@ function getEffectiveAlkalinitySource() {
 }
 
 // --- Get all target presets (built-in + custom, respecting deletions) ---
+let targetPresetsCache = null;
+function invalidateTargetPresetsCache() {
+  targetPresetsCache = null;
+}
+
 function getAllTargetPresets() {
+  if (targetPresetsCache) return targetPresetsCache;
   const custom = loadCustomTargetProfiles();
   const deleted = loadDeletedTargetPresets();
   const result = {};
@@ -536,7 +572,8 @@ function getAllTargetPresets() {
     }
   }
   result["custom"] = { label: "Custom" };
-  return result;
+  targetPresetsCache = result;
+  return targetPresetsCache;
 }
 
 function getTargetProfileByKey(key) {
