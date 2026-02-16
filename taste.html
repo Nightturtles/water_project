@@ -152,14 +152,17 @@
         <div class="metric highlight metric-box">
           <span class="metric-label">GH</span>
           <span class="metric-value" id="res-gh">--</span>
+          <span class="metric-unit">mg/L as CaCO3</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">KH</span>
           <span class="metric-value" id="res-kh">--</span>
+          <span class="metric-unit">mg/L as CaCO3</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">TDS</span>
           <span class="metric-value" id="res-tds">--</span>
+          <span class="metric-unit">mg/L</span>
         </div>
       </div>
 
@@ -441,9 +444,9 @@
 
       // Metrics
       const metrics = calculateMetrics(adjusted);
-      document.getElementById("res-gh").textContent = Math.round(metrics.gh) + " mg/L";
-      document.getElementById("res-kh").textContent = Math.round(metrics.kh) + " mg/L";
-      document.getElementById("res-tds").textContent = Math.round(metrics.tds) + " mg/L";
+      document.getElementById("res-gh").textContent = Math.round(metrics.gh);
+      document.getElementById("res-kh").textContent = Math.round(metrics.kh);
+      document.getElementById("res-tds").textContent = Math.round(metrics.tds);
 
       // SO4:Cl ratio (sulfate / chloride; undefined when chloride is 0)
       const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
@@ -457,21 +460,14 @@
 
     function updateTasteProfileNameError() {
       const errEl = document.getElementById("taste-profile-name-error");
-      const name = tasteProfileNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(tasteProfileNameInput.value, { allowEmpty: true });
+      if (validation.empty) {
         errEl.textContent = "";
         tasteSaveBtn.disabled = false;
         return;
       }
-      const key = slugify(name);
-      if (isReservedTargetKey(key)) {
-        errEl.textContent = "That name is reserved. Choose a different name.";
-        tasteSaveBtn.disabled = true;
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.toLowerCase())) {
-        errEl.textContent = "A profile with this name already exists.";
+      if (!validation.ok) {
+        errEl.textContent = validation.message;
         tasteSaveBtn.disabled = true;
         return;
       }
@@ -481,48 +477,28 @@
 
     tasteProfileNameInput.addEventListener("input", updateTasteProfileNameError);
 
-    let tasteSaveTimer = null;
-    function showTasteSaveStatus(message, isError) {
-      clearTimeout(tasteSaveTimer);
-      tasteSaveStatus.textContent = message;
-      tasteSaveStatus.classList.toggle("error", isError);
-      tasteSaveStatus.classList.add("visible");
-      tasteSaveTimer = setTimeout(() => {
-        tasteSaveStatus.classList.remove("visible", "error");
-      }, isError ? 3000 : 1500);
-    }
+    const showTasteSaveStatus = createStatusHandler(tasteSaveStatus);
 
     tasteSaveBtn.addEventListener("click", () => {
-      const name = tasteProfileNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(tasteProfileNameInput.value);
+      if (!validation.ok) {
+        if (validation.code === "reserved" || validation.code === "duplicate") {
+          updateTasteProfileNameError();
+          return;
+        }
         document.getElementById("taste-profile-name-error").textContent = "";
-        showTasteSaveStatus("Enter a profile name.", true);
+        showTasteSaveStatus(validation.message, true);
         return;
       }
-
-      const key = slugify(name);
-      if (!key) {
-        document.getElementById("taste-profile-name-error").textContent = "";
-        showTasteSaveStatus("Enter a valid name.", true);
-        return;
-      }
-      if (isReservedTargetKey(key)) {
-        updateTasteProfileNameError();
-        return;
-      }
-      const profiles = loadCustomTargetProfiles();
-      if (profiles[key]) {
-        updateTasteProfileNameError();
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.trim().toLowerCase())) {
+      const { key, name } = validation;
+      if (!key || !name) {
         updateTasteProfileNameError();
         return;
       }
 
       document.getElementById("taste-profile-name-error").textContent = "";
 
+      const profiles = loadCustomTargetProfiles();
       const adjusted = getAdjustedProfile();
       const metrics = calculateMetrics(adjusted);
       const alkalinity = Math.round(metrics.kh);
@@ -549,21 +525,14 @@
 
     function updateCurrentProfileNameError() {
       const errEl = document.getElementById("current-profile-name-error");
-      const name = currentProfileNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(currentProfileNameInput.value, { allowEmpty: true });
+      if (validation.empty) {
         errEl.textContent = "";
         currentSaveBtn.disabled = false;
         return;
       }
-      const key = slugify(name);
-      if (isReservedTargetKey(key)) {
-        errEl.textContent = "That name is reserved. Choose a different name.";
-        currentSaveBtn.disabled = true;
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.toLowerCase())) {
-        errEl.textContent = "A profile with this name already exists.";
+      if (!validation.ok) {
+        errEl.textContent = validation.message;
         currentSaveBtn.disabled = true;
         return;
       }
@@ -573,45 +542,27 @@
 
     currentProfileNameInput.addEventListener("input", updateCurrentProfileNameError);
 
-    let currentSaveTimer = null;
-    function showCurrentSaveStatus(message, isError) {
-      clearTimeout(currentSaveTimer);
-      currentSaveStatus.textContent = message;
-      currentSaveStatus.classList.toggle("error", isError);
-      currentSaveStatus.classList.add("visible");
-      currentSaveTimer = setTimeout(() => {
-        currentSaveStatus.classList.remove("visible", "error");
-      }, isError ? 3000 : 1500);
-    }
+    const showCurrentSaveStatus = createStatusHandler(currentSaveStatus);
 
     currentSaveBtn.addEventListener("click", () => {
-      const name = currentProfileNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(currentProfileNameInput.value);
+      if (!validation.ok) {
+        if (validation.code === "reserved" || validation.code === "duplicate") {
+          updateCurrentProfileNameError();
+          return;
+        }
         document.getElementById("current-profile-name-error").textContent = "";
-        showCurrentSaveStatus("Enter a profile name.", true);
+        showCurrentSaveStatus(validation.message, true);
         return;
       }
-      const key = slugify(name);
-      if (!key) {
-        showCurrentSaveStatus("Enter a valid name.", true);
-        return;
-      }
-      if (isReservedTargetKey(key)) {
-        updateCurrentProfileNameError();
-        return;
-      }
-      const profiles = loadCustomTargetProfiles();
-      if (profiles[key]) {
-        document.getElementById("current-profile-name-error").textContent = "A profile with this name already exists.";
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.toLowerCase())) {
+      const { key, name } = validation;
+      if (!key || !name) {
         updateCurrentProfileNameError();
         return;
       }
       document.getElementById("current-profile-name-error").textContent = "";
 
+      const profiles = loadCustomTargetProfiles();
       const ions = getCurrentProfileIons();
       const metrics = calculateMetrics(ions);
       const alkalinity = Math.round(metrics.kh);

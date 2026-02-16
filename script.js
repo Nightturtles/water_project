@@ -2,18 +2,6 @@
 // Coffee Water Chemistry Calculator
 // ============================================
 
-// --- Buffer descriptions ---
-const BUFFER_INFO = {
-  "baking-soda": {
-    name: "Baking Soda",
-    detail: "Sodium bicarbonate (NaHCO3)"
-  },
-  "potassium-bicarbonate": {
-    name: "Potassium Bicarbonate",
-    detail: "Potassium bicarbonate (KHCO3)"
-  }
-};
-
 // --- Conversion factors (derived from MINERAL_DB) ---
 const MG_TO_EPSOM = 1 / MINERAL_DB["epsom-salt"].ions.magnesium;
 const CA_TO_CACL2 = 1 / MINERAL_DB["calcium-chloride"].ions.calcium;
@@ -44,37 +32,14 @@ const targetSaveStatus = document.getElementById("target-save-status");
 
 
 // --- Populate source water dropdown ---
-const presetEntries = Object.entries(getAllPresets());
-presetEntries.forEach(([key, preset]) => {
-  const opt = document.createElement("option");
-  opt.value = key;
-  opt.textContent = preset.label;
-  sourcePresetSelect.appendChild(opt);
-});
-const savedPreset = loadSourcePresetName();
-const validKeys = presetEntries.map(([k]) => k);
-if (!validKeys.includes(savedPreset)) {
-  const fallback = validKeys.find(k => k !== "custom") || validKeys[0];
-  sourcePresetSelect.value = fallback;
-  saveSourcePresetName(fallback);
-} else {
-  sourcePresetSelect.value = savedPreset;
-}
+initSourcePresetSelect(sourcePresetSelect);
 
 function getSourceWater() {
   return getSourceWaterByPreset(sourcePresetSelect.value);
 }
 
 function updateSourceWaterTags() {
-  const water = getSourceWater();
-  const nonZero = ION_FIELDS.filter(ion => water[ion] > 0);
-  if (nonZero.length === 0) {
-    sourceWaterTags.innerHTML = '<span class="base-tag">All zeros</span>';
-  } else {
-    sourceWaterTags.innerHTML = nonZero
-      .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
-      .join("");
-  }
+  renderSourceWaterTags(sourceWaterTags, getSourceWater());
   const resultsHint = document.getElementById("results-hint");
   if (resultsHint) {
     const preset = getAllPresets()[sourcePresetSelect.value];
@@ -114,17 +79,13 @@ function renderResultItems() {
   for (const { id } of toShow) {
     const mineral = MINERAL_DB[id];
     if (!mineral) continue;
-    const isBuffer = id === "baking-soda" || id === "potassium-bicarbonate";
-    const info = isBuffer ? BUFFER_INFO[id] : null;
-    const name = info ? info.name : mineral.name;
-    const detail = info ? info.detail : mineral.formula;
     const div = document.createElement("div");
     div.className = "result-item";
     div.dataset.mineral = id;
     div.innerHTML = `
       <div class="result-info">
-        <span class="result-name">${name}</span>
-        <span class="result-detail">${detail}</span>
+        <span class="result-name">${mineral.name}</span>
+        <span class="result-detail">${mineral.formula}</span>
       </div>
       <span class="result-value">0.00 g</span>
     `;
@@ -273,21 +234,14 @@ targetSaveChangesBtn.addEventListener("click", () => {
 // --- Duplicate name error below name input (target profile) ---
 function updateTargetProfileNameError() {
   const errEl = document.getElementById("target-profile-name-error");
-  const name = targetProfileNameInput.value.trim();
-  if (!name) {
+  const validation = validateTargetProfileName(targetProfileNameInput.value, { allowEmpty: true });
+  if (validation.empty) {
     errEl.textContent = "";
     targetSaveBtn.disabled = false;
     return;
   }
-  const key = slugify(name);
-  if (isReservedTargetKey(key)) {
-    errEl.textContent = "That name is reserved. Choose a different name.";
-    targetSaveBtn.disabled = true;
-    return;
-  }
-  const existingLabels = getExistingTargetProfileLabels();
-  if (existingLabels.has(name.toLowerCase())) {
-    errEl.textContent = "A profile with this name already exists.";
+  if (!validation.ok) {
+    errEl.textContent = validation.message;
     targetSaveBtn.disabled = true;
     return;
   }
@@ -299,36 +253,25 @@ targetProfileNameInput.addEventListener("input", updateTargetProfileNameError);
 
 // --- Save new custom target profile ---
 targetSaveBtn.addEventListener("click", () => {
-  const name = targetProfileNameInput.value.trim();
-  if (!name) {
+  const validation = validateTargetProfileName(targetProfileNameInput.value);
+  if (!validation.ok) {
+    if (validation.code === "reserved" || validation.code === "duplicate") {
+      updateTargetProfileNameError();
+      return;
+    }
     document.getElementById("target-profile-name-error").textContent = "";
-    showTargetSaveStatus("Enter a profile name.", true);
+    showTargetSaveStatus(validation.message, true);
     return;
   }
-
-  const key = slugify(name);
-  if (!key) {
-    document.getElementById("target-profile-name-error").textContent = "";
-    showTargetSaveStatus("Enter a valid name.", true);
-    return;
-  }
-  if (isReservedTargetKey(key)) {
-    updateTargetProfileNameError();
-    return;
-  }
-  const profiles = loadCustomTargetProfiles();
-  if (profiles[key]) {
-    updateTargetProfileNameError();
-    return;
-  }
-  const existingLabels = getExistingTargetProfileLabels();
-  if (existingLabels.has(name.trim().toLowerCase())) {
+  const { key, name } = validation;
+  if (!key || !name) {
     updateTargetProfileNameError();
     return;
   }
 
   document.getElementById("target-profile-name-error").textContent = "";
 
+  const profiles = loadCustomTargetProfiles();
   profiles[key] = {
     label: name,
     calcium: parseFloat(targetCa.value) || 0,
@@ -345,17 +288,7 @@ targetSaveBtn.addEventListener("click", () => {
   showTargetSaveStatus("Saved!", false);
 });
 
-
-let targetSaveTimer = null;
-function showTargetSaveStatus(message, isError) {
-  clearTimeout(targetSaveTimer);
-  targetSaveStatus.textContent = message;
-  targetSaveStatus.classList.toggle("error", isError);
-  targetSaveStatus.classList.add("visible");
-  targetSaveTimer = setTimeout(() => {
-    targetSaveStatus.classList.remove("visible", "error");
-  }, isError ? 3000 : 1500);
-}
+const showTargetSaveStatus = createStatusHandler(targetSaveStatus);
 
 // --- Source water dropdown change ---
 sourcePresetSelect.addEventListener("change", () => {
@@ -513,11 +446,12 @@ function calculate() {
   // Summary HTML
   resultSummary.innerHTML =
     `<div style="line-height:1.5">` +
-      `<div><strong>TDS (ion-sum approx):</strong> ~${Math.round(TDS_ion_sum)} mg/L</div>` +
-      `<div><strong>GH:</strong> ~${Math.round(GH_asCaCO3)} mg/L as CaCO\u2083</div>` +
-      `<div><strong>KH:</strong> ~${Math.round(KH_asCaCO3)} mg/L as CaCO\u2083</div>` +
-      `<div><strong>SO\u2084:Cl ratio:</strong> ${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</div>` +
-      `<hr style="border:none;border-top:1px solid var(--gray-300);margin:8px 0" />` +
+      `<div class="metrics-row">` +
+        `<div class="metric highlight metric-box"><span class="metric-label">GH</span><span class="metric-value">${Math.round(GH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
+        `<div class="metric highlight metric-box"><span class="metric-label">KH</span><span class="metric-value">${Math.round(KH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
+        `<div class="metric highlight metric-box"><span class="metric-label">TDS</span><span class="metric-value">${Math.round(TDS_ion_sum)}</span><span class="metric-unit">mg/L</span></div>` +
+      `</div>` +
+      `<div class="metric highlight metric-box result-ratio-cell" style="margin-bottom:8px;"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>` +
       `<div><strong>Final ions (mg/L):</strong> ` +
         `Ca ${finalCa.toFixed(2)} | ` +
         `Mg ${finalMg.toFixed(2)} | ` +

@@ -422,17 +422,7 @@
       saveSourceWater(profile);
     }
 
-    let saveStatusTimer = null;
-    function showSaveStatus(message, isError) {
-      clearTimeout(saveStatusTimer);
-      const el = document.getElementById("save-status");
-      el.textContent = message;
-      el.classList.toggle("error", isError);
-      el.classList.add("visible");
-      saveStatusTimer = setTimeout(() => {
-        el.classList.remove("visible", "error");
-      }, isError ? 3000 : 1500);
-    }
+    const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
 
     function showSaved() {
       showSaveStatus("Saved!", false);

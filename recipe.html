@@ -110,7 +110,7 @@
         </div>
       </div>
 
-      <div class="save-bar recipe-save-target">
+      <div class="save-bar">
         <div class="name-field">
           <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
           <div class="profile-name-error" id="recipe-target-name-error" aria-live="polite"></div>
@@ -131,42 +131,15 @@
     const sourcePresetSelect = document.getElementById("source-preset");
     const sourceWaterTags = document.getElementById("source-water-tags");
 
-    const presetEntries = Object.entries(getAllPresets());
-    presetEntries.forEach(([key, preset]) => {
-      const opt = document.createElement("option");
-      opt.value = key;
-      opt.textContent = preset.label;
-      sourcePresetSelect.appendChild(opt);
-    });
-    const savedPreset = loadSourcePresetName();
-    const validKeys = presetEntries.map(([k]) => k);
-    if (!validKeys.includes(savedPreset)) {
-      const fallback = validKeys.find(k => k !== "custom") || validKeys[0];
-      sourcePresetSelect.value = fallback;
-      saveSourcePresetName(fallback);
-    } else {
-      sourcePresetSelect.value = savedPreset;
-    }
+    initSourcePresetSelect(sourcePresetSelect);
 
     let baseWater = getSourceWaterByPreset(sourcePresetSelect.value);
-
-    function updateSourceWaterTags() {
-      const water = baseWater;
-      const nonZero = ION_FIELDS.filter(ion => water[ion] > 0);
-      if (nonZero.length === 0) {
-        sourceWaterTags.innerHTML = '<span class="base-tag">All zeros</span>';
-      } else {
-        sourceWaterTags.innerHTML = nonZero
-          .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
-          .join("");
-      }
-    }
-    updateSourceWaterTags();
+    renderSourceWaterTags(sourceWaterTags, baseWater);
 
     sourcePresetSelect.addEventListener("change", () => {
       saveSourcePresetName(sourcePresetSelect.value);
       baseWater = getSourceWaterByPreset(sourcePresetSelect.value);
-      updateSourceWaterTags();
+      renderSourceWaterTags(sourceWaterTags, baseWater);
       recalculate();
     });
 
@@ -259,21 +232,14 @@
 
     function updateRecipeTargetNameError() {
       const errEl = document.getElementById("recipe-target-name-error");
-      const name = recipeTargetNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(recipeTargetNameInput.value, { allowEmpty: true });
+      if (validation.empty) {
         errEl.textContent = "";
         recipeSaveTargetBtn.disabled = false;
         return;
       }
-      const key = slugify(name);
-      if (isReservedTargetKey(key)) {
-        errEl.textContent = "That name is reserved. Choose a different name.";
-        recipeSaveTargetBtn.disabled = true;
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.toLowerCase())) {
-        errEl.textContent = "A profile with this name already exists.";
+      if (!validation.ok) {
+        errEl.textContent = validation.message;
         recipeSaveTargetBtn.disabled = true;
         return;
       }
@@ -283,47 +249,28 @@
 
     recipeTargetNameInput.addEventListener("input", updateRecipeTargetNameError);
 
-    let recipeSaveTimer = null;
-    function showRecipeSaveStatus(message, isError) {
-      clearTimeout(recipeSaveTimer);
-      recipeSaveStatus.textContent = message;
-      recipeSaveStatus.classList.toggle("error", isError);
-      recipeSaveStatus.classList.add("visible");
-      recipeSaveTimer = setTimeout(() => {
-        recipeSaveStatus.classList.remove("visible", "error");
-      }, isError ? 3000 : 1500);
-    }
+    const showRecipeSaveStatus = createStatusHandler(recipeSaveStatus);
 
     recipeSaveTargetBtn.addEventListener("click", () => {
-      const name = recipeTargetNameInput.value.trim();
-      if (!name) {
+      const validation = validateTargetProfileName(recipeTargetNameInput.value);
+      if (!validation.ok) {
+        if (validation.code === "reserved" || validation.code === "duplicate") {
+          updateRecipeTargetNameError();
+          return;
+        }
         document.getElementById("recipe-target-name-error").textContent = "";
-        showRecipeSaveStatus("Enter a name for this profile.", true);
+        showRecipeSaveStatus(validation.message, true);
         return;
       }
-      const key = slugify(name);
-      if (!key) {
-        document.getElementById("recipe-target-name-error").textContent = "";
-        showRecipeSaveStatus("Enter a valid name.", true);
-        return;
-      }
-      if (isReservedTargetKey(key)) {
-        updateRecipeTargetNameError();
-        return;
-      }
-      const profiles = loadCustomTargetProfiles();
-      if (profiles[key]) {
-        updateRecipeTargetNameError();
-        return;
-      }
-      const existingLabels = getExistingTargetProfileLabels();
-      if (existingLabels.has(name.trim().toLowerCase())) {
+      const { key, name } = validation;
+      if (!key || !name) {
         updateRecipeTargetNameError();
         return;
       }
 
       document.getElementById("recipe-target-name-error").textContent = "";
 
+      const profiles = loadCustomTargetProfiles();
       const calcium = Math.round(parseFloat(document.getElementById("ppm-calcium").textContent) || 0);
       const magnesium = Math.round(parseFloat(document.getElementById("ppm-magnesium").textContent) || 0);
       const alkalinity = Math.round(parseFloat(document.getElementById("ppm-kh").textContent) || 0);

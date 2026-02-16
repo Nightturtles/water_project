@@ -142,6 +142,57 @@ function loadSourcePresetName() {
   return localStorage.getItem("cw_source_preset") || "distilled";
 }
 
+function initSourcePresetSelect(selectEl) {
+  if (!selectEl) return null;
+  selectEl.innerHTML = "";
+  const presetEntries = Object.entries(getAllPresets());
+  for (const [key, preset] of presetEntries) {
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = preset.label;
+    selectEl.appendChild(opt);
+  }
+  const savedPreset = loadSourcePresetName();
+  const validKeys = presetEntries.map(([k]) => k);
+  const fallback = validKeys.find(k => k !== "custom") || validKeys[0] || null;
+  const selectedPreset = validKeys.includes(savedPreset) ? savedPreset : fallback;
+  if (selectedPreset) {
+    selectEl.value = selectedPreset;
+    if (selectedPreset !== savedPreset) {
+      saveSourcePresetName(selectedPreset);
+    }
+  }
+  return selectedPreset;
+}
+
+function renderSourceWaterTags(tagsEl, water) {
+  if (!tagsEl) return;
+  const nonZero = ION_FIELDS.filter(ion => (water && water[ion]) > 0);
+  if (nonZero.length === 0) {
+    tagsEl.innerHTML = '<span class="base-tag">All zeros</span>';
+    return;
+  }
+  tagsEl.innerHTML = nonZero
+    .map(ion => `<span class="base-tag">${ION_LABELS[ion]}: ${water[ion]} mg/L</span>`)
+    .join("");
+}
+
+function createStatusHandler(statusEl, options = {}) {
+  const successMs = options.successMs || 1500;
+  const errorMs = options.errorMs || 3000;
+  let timer = null;
+  return function showStatus(message, isError) {
+    if (!statusEl) return;
+    clearTimeout(timer);
+    statusEl.textContent = message;
+    statusEl.classList.toggle("error", isError);
+    statusEl.classList.add("visible");
+    timer = setTimeout(() => {
+      statusEl.classList.remove("visible", "error");
+    }, isError ? errorMs : successMs);
+  };
+}
+
 // --- Custom profile helpers ---
 function slugify(name) {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -220,6 +271,36 @@ for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
 
 function isReservedTargetKey(key) {
   return RESERVED_TARGET_KEYS.has(key);
+}
+
+function validateTargetProfileName(rawName, options = {}) {
+  const allowEmpty = !!options.allowEmpty;
+  const name = (rawName || "").trim();
+  if (!name) {
+    return allowEmpty
+      ? { ok: true, key: "", name: "", empty: true }
+      : { ok: false, code: "empty", message: "Enter a profile name." };
+  }
+
+  const key = slugify(name);
+  if (!key) {
+    return { ok: false, code: "invalid", message: "Enter a valid name." };
+  }
+  if (isReservedTargetKey(key)) {
+    return { ok: false, code: "reserved", message: "That name is reserved. Choose a different name." };
+  }
+
+  const profiles = loadCustomTargetProfiles();
+  if (profiles[key]) {
+    return { ok: false, code: "duplicate", message: "A profile with this name already exists." };
+  }
+
+  const existingLabels = getExistingTargetProfileLabels();
+  if (existingLabels.has(name.toLowerCase())) {
+    return { ok: false, code: "duplicate", message: "A profile with this name already exists." };
+  }
+
+  return { ok: true, key, name };
 }
 
 function loadCustomTargetProfiles() {
