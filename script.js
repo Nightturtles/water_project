@@ -443,24 +443,36 @@ function calculate() {
   // Sulfate:Chloride ratio
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
 
-  // Summary HTML
+  // Full ion display names (match Adjusted Water Profile template)
+  const ION_DISPLAY_NAMES = { calcium: "Calcium", magnesium: "Magnesium", potassium: "Potassium", sodium: "Sodium", sulfate: "Sulfate", chloride: "Chloride", bicarbonate: "Bicarbonate" };
+  const advancedOnlyIons = ["potassium", "sodium", "sulfate", "chloride"];
+
+  function formatIonValue(v) {
+    if (v == null || v !== v) return 0;
+    return Math.round(v);
+  }
+
+  // Summary HTML — same structure as Adjusted Water Profile (Taste Tuner)
+  const ionCells = ION_FIELDS.map(ion => {
+    const name = ION_DISPLAY_NAMES[ion] || ion;
+    const extraClass = ion === "bicarbonate" ? " always-hidden" : (advancedOnlyIons.includes(ion) ? " advanced-only" : "");
+    const val = formatIonValue(finalIons[ion]);
+    return `<div class="result-cell${extraClass}"><span class="result-label">${name}</span><span class="result-ppm">${val}</span><span class="result-unit">mg/L</span><span class="result-delta"></span></div>`;
+  }).join("");
+
+  const ratioCell = advancedMode
+    ? `<div class="metric highlight metric-box result-ratio-cell advanced-only"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>`
+    : "";
+
   resultSummary.innerHTML =
-    `<div style="line-height:1.5">` +
-      `<div class="metrics-row">` +
-        `<div class="metric highlight metric-box"><span class="metric-label">GH</span><span class="metric-value">${Math.round(GH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
-        `<div class="metric highlight metric-box"><span class="metric-label">KH</span><span class="metric-value">${Math.round(KH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
-        `<div class="metric highlight metric-box"><span class="metric-label">TDS</span><span class="metric-value">${Math.round(TDS_ion_sum)}</span><span class="metric-unit">mg/L</span></div>` +
-      `</div>` +
-      (advancedMode
-        ? `<div class="metric highlight metric-box result-ratio-cell" style="margin-bottom:8px;"><span class="metric-label">SO\u2084:Cl</span><span class="metric-value">${so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2)}</span></div>`
-        : ``) +
-      `<div><strong>Final ions (mg/L):</strong> ` +
-        `Ca ${finalCa.toFixed(2)} | ` +
-        `Mg ${finalMg.toFixed(2)}` +
-        (advancedMode
-          ? ` | K ${finalK.toFixed(2)} | Na ${finalNa.toFixed(2)} | SO\u2084 ${finalSO4.toFixed(2)} | Cl ${finalCl.toFixed(2)}`
-          : ``) +
-      `</div>` +
+    `<div class="metrics-row">` +
+      `<div class="metric highlight metric-box"><span class="metric-label">GH</span><span class="metric-value">${Math.round(GH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
+      `<div class="metric highlight metric-box"><span class="metric-label">KH</span><span class="metric-value">${Math.round(KH_asCaCO3)}</span><span class="metric-unit">mg/L as CaCO\u2083</span></div>` +
+      `<div class="metric highlight metric-box"><span class="metric-label">TDS</span><span class="metric-value">${Math.round(TDS_ion_sum)}</span><span class="metric-unit">mg/L</span></div>` +
+    `</div>` +
+    `<div class="result-grid">` +
+      ionCells +
+      ratioCell +
     `</div>`;
 }
 

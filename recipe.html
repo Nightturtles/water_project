@@ -72,43 +72,50 @@
         </div>
       </div>
 
-      <div class="ppm-grid">
-        <div class="ppm-cell">
-          <span class="ppm-label">Calcium</span>
-          <span class="ppm-value" id="ppm-calcium">0</span>
-          <span class="ppm-unit">mg/L</span>
+      <div class="result-grid">
+        <div class="result-cell">
+          <span class="result-label">Calcium</span>
+          <span class="result-ppm" id="ppm-calcium">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell">
-          <span class="ppm-label">Magnesium</span>
-          <span class="ppm-value" id="ppm-magnesium">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell">
+          <span class="result-label">Magnesium</span>
+          <span class="result-ppm" id="ppm-magnesium">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell advanced-only">
-          <span class="ppm-label">Potassium</span>
-          <span class="ppm-value" id="ppm-potassium">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell advanced-only">
+          <span class="result-label">Potassium</span>
+          <span class="result-ppm" id="ppm-potassium">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell advanced-only">
-          <span class="ppm-label">Sodium</span>
-          <span class="ppm-value" id="ppm-sodium">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell advanced-only">
+          <span class="result-label">Sodium</span>
+          <span class="result-ppm" id="ppm-sodium">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell advanced-only">
-          <span class="ppm-label">Sulfate</span>
-          <span class="ppm-value" id="ppm-sulfate">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell advanced-only">
+          <span class="result-label">Sulfate</span>
+          <span class="result-ppm" id="ppm-sulfate">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell advanced-only">
-          <span class="ppm-label">Chloride</span>
-          <span class="ppm-value" id="ppm-chloride">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell advanced-only">
+          <span class="result-label">Chloride</span>
+          <span class="result-ppm" id="ppm-chloride">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="ppm-cell always-hidden">
-          <span class="ppm-label">Bicarbonate</span>
-          <span class="ppm-value" id="ppm-bicarbonate">0</span>
-          <span class="ppm-unit">mg/L</span>
+        <div class="result-cell always-hidden">
+          <span class="result-label">Bicarbonate</span>
+          <span class="result-ppm" id="ppm-bicarbonate">0</span>
+          <span class="result-unit">mg/L</span>
+          <span class="result-delta"></span>
         </div>
-        <div class="metric highlight metric-box recipe-ratio-cell advanced-only">
+        <div class="metric highlight metric-box result-ratio-cell advanced-only">
           <span class="metric-label">SO₄:Cl</span>
           <span class="metric-value" id="ratio-display">—</span>
         </div>
@@ -217,11 +224,12 @@
         totalIons[ion] = (baseWater[ion] || 0) + (addedIons[ion] || 0);
       });
 
-      // Display ion PPMs
+      // Display ion PPMs (integer, match Adjusted Water Profile template)
       ION_FIELDS.forEach(ion => {
         const el = document.getElementById("ppm-" + ion);
         if (el) {
-          el.textContent = Math.round(totalIons[ion] * 10) / 10;
+          const val = totalIons[ion];
+          el.textContent = Math.round((val == null || val !== val) ? 0 : val);
         }
       });
 

@@ -705,10 +705,12 @@ input[type="range"]::-moz-range-thumb {
   margin-top: 0.35rem;
 }
 
-/* Taste result grid */
+/* Mineral output grid (Taste Tuner Adjusted Water Profile, Recipe Builder Final Water Profile, Calculator result summary) */
+/* Flexbox + justify-content: center so the bottom row (when incomplete) is horizontally center aligned */
 .result-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
@@ -718,6 +720,9 @@ input[type="range"]::-moz-range-thumb {
   padding: 0.75rem 0.5rem;
   background: var(--gray-50);
   border-radius: 8px;
+  width: calc((100% - 3 * 0.5rem) / 4);
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .result-label {
@@ -732,6 +737,9 @@ input[type="range"]::-moz-range-thumb {
   font-size: 1.25rem;
   font-weight: 700;
   color: var(--gray-900);
+  min-height: 1.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .result-unit {
@@ -755,18 +763,20 @@ input[type="range"]::-moz-range-thumb {
   color: var(--red-600);
 }
 
-/* SO4:Cl ratio box in result-grid (Taste Tuner) and ppm-grid (Recipe Builder) — matches ion cell colors */
-.result-ratio-cell,
-.recipe-ratio-cell {
+/* SO4:Cl ratio box in result-grid (Taste Tuner, Recipe Builder) — matches ion cell colors, same width as result-cell */
+.result-ratio-cell {
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  width: calc((100% - 3 * 0.5rem) / 4);
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0.75rem 0.5rem;
   background: var(--gray-50) !important;
   border: none !important;
 }
-.result-ratio-cell .metric-value,
-.recipe-ratio-cell .metric-value {
+.result-ratio-cell .metric-value {
   color: var(--gray-900);
 }
 
@@ -778,10 +788,13 @@ input[type="range"]::-moz-range-thumb {
   gap: 0.75rem;
   margin-top: 1rem;
   margin-bottom: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
 }
 
 .metric {
   flex: 1;
+  min-width: 0;
   text-align: center;
   padding: 0.75rem;
   background: var(--gray-50);
@@ -879,40 +892,7 @@ input[type="range"]::-moz-range-thumb {
   white-space: nowrap;
 }
 
-/* PPM grid */
-.ppm-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 0.5rem;
-}
-
-.ppm-cell {
-  text-align: center;
-  padding: 0.75rem 0.5rem;
-  background: var(--gray-50);
-  border-radius: 8px;
-}
-
-.ppm-label {
-  display: block;
-  font-size: 0.75rem;
-  color: var(--gray-500);
-  font-weight: 500;
-}
-
-.ppm-value {
-  display: block;
-  font-size: 1.25rem;
-  font-weight: 700;
-  color: var(--gray-900);
-}
-
-.ppm-unit {
-  display: block;
-  font-size: 0.7rem;
-  color: var(--gray-500);
-}
+/* PPM grid: removed — Recipe Builder and all mineral outputs use .result-grid / .result-cell (see Taste Tuner template) */
 
 /* ========================
    Footer
@@ -952,12 +932,9 @@ footer {
     font-size: 1.1rem;
   }
 
-  .result-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .ppm-grid {
-    grid-template-columns: repeat(2, 1fr);
+  .result-cell,
+  .result-ratio-cell {
+    width: calc((100% - 0.5rem) / 2);
   }
 
   .site-nav {
