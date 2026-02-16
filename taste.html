@@ -239,30 +239,6 @@
 
   <script src="shared.js"></script>
   <script>
-    // --- Taste presets ---
-    const TASTE_PRESETS = {
-      sca: {
-        label: "SCA Standard",
-        calcium: 51, magnesium: 17, potassium: 0, sodium: 10,
-        sulfate: 17, chloride: 35, bicarbonate: 49
-      },
-      rao: {
-        label: "Rao Water",
-        calcium: 39, magnesium: 16, potassium: 0, sodium: 11,
-        sulfate: 16, chloride: 27, bicarbonate: 49
-      },
-      light: {
-        label: "Light Roast",
-        calcium: 25, magnesium: 35, potassium: 0, sodium: 0,
-        sulfate: 35, chloride: 0, bicarbonate: 25
-      },
-      espresso: {
-        label: "Espresso",
-        calcium: 70, magnesium: 20, potassium: 0, sodium: 13,
-        sulfate: 20, chloride: 48, bicarbonate: 61
-      }
-    };
-
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
     // --- Slider adjustment factors ---
@@ -298,45 +274,22 @@
       }
     };
 
-    // --- Convert target profile (Ca/Mg/Alk) to 7-ion profile ---
-    function targetProfileToIons(profile) {
-      return {
-        calcium: profile.calcium || 0,
-        magnesium: profile.magnesium || 0,
-        potassium: 0,
-        sodium: 0,
-        sulfate: 0,
-        chloride: 0,
-        bicarbonate: Math.round((profile.alkalinity || 0) * CACO3_TO_HCO3)
-      };
-    }
-
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
 
     function renderTastePresets() {
       tastePresetsContainer.innerHTML = "";
-      for (const [key, preset] of Object.entries(TASTE_PRESETS)) {
+      const allPresets = getAllTargetPresets();
+      for (const [key, profile] of Object.entries(allPresets)) {
         const btn = document.createElement("button");
         btn.className = "taste-preset-btn";
         btn.dataset.preset = key;
-        btn.textContent = preset.label;
-        tastePresetsContainer.appendChild(btn);
-      }
-      const customTargets = loadCustomTargetProfiles();
-      for (const [key, profile] of Object.entries(customTargets)) {
-        const btn = document.createElement("button");
-        btn.className = "taste-preset-btn";
-        btn.dataset.preset = "target-" + key;
-        btn.dataset.targetKey = key;
+        if (key !== "custom" && !TARGET_PRESETS[key]) {
+          btn.dataset.targetKey = key;
+        }
         btn.textContent = profile.label;
         tastePresetsContainer.appendChild(btn);
       }
-      const customBtn = document.createElement("button");
-      customBtn.className = "taste-preset-btn";
-      customBtn.dataset.preset = "custom";
-      customBtn.textContent = "Custom";
-      tastePresetsContainer.appendChild(customBtn);
       const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
       if (firstBtn) firstBtn.classList.add("active");
       updateCurrentEditBar();
@@ -380,16 +333,9 @@
         return;
       }
 
-      let values;
-      if (btn.dataset.targetKey) {
-        const profiles = loadCustomTargetProfiles();
-        const profile = profiles[btn.dataset.targetKey];
-        if (profile) values = targetProfileToIons(profile);
-      } else {
-        values = TASTE_PRESETS[preset];
-      }
-
-      if (values) {
+      const profile = getTargetProfileByKey(preset);
+      if (profile) {
+        const values = computeFullProfile(profile);
         ION_FIELDS.forEach(ion => {
           document.getElementById("cur-" + ion).value = values[ion] || 0;
         });
@@ -724,11 +670,9 @@
         const firstBtn = tastePresetsContainer.querySelector(".taste-preset-btn");
         if (firstBtn) {
           firstBtn.classList.add("active");
-          const presetKey = firstBtn.dataset.preset;
-          const values = firstBtn.dataset.targetKey
-            ? targetProfileToIons(loadCustomTargetProfiles()[firstBtn.dataset.targetKey])
-            : TASTE_PRESETS[presetKey];
-          if (values) {
+          const profile = getTargetProfileByKey(firstBtn.dataset.preset);
+          if (profile) {
+            const values = computeFullProfile(profile);
             ION_FIELDS.forEach(ion => {
               document.getElementById("cur-" + ion).value = values[ion] || 0;
             });

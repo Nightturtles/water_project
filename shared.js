@@ -168,16 +168,46 @@ function addDeletedPreset(key) {
   }
 }
 
-// --- Custom target profile helpers ---
-// Built-in target profile keys (from script.js PROFILES) — custom saves must not use these
-const BUILTIN_TARGET_KEYS = ["sca", "rao", "hendon-light", "hendon-espresso"];
-// Built-in target profile display labels (for uniqueness check across built-in + custom)
-const BUILTIN_TARGET_LABELS = {
-  "sca": "SCA Standard",
-  "rao": "Rao Water",
-  "hendon-light": "Light Roast",
-  "hendon-espresso": "Espresso"
+// --- Target water presets (Ca/Mg/Alk targets for coffee water) ---
+const TARGET_PRESETS = {
+  sca: {
+    label: "SCA Standard",
+    calcium: 51,
+    magnesium: 17,
+    alkalinity: 40,
+    description: "SCA recommended range for brewing water. Balanced body and clarity."
+  },
+  rao: {
+    label: "Rao Water",
+    calcium: 39,
+    magnesium: 16,
+    alkalinity: 40,
+    description: "Scott Rao's recipe. Clean, sweet, and well-balanced for most coffees."
+  },
+  "hendon-light": {
+    label: "Light Roast",
+    calcium: 25,
+    magnesium: 35,
+    alkalinity: 25,
+    description: "Higher magnesium for light roasts. Enhances fruity and floral notes."
+  },
+  "hendon-espresso": {
+    label: "Espresso",
+    calcium: 70,
+    magnesium: 20,
+    alkalinity: 50,
+    description: "Higher hardness for espresso. More body and texture in the cup."
+  }
 };
+
+const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
+
+// --- Custom target profile helpers ---
+const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
+const BUILTIN_TARGET_LABELS = {};
+for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
+  BUILTIN_TARGET_LABELS[key] = preset.label;
+}
 
 function loadCustomTargetProfiles() {
   const saved = localStorage.getItem("cw_custom_target_profiles");
@@ -334,6 +364,7 @@ const CA_TO_CACO3 = 100.09 / 40.078;   // Ca ppm -> GH contribution (mg/L as CaC
 const MG_TO_CACO3 = 100.09 / 24.305;   // Mg ppm -> GH contribution (mg/L as CaCO3)
 const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
 const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
+const MW_CACO3 = 100.09;               // Molecular weight of CaCO3
 
 // --- Ion calculation from grams of minerals ---
 // Given an object { mineralId: gramsPerLiter, ... }, returns ion PPMs
@@ -366,6 +397,85 @@ function calculateMetrics(ions) {
   const tds = (ions.calcium || 0) + (ions.magnesium || 0) + (ions.potassium || 0) +
               (ions.sodium || 0) + (ions.sulfate || 0) + (ions.chloride || 0) + (ions.bicarbonate || 0);
   return { gh, kh, tds };
+}
+
+// --- Determine effective alkalinity source based on mineral selections ---
+function getEffectiveAlkalinitySource() {
+  const selected = loadSelectedMinerals();
+  const hasBakingSoda = selected.includes("baking-soda");
+  const hasPotBicarb = selected.includes("potassium-bicarbonate");
+  if (!hasBakingSoda && !hasPotBicarb) return null;
+  if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
+  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarbonate";
+  return loadAlkalinitySource();
+}
+
+// --- Get all target presets (built-in + custom, respecting deletions) ---
+function getAllTargetPresets() {
+  const custom = loadCustomTargetProfiles();
+  const deleted = loadDeletedTargetPresets();
+  const result = {};
+  for (const [key, value] of Object.entries(TARGET_PRESETS)) {
+    if (deleted.includes(key)) continue;
+    result[key] = custom[key] || value;
+  }
+  for (const [ck, cv] of Object.entries(custom)) {
+    if (!TARGET_PRESETS[ck]) {
+      result[ck] = cv;
+    }
+  }
+  result["custom"] = { label: "Custom" };
+  return result;
+}
+
+function getTargetProfileByKey(key) {
+  if (key === "custom") return null;
+  const custom = loadCustomTargetProfiles();
+  return custom[key] || TARGET_PRESETS[key] || null;
+}
+
+// --- Compute full 7-ion profile from a Ca/Mg/Alk target ---
+function computeFullProfile(target) {
+  const sourceWater = getSourceWaterByPreset(loadSourcePresetName());
+  const alkSource = getEffectiveAlkalinitySource();
+  const selected = loadSelectedMinerals();
+  const hasEpsom = selected.includes("epsom-salt");
+  const hasCaCl2 = selected.includes("calcium-chloride");
+
+  const sourceAlk = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
+  const deltaCa = Math.max(0, (target.calcium || 0) - (sourceWater.calcium || 0));
+  const deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
+  const deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
+
+  const mgL_cacl2 = hasCaCl2 ? deltaCa / MINERAL_DB["calcium-chloride"].ions.calcium : 0;
+  const mgL_epsom = hasEpsom ? deltaMg / MINERAL_DB["epsom-salt"].ions.magnesium : 0;
+  let mgL_buffer = 0;
+  if (alkSource === "potassium-bicarbonate") {
+    mgL_buffer = deltaAlk * 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
+  } else if (alkSource === "baking-soda") {
+    mgL_buffer = deltaAlk * 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
+  }
+
+  const result = {
+    calcium: (sourceWater.calcium || 0) + (hasCaCl2 ? deltaCa : 0),
+    magnesium: (sourceWater.magnesium || 0) + (hasEpsom ? deltaMg : 0),
+    potassium: sourceWater.potassium || 0,
+    sodium: sourceWater.sodium || 0,
+    sulfate: (sourceWater.sulfate || 0) + mgL_epsom * MINERAL_DB["epsom-salt"].ions.sulfate,
+    chloride: (sourceWater.chloride || 0) + mgL_cacl2 * MINERAL_DB["calcium-chloride"].ions.chloride,
+    bicarbonate: sourceWater.bicarbonate || 0
+  };
+
+  if (alkSource === "potassium-bicarbonate") {
+    result.potassium += mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.potassium;
+    result.bicarbonate += mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.bicarbonate;
+  } else if (alkSource === "baking-soda") {
+    result.sodium += mgL_buffer * MINERAL_DB["baking-soda"].ions.sodium;
+    result.bicarbonate += mgL_buffer * MINERAL_DB["baking-soda"].ions.bicarbonate;
+  }
+
+  ION_FIELDS.forEach(ion => { result[ion] = Math.round(result[ion]); });
+  return result;
 }
 
 // --- Confirmation modal (shared across pages) ---

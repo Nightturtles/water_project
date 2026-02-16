@@ -2,41 +2,6 @@
 // Coffee Water Chemistry Calculator
 // ============================================
 
-// --- Water profiles (target mineral concentrations in mg/L) ---
-const PROFILES = {
-  sca: {
-    label: "SCA Standard",
-    calcium: 51,
-    magnesium: 17,
-    alkalinity: 40,
-    description: "SCA recommended range for brewing water. Balanced body and clarity."
-  },
-  rao: {
-    label: "Rao Water",
-    calcium: 39,
-    magnesium: 16,
-    alkalinity: 40,
-    description: "Scott Rao's recipe. Clean, sweet, and well-balanced for most coffees."
-  },
-  "hendon-light": {
-    label: "Light Roast",
-    calcium: 25,
-    magnesium: 35,
-    alkalinity: 25,
-    description: "Higher magnesium for light roasts. Enhances fruity and floral notes."
-  },
-  "hendon-espresso": {
-    label: "Espresso",
-    calcium: 70,
-    magnesium: 20,
-    alkalinity: 50,
-    description: "Higher hardness for espresso. More body and texture in the cup."
-  }
-};
-
-// SCA Standard and Rao Water can be deleted but not edited
-const NON_EDITABLE_PROFILES = ["sca", "rao"];
-
 // --- Buffer descriptions ---
 const BUFFER_INFO = {
   "baking-soda": {
@@ -49,34 +14,11 @@ const BUFFER_INFO = {
   }
 };
 
-// --- Molecular weights and conversion factors ---
-// Epsom salt: MgSO4 * 7H2O, MW = 246.47, provides Mg (MW = 24.305)
-// To get X mg/L of Mg, need X * (246.47 / 24.305) mg/L of Epsom salt
-const MG_TO_EPSOM = 246.47 / 24.305; // ~10.14
-
-// Baking soda: NaHCO3, MW = 84.007
-// Alkalinity is measured as mg/L CaCO3 (MW = 100.09)
-// 1 mole CaCO3 = 2 moles NaHCO3 (because CaCO3 has 2 equivalents)
-// mg/L NaHCO3 = alkalinity_as_CaCO3 * (2 * 84.007 / 100.09)
-const ALK_TO_BAKING_SODA = (2 * 84.007) / 100.09; // ~1.679
-
-// Potassium bicarbonate: KHCO3, MW = 100.115
-// mg/L KHCO3 = alkalinity_as_CaCO3 * (2 * 100.115 / 100.09)
-const ALK_TO_POTASSIUM_BICARB = (2 * 100.115) / 100.09; // ~2.001
-
-// Calcium chloride dihydrate: CaCl2 * 2H2O, MW = 147.01, provides Ca (MW = 40.078)
-// To get X mg/L of Ca, need X * (147.01 / 40.078) mg/L of CaCl2·2H2O
-const CA_TO_CACL2 = 147.01 / 40.078; // ~3.667
-
-// --- Mass fraction constants for ion calculations ---
-const FRAC_CA_IN_CACL2_2H2O = 40.078 / 147.01;
-const FRAC_CL_IN_CACL2_2H2O = 70.906 / 147.01;
-const FRAC_MG_IN_MGSO4_7H2O = 24.305 / 246.47;
-const FRAC_SO4_IN_MGSO4_7H2O = 96.06 / 246.47;
-const FRAC_K_IN_KHCO3 = 39.098 / 100.115;
-const FRAC_HCO3_IN_KHCO3 = 61.017 / 100.115;
-const FRAC_NA_IN_NAHCO3 = 22.99 / 84.007;
-const FRAC_HCO3_IN_NAHCO3 = 61.017 / 84.007;
+// --- Conversion factors (derived from MINERAL_DB) ---
+const MG_TO_EPSOM = 1 / MINERAL_DB["epsom-salt"].ions.magnesium;
+const CA_TO_CACL2 = 1 / MINERAL_DB["calcium-chloride"].ions.calcium;
+const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
+const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
 
 // --- State ---
 let currentProfile = loadTargetPresetName();
@@ -146,20 +88,8 @@ updateSourceWaterTags();
 // --- Result items: show only minerals selected in Settings ---
 // Calculator uses: epsom-salt (Mg), calcium-chloride (Ca), baking-soda or potassium-bicarbonate (alkalinity)
 
-// Returns "baking-soda" | "potassium-bicarbonate" | null. null means no alkalinity source selected in Settings.
-function getAlkalinitySource() {
-  const selected = loadSelectedMinerals();
-  const hasBakingSoda = selected.includes("baking-soda");
-  const hasPotBicarb = selected.includes("potassium-bicarbonate");
-  if (!hasBakingSoda && !hasPotBicarb) return null;
-  if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
-  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarbonate";
-  // Both selected: use Settings preference
-  return loadAlkalinitySource();
-}
-
 function renderResultItems() {
-  const alkalinitySource = getAlkalinitySource();
+  const alkalinitySource = getEffectiveAlkalinitySource();
   if (alkalinitySource === null) {
     resultsContainer.innerHTML = '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
     resultSummary.innerHTML = "";
@@ -200,30 +130,6 @@ function renderResultItems() {
     `;
     resultsContainer.appendChild(div);
   }
-}
-
-// --- Target profile helpers ---
-function getAllTargetPresets() {
-  const custom = loadCustomTargetProfiles();
-  const deleted = loadDeletedTargetPresets();
-  const result = {};
-  for (const [key, value] of Object.entries(PROFILES)) {
-    if (deleted.includes(key)) continue;
-    result[key] = custom[key] || value;
-  }
-  for (const [ck, cv] of Object.entries(custom)) {
-    if (!PROFILES[ck]) {
-      result[ck] = cv;
-    }
-  }
-  result["custom"] = { label: "Custom" };
-  return result;
-}
-
-function getTargetProfileByKey(key) {
-  if (key === "custom") return null;
-  const custom = loadCustomTargetProfiles();
-  return custom[key] || PROFILES[key] || null;
 }
 
 // --- Dynamic profile buttons ---
@@ -306,7 +212,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
   if (deleteKey) {
     e.stopPropagation();
     showConfirm("Are you sure you want to delete this profile?", () => {
-      if (PROFILES[deleteKey]) {
+      if (TARGET_PRESETS[deleteKey]) {
         addDeletedTargetPreset(deleteKey);
       }
       deleteCustomTargetProfile(deleteKey);
@@ -330,7 +236,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
 [targetCa, targetMg, targetAlk].forEach(input => {
   input.addEventListener("input", () => {
     if (currentProfile !== "custom") {
-      if (NON_EDITABLE_PROFILES.includes(currentProfile)) {
+      if (NON_EDITABLE_TARGET_KEYS.includes(currentProfile)) {
         currentProfile = "custom";
         highlightProfile("custom");
         saveTargetPresetName("custom");
@@ -474,13 +380,13 @@ function calculate() {
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
-    const alk = getAlkalinitySource();
+    const alk = getEffectiveAlkalinitySource();
     updateResultValues({ "epsom-salt": 0, "calcium-chloride": 0, ...(alk ? { [alk]: 0 } : {}) });
     resultSummary.innerHTML = `<strong>Enter a water volume</strong> to see results.`;
     return;
   }
 
-  const currentBuffer = getAlkalinitySource();
+  const currentBuffer = getEffectiveAlkalinitySource();
   if (currentBuffer === null) {
     resultSummary.innerHTML = "";
     return;
@@ -567,18 +473,18 @@ function calculate() {
   const mgL_cacl2 = cacl2PerL * 1000;
   const mgL_buffer = bufferPerL * 1000;
 
-  // Ions contributed by added salts (source presets do not track these, assume 0 in source)
-  const addedCl = mgL_cacl2 * FRAC_CL_IN_CACL2_2H2O;
-  const addedSO4 = mgL_epsom * FRAC_SO4_IN_MGSO4_7H2O;
+  // Ions contributed by added salts
+  const addedCl = mgL_cacl2 * MINERAL_DB["calcium-chloride"].ions.chloride;
+  const addedSO4 = mgL_epsom * MINERAL_DB["epsom-salt"].ions.sulfate;
 
   // Buffer ions (either K + HCO3 or Na + HCO3)
   const addedHCO3 =
     currentBuffer === "potassium-bicarbonate"
-      ? mgL_buffer * FRAC_HCO3_IN_KHCO3
-      : mgL_buffer * FRAC_HCO3_IN_NAHCO3;
+      ? mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.bicarbonate
+      : mgL_buffer * MINERAL_DB["baking-soda"].ions.bicarbonate;
 
-  const addedK = currentBuffer === "potassium-bicarbonate" ? mgL_buffer * FRAC_K_IN_KHCO3 : 0;
-  const addedNa = currentBuffer === "baking-soda" ? mgL_buffer * FRAC_NA_IN_NAHCO3 : 0;
+  const addedK = currentBuffer === "potassium-bicarbonate" ? mgL_buffer * MINERAL_DB["potassium-bicarbonate"].ions.potassium : 0;
+  const addedNa = currentBuffer === "baking-soda" ? mgL_buffer * MINERAL_DB["baking-soda"].ions.sodium : 0;
 
   // Final bicarbonate (mg/L) is source bicarbonate + added bicarbonate
   const finalHCO3 = (sourceWater.bicarbonate || 0) + addedHCO3;
