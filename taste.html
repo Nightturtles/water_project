@@ -317,6 +317,15 @@
       if (profile) {
         const values = computeFullProfile(profile);
         setCurrentProfileInputs(values);
+        // So Calculator and Taste Tuner show the same numbers: use preset Ca/Mg/Alk exactly when present
+        const hasTargetTriple = Number.isFinite(Number(profile.calcium)) && Number.isFinite(Number(profile.magnesium)) && Number.isFinite(Number(profile.alkalinity));
+        if (hasTargetTriple) {
+          document.getElementById("cur-calcium").value = profile.calcium;
+          document.getElementById("cur-magnesium").value = profile.magnesium;
+          document.getElementById("cur-alkalinity").value = profile.alkalinity;
+          curBicarbonateInput.value = toStableBicarbonateFromAlkalinity(profile.alkalinity, values.bicarbonate || 0);
+        }
+        saveTargetPresetName(presetKey);
         if (reset) resetSliders();
         recalculate();
       }
@@ -344,9 +353,10 @@
         tastePresetsContainer.appendChild(btn);
       }
       const keys = Object.keys(allPresets);
+      const savedPreset = loadTargetPresetName();
       const initialKey = (activePreset && keys.includes(activePreset))
         ? activePreset
-        : (keys[0] || "custom");
+        : (keys.includes(savedPreset) ? savedPreset : null) || (keys[0] || "custom");
       if (initialKey) activateTastePreset(initialKey, { resetSliders: true });
     }
 
