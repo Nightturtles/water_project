@@ -598,6 +598,11 @@
     function showSaved() {
       showSaveStatus("Saved!", false);
     }
+
+    // --- Refresh on bfcache restore ---
+    window.addEventListener("pageshow", (e) => {
+      if (e.persisted) location.reload();
+    });
   </script>
 </body>
 </html>
