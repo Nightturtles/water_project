@@ -996,15 +996,26 @@ footer {
   }
 
   .site-nav {
+    gap: 0.2rem;
+    padding: 0.5rem 0.5rem;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    justify-content: flex-start;
-    -webkit-overflow-scrolling: touch;
+    justify-content: center;
   }
 
   .site-nav a {
-    flex: 0 0 auto;
-    white-space: nowrap;
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.15;
+    min-height: 2.5rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+    word-break: keep-all;
+    overflow-wrap: normal;
   }
 
   .metrics-row {
@@ -1018,6 +1029,16 @@ footer {
 }
 
 @media (max-width: 350px) {
+  .site-nav {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.25rem;
+  }
+
+  .site-nav a {
+    width: 100%;
+  }
+
   .profile-buttons,
   .source-presets {
     grid-template-columns: 1fr;
