@@ -318,12 +318,47 @@ const TARGET_PRESETS = {
     alkalinity: 40,
     description: "SCA recommended range for brewing water. Balanced body and clarity."
   },
-  rao: {
-    label: "Rao Water",
-    calcium: 39,
-    magnesium: 16,
+  "lotus-light-bright": {
+    label: "Light and Bright",
+    calcium: 24,
+    magnesium: 0,
+    alkalinity: 30,
+    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees."
+  },
+  "lotus-simple-sweet": {
+    label: "Simple and Sweet",
+    calcium: 21.6,
+    magnesium: 8.7,
     alkalinity: 40,
-    description: "Scott Rao's recipe. Clean, sweet, and well-balanced for most coffees."
+    description: "Lotus balanced profile with added sweetness and approachable acidity."
+  },
+  "lotus-light-bright-espresso": {
+    label: "Light and Bright (espresso)",
+    calcium: 0,
+    magnesium: 4.9,
+    alkalinity: 50,
+    description: "Lotus espresso profile for clarity-forward shots with restrained hardness."
+  },
+  "lotus-simple-sweet-espresso": {
+    label: "Simple and Sweet (espresso)",
+    calcium: 0,
+    magnesium: 4.9,
+    alkalinity: 55,
+    description: "Lotus espresso profile with higher buffer for sweeter, rounder shots."
+  },
+  "lotus-bright-juicy": {
+    label: "Bright and Juicy",
+    calcium: 14.4,
+    magnesium: 8.7,
+    alkalinity: 18,
+    description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity."
+  },
+  rao: {
+    label: "Rao's Recipe",
+    calcium: 20.9,
+    magnesium: 8.5,
+    alkalinity: 40,
+    description: "Lotus-style Rao recipe target with balanced sweetness and structure."
   },
   "hendon-light": {
     label: "Light Roast",
@@ -754,7 +789,7 @@ function getAllTargetPresets() {
       result[ck] = cv;
     }
   }
-  result["custom"] = { label: "Custom" };
+  result["custom"] = { label: "Custom Recipe" };
   targetPresetsCache = result;
   return targetPresetsCache;
 }

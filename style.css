@@ -974,6 +974,12 @@ footer {
   .taste-preset-btn {
     width: 100%;
     text-align: center;
+    white-space: normal;
+    overflow-wrap: break-word;
+    word-break: normal;
+    text-overflow: clip;
+    overflow: visible;
+    line-height: 1.2;
   }
 
   .mineral-input-row {
