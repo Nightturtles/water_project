@@ -353,6 +353,102 @@ const TARGET_PRESETS = {
     alkalinity: 18,
     description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity."
   },
+  "eaf-holy-water": {
+    label: "Holy Water",
+    calcium: 0,
+    magnesium: 15,
+    alkalinity: 23,
+    potassium: 18,
+    sodium: 0,
+    sulfate: 59,
+    chloride: 0,
+    bicarbonate: 28,
+    description: "Espresso Aficionados direct dosing: 1.520g Epsom + 0.460g KHCO3 per 10L."
+  },
+  "eaf-melbourne-water": {
+    label: "Melbourne Water",
+    calcium: 0,
+    magnesium: 12,
+    alkalinity: 20.2,
+    potassium: 0,
+    sodium: 9,
+    sulfate: 48,
+    chloride: 0,
+    bicarbonate: 24.7,
+    description: "Espresso Aficionados direct dosing: 1.220g Epsom + 0.340g Baking Soda per 10L."
+  },
+  "eaf-hendon-water": {
+    label: "Hendon Water (Direct Dosing)",
+    calcium: 0,
+    magnesium: 24,
+    alkalinity: 31,
+    potassium: 0,
+    sodium: 14,
+    sulfate: 95,
+    chloride: 0,
+    bicarbonate: 37.8,
+    description: "Espresso Aficionados direct dosing: 2.430g Epsom + 0.520g Baking Soda per 10L."
+  },
+  "eaf-bh-water-4": {
+    label: "Barista Hustle Water #4",
+    calcium: 0,
+    magnesium: 19.4,
+    alkalinity: 40,
+    potassium: 0,
+    sodium: 18,
+    sulfate: 77,
+    chloride: 0,
+    bicarbonate: 48.7,
+    description: "Espresso Aficionados direct dosing: 1.970g Epsom + 0.671g Baking Soda per 10L."
+  },
+  "eaf-tww-espresso-inspired": {
+    label: "TWW Espresso Inspired",
+    calcium: 0,
+    magnesium: 38.9,
+    alkalinity: 67.5,
+    potassium: 53,
+    sodium: 0,
+    sulfate: 154,
+    chloride: 0,
+    bicarbonate: 82.3,
+    description: "Espresso Aficionados direct dosing: 3.940g Epsom + 1.350g KHCO3 per 10L."
+  },
+  "eaf-rpavlis": {
+    label: "RPavlis",
+    calcium: 0,
+    magnesium: 0,
+    alkalinity: 50,
+    potassium: 39,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 60.9,
+    description: "Espresso Aficionados direct dosing: 1.000g KHCO3 per 10L."
+  },
+  "eaf-fam-29th-wave": {
+    label: "Fam's 29th Wave",
+    calcium: 0,
+    magnesium: 4.9,
+    alkalinity: 90,
+    potassium: 0,
+    sodium: 41,
+    sulfate: 19,
+    chloride: 0,
+    bicarbonate: 109.7,
+    description: "Espresso Aficionados direct dosing: 0.493g Epsom + 1.511g Baking Soda per 10L."
+  },
+  "eaf-fam-69th-wave": {
+    label: "Fam's 69th Wave",
+    calcium: 0,
+    magnesium: 14.6,
+    alkalinity: 90,
+    potassium: 0,
+    sodium: 41,
+    sulfate: 58,
+    chloride: 0,
+    bicarbonate: 109.7,
+    description: "Espresso Aficionados direct dosing: 1.478g Epsom + 1.511g Baking Soda per 10L."
+  },
   rao: {
     label: "Rao's Recipe",
     calcium: 20.9,
@@ -361,14 +457,14 @@ const TARGET_PRESETS = {
     description: "Lotus-style Rao recipe target with balanced sweetness and structure."
   },
   "hendon-light": {
-    label: "Light Roast",
+    label: "Hendon Light Roast",
     calcium: 25,
     magnesium: 35,
     alkalinity: 25,
     description: "Higher magnesium for light roasts. Enhances fruity and floral notes."
   },
   "hendon-espresso": {
-    label: "Espresso",
+    label: "Hendon Espresso",
     calcium: 70,
     magnesium: 20,
     alkalinity: 50,
@@ -700,6 +796,9 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   const metrics = calculateMetrics(normalized);
   const ratio = calculateSo4ClRatio(normalized);
   const includeAdvanced = options.includeAdvanced !== false;
+  const alkalinitySource = typeof getEffectiveAlkalinitySource === "function" ? getEffectiveAlkalinitySource() : null;
+  const calciumSource = typeof getEffectiveCalciumSource === "function" ? getEffectiveCalciumSource() : null;
+  const magnesiumSource = typeof getEffectiveMagnesiumSource === "function" ? getEffectiveMagnesiumSource() : null;
   const findings = [];
 
   function addFinding(severity, message) {
@@ -737,19 +836,28 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   }
 
   addBandFinding("TDS", metrics.tds, "mg/L", 75, 250, 50, 300, 25, 400);
-  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 30, 80, 20, 120, 10, 180);
-  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 40, 120, 25, 160, 10, 220);
+  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 40, 70, 20, 120, 10, 180);
+  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 50, 175, 25, 220, 10, 280);
   addBandFinding("Calcium", normalized.calcium, "mg/L", 17, 85, 10, 110, 5, 150);
   addBandFinding("Magnesium", normalized.magnesium, "mg/L", 5, 30, 2, 45, 1, 70);
 
-  // Sodium: soft warning above 10, strong warning above 30
-  addBandFinding("Sodium", normalized.sodium, "mg/L", null, 10, null, 30, null, 30);
+  // Sodium thresholds are source-aware:
+  // baking soda intentionally adds sodium, so use a looser guidance band.
+  const sodiumPreferredMax = alkalinitySource === "baking-soda" ? 25 : 10;
+  const sodiumWarnMax = alkalinitySource === "baking-soda" ? 40 : 30;
+  const sodiumDangerMax = alkalinitySource === "baking-soda" ? 60 : 45;
+  addBandFinding("Sodium", normalized.sodium, "mg/L", null, sodiumPreferredMax, null, sodiumWarnMax, null, sodiumDangerMax);
 
   if (includeAdvanced) {
-    // Chloride: keep <=30 when possible; elevate severity when much higher.
-    addBandFinding("Chloride", normalized.chloride, "mg/L", null, 30, null, 50, null, 100);
+    // Chloride thresholds are source-aware:
+    // CaCl2 and MgCl2 both intentionally add chloride, so guidance is relaxed.
+    const chlorideHeavySource = calciumSource === "calcium-chloride" || magnesiumSource === "magnesium-chloride";
+    const chloridePreferredMax = chlorideHeavySource ? 90 : 30;
+    const chlorideWarnMax = chlorideHeavySource ? 130 : 50;
+    const chlorideDangerMax = chlorideHeavySource ? 180 : 100;
+    addBandFinding("Chloride", normalized.chloride, "mg/L", null, chloridePreferredMax, null, chlorideWarnMax, null, chlorideDangerMax);
 
-    // Heuristic-only checks: keep as informational guidance.
+    // Heuristic-only checks: always informational (never warn/danger).
     if (normalized.sulfate < 5 || normalized.sulfate > 75) {
       const sulfateDirection = normalized.sulfate < 5 ? "low" : "high";
       addFinding("info", `Sulfate is ${sulfateDirection} at ${Math.round(normalized.sulfate * 10) / 10} mg/L (heuristic 5-75 mg/L).`);
