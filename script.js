@@ -225,20 +225,33 @@ targetSaveChangesBtn.addEventListener("click", () => {
     const allProfiles = getAllTargetPresets();
     const existing = allProfiles[currentProfile];
     if (!existing) return;
-    const ions = lastCalculatedIons || {};
-    const metrics = calculateMetrics(ions);
-    const profile = {
-      label: existing.label,
-      calcium: Math.round(ions.calcium || 0),
-      magnesium: Math.round(ions.magnesium || 0),
-      alkalinity: Math.round(metrics.kh || 0),
-      potassium: Math.round(ions.potassium || 0),
-      sodium: Math.round(ions.sodium || 0),
-      sulfate: Math.round(ions.sulfate || 0),
-      chloride: Math.round(ions.chloride || 0),
-      bicarbonate: Math.round(ions.bicarbonate || 0),
-      description: existing.description || ""
-    };
+    const orig = getTargetProfileByKey(currentProfile);
+    const hasExplicitIons = orig && ION_FIELDS.every(ion => Number.isFinite(Number(orig[ion])));
+    let profile;
+    if (hasExplicitIons) {
+      const ions = lastCalculatedIons || {};
+      const metrics = calculateMetrics(ions);
+      profile = {
+        label: existing.label,
+        calcium: Math.round(ions.calcium || 0),
+        magnesium: Math.round(ions.magnesium || 0),
+        alkalinity: Math.round(metrics.kh || 0),
+        potassium: Math.round(ions.potassium || 0),
+        sodium: Math.round(ions.sodium || 0),
+        sulfate: Math.round(ions.sulfate || 0),
+        chloride: Math.round(ions.chloride || 0),
+        bicarbonate: Math.round(ions.bicarbonate || 0),
+        description: existing.description || ""
+      };
+    } else {
+      profile = {
+        label: existing.label,
+        calcium: parseFloat(targetCa.value) || 0,
+        magnesium: parseFloat(targetMg.value) || 0,
+        alkalinity: parseFloat(targetAlk.value) || 0,
+        description: existing.description || ""
+      };
+    }
     const profiles = loadCustomTargetProfiles();
     profiles[currentProfile] = profile;
     saveCustomTargetProfiles(profiles);

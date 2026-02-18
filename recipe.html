@@ -80,43 +80,43 @@
           <span class="result-label">Calcium</span>
           <span class="result-ppm" id="ppm-calcium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-calcium">—</span>
+          <span class="result-delta" id="delta-ppm-calcium" aria-live="polite">—</span>
         </div>
         <div class="result-cell">
           <span class="result-label">Magnesium</span>
           <span class="result-ppm" id="ppm-magnesium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-magnesium">—</span>
+          <span class="result-delta" id="delta-ppm-magnesium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Potassium</span>
           <span class="result-ppm" id="ppm-potassium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-potassium">—</span>
+          <span class="result-delta" id="delta-ppm-potassium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sodium</span>
           <span class="result-ppm" id="ppm-sodium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-sodium">—</span>
+          <span class="result-delta" id="delta-ppm-sodium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Sulfate</span>
           <span class="result-ppm" id="ppm-sulfate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-sulfate">—</span>
+          <span class="result-delta" id="delta-ppm-sulfate" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Chloride</span>
           <span class="result-ppm" id="ppm-chloride">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-chloride">—</span>
+          <span class="result-delta" id="delta-ppm-chloride" aria-live="polite">—</span>
         </div>
         <div class="result-cell always-hidden">
           <span class="result-label">Bicarbonate</span>
           <span class="result-ppm" id="ppm-bicarbonate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-bicarbonate">—</span>
+          <span class="result-delta" id="delta-ppm-bicarbonate" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box result-ratio-cell advanced-only sulfate-row-item">
           <span class="metric-label">SO₄:Cl</span>
@@ -137,6 +137,16 @@
       <p class="hint">All deltas shown vs Source Water.</p>
     </section>
   </main>
+
+  <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
+    <div class="confirm-dialog">
+      <p id="confirm-message"></p>
+      <div class="confirm-actions">
+        <button id="confirm-yes" class="preset-btn">Yes</button>
+        <button id="confirm-no" class="preset-btn">No</button>
+      </div>
+    </div>
+  </div>
 
   <footer>
     <p>Use a 0.01g precision scale for accurate measurements.</p>

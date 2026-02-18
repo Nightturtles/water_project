@@ -653,8 +653,11 @@ function getSourceWaterByPreset(presetName) {
   return ions;
 }
 
+let selectedMineralsCache = null;
+
 function saveSelectedMinerals(mineralIds) {
   localStorage.setItem("cw_selected_minerals", JSON.stringify(mineralIds));
+  selectedMineralsCache = null;
 }
 
 function saveAlkalinitySource(mineralId) {
@@ -688,10 +691,10 @@ function loadMagnesiumSource() {
 }
 
 function loadSelectedMinerals() {
+  if (selectedMineralsCache) return selectedMineralsCache;
   const parsed = safeParse(localStorage.getItem("cw_selected_minerals"), null);
-  if (Array.isArray(parsed)) return parsed;
-  // Default selection
-  return ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+  selectedMineralsCache = Array.isArray(parsed) ? parsed : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+  return selectedMineralsCache;
 }
 
 function restoreSourcePresetDefaults() {

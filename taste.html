@@ -25,6 +25,10 @@
       <div class="profile-buttons" id="taste-presets">
         <!-- Populated by JS -->
       </div>
+      <div class="restore-bar" id="restore-target-bar" style="display:none;">
+        <span>Some built-in presets were deleted.</span>
+        <a href="#" id="restore-target-defaults">Restore defaults</a>
+      </div>
 
       <div class="source-grid">
         <div class="input-group">
@@ -182,43 +186,43 @@
           <span class="result-label">Calcium</span>
           <span class="result-ppm" id="res-calcium">51</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-calcium">—</span>
+          <span class="result-delta" id="delta-calcium" aria-live="polite">—</span>
         </div>
         <div class="result-cell">
           <span class="result-label">Magnesium</span>
           <span class="result-ppm" id="res-magnesium">17</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-magnesium">—</span>
+          <span class="result-delta" id="delta-magnesium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Potassium</span>
           <span class="result-ppm" id="res-potassium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-potassium">—</span>
+          <span class="result-delta" id="delta-potassium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sodium</span>
           <span class="result-ppm" id="res-sodium">10</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-sodium">—</span>
+          <span class="result-delta" id="delta-sodium" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Sulfate</span>
           <span class="result-ppm" id="res-sulfate">17</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-sulfate">—</span>
+          <span class="result-delta" id="delta-sulfate" aria-live="polite">—</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Chloride</span>
           <span class="result-ppm" id="res-chloride">35</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-chloride">—</span>
+          <span class="result-delta" id="delta-chloride" aria-live="polite">—</span>
         </div>
         <div class="result-cell always-hidden">
           <span class="result-label">Bicarbonate</span>
           <span class="result-ppm" id="res-bicarbonate">49</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-bicarbonate">—</span>
+          <span class="result-delta" id="delta-bicarbonate" aria-live="polite">—</span>
         </div>
         <div class="metric highlight metric-box result-ratio-cell advanced-only sulfate-row-item">
           <span class="metric-label">SO₄:Cl</span>
@@ -402,6 +406,7 @@
           const remaining = Object.keys(getAllTargetPresets());
           const fallback = remaining[0] || "custom";
           renderTastePresets(fallback);
+          updateRestoreTargetBar();
           showCurrentSaveStatus("Profile deleted.", false);
         });
         return;
@@ -682,11 +687,13 @@
       const existing = profiles[targetKey];
       if (!existing) return;
 
-      const ions = getCurrentProfileIons();
-      profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "");
-      saveCustomTargetProfiles(profiles);
-      renderTastePresets(targetKey);
-      showCurrentSaveStatus("Profile updated.", false);
+      showConfirm("Are you sure you want to change this profile?", () => {
+        const ions = getCurrentProfileIons();
+        profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "");
+        saveCustomTargetProfiles(profiles);
+        renderTastePresets(targetKey);
+        showCurrentSaveStatus("Profile updated.", false);
+      });
     });
 
     // --- Delete selected custom profile ---
@@ -702,12 +709,27 @@
         const remaining = Object.keys(getAllTargetPresets());
         const fallback = remaining[0] || "custom";
         renderTastePresets(fallback);
+        updateRestoreTargetBar();
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
 
+    // --- Restore defaults for target presets ---
+    function updateRestoreTargetBar() {
+      const deleted = loadDeletedTargetPresets();
+      document.getElementById("restore-target-bar").style.display = deleted.length > 0 ? "flex" : "none";
+    }
+
+    document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
+      e.preventDefault();
+      restoreTargetPresetDefaults();
+      renderTastePresets();
+      updateRestoreTargetBar();
+    });
+
     // --- Initialize ---
     renderTastePresets();
+    updateRestoreTargetBar();
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

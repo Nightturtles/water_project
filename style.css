@@ -21,6 +21,7 @@
   --gray-500: #64748b;
   --gray-700: #334155;
   --gray-900: #0f172a;
+  --red-bg: rgba(248, 113, 113, 0.1);
   --surface: #ffffff;
   --radius: 12px;
 }
@@ -42,6 +43,7 @@
   --gray-500: #94a3b8;
   --gray-700: #cbd5e1;
   --gray-900: #f1f5f9;
+  --red-bg: rgba(248, 113, 113, 0.15);
   --surface: #1e293b;
 }
 
@@ -372,7 +374,7 @@ select:focus {
   font-weight: 500;
   line-height: 1.6;
   padding: 0.5rem 0.75rem;
-  background: rgba(248, 113, 113, 0.1);
+  background: var(--red-bg);
   border-radius: 8px;
   white-space: pre-line;
 }
