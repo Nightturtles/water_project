@@ -919,7 +919,7 @@ footer {
 /* ========================
    Responsive
    ======================== */
-@media (max-width: 500px) {
+@media (min-width: 350px) and (max-width: 768px) {
   .input-row {
     grid-template-columns: 1fr;
   }
@@ -928,9 +928,29 @@ footer {
     grid-template-columns: 1fr;
   }
 
+  .card {
+    padding: 1rem;
+  }
+
+  .input-with-unit select {
+    width: 92px;
+    flex: 0 0 92px;
+  }
+
+  .save-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .save-bar .preset-btn {
+    width: 100%;
+    min-height: 2.5rem;
+  }
+
   .profile-buttons,
   .source-presets {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .profile-btn,
@@ -938,6 +958,32 @@ footer {
   .taste-preset-btn {
     width: 100%;
     text-align: center;
+  }
+
+  .result-item {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .result-value {
+    width: 100%;
+    text-align: right;
+  }
+
+  .mineral-input-row {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .mineral-input-info,
+  .mineral-input-field {
+    width: 100%;
+  }
+
+  .mineral-input-field input {
+    width: 100%;
+    min-width: 120px;
+    max-width: none;
   }
 
   .result-value {
@@ -950,10 +996,48 @@ footer {
   }
 
   .site-nav {
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    justify-content: flex-start;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .site-nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
   }
 
   .metrics-row {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metrics-row .metric:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 350px) {
+  .profile-buttons,
+  .source-presets {
+    grid-template-columns: 1fr;
+  }
+
+  .input-with-unit select {
+    width: 84px;
+    flex-basis: 84px;
+  }
+
+  .result-cell,
+  .result-ratio-cell {
+    width: 100%;
+  }
+
+  .metrics-row {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics-row .metric:last-child {
+    grid-column: auto;
   }
 }
