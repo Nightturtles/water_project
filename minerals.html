@@ -39,6 +39,7 @@
       </div>
 
       <div class="edit-bar" id="edit-bar" style="display:none;">
+        <span class="edit-bar-label" id="edit-bar-label">Editing:</span>
         <button id="save-changes-btn" class="preset-btn">Save Changes</button>
       </div>
 
@@ -474,7 +475,13 @@
       const input = document.getElementById("src-" + ion);
       input.addEventListener("input", () => {
         if (activePreset !== "custom") {
-          editBar.style.display = hasUnsavedChanges() ? "flex" : "none";
+          const showEdit = hasUnsavedChanges();
+          editBar.style.display = showEdit ? "flex" : "none";
+          if (showEdit) {
+            const preset = getAllPresets()[activePreset];
+            document.getElementById("edit-bar-label").textContent =
+              "Editing: " + (preset && preset.label ? preset.label : activePreset);
+          }
         }
         saveCurrentSource();
         updateAlkalinityFromBicarbonate();
@@ -578,11 +585,13 @@
     updateRestoreSourceBar();
     updateMineralSourceWarnings();
 
-    // If saved preset was deleted, fall back
+    // Sync inputs with active preset (handles cross-page preset changes)
     const allPresets = getAllPresets();
     if (!allPresets[activePreset]) {
       const fallback = Object.keys(allPresets).find(k => k !== "custom") || "custom";
       activatePreset(fallback);
+    } else if (activePreset !== "custom") {
+      activatePreset(activePreset);
     }
 
     function saveCurrentSource() {

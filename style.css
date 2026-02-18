@@ -23,24 +23,6 @@
   --radius: 12px;
 }
 
-[data-theme="light"] {
-  --blue-50: #eff6ff;
-  --blue-100: #dbeafe;
-  --blue-500: #3b82f6;
-  --blue-600: #2563eb;
-  --blue-700: #1d4ed8;
-  --green-600: #16a34a;
-  --red-600: #dc2626;
-  --gray-50: #f8fafc;
-  --gray-100: #f1f5f9;
-  --gray-200: #e2e8f0;
-  --gray-300: #cbd5e1;
-  --gray-500: #64748b;
-  --gray-700: #334155;
-  --gray-900: #0f172a;
-  --surface: #ffffff;
-}
-
 [data-theme="dark"] {
   --blue-50: #1e293b;
   --blue-100: #1e3a5f;
@@ -580,7 +562,7 @@ select:focus {
 
 .edit-bar .edit-bar-label {
   margin-right: 0.25rem;
-  color: var(--gray-600);
+  color: var(--gray-500);
   font-size: 0.9rem;
 }
 

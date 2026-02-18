@@ -2,10 +2,6 @@
 // Coffee Water Chemistry Calculator
 // ============================================
 
-// --- Conversion factors (derived from MINERAL_DB) ---
-const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
-const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
-
 // --- State ---
 let currentProfile = loadTargetPresetName();
 
@@ -210,7 +206,13 @@ profileButtonsContainer.addEventListener("click", (e) => {
         saveTargetPresetName("custom");
         profileDesc.textContent = "Enter your own target values above.";
       } else {
-        targetEditBar.style.display = hasUnsavedTargetChanges() ? "flex" : "none";
+        const showEdit = hasUnsavedTargetChanges();
+        targetEditBar.style.display = showEdit ? "flex" : "none";
+        if (showEdit) {
+          const profile = getTargetProfileByKey(currentProfile);
+          document.getElementById("target-edit-bar-label").textContent =
+            "Editing: " + (profile && profile.label ? profile.label : currentProfile);
+        }
       }
     }
     calculate();

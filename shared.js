@@ -211,7 +211,7 @@ function isAdvancedMineralDisplayMode() {
 
 function getVisibleIonFields() {
   if (isAdvancedMineralDisplayMode()) {
-    return ["calcium", "magnesium", "sodium", "potassium", "sulfate", "chloride"];
+    return ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride"];
   }
   return ["calcium", "magnesium"];
 }
@@ -611,6 +611,8 @@ const MG_TO_CACO3 = 100.09 / 24.305;   // Mg ppm -> GH contribution (mg/L as CaC
 const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
 const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
 const MW_CACO3 = 100.09;               // Molecular weight of CaCO3
+const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
+const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
 
 // --- Ion calculation from grams of minerals ---
 // Given an object { mineralId: gramsPerLiter, ... }, returns ion PPMs
@@ -790,9 +792,9 @@ function computeFullProfile(target) {
   const mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
   let mgL_buffer = 0;
   if (alkSource === "potassium-bicarbonate") {
-    mgL_buffer = deltaAlk * 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
+    mgL_buffer = deltaAlk * ALK_TO_POTASSIUM_BICARB;
   } else if (alkSource === "baking-soda") {
-    mgL_buffer = deltaAlk * 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
+    mgL_buffer = deltaAlk * ALK_TO_BAKING_SODA;
   }
 
   const result = {
