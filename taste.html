@@ -94,7 +94,7 @@
             <span>Bright / Acidic</span>
           </div>
           <input type="range" id="slider-acidity" min="-5" max="5" value="0" step="1">
-          <p class="slider-hint">Lower KH = more brightness and perceived acidity</p>
+          <p class="slider-hint">Primary KH lever. Lower KH increases perceived brightness/acidity.</p>
         </div>
 
         <div class="slider-item">
@@ -107,7 +107,7 @@
             <span>Separated / Clear</span>
           </div>
           <input type="range" id="slider-clarity" min="-5" max="5" value="0" step="1">
-          <p class="slider-hint">More Mg + sulfate, less chloride = more clarity and separation</p>
+          <p class="slider-hint">Hardness-forward: more Mg, slightly less Ca, subtle SO₄/Cl shifts.</p>
         </div>
 
         <div class="slider-item">
@@ -120,7 +120,7 @@
             <span>More Fruit</span>
           </div>
           <input type="range" id="slider-fruit" min="-5" max="5" value="0" step="1">
-          <p class="slider-hint">More Mg = more fruit expression; excess Ca/Cl can mute fruitiness</p>
+          <p class="slider-hint">Mg-forward with gentle Ca/Cl reduction to avoid over-suppressing extraction structure.</p>
         </div>
 
         <div class="slider-item">
@@ -133,7 +133,7 @@
             <span>More Sweet</span>
           </div>
           <input type="range" id="slider-sweet" min="-5" max="5" value="0" step="1">
-          <p class="slider-hint">More calcium = more perceived sweetness</p>
+          <p class="slider-hint">Gentle KH + chloride + calcium lift for roundness and perceived sweetness.</p>
         </div>
 
         <div class="slider-item">
@@ -146,7 +146,7 @@
             <span>Heavier / Fuller</span>
           </div>
           <input type="range" id="slider-body" min="-5" max="5" value="0" step="1">
-          <p class="slider-hint">More Ca + Cl = heavier body; more Mg + SO4 = lighter body</p>
+          <p class="slider-hint">Chloride-forward body increase with softened sulfate penalty.</p>
         </div>
       </div>
     </section>
@@ -235,6 +235,7 @@
         <button id="taste-save-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="taste-save-status" aria-live="polite"></div>
+      <div class="range-guidance" id="taste-range-warnings" aria-live="polite"></div>
       <p class="hint">All deltas shown vs Current Profile.</p>
     </section>
   </main>
@@ -262,31 +263,34 @@
     // Positive slider = more of the taste attribute
     const SLIDER_EFFECTS = {
       acidity: {
-        // More brightness = less KH (bicarbonate)
-        bicarbonate: -6
+        // More brightness = less KH (bicarbonate), tuned to reduce overshoot
+        bicarbonate: -5
       },
       clarity: {
-        // More clarity = more Mg, more sulfate, less chloride
+        // More clarity = hardness-forward with subtle anion shifts
         magnesium: 2,
-        sulfate: 4,
-        chloride: -3
+        calcium: -1,
+        sulfate: 1,
+        chloride: -1
       },
       fruit: {
-        // More fruit = more Mg; reduce Ca and Cl slightly
-        magnesium: 3,
-        calcium: -2,
-        chloride: -2
+        // More fruit = Mg-forward with minimal Cl/Ca reduction
+        magnesium: 2,
+        calcium: -1,
+        chloride: -1
       },
       sweet: {
-        // More sweetness = more calcium
-        calcium: 4
+        // More sweetness = gentle KH + Cl + Ca increase
+        bicarbonate: 2,
+        chloride: 1,
+        calcium: 1
       },
       body: {
-        // More body = more Ca + Cl, less Mg + SO4
-        calcium: 3,
-        chloride: 4,
-        magnesium: -2,
-        sulfate: -3
+        // More body = chloride-forward, with softer sulfate/magnesium reduction
+        chloride: 2,
+        calcium: 1,
+        magnesium: -1,
+        sulfate: -1
       }
     };
 
@@ -528,6 +532,12 @@
         metricName: "SO4:Cl ratio",
         baselineLabel: "current water profile"
       });
+
+      const rangeWarningsEl = document.getElementById("taste-range-warnings");
+      if (rangeWarningsEl) {
+        const evaluation = evaluateWaterProfileRanges(adjusted, { includeAdvanced: isAdvancedMineralDisplayMode() });
+        renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+      }
     }
 
     // --- Save as Target Profile ---

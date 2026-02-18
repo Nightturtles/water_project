@@ -690,6 +690,120 @@ function calculateSo4ClRatio(ions) {
   return sulfate / chloride;
 }
 
+const RANGE_SEVERITY_ORDER = { danger: 0, warn: 1, info: 2 };
+
+function evaluateWaterProfileRanges(ions, options = {}) {
+  const normalized = {};
+  ION_FIELDS.forEach((ion) => {
+    normalized[ion] = Number.isFinite(Number(ions && ions[ion])) ? Number(ions[ion]) : 0;
+  });
+  const metrics = calculateMetrics(normalized);
+  const ratio = calculateSo4ClRatio(normalized);
+  const includeAdvanced = options.includeAdvanced !== false;
+  const findings = [];
+
+  function addFinding(severity, message) {
+    findings.push({ severity, message });
+  }
+
+  function formatBand(min, max, unit) {
+    if (min != null && max != null) return `${min}-${max}${unit ? " " + unit : ""}`;
+    if (min != null) return `>=${min}${unit ? " " + unit : ""}`;
+    if (max != null) return `<=${max}${unit ? " " + unit : ""}`;
+    return "n/a";
+  }
+
+  function addBandFinding(label, value, unit, preferredMin, preferredMax, warnMin, warnMax, dangerMin, dangerMax) {
+    if (!Number.isFinite(value)) return;
+    const rounded = Math.round(value * 10) / 10;
+    const valueText = `${rounded}${unit ? " " + unit : ""}`;
+    const preferredBand = formatBand(preferredMin, preferredMax, unit);
+    const direction = (
+      (preferredMin != null && value < preferredMin) ||
+      (warnMin != null && value < warnMin) ||
+      (dangerMin != null && value < dangerMin)
+    ) ? "low" : "high";
+    if ((dangerMin != null && value < dangerMin) || (dangerMax != null && value > dangerMax)) {
+      addFinding("danger", `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`);
+      return;
+    }
+    if ((warnMin != null && value < warnMin) || (warnMax != null && value > warnMax)) {
+      addFinding("warn", `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`);
+      return;
+    }
+    if ((preferredMin != null && value < preferredMin) || (preferredMax != null && value > preferredMax)) {
+      addFinding("info", `${label} is slightly ${direction} at ${valueText} (recommended ${preferredBand}).`);
+    }
+  }
+
+  addBandFinding("TDS", metrics.tds, "mg/L", 75, 250, 50, 300, 25, 400);
+  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 30, 80, 20, 120, 10, 180);
+  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 40, 120, 25, 160, 10, 220);
+  addBandFinding("Calcium", normalized.calcium, "mg/L", 17, 85, 10, 110, 5, 150);
+  addBandFinding("Magnesium", normalized.magnesium, "mg/L", 5, 30, 2, 45, 1, 70);
+
+  // Sodium: soft warning above 10, strong warning above 30
+  addBandFinding("Sodium", normalized.sodium, "mg/L", null, 10, null, 30, null, 30);
+
+  if (includeAdvanced) {
+    // Chloride: keep <=30 when possible; elevate severity when much higher.
+    addBandFinding("Chloride", normalized.chloride, "mg/L", null, 30, null, 50, null, 100);
+
+    // Heuristic-only checks: keep as informational guidance.
+    if (normalized.sulfate < 5 || normalized.sulfate > 75) {
+      const sulfateDirection = normalized.sulfate < 5 ? "low" : "high";
+      addFinding("info", `Sulfate is ${sulfateDirection} at ${Math.round(normalized.sulfate * 10) / 10} mg/L (heuristic 5-75 mg/L).`);
+    }
+    if (normalized.potassium > 20) {
+      addFinding("info", `Potassium is high at ${Math.round(normalized.potassium * 10) / 10} mg/L (heuristic <=20 mg/L).`);
+    }
+    if (ratio == null) {
+      addFinding("info", "SO4:Cl ratio unavailable (chloride is 0).");
+    } else if (ratio < 0.5 || ratio > 2.0) {
+      const ratioDirection = ratio < 0.5 ? "low" : "high";
+      addFinding("info", `SO4:Cl ratio is ${ratioDirection} at ${ratio.toFixed(2)} (heuristic 0.50-2.00).`);
+    }
+  }
+
+  findings.sort((a, b) => {
+    const sa = RANGE_SEVERITY_ORDER[a.severity] ?? 99;
+    const sb = RANGE_SEVERITY_ORDER[b.severity] ?? 99;
+    return sa - sb;
+  });
+
+  return { findings, metrics, ratio };
+}
+
+function renderRangeGuidance(el, findings) {
+  if (!el) return;
+  el.innerHTML = "";
+  if (!Array.isArray(findings) || findings.length === 0) return;
+  const fragment = document.createDocumentFragment();
+  findings.forEach((f) => {
+    const row = document.createElement("div");
+    const severity = f && f.severity ? f.severity : "info";
+    row.className = "range-guidance-line " + severity;
+
+    const prefix = document.createElement("span");
+    prefix.className = "range-guidance-prefix";
+    if (severity === "danger") {
+      prefix.textContent = "High risk: ";
+    } else if (severity === "warn") {
+      prefix.textContent = "Recommended range: ";
+    } else {
+      prefix.textContent = "Note: ";
+    }
+
+    const message = document.createElement("span");
+    message.textContent = f && f.message ? f.message : "";
+
+    row.appendChild(prefix);
+    row.appendChild(message);
+    fragment.appendChild(row);
+  });
+  el.appendChild(fragment);
+}
+
 function roundDelta(delta, decimals = 0) {
   if (!Number.isFinite(delta)) return null;
   if (decimals > 0) {

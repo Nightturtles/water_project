@@ -521,6 +521,16 @@ function updateSummaryMetrics(payload) {
     metricName: "SO4:Cl ratio",
     baselineLabel: "source water"
   });
+
+  const rangeWarningsEl = document.getElementById("calc-range-warnings");
+  if (rangeWarningsEl) {
+    if (!Number.isFinite(gh) || !Number.isFinite(kh) || !Number.isFinite(tds)) {
+      renderRangeGuidance(rangeWarningsEl, []);
+    } else {
+      const evaluation = evaluateWaterProfileRanges(ions, { includeAdvanced: advancedMode });
+      renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+    }
+  }
 }
 
 function formatGrams(g) {

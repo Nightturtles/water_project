@@ -133,6 +133,7 @@
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status" aria-live="polite"></div>
+      <div class="range-guidance" id="recipe-range-warnings" aria-live="polite"></div>
       <p class="hint">All deltas shown vs Source Water.</p>
     </section>
   </main>
@@ -276,6 +277,12 @@
         metricName: "SO4:Cl ratio",
         baselineLabel: "source water"
       });
+
+      const rangeWarningsEl = document.getElementById("recipe-range-warnings");
+      if (rangeWarningsEl) {
+        const evaluation = evaluateWaterProfileRanges(totalIons, { includeAdvanced: isAdvancedMineralDisplayMode() });
+        renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+      }
     }
 
     // --- Save Final Water Profile as Target Water Profile ---
