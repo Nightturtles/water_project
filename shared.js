@@ -145,7 +145,7 @@ function loadSourcePresetName() {
 function initSourcePresetSelect(selectEl) {
   if (!selectEl) return null;
   selectEl.innerHTML = "";
-  const presetEntries = Object.entries(getAllPresets());
+  const presetEntries = Object.entries(getAllPresets()).filter(([key]) => key !== "custom");
   for (const [key, preset] of presetEntries) {
     const opt = document.createElement("option");
     opt.value = key;
@@ -154,7 +154,7 @@ function initSourcePresetSelect(selectEl) {
   }
   const savedPreset = loadSourcePresetName();
   const validKeys = presetEntries.map(([k]) => k);
-  const fallback = validKeys.find(k => k !== "custom") || validKeys[0] || null;
+  const fallback = validKeys[0] || null;
   const selectedPreset = validKeys.includes(savedPreset) ? savedPreset : fallback;
   if (selectedPreset) {
     selectEl.value = selectedPreset;

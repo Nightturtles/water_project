@@ -195,6 +195,20 @@ select {
   width: 100%;
 }
 
+select {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-right: 2rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gray-700) 50%),
+    linear-gradient(135deg, var(--gray-700) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) calc(50% - 2px),
+    calc(100% - 8px) calc(50% - 2px);
+  background-size: 6px 6px, 6px 6px;
+  background-repeat: no-repeat;
+}
+
 input[type="number"]:focus,
 select:focus {
   outline: none;
@@ -963,19 +977,7 @@ footer {
   }
 
   .mineral-input-row {
-    flex-wrap: wrap;
-    gap: 0.5rem;
-  }
-
-  .mineral-input-info,
-  .mineral-input-field {
-    width: 100%;
-  }
-
-  .mineral-input-field input {
-    width: 100%;
-    min-width: 120px;
-    max-width: none;
+    flex-wrap: nowrap;
   }
 
   .result-value {
@@ -1011,12 +1013,8 @@ footer {
   }
 
   .metrics-row {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .metrics-row .metric:last-child {
-    grid-column: 1 / -1;
+    display: flex;
+    flex-wrap: nowrap;
   }
 }
 
@@ -1048,9 +1046,18 @@ footer {
 
   .metrics-row {
     grid-template-columns: 1fr;
+    display: grid;
   }
 
   .metrics-row .metric:last-child {
     grid-column: auto;
+  }
+}
+
+@media (min-width: 351px) {
+  .result-grid .sulfate-row-item {
+    flex: 0 0 calc((100% - 2 * 0.5rem) / 3);
+    width: calc((100% - 2 * 0.5rem) / 3);
+    max-width: calc((100% - 2 * 0.5rem) / 3);
   }
 }
