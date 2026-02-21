@@ -199,6 +199,7 @@ function computeFullProfile(target) {
 // --- Build a stored target profile from ions (Inconsistency 1: shared across pages) ---
 function buildStoredTargetProfile(label, ions, description, options) {
   options = options || {};
+  const brewMethod = options.brewMethod === "espresso" ? "espresso" : (options.brewMethod === "filter" ? "filter" : loadBrewMethod());
   const normalized = {};
   ION_FIELDS.forEach(function(ion) {
     normalized[ion] = Math.round(parseFloat(ions[ion]) || 0);
@@ -214,6 +215,7 @@ function buildStoredTargetProfile(label, ions, description, options) {
     sulfate: normalized.sulfate,
     chloride: normalized.chloride,
     bicarbonate: normalized.bicarbonate,
-    description: description || ""
+    description: description || "",
+    brewMethod: brewMethod
   };
 }

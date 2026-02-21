@@ -198,6 +198,19 @@ function loadTargetPresetName() {
   return safeGetItem("cw_target_preset") || "sca";
 }
 
+// --- Brew method preference ---
+function normalizeBrewMethod(method) {
+  return method === "espresso" ? "espresso" : "filter";
+}
+
+function saveBrewMethod(method) {
+  safeSetItem("cw_brew_method", normalizeBrewMethod(method));
+}
+
+function loadBrewMethod() {
+  return normalizeBrewMethod(safeGetItem("cw_brew_method"));
+}
+
 // --- Source presets aggregation + cache ---
 let sourcePresetsCache = null;
 function invalidateSourcePresetsCache() {
@@ -343,6 +356,40 @@ function getTargetProfileByKey(key) {
   if (key === "custom") return null;
   const custom = loadCustomTargetProfiles();
   return custom[key] || TARGET_PRESETS[key] || null;
+}
+
+function inferTargetProfileBrewMethod(key, profile) {
+  if (profile && (profile.brewMethod === "filter" || profile.brewMethod === "espresso")) {
+    return profile.brewMethod;
+  }
+  if (typeof key === "string" && (key.startsWith("eaf-") || key.includes("espresso"))) {
+    return "espresso";
+  }
+  const label = (profile && profile.label ? String(profile.label) : "").toLowerCase();
+  const description = (profile && profile.description ? String(profile.description) : "").toLowerCase();
+  if (label.includes("espresso") || description.includes("espresso")) {
+    return "espresso";
+  }
+  return "filter";
+}
+
+function getTargetPresetsForBrewMethod(method) {
+  const brewMethod = normalizeBrewMethod(method);
+  const allPresets = getAllTargetPresets();
+  const filtered = {};
+  for (const [key, profile] of Object.entries(allPresets)) {
+    if (key === "custom") {
+      filtered[key] = profile;
+      continue;
+    }
+    if (inferTargetProfileBrewMethod(key, profile) === brewMethod) {
+      filtered[key] = profile;
+    }
+  }
+  if (!filtered.custom) {
+    filtered.custom = { label: "Custom Recipe" };
+  }
+  return filtered;
 }
 
 // --- Profile name validation ---

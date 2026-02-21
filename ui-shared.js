@@ -73,6 +73,17 @@ function initSourcePresetSelect(selectEl) {
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
   tagsEl.innerHTML = "";
+  var allZeros = ION_FIELDS.every(function(ion) {
+    var value = Number(water && water[ion]);
+    return !Number.isFinite(value) || value === 0;
+  });
+  if (allZeros) {
+    var zeroTag = document.createElement("span");
+    zeroTag.className = "base-tag";
+    zeroTag.textContent = "All zeros";
+    tagsEl.appendChild(zeroTag);
+    return;
+  }
   var nonZero = getVisibleIonFields().filter(function(ion) { return (water && water[ion]) > 0; });
   var metrics = water ? calculateMetrics(water) : { kh: 0 };
   var alk = metrics.kh;

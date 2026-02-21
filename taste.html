@@ -19,6 +19,10 @@
     <section class="card">
       <h2>Current Water Profile</h2>
       <p class="hint">Enter the water recipe you're currently using, or start from a preset.</p>
+      <div class="brew-method-toggle" id="brew-method-toggle">
+        <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
+        <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
+      </div>
 
       <div class="profile-buttons" id="taste-presets">
         <!-- Populated by JS -->
@@ -65,7 +69,7 @@
 
       <div class="save-bar" id="current-save-bar">
         <div class="name-field">
-          <input type="text" id="current-profile-name" placeholder="Name this profile to save..." maxlength="40">
+          <input type="text" id="current-profile-name" placeholder="Name this profile..." maxlength="40">
           <div class="profile-name-error" id="current-profile-name-error" aria-live="polite"></div>
         </div>
         <button id="current-save-btn" class="preset-btn">Save</button>
@@ -294,6 +298,8 @@
 
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
+    const brewMethodToggle = document.getElementById("brew-method-toggle");
+    let activeBrewMethod = loadBrewMethod();
     var debouncedRecalculate = debounce(recalculate, 120);
 
     function setCurrentProfileInputs(values) {
@@ -304,6 +310,10 @@
     }
 
     function activateTastePreset(presetKey, options = {}) {
+      const visiblePresets = getTargetPresetsForBrewMethod(activeBrewMethod);
+      if (!visiblePresets[presetKey]) {
+        presetKey = findFallbackPreset(visiblePresets);
+      }
       const reset = options.resetSliders !== false;
       tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => {
         b.classList.toggle("active", b.dataset.preset === presetKey);
@@ -336,7 +346,7 @@
 
     function renderTastePresets(activePreset = null) {
       tastePresetsContainer.innerHTML = "";
-      const allPresets = getAllTargetPresets();
+      const allPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
       for (const [key, profile] of Object.entries(allPresets)) {
         const btn = document.createElement("button");
         btn.className = "taste-preset-btn";
@@ -401,7 +411,7 @@
             addDeletedTargetPreset(deleteKey);
           }
           deleteCustomTargetProfile(deleteKey);
-          const fallback = findFallbackPreset(getAllTargetPresets());
+          const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
           renderTastePresets(fallback);
           updateRestoreTargetBar();
           showCurrentSaveStatus("Profile deleted.", false);
@@ -587,7 +597,7 @@
 
       const profiles = loadCustomTargetProfiles();
       const adjusted = getAdjustedProfile();
-      profiles[key] = buildStoredTargetProfile(name, adjusted, "");
+      profiles[key] = buildStoredTargetProfile(name, adjusted, "", { brewMethod: activeBrewMethod });
       saveCustomTargetProfiles(profiles);
       renderTastePresets(key);
 
@@ -643,7 +653,7 @@
 
       const profiles = loadCustomTargetProfiles();
       const ions = getCurrentProfileIons();
-      profiles[key] = buildStoredTargetProfile(name, ions, "");
+      profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
       saveCustomTargetProfiles(profiles);
       renderTastePresets(key);
 
@@ -663,7 +673,7 @@
 
       showConfirm("Are you sure you want to change this profile?", () => {
         const ions = getCurrentProfileIons();
-        profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "");
+        profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "", { brewMethod: activeBrewMethod });
         saveCustomTargetProfiles(profiles);
         renderTastePresets(targetKey);
         showCurrentSaveStatus("Profile updated.", false);
@@ -680,12 +690,27 @@
       const label = profile && profile.label ? profile.label : targetKey;
       showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
         deleteCustomTargetProfile(targetKey);
-        const fallback = findFallbackPreset(getAllTargetPresets());
+        const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
         renderTastePresets(fallback);
         updateRestoreTargetBar();
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
+
+    function setActiveBrewMethod(method) {
+      activeBrewMethod = method === "espresso" ? "espresso" : "filter";
+      saveBrewMethod(activeBrewMethod);
+      if (brewMethodToggle) {
+        brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+        });
+      }
+      const visible = getTargetPresetsForBrewMethod(activeBrewMethod);
+      const savedPreset = loadTargetPresetName();
+      const fallback = findFallbackPreset(visible);
+      const nextPreset = visible[savedPreset] ? savedPreset : fallback;
+      renderTastePresets(nextPreset);
+    }
 
     // --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
     document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
@@ -696,6 +721,17 @@
     });
 
     // --- Initialize ---
+    if (brewMethodToggle) {
+      brewMethodToggle.addEventListener("click", (e) => {
+        const btn = e.target.closest(".brew-method-btn");
+        if (!btn) return;
+        if (btn.dataset.brewMethod === activeBrewMethod) return;
+        setActiveBrewMethod(btn.dataset.brewMethod);
+      });
+      brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+      });
+    }
     renderTastePresets();
     updateRestoreTargetBar();
 

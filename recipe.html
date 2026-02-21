@@ -349,7 +349,7 @@
 
       const profiles = loadCustomTargetProfiles();
       const ions = lastTotalIons || {};
-      profiles[key] = buildStoredTargetProfile(name, ions, "");
+      profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: loadBrewMethod() });
       saveCustomTargetProfiles(profiles);
       recipeTargetNameInput.value = "";
       updateRecipeTargetNameError();

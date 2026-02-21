@@ -4,6 +4,7 @@
 
 // --- State ---
 let currentProfile = loadTargetPresetName();
+let activeBrewMethod = loadBrewMethod();
 
 // --- DOM elements ---
 const volumeInput = document.getElementById("volume");
@@ -16,6 +17,7 @@ const targetAlk = document.getElementById("target-alkalinity");
 const profileDesc = document.getElementById("profile-description");
 const resultsContainer = document.getElementById("results-container");
 const profileButtonsContainer = document.getElementById("profile-buttons");
+const brewMethodToggle = document.getElementById("brew-method-toggle");
 const targetSaveBar = document.getElementById("target-save-bar");
 const targetEditBar = document.getElementById("target-edit-bar");
 const targetProfileNameInput = document.getElementById("target-profile-name");
@@ -100,7 +102,7 @@ function renderResultItems() {
 // --- Dynamic profile buttons (Inefficiency 1: cleaned up redundant if/else) ---
 function renderProfileButtons() {
   profileButtonsContainer.innerHTML = "";
-  const allProfiles = getAllTargetPresets();
+  const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
   for (const [key, profile] of Object.entries(allProfiles)) {
     const btn = document.createElement("button");
     btn.className = "profile-btn";
@@ -135,6 +137,10 @@ function highlightProfile(profileName) {
 }
 
 function activateProfile(profileName) {
+  const visibleProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
+  if (!visibleProfiles[profileName]) {
+    profileName = findFallbackPreset(visibleProfiles);
+  }
   currentProfile = profileName;
   highlightProfile(profileName);
   saveTargetPresetName(profileName);
@@ -177,7 +183,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
       renderProfileButtons();
       updateRestoreTargetBar();
       if (currentProfile === deleteKey) {
-        const fallback = findFallbackPreset(getAllTargetPresets());
+        const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
         activateProfile(fallback);
       }
     });
@@ -216,7 +222,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
 targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {
     calculate();
-    const allProfiles = getAllTargetPresets();
+    const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
     const existing = allProfiles[currentProfile];
     if (!existing) return;
     const orig = getTargetProfileByKey(currentProfile);
@@ -225,7 +231,8 @@ targetSaveChangesBtn.addEventListener("click", () => {
     if (hasExplicitIons) {
       const ions = lastCalculatedIons || {};
       profile = buildStoredTargetProfile(existing.label, ions, existing.description || "", {
-        alkalinity: parseFloat(targetAlk.value) || 0
+        alkalinity: parseFloat(targetAlk.value) || 0,
+        brewMethod: activeBrewMethod
       });
     } else {
       profile = {
@@ -233,7 +240,8 @@ targetSaveChangesBtn.addEventListener("click", () => {
         calcium: parseFloat(targetCa.value) || 0,
         magnesium: parseFloat(targetMg.value) || 0,
         alkalinity: parseFloat(targetAlk.value) || 0,
-        description: existing.description || ""
+        description: existing.description || "",
+        brewMethod: activeBrewMethod
       };
     }
     const profiles = loadCustomTargetProfiles();
@@ -289,7 +297,8 @@ targetSaveBtn.addEventListener("click", () => {
   const profiles = loadCustomTargetProfiles();
   const ions = lastCalculatedIons || {};
   profiles[key] = buildStoredTargetProfile(name, ions, "", {
-    alkalinity: parseFloat(targetAlk.value) || 0
+    alkalinity: parseFloat(targetAlk.value) || 0,
+    brewMethod: activeBrewMethod
   });
   saveCustomTargetProfiles(profiles);
 
@@ -508,6 +517,23 @@ function updateSummaryMetrics(payload) {
   }
 }
 
+function setActiveBrewMethod(method) {
+  activeBrewMethod = method === "espresso" ? "espresso" : "filter";
+  saveBrewMethod(activeBrewMethod);
+  if (brewMethodToggle) {
+    brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+    });
+  }
+  renderProfileButtons();
+  const visible = getTargetPresetsForBrewMethod(activeBrewMethod);
+  if (!visible[currentProfile]) {
+    currentProfile = findFallbackPreset(visible);
+    saveTargetPresetName(currentProfile);
+  }
+  activateProfile(currentProfile);
+}
+
 // --- Bug 3: Fixed formatGrams to handle sub-threshold display ---
 function formatGrams(g) {
   if (!isFinite(g) || g <= 0) return "0.00 g";
@@ -526,10 +552,21 @@ function updateResultValues(valuesByMineral) {
 }
 
 // --- Initialize ---
+if (brewMethodToggle) {
+  brewMethodToggle.addEventListener("click", (e) => {
+    const btn = e.target.closest(".brew-method-btn");
+    if (!btn) return;
+    if (btn.dataset.brewMethod === activeBrewMethod) return;
+    setActiveBrewMethod(btn.dataset.brewMethod);
+  });
+  brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+  });
+}
 renderResultItems();
 renderProfileButtons();
 updateRestoreTargetBar();
-const allTargetPresets = getAllTargetPresets();
+const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
 if (!allTargetPresets[currentProfile]) {
   currentProfile = findFallbackPreset(allTargetPresets);
   saveTargetPresetName(currentProfile);
