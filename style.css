@@ -22,6 +22,7 @@
   --gray-700: #334155;
   --gray-900: #0f172a;
   --red-bg: rgba(248, 113, 113, 0.1);
+  --focus-ring: rgba(59, 130, 246, 0.3);
   --surface: #ffffff;
   --radius: 12px;
 }
@@ -44,6 +45,7 @@
   --gray-700: #cbd5e1;
   --gray-900: #f1f5f9;
   --red-bg: rgba(248, 113, 113, 0.15);
+  --focus-ring: rgba(96, 165, 250, 0.35);
   --surface: #1e293b;
 }
 
@@ -219,7 +221,7 @@ input[type="number"]:focus,
 select:focus {
   outline: none;
   border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .input-with-unit {
@@ -542,7 +544,7 @@ select:focus {
 .save-bar input[type="text"]:focus {
   outline: none;
   border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .save-bar .preset-btn {

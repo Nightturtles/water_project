@@ -6,9 +6,7 @@
   <title>Coffee Water Calculator</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
-  <script>
-    (function(){var p=localStorage.getItem("cw_theme")||"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);})();
-  </script>
+  <script src="theme-init.js"></script>
 </head>
 <body>
   <header>
@@ -179,7 +177,10 @@
     <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>
   </footer>
 
-  <script src="shared.js"></script>
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
   <script src="script.js"></script>
 </body>
 </html>

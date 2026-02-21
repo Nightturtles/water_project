@@ -6,9 +6,7 @@
   <title>Taste Tuner - Coffee Water Calculator</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
-  <script>
-    (function(){var p=localStorage.getItem("cw_theme")||"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);})();
-  </script>
+  <script src="theme-init.js"></script>
 </head>
 <body>
   <header>
@@ -244,10 +242,6 @@
     </section>
   </main>
 
-  <footer>
-    <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
-  </footer>
-
   <div class="confirm-overlay" id="confirm-overlay" style="display:none;">
     <div class="confirm-dialog">
       <p id="confirm-message"></p>
@@ -258,39 +252,39 @@
     </div>
   </div>
 
-  <script src="shared.js"></script>
+  <footer>
+    <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
+  </footer>
+
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
   <script>
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
     // --- Slider adjustment factors ---
-    // Each slider step adjusts ions by these amounts (mg/L per step)
-    // Positive slider = more of the taste attribute
     const SLIDER_EFFECTS = {
       acidity: {
-        // More brightness = less KH (bicarbonate), tuned to reduce overshoot
         bicarbonate: -5
       },
       clarity: {
-        // More clarity = hardness-forward with subtle anion shifts
         magnesium: 2,
         calcium: -1,
         sulfate: 1,
         chloride: -1
       },
       fruit: {
-        // More fruit = Mg-forward with minimal Cl/Ca reduction
         magnesium: 2,
         calcium: -1,
         chloride: -1
       },
       sweet: {
-        // More sweetness = gentle KH + Cl + Ca increase
         bicarbonate: 2,
         chloride: 1,
         calcium: 1
       },
       body: {
-        // More body = chloride-forward, with softer sulfate/magnesium reduction
         chloride: 2,
         calcium: 1,
         magnesium: -1,
@@ -300,6 +294,7 @@
 
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
+    var debouncedRecalculate = debounce(recalculate, 120);
 
     function setCurrentProfileInputs(values) {
       ION_FIELDS.forEach(ion => {
@@ -325,7 +320,6 @@
       if (profile) {
         const values = computeFullProfile(profile);
         setCurrentProfileInputs(values);
-        // So Calculator and Taste Tuner show the same numbers: use preset Ca/Mg/Alk exactly when present
         const hasTargetTriple = Number.isFinite(Number(profile.calcium)) && Number.isFinite(Number(profile.magnesium)) && Number.isFinite(Number(profile.alkalinity));
         if (hasTargetTriple) {
           document.getElementById("cur-calcium").value = profile.calcium;
@@ -347,8 +341,12 @@
         const btn = document.createElement("button");
         btn.className = "taste-preset-btn";
         btn.dataset.preset = key;
-        if (key !== "custom" && !TARGET_PRESETS[key]) {
-          btn.dataset.targetKey = key;
+        // Inconsistency 2: show edit bar for overridden built-in presets too
+        if (key !== "custom") {
+          var customProfiles = loadCustomTargetProfiles();
+          if (!TARGET_PRESETS[key] || customProfiles[key]) {
+            btn.dataset.targetKey = key;
+          }
         }
         btn.textContent = profile.label;
         if (key !== "custom") {
@@ -364,7 +362,7 @@
       const savedPreset = loadTargetPresetName();
       const initialKey = (activePreset && keys.includes(activePreset))
         ? activePreset
-        : (keys.includes(savedPreset) ? savedPreset : null) || (keys[0] || "custom");
+        : (keys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
       if (initialKey) activateTastePreset(initialKey, { resetSliders: true });
     }
 
@@ -403,8 +401,7 @@
             addDeletedTargetPreset(deleteKey);
           }
           deleteCustomTargetProfile(deleteKey);
-          const remaining = Object.keys(getAllTargetPresets());
-          const fallback = remaining[0] || "custom";
+          const fallback = findFallbackPreset(getAllTargetPresets());
           renderTastePresets(fallback);
           updateRestoreTargetBar();
           showCurrentSaveStatus("Profile deleted.", false);
@@ -417,24 +414,24 @@
       activateTastePreset(btn.dataset.preset, { resetSliders: true });
     });
 
-    // --- Input change handlers ---
+    // --- Input change handlers (debounced) ---
     ION_FIELDS.forEach(ion => {
       document.getElementById("cur-" + ion).addEventListener("input", () => {
         tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
         tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
         updateCurrentEditBar();
-        recalculate();
+        debouncedRecalculate();
       });
     });
 
-    // --- Slider handlers ---
+    // --- Slider handlers (debounced calculation, immediate display update) ---
     SLIDERS.forEach(slider => {
       const el = document.getElementById("slider-" + slider);
       const valEl = document.getElementById("val-" + slider);
       el.addEventListener("input", () => {
         const v = parseInt(el.value);
         valEl.textContent = (v > 0 ? "+" : "") + v;
-        recalculate();
+        debouncedRecalculate();
       });
     });
 
@@ -496,7 +493,6 @@
       });
       const adjusted = getAdjustedProfile();
 
-      // Display adjusted values and deltas
       ION_FIELDS.forEach(ion => {
         document.getElementById("res-" + ion).textContent = adjusted[ion];
         setDeltaText(document.getElementById("delta-" + ion), adjusted[ion] - Math.round(base[ion]), {
@@ -506,7 +502,6 @@
         });
       });
 
-      // Metrics
       const baselineMetrics = calculateMetrics(base);
       const metrics = calculateMetrics(adjusted);
       document.getElementById("res-gh").textContent = Math.round(metrics.gh);
@@ -528,9 +523,8 @@
         baselineLabel: "current water profile"
       });
 
-      // SO4:Cl ratio (sulfate / chloride; undefined when chloride is 0)
       const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
-      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "—" : so4ToCl.toFixed(2);
+      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
       const baselineRatio = calculateSo4ClRatio(base);
       setDeltaText(document.getElementById("delta-res-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
         decimals: 2,
@@ -571,26 +565,6 @@
     bindEnterToClick(tasteProfileNameInput, tasteSaveBtn);
 
     const showTasteSaveStatus = createStatusHandler(tasteSaveStatus);
-
-    function buildStoredTargetProfile(label, ions, description = "") {
-      const normalized = {};
-      ION_FIELDS.forEach((ion) => {
-        normalized[ion] = Math.round(parseFloat(ions[ion]) || 0);
-      });
-      const metrics = calculateMetrics(normalized);
-      return {
-        label,
-        calcium: normalized.calcium,
-        magnesium: normalized.magnesium,
-        alkalinity: Math.round(metrics.kh),
-        potassium: normalized.potassium,
-        sodium: normalized.sodium,
-        sulfate: normalized.sulfate,
-        chloride: normalized.chloride,
-        bicarbonate: normalized.bicarbonate,
-        description
-      };
-    }
 
     tasteSaveBtn.addEventListener("click", () => {
       const validation = validateTargetProfileName(tasteProfileNameInput.value);
@@ -706,20 +680,14 @@
       const label = profile && profile.label ? profile.label : targetKey;
       showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
         deleteCustomTargetProfile(targetKey);
-        const remaining = Object.keys(getAllTargetPresets());
-        const fallback = remaining[0] || "custom";
+        const fallback = findFallbackPreset(getAllTargetPresets());
         renderTastePresets(fallback);
         updateRestoreTargetBar();
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
 
-    // --- Restore defaults for target presets ---
-    function updateRestoreTargetBar() {
-      const deleted = loadDeletedTargetPresets();
-      document.getElementById("restore-target-bar").style.display = deleted.length > 0 ? "flex" : "none";
-    }
-
+    // --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
     document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
       e.preventDefault();
       restoreTargetPresetDefaults();

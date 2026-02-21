@@ -25,6 +25,8 @@ const targetSaveStatus = document.getElementById("target-save-status");
 
 let lastCalculatedIons = null;
 
+// --- Debounced calculate (Inefficiency 6) ---
+var debouncedCalculate = debounce(calculate, 120);
 
 // --- Populate source water dropdown ---
 initSourcePresetSelect(sourcePresetSelect);
@@ -49,7 +51,6 @@ function updateSourceWaterTags() {
 updateSourceWaterTags();
 
 // --- Result items: show only minerals selected in Settings ---
-// Calculator uses: epsom-salt (Mg), calcium-chloride (Ca), baking-soda or potassium-bicarbonate (alkalinity)
 
 function renderResultItems() {
   const alkalinitySource = getEffectiveAlkalinitySource();
@@ -96,7 +97,7 @@ function renderResultItems() {
   }
 }
 
-// --- Dynamic profile buttons ---
+// --- Dynamic profile buttons (Inefficiency 1: cleaned up redundant if/else) ---
 function renderProfileButtons() {
   profileButtonsContainer.innerHTML = "";
   const allProfiles = getAllTargetPresets();
@@ -104,10 +105,8 @@ function renderProfileButtons() {
     const btn = document.createElement("button");
     btn.className = "profile-btn";
     btn.dataset.profile = key;
-    if (key === "custom") {
-      btn.textContent = profile.label;
-    } else {
-      btn.textContent = profile.label;
+    btn.textContent = profile.label;
+    if (key !== "custom") {
       const del = document.createElement("span");
       del.className = "preset-delete";
       del.dataset.delete = key;
@@ -119,12 +118,7 @@ function renderProfileButtons() {
   highlightProfile(currentProfile);
 }
 
-// --- Restore defaults for target presets ---
-function updateRestoreTargetBar() {
-  const deleted = loadDeletedTargetPresets();
-  document.getElementById("restore-target-bar").style.display = deleted.length > 0 ? "flex" : "none";
-}
-
+// --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
 document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
   e.preventDefault();
   restoreTargetPresetDefaults();
@@ -183,8 +177,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
       renderProfileButtons();
       updateRestoreTargetBar();
       if (currentProfile === deleteKey) {
-        const remaining = Object.keys(getAllTargetPresets());
-        const fallback = remaining.find(k => k !== "custom") || "custom";
+        const fallback = findFallbackPreset(getAllTargetPresets());
         activateProfile(fallback);
       }
     });
@@ -196,7 +189,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
   activateProfile(btn.dataset.profile);
 });
 
-// --- Target input handling ---
+// --- Target input handling (Inefficiency 6: debounced) ---
 [targetCa, targetMg, targetAlk].forEach(input => {
   input.addEventListener("input", () => {
     if (currentProfile !== "custom") {
@@ -215,13 +208,14 @@ profileButtonsContainer.addEventListener("click", (e) => {
         }
       }
     }
-    calculate();
+    debouncedCalculate();
   });
 });
 
-// --- Save changes to existing target profile ---
+// --- Save changes to existing target profile (Bug 1: alkalinity drift fix) ---
 targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {
+    calculate();
     const allProfiles = getAllTargetPresets();
     const existing = allProfiles[currentProfile];
     if (!existing) return;
@@ -230,19 +224,9 @@ targetSaveChangesBtn.addEventListener("click", () => {
     let profile;
     if (hasExplicitIons) {
       const ions = lastCalculatedIons || {};
-      const metrics = calculateMetrics(ions);
-      profile = {
-        label: existing.label,
-        calcium: Math.round(ions.calcium || 0),
-        magnesium: Math.round(ions.magnesium || 0),
-        alkalinity: Math.round(metrics.kh || 0),
-        potassium: Math.round(ions.potassium || 0),
-        sodium: Math.round(ions.sodium || 0),
-        sulfate: Math.round(ions.sulfate || 0),
-        chloride: Math.round(ions.chloride || 0),
-        bicarbonate: Math.round(ions.bicarbonate || 0),
-        description: existing.description || ""
-      };
+      profile = buildStoredTargetProfile(existing.label, ions, existing.description || "", {
+        alkalinity: parseFloat(targetAlk.value) || 0
+      });
     } else {
       profile = {
         label: existing.label,
@@ -281,7 +265,7 @@ function updateTargetProfileNameError() {
 targetProfileNameInput.addEventListener("input", updateTargetProfileNameError);
 bindEnterToClick(targetProfileNameInput, targetSaveBtn);
 
-// --- Save new custom target profile ---
+// --- Save new custom target profile (Bug 1: alkalinity drift fix) ---
 targetSaveBtn.addEventListener("click", () => {
   const validation = validateTargetProfileName(targetProfileNameInput.value);
   if (!validation.ok) {
@@ -300,22 +284,13 @@ targetSaveBtn.addEventListener("click", () => {
   }
 
   document.getElementById("target-profile-name-error").textContent = "";
+  calculate();
 
   const profiles = loadCustomTargetProfiles();
   const ions = lastCalculatedIons || {};
-  const metrics = calculateMetrics(ions);
-  profiles[key] = {
-    label: name,
-    calcium: Math.round(ions.calcium || 0),
-    magnesium: Math.round(ions.magnesium || 0),
-    alkalinity: Math.round(metrics.kh || 0),
-    potassium: Math.round(ions.potassium || 0),
-    sodium: Math.round(ions.sodium || 0),
-    sulfate: Math.round(ions.sulfate || 0),
-    chloride: Math.round(ions.chloride || 0),
-    bicarbonate: Math.round(ions.bicarbonate || 0),
-    description: ""
-  };
+  profiles[key] = buildStoredTargetProfile(name, ions, "", {
+    alkalinity: parseFloat(targetAlk.value) || 0
+  });
   saveCustomTargetProfiles(profiles);
 
   renderProfileButtons();
@@ -334,13 +309,16 @@ sourcePresetSelect.addEventListener("change", () => {
   calculate();
 });
 
-// --- Recalculate on any input change ---
+// --- Recalculate on any input change (Inefficiency 6: debounced volume input) ---
 function onVolumeChanged() {
   saveVolumePreference("calculator", volumeInput.value, volumeUnit.value);
-  calculate();
+  debouncedCalculate();
 }
 volumeInput.addEventListener("input", onVolumeChanged);
-volumeUnit.addEventListener("change", onVolumeChanged);
+volumeUnit.addEventListener("change", () => {
+  saveVolumePreference("calculator", volumeInput.value, volumeUnit.value);
+  calculate();
+});
 
 // --- Core calculation ---
 function calculate() {
@@ -381,16 +359,13 @@ function calculate() {
   // Read source water from dropdown/preset
   const sourceWater = getSourceWater();
 
-  // Convert source bicarbonate to alkalinity as CaCO3 (uses shared HCO3_TO_CACO3)
+  // Convert source bicarbonate to alkalinity as CaCO3
   const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
 
-  // ---------------------------
   // Targets (UI)
-  // ---------------------------
-  // NOTE: In the existing UI, targetAlk is "alkalinity as CaCO3" (mg/L as CaCO3)
-  const targetCaMgL = parseFloat(targetCa.value) || 0; // mg/L Ca
-  const targetMgMgL = parseFloat(targetMg.value) || 0; // mg/L Mg
-  const targetAlkAsCaCO3 = parseFloat(targetAlk.value) || 0; // mg/L as CaCO3
+  const targetCaMgL = parseFloat(targetCa.value) || 0;
+  const targetMgMgL = parseFloat(targetMg.value) || 0;
+  const targetAlkAsCaCO3 = parseFloat(targetAlk.value) || 0;
 
   // Mineral deltas (target - source), floored at 0
   const rawDeltaCa = targetCaMgL - (sourceWater.calcium || 0);
@@ -410,32 +385,23 @@ function calculate() {
 
   if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
-  // ---------------------------
   // Compute salt dosing (per L)
-  // ---------------------------
   const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
   const caFraction = caSource ? (MINERAL_DB[caSource]?.ions?.calcium || 0) : 0;
-  let mgSaltPerL = mgFraction > 0 ? (deltaMg / mgFraction) / 1000 : 0;
-  let caSaltPerL = caFraction > 0 ? (deltaCa / caFraction) / 1000 : 0;
+  const mgSaltPerL = mgFraction > 0 ? (deltaMg / mgFraction) / 1000 : 0;
+  const caSaltPerL = caFraction > 0 ? (deltaCa / caFraction) / 1000 : 0;
 
-  // Buffer dosing:
-  // target alkalinity is in mg/L as CaCO3. Convert to grams of bicarbonate salt using the tool's constants.
   let bufferPerL;
   if (currentBuffer === "potassium-bicarbonate") {
-    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_POTASSIUM_BICARB) / 1000; // grams per liter
+    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_POTASSIUM_BICARB) / 1000;
   } else {
-    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_BAKING_SODA) / 1000; // grams per liter
+    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_BAKING_SODA) / 1000;
   }
 
   // Total grams for the full volume
   const mgSaltTotal = mgSaltPerL * volumeL;
   const bufferTotal = bufferPerL * volumeL;
   const caSaltTotal = caSaltPerL * volumeL;
-
-  // Zero out sub-threshold amounts so ion summary matches displayed grams
-  if (mgSaltTotal < 0.01) mgSaltPerL = 0;
-  if (caSaltTotal < 0.01) caSaltPerL = 0;
-  if (bufferTotal < 0.01) bufferPerL = 0;
 
   // Display grams (only update elements that exist for selected minerals)
   updateResultValues({
@@ -444,9 +410,7 @@ function calculate() {
     [currentBuffer]: bufferTotal
   });
 
-  // ---------------------------
   // Compute resulting ions (mg/L)
-  // ---------------------------
   const mineralGramsPerL = {};
   if (mgSource && mgSaltPerL > 0) mineralGramsPerL[mgSource] = mgSaltPerL;
   if (caSource && caSaltPerL > 0) mineralGramsPerL[caSource] = caSaltPerL;
@@ -460,9 +424,7 @@ function calculate() {
   const finalSO4 = finalIons.sulfate || 0;
   const finalCl = finalIons.chloride || 0;
 
-  // ---------------------------
-  // GH / KH / TDS — use shared calculateMetrics for consistency
-  // ---------------------------
+  // GH / KH / TDS
   const metrics = calculateMetrics(finalIons);
   const GH_asCaCO3 = metrics.gh;
   const KH_asCaCO3 = metrics.kh;
@@ -528,7 +490,7 @@ function updateSummaryMetrics(payload) {
     });
   });
   document.getElementById("calc-so4cl").textContent =
-    advancedMode ? (so4ToCl == null ? "—" : so4ToCl.toFixed(2)) : "—";
+    advancedMode ? (so4ToCl == null ? "\u2014" : so4ToCl.toFixed(2)) : "\u2014";
   setDeltaText(document.getElementById("calc-delta-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
     decimals: 2,
     metricName: "SO4:Cl ratio",
@@ -546,8 +508,10 @@ function updateSummaryMetrics(payload) {
   }
 }
 
+// --- Bug 3: Fixed formatGrams to handle sub-threshold display ---
 function formatGrams(g) {
-  if (!isFinite(g) || g < 0.01) return "0.00 g";
+  if (!isFinite(g) || g <= 0) return "0.00 g";
+  if (g < 0.01) return "<0.01 g";
   return g.toFixed(2) + " g";
 }
 
@@ -567,7 +531,7 @@ renderProfileButtons();
 updateRestoreTargetBar();
 const allTargetPresets = getAllTargetPresets();
 if (!allTargetPresets[currentProfile]) {
-  currentProfile = Object.keys(allTargetPresets).find(k => k !== "custom") || "custom";
+  currentProfile = findFallbackPreset(allTargetPresets);
   saveTargetPresetName(currentProfile);
 }
 activateProfile(currentProfile);

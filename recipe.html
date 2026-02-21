@@ -6,9 +6,7 @@
   <title>Recipe Builder - Coffee Water Calculator</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
-  <script>
-    (function(){var p=localStorage.getItem("cw_theme")||"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);})();
-  </script>
+  <script src="theme-init.js"></script>
 </head>
 <body>
   <header>
@@ -152,7 +150,10 @@
     <p>Use a 0.01g precision scale for accurate measurements.</p>
   </footer>
 
-  <script src="shared.js"></script>
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
   <script>
     // --- Source water dropdown ---
     const sourcePresetSelect = document.getElementById("source-preset");
@@ -205,15 +206,19 @@
     volumeInput.value = savedVolume.value;
     volumeUnit.value = savedVolume.unit;
 
+    var debouncedRecalculate = debounce(recalculate, 120);
     document.querySelectorAll("#mineral-inputs input").forEach(input => {
-      input.addEventListener("input", recalculate);
+      input.addEventListener("input", debouncedRecalculate);
     });
     function onVolumeChanged() {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
-      recalculate();
+      debouncedRecalculate();
     }
     volumeInput.addEventListener("input", onVolumeChanged);
-    volumeUnit.addEventListener("change", onVolumeChanged);
+    volumeUnit.addEventListener("change", () => {
+      saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
+      recalculate();
+    });
 
     function recalculate() {
       // Get volume in liters (mineral inputs are total grams for this volume)
@@ -340,22 +345,11 @@
       }
 
       document.getElementById("recipe-target-name-error").textContent = "";
+      recalculate();
 
       const profiles = loadCustomTargetProfiles();
       const ions = lastTotalIons || {};
-      const metrics = calculateMetrics(ions);
-      profiles[key] = {
-        label: name,
-        calcium: Math.round(ions.calcium || 0),
-        magnesium: Math.round(ions.magnesium || 0),
-        alkalinity: Math.round(metrics.kh || 0),
-        potassium: Math.round(ions.potassium || 0),
-        sodium: Math.round(ions.sodium || 0),
-        sulfate: Math.round(ions.sulfate || 0),
-        chloride: Math.round(ions.chloride || 0),
-        bicarbonate: Math.round(ions.bicarbonate || 0),
-        description: ""
-      };
+      profiles[key] = buildStoredTargetProfile(name, ions, "");
       saveCustomTargetProfiles(profiles);
       recipeTargetNameInput.value = "";
       updateRecipeTargetNameError();

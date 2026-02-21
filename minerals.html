@@ -6,9 +6,7 @@
   <title>Settings - Coffee Water Calculator</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
-  <script>
-    (function(){var p=localStorage.getItem("cw_theme")||"system";var r=p==="system"?(window.matchMedia("(prefers-color-scheme:dark)").matches?"dark":"light"):p;document.documentElement.setAttribute("data-theme",r);})();
-  </script>
+  <script src="theme-init.js"></script>
 </head>
 <body>
   <header>
@@ -190,7 +188,10 @@
     <p>Your selections are saved automatically and shared across all pages.</p>
   </footer>
 
-  <script src="shared.js"></script>
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
   <script>
     const presetsContainer = document.getElementById("source-presets");
     const saveBar = document.getElementById("save-bar");
@@ -306,10 +307,9 @@
       showSaved();
     });
 
-    // --- Theme ---
+    // --- Theme (Bug 6: safe radio selection) ---
     const themeInputs = document.querySelectorAll('input[name="theme"]');
-    const currentTheme = loadThemePreference();
-    document.querySelector(`input[name="theme"][value="${currentTheme}"]`).checked = true;
+    selectRadioByValue("theme", loadThemePreference());
     themeInputs.forEach(radio => {
       radio.addEventListener("change", () => {
         saveThemePreference(radio.value);
@@ -318,8 +318,7 @@
       });
     });
 
-    const currentDisplayMode = loadMineralDisplayMode();
-    document.querySelector(`input[name="mineral-display-mode"][value="${currentDisplayMode}"]`).checked = true;
+    selectRadioByValue("mineral-display-mode", loadMineralDisplayMode());
     mineralDisplayModeInputs.forEach(radio => {
       radio.addEventListener("change", () => {
         saveMineralDisplayMode(radio.value);
@@ -328,9 +327,8 @@
       });
     });
 
-    // --- Alkalinity source ---
-    const currentAlkSource = loadAlkalinitySource();
-    document.querySelector(`input[name="alkalinity-source"][value="${currentAlkSource}"]`).checked = true;
+    // --- Alkalinity source (Bug 6: safe radio selection) ---
+    selectRadioByValue("alkalinity-source", loadAlkalinitySource());
     document.querySelectorAll('input[name="alkalinity-source"]').forEach(radio => {
       radio.addEventListener("change", () => {
         saveAlkalinitySource(radio.value);
@@ -338,9 +336,8 @@
       });
     });
 
-    // --- Calcium source ---
-    const currentCaSource = loadCalciumSource();
-    document.querySelector(`input[name="calcium-source"][value="${currentCaSource}"]`).checked = true;
+    // --- Calcium source (Bug 6: safe radio selection) ---
+    selectRadioByValue("calcium-source", loadCalciumSource());
     document.querySelectorAll('input[name="calcium-source"]').forEach(radio => {
       radio.addEventListener("change", () => {
         saveCalciumSource(radio.value);
@@ -348,9 +345,8 @@
       });
     });
 
-    // --- Magnesium source ---
-    const currentMgSource = loadMagnesiumSource();
-    document.querySelector(`input[name="magnesium-source"][value="${currentMgSource}"]`).checked = true;
+    // --- Magnesium source (Bug 6: safe radio selection) ---
+    selectRadioByValue("magnesium-source", loadMagnesiumSource());
     document.querySelectorAll('input[name="magnesium-source"]').forEach(radio => {
       radio.addEventListener("change", () => {
         saveMagnesiumSource(radio.value);
@@ -358,12 +354,7 @@
       });
     });
 
-    // --- Restore defaults for source water presets ---
-    function updateRestoreSourceBar() {
-      const deleted = loadDeletedPresets();
-      document.getElementById("restore-source-bar").style.display = deleted.length > 0 ? "flex" : "none";
-    }
-
+    // --- Restore defaults for source water presets (uses shared updateRestoreSourceBar) ---
     document.getElementById("restore-source-defaults").addEventListener("click", (e) => {
       e.preventDefault();
       restoreSourcePresetDefaults();
@@ -372,7 +363,7 @@
       showSaved();
     });
 
-    // --- Render all preset buttons dynamically ---
+    // --- Render all preset buttons dynamically (Inefficiency 1: cleaned up) ---
     function renderPresetButtons() {
       presetsContainer.innerHTML = "";
       const allPresets = getAllPresets();
@@ -380,10 +371,8 @@
         const btn = document.createElement("button");
         btn.className = "preset-btn";
         btn.dataset.preset = key;
-        if (key === "custom") {
-          btn.textContent = preset.label;
-        } else {
-          btn.textContent = preset.label;
+        btn.textContent = preset.label;
+        if (key !== "custom") {
           const del = document.createElement("span");
           del.className = "preset-delete";
           del.dataset.delete = key;
