@@ -17,15 +17,89 @@
   <main>
     <!-- Starting water (profile = main, volume = secondary) -->
     <section class="card">
-      <h2>Starting water</h2>
-      <p class="hint">Select your base water. Configure custom values on the <a href="minerals.html">Settings</a> page.</p>
-      <div class="input-group">
-        <label for="source-preset">Source Water</label>
-        <select id="source-preset">
-          <!-- Populated by JS from SOURCE_PRESETS -->
-        </select>
+      <div class="section-header-actions">
+        <h2>Starting water</h2>
+        <button type="button" id="source-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Starting Water</button>
       </div>
-      <div class="source-water-tags" id="source-water-tags"></div>
+      <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
+      <div class="source-presets" id="source-presets">
+        <!-- Populated by JS -->
+      </div>
+      <div class="restore-bar" id="restore-source-bar" style="display:none;">
+        <span>Some built-in presets were deleted.</span>
+        <a href="#" id="restore-source-defaults">Restore defaults</a>
+      </div>
+      <div class="save-bar" id="source-save-bar" style="display:none;">
+        <div class="name-field">
+          <input type="text" id="source-profile-name" placeholder="Name this profile..." maxlength="40">
+          <div class="profile-name-error" id="source-profile-name-error" aria-live="polite"></div>
+        </div>
+        <button id="source-save-btn" class="preset-btn">Save</button>
+      </div>
+      <div class="edit-bar" id="source-edit-bar" style="display:none;">
+        <span class="edit-bar-label" id="source-edit-bar-label">Editing:</span>
+        <button id="source-save-changes-btn" class="preset-btn">Save Changes</button>
+      </div>
+      <div class="source-grid" id="source-input-grid">
+        <div class="input-group">
+          <label for="src-calcium">Calcium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-calcium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="src-magnesium">Magnesium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group">
+          <label for="src-alkalinity">Alkalinity</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-alkalinity" value="0" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L as CaCO3</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="src-potassium">Potassium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-potassium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="src-sodium">Sodium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-sodium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="src-sulfate">Sulfate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-sulfate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="src-chloride">Chloride</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-chloride" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group always-hidden">
+          <label for="src-bicarbonate">Bicarbonate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-bicarbonate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+      </div>
+      <div class="source-water-tags" id="source-readonly-tags" style="display:none;"></div>
+      <div class="save-status" id="source-save-status" aria-live="polite"></div>
       <div class="input-group volume-secondary">
         <label for="volume">Volume</label>
         <div class="input-with-unit">
