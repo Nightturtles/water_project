@@ -2,6 +2,11 @@
 // UI Shared — DOM helpers and shared UI logic
 // ============================================
 
+// --- Non-negative number input reader ---
+function readNonNegative(el) {
+  return Math.max(0, parseFloat(el.value) || 0);
+}
+
 // --- Visible ion fields based on display mode ---
 function getVisibleIonFields() {
   if (isAdvancedMineralDisplayMode()) {
@@ -73,29 +78,29 @@ function initSourcePresetSelect(selectEl) {
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
   tagsEl.innerHTML = "";
-  var allZeros = ION_FIELDS.every(function(ion) {
-    var value = Number(water && water[ion]);
+  const allZeros = ION_FIELDS.every(function(ion) {
+    const value = Number(water && water[ion]);
     return !Number.isFinite(value) || value === 0;
   });
   if (allZeros) {
-    var zeroTag = document.createElement("span");
+    const zeroTag = document.createElement("span");
     zeroTag.className = "base-tag";
     zeroTag.textContent = "All zeros";
     tagsEl.appendChild(zeroTag);
     return;
   }
-  var nonZero = getVisibleIonFields().filter(function(ion) { return (water && water[ion]) > 0; });
-  var metrics = water ? calculateMetrics(water) : { kh: 0 };
-  var alk = metrics.kh;
-  var alkRounded = (alk == null || alk !== alk) ? 0 : Math.round(alk);
+  const nonZero = getVisibleIonFields().filter(function(ion) { return (water && water[ion]) > 0; });
+  const metrics = water ? calculateMetrics(water) : { kh: 0 };
+  const alk = metrics.kh;
+  const alkRounded = (alk == null || alk !== alk) ? 0 : Math.round(alk);
 
   if (nonZero.length === 0) {
-    var tag = document.createElement("span");
+    const tag = document.createElement("span");
     tag.className = "base-tag";
     tag.textContent = "All zeros";
     tagsEl.appendChild(tag);
     if (alkRounded !== 0) {
-      var alkTag = document.createElement("span");
+      const alkTag = document.createElement("span");
       alkTag.className = "base-tag";
       alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO\u2083";
       tagsEl.appendChild(alkTag);
@@ -103,28 +108,28 @@ function renderSourceWaterTags(tagsEl, water) {
     return;
   }
   nonZero.forEach(function(ion) {
-    var tag = document.createElement("span");
+    const tag = document.createElement("span");
     tag.className = "base-tag";
     tag.textContent = ION_LABELS[ion] + ": " + Number(water[ion]) + " mg/L";
     tagsEl.appendChild(tag);
   });
-  var alkTag = document.createElement("span");
+  const alkTag = document.createElement("span");
   alkTag.className = "base-tag";
   alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO\u2083";
   tagsEl.appendChild(alkTag);
 }
 
 // --- Confirmation modal (Bug 2: prevent stacking, Bug 3 fix: focus trap + ARIA) ---
-var confirmCleanup = null;
+let confirmCleanup = null;
 function showConfirm(message, onYes) {
   if (confirmCleanup) confirmCleanup();
 
-  var overlay = document.getElementById("confirm-overlay");
-  var dialog = overlay.querySelector(".confirm-dialog");
-  var msgEl = document.getElementById("confirm-message");
-  var yesBtn = document.getElementById("confirm-yes");
-  var noBtn = document.getElementById("confirm-no");
-  var previousFocus = document.activeElement;
+  const overlay = document.getElementById("confirm-overlay");
+  const dialog = overlay.querySelector(".confirm-dialog");
+  const msgEl = document.getElementById("confirm-message");
+  const yesBtn = document.getElementById("confirm-yes");
+  const noBtn = document.getElementById("confirm-no");
+  const previousFocus = document.activeElement;
 
   // ARIA attributes
   dialog.setAttribute("role", "dialog");
@@ -151,8 +156,8 @@ function showConfirm(message, onYes) {
   function keyHandler(e) {
     if (e.key === "Escape") { noHandler(); return; }
     if (e.key === "Tab") {
-      var focusable = [yesBtn, noBtn];
-      var idx = focusable.indexOf(document.activeElement);
+      const focusable = [yesBtn, noBtn];
+      const idx = focusable.indexOf(document.activeElement);
       if (e.shiftKey) {
         e.preventDefault();
         focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
@@ -283,42 +288,46 @@ function injectNav() {
 
   const nav = document.createElement("nav");
   nav.className = "site-nav";
-  nav.innerHTML = pages.map(p =>
-    `<a href="${p.href}" class="${currentPage === p.href ? "active" : ""}">${p.label}</a>`
-  ).join("");
+  pages.forEach(p => {
+    const a = document.createElement("a");
+    a.href = p.href;
+    a.textContent = p.label;
+    if (currentPage === p.href) a.className = "active";
+    nav.appendChild(a);
+  });
 
   document.body.insertBefore(nav, document.body.firstChild);
 }
 
 // --- Shared restore bar helpers (Inconsistency 7) ---
 function updateRestoreTargetBar() {
-  var el = document.getElementById("restore-target-bar");
+  const el = document.getElementById("restore-target-bar");
   if (!el) return;
   el.style.display = loadDeletedTargetPresets().length > 0 ? "flex" : "none";
 }
 
 function updateRestoreSourceBar() {
-  var el = document.getElementById("restore-source-bar");
+  const el = document.getElementById("restore-source-bar");
   if (!el) return;
   el.style.display = loadDeletedPresets().length > 0 ? "flex" : "none";
 }
 
 function findFallbackPreset(allPresets) {
-  var keys = Object.keys(allPresets);
+  const keys = Object.keys(allPresets);
   return keys.find(function(k) { return k !== "custom"; }) || "custom";
 }
 
 // --- Safe radio selection (Bug 6) ---
 function selectRadioByValue(name, value) {
-  var el = document.querySelector('input[name="' + name + '"][value="' + value + '"]');
-  if (el) el.checked = true;
+  const radios = document.querySelectorAll('input[name="' + CSS.escape(name) + '"]');
+  radios.forEach(function(el) { if (el.value === value) el.checked = true; });
 }
 
 // --- Debounce helper (Inefficiency 6) ---
 function debounce(fn, ms) {
-  var timer;
+  let timer;
   return function() {
-    var context = this, args = arguments;
+    const context = this, args = arguments;
     clearTimeout(timer);
     timer = setTimeout(function() { fn.apply(context, args); }, ms);
   };

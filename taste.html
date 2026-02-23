@@ -333,7 +333,7 @@
     const currentEditBar = document.getElementById("current-edit-bar");
     let activeBrewMethod = loadBrewMethod();
     let isTasteEditMode = false;
-    var debouncedRecalculate = debounce(recalculate, 120);
+    const debouncedRecalculate = debounce(recalculate, 120);
 
     function setCurrentProfileInputs(values) {
       ION_FIELDS.forEach(ion => {
@@ -437,7 +437,7 @@
     function getCurrentProfileIons() {
       const ions = {};
       ION_FIELDS.forEach(ion => {
-        ions[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
+        ions[ion] = readNonNegative(document.getElementById("cur-" + ion));
       });
       return ions;
     }
@@ -661,7 +661,10 @@
       const profiles = loadCustomTargetProfiles();
       const adjusted = getAdjustedProfile();
       profiles[key] = buildStoredTargetProfile(name, adjusted, "", { brewMethod: activeBrewMethod });
-      saveCustomTargetProfiles(profiles);
+      if (!saveCustomTargetProfiles(profiles)) {
+        showTasteSaveStatus("Storage full — could not save.", true);
+        return;
+      }
       renderTastePresets(key);
 
       tasteProfileNameInput.value = "";
@@ -717,7 +720,10 @@
       const profiles = loadCustomTargetProfiles();
       const ions = getCurrentProfileIons();
       profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
-      saveCustomTargetProfiles(profiles);
+      if (!saveCustomTargetProfiles(profiles)) {
+        showCurrentSaveStatus("Storage full — could not save.", true);
+        return;
+      }
       renderTastePresets(key);
 
       currentProfileNameInput.value = "";
@@ -737,7 +743,10 @@
       showConfirm("Are you sure you want to change this profile?", () => {
         const ions = getCurrentProfileIons();
         profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "", { brewMethod: activeBrewMethod });
-        saveCustomTargetProfiles(profiles);
+        if (!saveCustomTargetProfiles(profiles)) {
+          showCurrentSaveStatus("Storage full — could not save.", true);
+          return;
+        }
         renderTastePresets(targetKey);
         showCurrentSaveStatus("Profile updated.", false);
       });

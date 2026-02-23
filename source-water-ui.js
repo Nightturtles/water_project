@@ -12,31 +12,31 @@
  */
 function initSourceWaterSection(options) {
   options = options || {};
-  var onChanged = options.onChanged || function() {};
-  var onActivated = options.onActivated || function() {};
+  const onChanged = options.onChanged || function() {};
+  const onActivated = options.onActivated || function() {};
 
   // --- DOM elements ---
-  var sourcePresetsContainer = document.getElementById("source-presets");
-  var sourceEditModeBtn = document.getElementById("source-edit-mode-btn");
-  var sourceReadonlyTags = document.getElementById("source-readonly-tags");
-  var sourceInputGrid = document.getElementById("source-input-grid");
-  var sourceSaveBar = document.getElementById("source-save-bar");
-  var sourceEditBar = document.getElementById("source-edit-bar");
-  var sourceProfileNameInput = document.getElementById("source-profile-name");
-  var sourceSaveBtn = document.getElementById("source-save-btn");
-  var sourceSaveChangesBtn = document.getElementById("source-save-changes-btn");
-  var sourceSaveStatus = document.getElementById("source-save-status");
-  var sourceAlkalinityInput = document.getElementById("src-alkalinity");
-  var sourceBicarbonateInput = document.getElementById("src-bicarbonate");
+  const sourcePresetsContainer = document.getElementById("source-presets");
+  const sourceEditModeBtn = document.getElementById("source-edit-mode-btn");
+  const sourceReadonlyTags = document.getElementById("source-readonly-tags");
+  const sourceInputGrid = document.getElementById("source-input-grid");
+  const sourceSaveBar = document.getElementById("source-save-bar");
+  const sourceEditBar = document.getElementById("source-edit-bar");
+  const sourceProfileNameInput = document.getElementById("source-profile-name");
+  const sourceSaveBtn = document.getElementById("source-save-btn");
+  const sourceSaveChangesBtn = document.getElementById("source-save-changes-btn");
+  const sourceSaveStatus = document.getElementById("source-save-status");
+  const sourceAlkalinityInput = document.getElementById("src-alkalinity");
+  const sourceBicarbonateInput = document.getElementById("src-bicarbonate");
 
-  var activeSourcePreset = loadSourcePresetName();
-  var isSourceEditMode = false;
-  var showSourceSaveStatus = createStatusHandler(sourceSaveStatus);
+  let activeSourcePreset = loadSourcePresetName();
+  let isSourceEditMode = false;
+  const showSourceSaveStatus = createStatusHandler(sourceSaveStatus);
 
   function getSourceWater() {
-    var water = {};
+    const water = {};
     ION_FIELDS.forEach(function(ion) {
-      water[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      water[ion] = readNonNegative(document.getElementById("src-" + ion));
     });
     return water;
   }
@@ -46,12 +46,12 @@ function initSourceWaterSection(options) {
   }
 
   function updateSourceAlkalinityFromBicarbonate() {
-    var bicarb = parseFloat(sourceBicarbonateInput.value) || 0;
+    const bicarb = parseFloat(sourceBicarbonateInput.value) || 0;
     sourceAlkalinityInput.value = Math.round(bicarb * HCO3_TO_CACO3);
   }
 
   sourceAlkalinityInput.addEventListener("input", function() {
-    var alkAsCaCO3 = parseFloat(sourceAlkalinityInput.value) || 0;
+    const alkAsCaCO3 = parseFloat(sourceAlkalinityInput.value) || 0;
     sourceBicarbonateInput.value = toStableBicarbonateFromAlkalinity(alkAsCaCO3, sourceBicarbonateInput.value);
     sourceBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
   });
@@ -62,8 +62,8 @@ function initSourceWaterSection(options) {
   }
 
   function updateSourceModeUI() {
-    var customSelected = activeSourcePreset === "custom";
-    var showInputs = isSourceEditMode || customSelected;
+    const customSelected = activeSourcePreset === "custom";
+    const showInputs = isSourceEditMode || customSelected;
     if (sourceInputGrid) sourceInputGrid.style.display = showInputs ? "" : "none";
     if (sourceReadonlyTags) sourceReadonlyTags.style.display = showInputs ? "none" : "";
     if (sourceSaveBar) sourceSaveBar.style.display = customSelected ? "flex" : "none";
@@ -77,7 +77,7 @@ function initSourceWaterSection(options) {
 
   function highlightSourcePreset(presetName) {
     sourcePresetsContainer.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
-    var btn = sourcePresetsContainer.querySelector('[data-preset="' + presetName + '"]');
+    const btn = sourcePresetsContainer.querySelector('[data-preset="' + presetName + '"]');
     if (btn) btn.classList.add("active");
     if (sourceSaveBar) sourceSaveBar.style.display = presetName === "custom" ? "flex" : "none";
     if (sourceEditBar) sourceEditBar.style.display = "none";
@@ -85,7 +85,7 @@ function initSourceWaterSection(options) {
   }
 
   function activateSourcePreset(presetName) {
-    var allPresets = getAllPresets();
+    const allPresets = getAllPresets();
     if (!allPresets[presetName]) {
       presetName = Object.keys(allPresets).find(function(k) { return k !== "custom"; }) || "custom";
     }
@@ -96,7 +96,7 @@ function initSourceWaterSection(options) {
       onActivated(presetName);
       return;
     }
-    var values = getSourceWaterByPreset(presetName);
+    const values = getSourceWaterByPreset(presetName);
     ION_FIELDS.forEach(function(ion) {
       document.getElementById("src-" + ion).value = values[ion] || 0;
     });
@@ -108,25 +108,23 @@ function initSourceWaterSection(options) {
 
   function hasUnsavedSourceChanges() {
     if (activeSourcePreset === "custom") return false;
-    var presetValues = getSourceWaterByPreset(activeSourcePreset);
+    const presetValues = getSourceWaterByPreset(activeSourcePreset);
     return ION_FIELDS.some(function(ion) {
-      var current = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      const current = parseFloat(document.getElementById("src-" + ion).value) || 0;
       return current !== (presetValues[ion] || 0);
     });
   }
 
   function renderSourcePresetButtons() {
     sourcePresetsContainer.innerHTML = "";
-    var allPresets = getAllPresets();
-    for (var _i = 0, _entries = Object.entries(allPresets); _i < _entries.length; _i++) {
-      var key = _entries[_i][0];
-      var preset = _entries[_i][1];
-      var btn = document.createElement("button");
+    const allPresets = getAllPresets();
+    for (const [key, preset] of Object.entries(allPresets)) {
+      const btn = document.createElement("button");
       btn.className = "preset-btn";
       btn.dataset.preset = key;
       btn.textContent = preset.label;
       if (isSourceEditMode && key !== "custom") {
-        var del = document.createElement("span");
+        const del = document.createElement("span");
         del.className = "preset-delete";
         del.dataset.delete = key;
         del.innerHTML = "&times;";
@@ -138,8 +136,8 @@ function initSourceWaterSection(options) {
   }
 
   function updateSourceProfileNameError() {
-    var errEl = document.getElementById("source-profile-name-error");
-    var validation = validateProfileName(sourceProfileNameInput.value, {
+    const errEl = document.getElementById("source-profile-name-error");
+    const validation = validateProfileName(sourceProfileNameInput.value, {
       allowEmpty: true,
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
@@ -177,7 +175,7 @@ function initSourceWaterSection(options) {
   });
 
   sourcePresetsContainer.addEventListener("click", function(e) {
-    var deleteKey = e.target.dataset.delete;
+    const deleteKey = e.target.dataset.delete;
     if (deleteKey) {
       if (!isSourceEditMode) return;
       e.stopPropagation();
@@ -189,7 +187,7 @@ function initSourceWaterSection(options) {
         renderSourcePresetButtons();
         updateRestoreSourceBar();
         if (activeSourcePreset === deleteKey) {
-          var fallback = Object.keys(getAllPresets()).find(function(k) { return k !== "custom"; }) || "custom";
+          const fallback = Object.keys(getAllPresets()).find(function(k) { return k !== "custom"; }) || "custom";
           activateSourcePreset(fallback);
         }
         showSourceSaveStatus("Profile deleted.", false);
@@ -197,20 +195,20 @@ function initSourceWaterSection(options) {
       });
       return;
     }
-    var btn = e.target.closest(".preset-btn");
+    const btn = e.target.closest(".preset-btn");
     if (!btn) return;
     activateSourcePreset(btn.dataset.preset);
     onChanged();
   });
 
   ION_FIELDS.forEach(function(ion) {
-    var input = document.getElementById("src-" + ion);
+    const input = document.getElementById("src-" + ion);
     input.addEventListener("input", function() {
       if (activeSourcePreset !== "custom") {
-        var showEdit = isSourceEditMode && hasUnsavedSourceChanges();
+        const showEdit = isSourceEditMode && hasUnsavedSourceChanges();
         sourceEditBar.style.display = showEdit ? "flex" : "none";
         if (showEdit) {
-          var preset = getAllPresets()[activeSourcePreset];
+          const preset = getAllPresets()[activeSourcePreset];
           document.getElementById("source-edit-bar-label").textContent =
             "Editing: " + (preset && preset.label ? preset.label : activeSourcePreset);
         }
@@ -226,7 +224,7 @@ function initSourceWaterSection(options) {
   bindEnterToClick(sourceProfileNameInput, sourceSaveBtn);
 
   sourceSaveBtn.addEventListener("click", function() {
-    var validation = validateProfileName(sourceProfileNameInput.value, {
+    const validation = validateProfileName(sourceProfileNameInput.value, {
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
       existingLabels: getExistingSourceProfileLabels()
@@ -240,20 +238,23 @@ function initSourceWaterSection(options) {
       showSourceSaveStatus(validation.message, true);
       return;
     }
-    var key = validation.key;
-    var name = validation.name;
+    const key = validation.key;
+    const name = validation.name;
     if (!key || !name) {
       updateSourceProfileNameError();
       return;
     }
     document.getElementById("source-profile-name-error").textContent = "";
-    var profiles = loadCustomProfiles();
-    var profile = { label: name };
+    const profiles = loadCustomProfiles();
+    const profile = { label: name };
     ION_FIELDS.forEach(function(ion) {
-      profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      profile[ion] = readNonNegative(document.getElementById("src-" + ion));
     });
     profiles[key] = profile;
-    saveCustomProfiles(profiles);
+    if (!saveCustomProfiles(profiles)) {
+      showSourceSaveStatus("Storage full — could not save.", true);
+      return;
+    }
     renderSourcePresetButtons();
     activateSourcePreset(key);
     sourceProfileNameInput.value = "";
@@ -264,16 +265,19 @@ function initSourceWaterSection(options) {
 
   sourceSaveChangesBtn.addEventListener("click", function() {
     showConfirm("Are you sure you want to change this profile?", function() {
-      var allPresets = getAllPresets();
-      var existing = allPresets[activeSourcePreset];
+      const allPresets = getAllPresets();
+      const existing = allPresets[activeSourcePreset];
       if (!existing) return;
-      var profile = { label: existing.label };
+      const profile = { label: existing.label };
       ION_FIELDS.forEach(function(ion) {
-        profile[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+        profile[ion] = readNonNegative(document.getElementById("src-" + ion));
       });
-      var profiles = loadCustomProfiles();
+      const profiles = loadCustomProfiles();
       profiles[activeSourcePreset] = profile;
-      saveCustomProfiles(profiles);
+      if (!saveCustomProfiles(profiles)) {
+        showSourceSaveStatus("Storage full — could not save.", true);
+        return;
+      }
       sourceEditBar.style.display = "none";
       renderSourcePresetButtons();
       showSourceSaveStatus("Saved!", false);
@@ -282,9 +286,9 @@ function initSourceWaterSection(options) {
   });
 
   // --- Initialize ---
-  var sourceWater = loadSourceWater();
+  const sourceWater = loadSourceWater();
   ION_FIELDS.forEach(function(ion) {
-    var input = document.getElementById("src-" + ion);
+    const input = document.getElementById("src-" + ion);
     if (input) input.value = sourceWater[ion] || 0;
   });
   updateSourceAlkalinityFromBicarbonate();
@@ -292,7 +296,7 @@ function initSourceWaterSection(options) {
   updateSourceModeUI();
   updateRestoreSourceBar();
   updateSourceProfileNameError();
-  var allSourcePresets = getAllPresets();
+  const allSourcePresets = getAllPresets();
   if (!allSourcePresets[activeSourcePreset]) {
     activeSourcePreset = Object.keys(allSourcePresets).find(function(k) { return k !== "custom"; }) || "custom";
   }

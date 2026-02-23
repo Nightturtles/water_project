@@ -232,7 +232,7 @@
   <script>
     // --- Source water section (shared module) ---
     let lastTotalIons = null;
-    var sourceSection = initSourceWaterSection({
+    const sourceSection = initSourceWaterSection({
       onChanged: recalculate
     });
 
@@ -270,7 +270,7 @@
     volumeInput.value = savedVolume.value;
     volumeUnit.value = savedVolume.unit;
 
-    var debouncedRecalculate = debounce(recalculate, 120);
+    const debouncedRecalculate = debounce(recalculate, 120);
     document.querySelectorAll("#mineral-inputs input").forEach(input => {
       input.addEventListener("input", debouncedRecalculate);
     });
@@ -415,7 +415,10 @@
       const profiles = loadCustomTargetProfiles();
       const ions = lastTotalIons || {};
       profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: loadBrewMethod() });
-      saveCustomTargetProfiles(profiles);
+      if (!saveCustomTargetProfiles(profiles)) {
+        showRecipeSaveStatus("Storage full — could not save.", true);
+        return;
+      }
       recipeTargetNameInput.value = "";
       updateRecipeTargetNameError();
       showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);

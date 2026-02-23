@@ -7,7 +7,7 @@ function safeGetItem(key) {
   try { return localStorage.getItem(key); } catch(e) { return null; }
 }
 function safeSetItem(key, value) {
-  try { localStorage.setItem(key, value); } catch(e) {}
+  try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
 }
 function safeRemoveItem(key) {
   try { localStorage.removeItem(key); } catch(e) {}
@@ -97,9 +97,10 @@ function loadCustomProfiles() {
 }
 
 function saveCustomProfiles(profiles) {
-  safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
+  const ok = safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
+  return ok;
 }
 
 function deleteCustomProfile(key) {
@@ -134,9 +135,10 @@ function loadCustomTargetProfiles() {
 }
 
 function saveCustomTargetProfiles(profiles) {
-  safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
+  const ok = safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
+  return ok;
 }
 
 function deleteCustomTargetProfile(key) {

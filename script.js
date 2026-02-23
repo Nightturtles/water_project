@@ -29,7 +29,7 @@ let lastCalculatedIons = null;
 let isTargetEditMode = false;
 
 // --- Debounced calculate (Inefficiency 6) ---
-var debouncedCalculate = debounce(calculate, 120);
+const debouncedCalculate = debounce(calculate, 120);
 
 const savedVolume = loadVolumePreference("calculator", { value: volumeInput.value, unit: volumeUnit.value });
 volumeInput.value = savedVolume.value;
@@ -37,15 +37,15 @@ volumeUnit.value = savedVolume.unit;
 
 // --- Source water section (shared module) ---
 function updateSourceHintLabel(presetName) {
-  var resultsHint = document.getElementById("results-hint");
+  const resultsHint = document.getElementById("results-hint");
   if (resultsHint) {
-    var preset = getAllPresets()[presetName];
-    var name = preset ? preset.label : "your water";
+    const preset = getAllPresets()[presetName];
+    const name = preset ? preset.label : "your water";
     resultsHint.textContent = "Using " + name + " as your base, add these mineral salts:";
   }
 }
 
-var sourceSection = initSourceWaterSection({
+const sourceSection = initSourceWaterSection({
   onChanged: calculate,
   onActivated: updateSourceHintLabel
 });
@@ -124,13 +124,13 @@ function renderTargetReadonlyTags() {
   const ca = parseFloat(targetCa.value) || 0;
   const mg = parseFloat(targetMg.value) || 0;
   const alk = parseFloat(targetAlk.value) || 0;
-  var tags = [
+  const tags = [
     ["Ca", Math.round(ca), "mg/L"],
     ["Mg", Math.round(mg), "mg/L"],
     ["Alkalinity", Math.round(alk), "mg/L as CaCO3"]
   ];
   tags.forEach(function(t) {
-    var span = document.createElement("span");
+    const span = document.createElement("span");
     span.className = "base-tag";
     span.textContent = t[0] + ": " + t[1] + " " + t[2];
     targetReadonlyTags.appendChild(span);
@@ -292,7 +292,10 @@ targetSaveChangesBtn.addEventListener("click", () => {
     }
     const profiles = loadCustomTargetProfiles();
     profiles[currentProfile] = profile;
-    saveCustomTargetProfiles(profiles);
+    if (!saveCustomTargetProfiles(profiles)) {
+      showTargetSaveStatus("Storage full — could not save.", true);
+      return;
+    }
     targetEditBar.style.display = "none";
     renderProfileButtons();
   });
@@ -346,7 +349,10 @@ targetSaveBtn.addEventListener("click", () => {
     alkalinity: parseFloat(targetAlk.value) || 0,
     brewMethod: activeBrewMethod
   });
-  saveCustomTargetProfiles(profiles);
+  if (!saveCustomTargetProfiles(profiles)) {
+    showTargetSaveStatus("Storage full — could not save.", true);
+    return;
+  }
 
   renderProfileButtons();
   activateProfile(key);
@@ -411,9 +417,9 @@ function calculate() {
   const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
 
   // Targets (UI)
-  const targetCaMgL = parseFloat(targetCa.value) || 0;
-  const targetMgMgL = parseFloat(targetMg.value) || 0;
-  const targetAlkAsCaCO3 = parseFloat(targetAlk.value) || 0;
+  const targetCaMgL = readNonNegative(targetCa);
+  const targetMgMgL = readNonNegative(targetMg);
+  const targetAlkAsCaCO3 = readNonNegative(targetAlk);
 
   // Mineral deltas (target - source), floored at 0
   const rawDeltaCa = targetCaMgL - (sourceWater.calcium || 0);
