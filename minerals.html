@@ -17,7 +17,10 @@
   <main>
     <!-- Source Water Profile -->
     <section class="card">
-      <h2>My Starting Water</h2>
+      <div class="section-header-actions">
+        <h2>My Starting Water</h2>
+        <button type="button" id="source-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Starting Water</button>
+      </div>
       <p class="hint">Enter your tap or base water profile. This will be used as the starting point across all pages. If using distilled or RO water, leave everything at 0.</p>
 
       <div class="source-presets" id="source-presets">
@@ -43,38 +46,63 @@
 
       <div class="source-grid">
         <div class="input-group">
-          <label for="src-calcium">Calcium (mg/L)</label>
-          <input type="number" id="src-calcium" value="0" min="0" step="0.1">
+          <label for="src-calcium">Calcium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-calcium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="src-magnesium">Magnesium (mg/L)</label>
-          <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
+          <label for="src-magnesium">Magnesium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-magnesium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="src-alkalinity">Alkalinity (mg/L as CaCO₃)</label>
-          <input type="number" id="src-alkalinity" value="0" min="0" step="1">
+          <label for="src-alkalinity">Alkalinity</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-alkalinity" value="0" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L as CaCO₃</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="src-potassium">Potassium (mg/L)</label>
-          <input type="number" id="src-potassium" value="0" min="0" step="0.1">
+          <label for="src-potassium">Potassium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-potassium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="src-sodium">Sodium (mg/L)</label>
-          <input type="number" id="src-sodium" value="0" min="0" step="0.1">
+          <label for="src-sodium">Sodium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-sodium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="src-sulfate">Sulfate (mg/L)</label>
-          <input type="number" id="src-sulfate" value="0" min="0" step="0.1">
+          <label for="src-sulfate">Sulfate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-sulfate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="src-chloride">Chloride (mg/L)</label>
-          <input type="number" id="src-chloride" value="0" min="0" step="0.1">
+          <label for="src-chloride">Chloride</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-chloride" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group always-hidden">
-          <label for="src-bicarbonate">Bicarbonate (mg/L)</label>
-          <input type="number" id="src-bicarbonate" value="0" min="0" step="0.1">
+          <label for="src-bicarbonate">Bicarbonate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="src-bicarbonate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
       </div>
+      <div class="source-water-tags" id="source-readonly-tags" style="display:none;"></div>
 
       <div class="save-status" id="save-status" aria-live="polite"></div>
     </section>
@@ -194,6 +222,9 @@
   <script src="ui-shared.js"></script>
   <script>
     const presetsContainer = document.getElementById("source-presets");
+    const sourceEditModeBtn = document.getElementById("source-edit-mode-btn");
+    const sourceReadonlyTags = document.getElementById("source-readonly-tags");
+    const sourceGridEl = document.querySelector(".source-grid");
     const saveBar = document.getElementById("save-bar");
     const editBar = document.getElementById("edit-bar");
     const profileNameInput = document.getElementById("profile-name");
@@ -203,6 +234,7 @@
 
 
     let activePreset = loadSourcePresetName();
+    let isSourceEditMode = false;
 
     // --- Populate mineral list ---
     const mineralListEl = document.getElementById("mineral-list");
@@ -372,7 +404,7 @@
         btn.className = "preset-btn";
         btn.dataset.preset = key;
         btn.textContent = preset.label;
-        if (key !== "custom") {
+        if (isSourceEditMode && key !== "custom") {
           const del = document.createElement("span");
           del.className = "preset-delete";
           del.dataset.delete = key;
@@ -382,6 +414,29 @@
         presetsContainer.appendChild(btn);
       }
       highlightPreset(activePreset);
+    }
+
+    function renderSourceReadonlyTags() {
+      if (!sourceReadonlyTags) return;
+      const water = {};
+      ION_FIELDS.forEach(ion => {
+        water[ion] = parseFloat(document.getElementById("src-" + ion).value) || 0;
+      });
+      renderSourceWaterTags(sourceReadonlyTags, water);
+    }
+
+    function updateSourceModeUI() {
+      const customSelected = activePreset === "custom";
+      const showInputs = isSourceEditMode || customSelected;
+      if (sourceGridEl) sourceGridEl.style.display = showInputs ? "" : "none";
+      if (sourceReadonlyTags) sourceReadonlyTags.style.display = showInputs ? "none" : "";
+      saveBar.style.display = customSelected ? "flex" : "none";
+      if (!isSourceEditMode) editBar.style.display = "none";
+      if (sourceEditModeBtn) {
+        sourceEditModeBtn.textContent = isSourceEditMode ? "Done Editing" : "Edit Starting Water";
+        sourceEditModeBtn.setAttribute("aria-pressed", isSourceEditMode ? "true" : "false");
+      }
+      renderSourceReadonlyTags();
     }
 
     const srcAlkalinityInput = document.getElementById("src-alkalinity");
@@ -404,6 +459,7 @@
       if (btn) btn.classList.add("active");
       saveBar.style.display = presetName === "custom" ? "flex" : "none";
       editBar.style.display = "none";
+      updateSourceModeUI();
     }
 
     function activatePreset(presetName) {
@@ -419,6 +475,7 @@
       });
       saveCurrentSource();
       updateAlkalinityFromBicarbonate();
+      renderSourceReadonlyTags();
     }
 
     // --- Detect unsaved changes vs active profile ---
@@ -436,6 +493,7 @@
       // Handle delete
       const deleteKey = e.target.dataset.delete;
       if (deleteKey) {
+        if (!isSourceEditMode) return;
         e.stopPropagation();
         showConfirm("Are you sure you want to delete this profile?", () => {
           if (SOURCE_PRESETS[deleteKey]) {
@@ -464,7 +522,7 @@
       const input = document.getElementById("src-" + ion);
       input.addEventListener("input", () => {
         if (activePreset !== "custom") {
-          const showEdit = hasUnsavedChanges();
+          const showEdit = isSourceEditMode && hasUnsavedChanges();
           editBar.style.display = showEdit ? "flex" : "none";
           if (showEdit) {
             const preset = getAllPresets()[activePreset];
@@ -474,8 +532,17 @@
         }
         saveCurrentSource();
         updateAlkalinityFromBicarbonate();
+        renderSourceReadonlyTags();
       });
     });
+
+    if (sourceEditModeBtn) {
+      sourceEditModeBtn.addEventListener("click", () => {
+        isSourceEditMode = !isSourceEditMode;
+        renderPresetButtons();
+        updateSourceModeUI();
+      });
+    }
 
     // --- Save changes to existing profile (with confirmation) ---
     saveChangesBtn.addEventListener("click", () => {
@@ -571,6 +638,7 @@
 
     renderPresetButtons();
     updateAlkalinityFromBicarbonate();
+    updateSourceModeUI();
     updateRestoreSourceBar();
     updateMineralSourceWarnings();
 

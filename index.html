@@ -40,7 +40,10 @@
 
     <!-- Target Profile -->
     <section class="card">
-      <h2>Target water profile</h2>
+      <div class="section-header-actions">
+        <h2>Target water profile</h2>
+        <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+      </div>
       <div class="brew-method-toggle" id="brew-method-toggle">
         <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
         <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
@@ -68,18 +71,28 @@
       </div>
       <div class="input-row target-inputs">
         <div class="input-group">
-          <label for="target-calcium">Calcium (mg/L)</label>
-          <input type="number" id="target-calcium" value="51" min="0" step="1">
+          <label for="target-calcium">Calcium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-calcium" value="51" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="target-magnesium">Magnesium (mg/L)</label>
-          <input type="number" id="target-magnesium" value="17" min="0" step="1">
+          <label for="target-magnesium">Magnesium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-magnesium" value="17" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="target-alkalinity">Alkalinity (mg/L as CaCO3)</label>
-          <input type="number" id="target-alkalinity" value="40" min="0" step="1">
+          <label for="target-alkalinity">Alkalinity</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-alkalinity" value="40" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L as CaCO3</span>
+          </div>
         </div>
       </div>
+      <div class="source-water-tags" id="target-readonly-tags" style="display:none;"></div>
       <p class="profile-description" id="profile-description">
         SCA recommended range for brewing water. Balanced body and clarity.
       </p>

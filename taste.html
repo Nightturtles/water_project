@@ -17,7 +17,10 @@
   <main>
     <!-- Current Water Profile -->
     <section class="card">
-      <h2>Current Water Profile</h2>
+      <div class="section-header-actions">
+        <h2>Current Water Profile</h2>
+        <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+      </div>
       <p class="hint">Enter the water recipe you're currently using, or start from a preset.</p>
       <div class="brew-method-toggle" id="brew-method-toggle">
         <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
@@ -34,38 +37,63 @@
 
       <div class="source-grid">
         <div class="input-group">
-          <label for="cur-calcium">Calcium (mg/L)</label>
-          <input type="number" id="cur-calcium" value="51" min="0" step="1">
+          <label for="cur-calcium">Calcium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-calcium" value="51" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="cur-magnesium">Magnesium (mg/L)</label>
-          <input type="number" id="cur-magnesium" value="17" min="0" step="1">
+          <label for="cur-magnesium">Magnesium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-magnesium" value="17" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group">
-          <label for="cur-alkalinity">Alkalinity (mg/L as CaCO₃)</label>
-          <input type="number" id="cur-alkalinity" value="0" min="0" step="1">
+          <label for="cur-alkalinity">Alkalinity</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-alkalinity" value="0" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L as CaCO₃</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="cur-potassium">Potassium (mg/L)</label>
-          <input type="number" id="cur-potassium" value="0" min="0" step="1">
+          <label for="cur-potassium">Potassium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-potassium" value="0" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="cur-sodium">Sodium (mg/L)</label>
-          <input type="number" id="cur-sodium" value="10" min="0" step="1">
+          <label for="cur-sodium">Sodium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-sodium" value="10" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="cur-sulfate">Sulfate (mg/L)</label>
-          <input type="number" id="cur-sulfate" value="17" min="0" step="1">
+          <label for="cur-sulfate">Sulfate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-sulfate" value="17" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group advanced-only">
-          <label for="cur-chloride">Chloride (mg/L)</label>
-          <input type="number" id="cur-chloride" value="35" min="0" step="1">
+          <label for="cur-chloride">Chloride</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-chloride" value="35" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
         <div class="input-group always-hidden">
-          <label for="cur-bicarbonate">Bicarbonate (mg/L)</label>
-          <input type="number" id="cur-bicarbonate" value="49" min="0" step="1">
+          <label for="cur-bicarbonate">Bicarbonate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="cur-bicarbonate" value="49" min="0" step="1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
         </div>
       </div>
+      <div class="source-water-tags" id="taste-readonly-tags" style="display:none;"></div>
 
       <div class="save-bar" id="current-save-bar">
         <div class="name-field">
@@ -298,8 +326,13 @@
 
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
+    const tasteEditModeBtn = document.getElementById("taste-edit-mode-btn");
+    const tasteReadonlyTags = document.getElementById("taste-readonly-tags");
     const brewMethodToggle = document.getElementById("brew-method-toggle");
+    const currentSaveBar = document.getElementById("current-save-bar");
+    const currentEditBar = document.getElementById("current-edit-bar");
     let activeBrewMethod = loadBrewMethod();
+    let isTasteEditMode = false;
     var debouncedRecalculate = debounce(recalculate, 120);
 
     function setCurrentProfileInputs(values) {
@@ -322,6 +355,7 @@
       if (presetKey === "custom") {
         if (reset) resetSliders();
         updateCurrentEditBar();
+        updateTasteModeUI();
         recalculate();
         return;
       }
@@ -342,9 +376,11 @@
         recalculate();
       }
       updateCurrentEditBar();
+      updateTasteModeUI();
     }
 
-    function renderTastePresets(activePreset = null) {
+    function renderTastePresets(activePreset = null, options = {}) {
+      const resetSliders = options.resetSliders !== false;
       tastePresetsContainer.innerHTML = "";
       const allPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
       for (const [key, profile] of Object.entries(allPresets)) {
@@ -359,7 +395,7 @@
           }
         }
         btn.textContent = profile.label;
-        if (key !== "custom") {
+        if (isTasteEditMode && key !== "custom") {
           const del = document.createElement("span");
           del.className = "preset-delete";
           del.dataset.delete = key;
@@ -373,7 +409,28 @@
       const initialKey = (activePreset && keys.includes(activePreset))
         ? activePreset
         : (keys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
-      if (initialKey) activateTastePreset(initialKey, { resetSliders: true });
+      if (initialKey) activateTastePreset(initialKey, { resetSliders });
+    }
+
+    function renderTasteReadonlyTags() {
+      if (!tasteReadonlyTags) return;
+      const ions = getCurrentProfileIons();
+      renderSourceWaterTags(tasteReadonlyTags, ions);
+    }
+
+    function updateTasteModeUI() {
+      const sourceGrid = document.querySelector(".source-grid");
+      const customSelected = !!tastePresetsContainer.querySelector('[data-preset="custom"].active');
+      const showInputs = isTasteEditMode || customSelected;
+      if (sourceGrid) sourceGrid.style.display = showInputs ? "" : "none";
+      if (tasteReadonlyTags) tasteReadonlyTags.style.display = showInputs ? "none" : "";
+      if (currentSaveBar) currentSaveBar.style.display = customSelected ? "flex" : "none";
+      if (!isTasteEditMode && currentEditBar) currentEditBar.style.display = "none";
+      if (tasteEditModeBtn) {
+        tasteEditModeBtn.textContent = isTasteEditMode ? "Done Editing" : "Edit Profiles";
+        tasteEditModeBtn.setAttribute("aria-pressed", isTasteEditMode ? "true" : "false");
+      }
+      renderTasteReadonlyTags();
     }
 
     // --- Get current water profile ions from the Current Water Profile grid ---
@@ -387,8 +444,12 @@
 
     // --- Show/hide edit bar when a custom profile is selected ---
     function updateCurrentEditBar() {
-      const editBar = document.getElementById("current-edit-bar");
+      const editBar = currentEditBar;
       const labelEl = document.getElementById("current-edit-bar-label");
+      if (!isTasteEditMode) {
+        editBar.style.display = "none";
+        return;
+      }
       const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
       const targetKey = activeBtn && activeBtn.dataset.targetKey;
       if (targetKey) {
@@ -405,6 +466,7 @@
     tastePresetsContainer.addEventListener("click", (e) => {
       const deleteKey = e.target.dataset.delete;
       if (deleteKey) {
+        if (!isTasteEditMode) return;
         e.stopPropagation();
         showConfirm("Are you sure you want to delete this profile?", () => {
           if (TARGET_PRESETS[deleteKey]) {
@@ -430,6 +492,7 @@
         tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
         tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
         updateCurrentEditBar();
+        updateTasteModeUI();
         debouncedRecalculate();
       });
     });
@@ -732,7 +795,17 @@
         btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
       });
     }
+    if (tasteEditModeBtn) {
+      tasteEditModeBtn.addEventListener("click", () => {
+        isTasteEditMode = !isTasteEditMode;
+        const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+        const activeKey = activeBtn ? activeBtn.dataset.preset : null;
+        renderTastePresets(activeKey, { resetSliders: false });
+        updateTasteModeUI();
+      });
+    }
     renderTastePresets();
+    updateTasteModeUI();
     updateRestoreTargetBar();
 
     // --- Refresh on bfcache restore ---

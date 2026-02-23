@@ -20,12 +20,15 @@ const profileButtonsContainer = document.getElementById("profile-buttons");
 const brewMethodToggle = document.getElementById("brew-method-toggle");
 const targetSaveBar = document.getElementById("target-save-bar");
 const targetEditBar = document.getElementById("target-edit-bar");
+const targetEditModeBtn = document.getElementById("target-edit-mode-btn");
+const targetReadonlyTags = document.getElementById("target-readonly-tags");
 const targetProfileNameInput = document.getElementById("target-profile-name");
 const targetSaveBtn = document.getElementById("target-save-btn");
 const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
 const targetSaveStatus = document.getElementById("target-save-status");
 
 let lastCalculatedIons = null;
+let isTargetEditMode = false;
 
 // --- Debounced calculate (Inefficiency 6) ---
 var debouncedCalculate = debounce(calculate, 120);
@@ -108,7 +111,7 @@ function renderProfileButtons() {
     btn.className = "profile-btn";
     btn.dataset.profile = key;
     btn.textContent = profile.label;
-    if (key !== "custom") {
+    if (isTargetEditMode && key !== "custom") {
       const del = document.createElement("span");
       del.className = "preset-delete";
       del.dataset.delete = key;
@@ -118,6 +121,36 @@ function renderProfileButtons() {
     profileButtonsContainer.appendChild(btn);
   }
   highlightProfile(currentProfile);
+}
+
+function renderTargetReadonlyTags() {
+  if (!targetReadonlyTags) return;
+  const ca = parseFloat(targetCa.value) || 0;
+  const mg = parseFloat(targetMg.value) || 0;
+  const alk = parseFloat(targetAlk.value) || 0;
+  targetReadonlyTags.innerHTML = [
+    `<span class="base-tag">Ca: ${Math.round(ca)} mg/L</span>`,
+    `<span class="base-tag">Mg: ${Math.round(mg)} mg/L</span>`,
+    `<span class="base-tag">Alkalinity: ${Math.round(alk)} mg/L as CaCO3</span>`
+  ].join("");
+}
+
+function updateTargetModeUI() {
+  const targetInputs = document.querySelector(".target-inputs");
+  const customSelected = currentProfile === "custom";
+  const showInputs = isTargetEditMode || customSelected;
+  if (targetInputs) targetInputs.style.display = showInputs ? "" : "none";
+  if (targetReadonlyTags) {
+    targetReadonlyTags.style.display = showInputs ? "none" : "";
+  }
+  if (!showInputs) {
+    targetEditBar.style.display = "none";
+  }
+  if (targetEditModeBtn) {
+    targetEditModeBtn.textContent = isTargetEditMode ? "Done Editing" : "Edit Profiles";
+    targetEditModeBtn.setAttribute("aria-pressed", isTargetEditMode ? "true" : "false");
+  }
+  renderTargetReadonlyTags();
 }
 
 // --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
@@ -134,6 +167,7 @@ function highlightProfile(profileName) {
   if (btn) btn.classList.add("active");
   targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
   targetEditBar.style.display = "none";
+  updateTargetModeUI();
 }
 
 function activateProfile(profileName) {
@@ -174,6 +208,7 @@ function hasUnsavedTargetChanges() {
 profileButtonsContainer.addEventListener("click", (e) => {
   const deleteKey = e.target.dataset.delete;
   if (deleteKey) {
+    if (!isTargetEditMode) return;
     e.stopPropagation();
     showConfirm("Are you sure you want to delete this profile?", () => {
       if (TARGET_PRESETS[deleteKey]) {
@@ -198,6 +233,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
 // --- Target input handling (Inefficiency 6: debounced) ---
 [targetCa, targetMg, targetAlk].forEach(input => {
   input.addEventListener("input", () => {
+    renderTargetReadonlyTags();
     if (currentProfile !== "custom") {
       if (NON_EDITABLE_TARGET_KEYS.includes(currentProfile)) {
         currentProfile = "custom";
@@ -217,6 +253,14 @@ profileButtonsContainer.addEventListener("click", (e) => {
     debouncedCalculate();
   });
 });
+
+if (targetEditModeBtn) {
+  targetEditModeBtn.addEventListener("click", () => {
+    isTargetEditMode = !isTargetEditMode;
+    renderProfileButtons();
+    updateTargetModeUI();
+  });
+}
 
 // --- Save changes to existing target profile (Bug 1: alkalinity drift fix) ---
 targetSaveChangesBtn.addEventListener("click", () => {
@@ -565,6 +609,7 @@ if (brewMethodToggle) {
 }
 renderResultItems();
 renderProfileButtons();
+updateTargetModeUI();
 updateRestoreTargetBar();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
 if (!allTargetPresets[currentProfile]) {
