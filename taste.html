@@ -383,13 +383,13 @@
       const resetSliders = options.resetSliders !== false;
       tastePresetsContainer.innerHTML = "";
       const allPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
+      const customProfiles = loadCustomTargetProfiles();
       for (const [key, profile] of Object.entries(allPresets)) {
         const btn = document.createElement("button");
         btn.className = "taste-preset-btn";
         btn.dataset.preset = key;
         // Inconsistency 2: show edit bar for overridden built-in presets too
         if (key !== "custom") {
-          var customProfiles = loadCustomTargetProfiles();
           if (!TARGET_PRESETS[key] || customProfiles[key]) {
             btn.dataset.targetKey = key;
           }

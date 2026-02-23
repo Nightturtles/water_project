@@ -90,10 +90,10 @@ function slugify(name) {
 let customProfilesCache = null;
 
 function loadCustomProfiles() {
-  if (customProfilesCache) return customProfilesCache;
+  if (customProfilesCache) return Object.assign({}, customProfilesCache);
   const parsed = safeParse(safeGetItem("cw_custom_profiles"), {});
   customProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  return customProfilesCache;
+  return Object.assign({}, customProfilesCache);
 }
 
 function saveCustomProfiles(profiles) {
@@ -127,10 +127,10 @@ function addDeletedPreset(key) {
 let customTargetProfilesCache = null;
 
 function loadCustomTargetProfiles() {
-  if (customTargetProfilesCache) return customTargetProfilesCache;
+  if (customTargetProfilesCache) return Object.assign({}, customTargetProfilesCache);
   const parsed = safeParse(safeGetItem("cw_custom_target_profiles"), {});
   customTargetProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
-  return customTargetProfilesCache;
+  return Object.assign({}, customTargetProfilesCache);
 }
 
 function saveCustomTargetProfiles(profiles) {

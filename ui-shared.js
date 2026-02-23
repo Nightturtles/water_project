@@ -114,18 +114,26 @@ function renderSourceWaterTags(tagsEl, water) {
   tagsEl.appendChild(alkTag);
 }
 
-// --- Confirmation modal (Bug 2: prevent listener stacking) ---
+// --- Confirmation modal (Bug 2: prevent stacking, Bug 3 fix: focus trap + ARIA) ---
 var confirmCleanup = null;
 function showConfirm(message, onYes) {
   if (confirmCleanup) confirmCleanup();
 
-  const overlay = document.getElementById("confirm-overlay");
-  const msgEl = document.getElementById("confirm-message");
-  const yesBtn = document.getElementById("confirm-yes");
-  const noBtn = document.getElementById("confirm-no");
+  var overlay = document.getElementById("confirm-overlay");
+  var dialog = overlay.querySelector(".confirm-dialog");
+  var msgEl = document.getElementById("confirm-message");
+  var yesBtn = document.getElementById("confirm-yes");
+  var noBtn = document.getElementById("confirm-no");
+  var previousFocus = document.activeElement;
+
+  // ARIA attributes
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  dialog.setAttribute("aria-labelledby", "confirm-message");
 
   msgEl.textContent = message;
   overlay.style.display = "flex";
+  yesBtn.focus();
 
   function close() {
     overlay.style.display = "none";
@@ -134,10 +142,26 @@ function showConfirm(message, onYes) {
     document.removeEventListener("keydown", keyHandler);
     overlay.removeEventListener("click", overlayClickHandler);
     confirmCleanup = null;
+    if (previousFocus && previousFocus.focus) {
+      previousFocus.focus();
+    }
   }
   function yesHandler() { close(); onYes(); }
   function noHandler() { close(); }
-  function keyHandler(e) { if (e.key === "Escape") noHandler(); }
+  function keyHandler(e) {
+    if (e.key === "Escape") { noHandler(); return; }
+    if (e.key === "Tab") {
+      var focusable = [yesBtn, noBtn];
+      var idx = focusable.indexOf(document.activeElement);
+      if (e.shiftKey) {
+        e.preventDefault();
+        focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
+      } else {
+        e.preventDefault();
+        focusable[(idx + 1) % focusable.length].focus();
+      }
+    }
+  }
   function overlayClickHandler(e) { if (e.target === overlay) noHandler(); }
 
   confirmCleanup = close;

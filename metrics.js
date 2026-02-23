@@ -51,9 +51,9 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   const metrics = calculateMetrics(normalized);
   const ratio = calculateSo4ClRatio(normalized);
   const includeAdvanced = options.includeAdvanced !== false;
-  const alkalinitySource = getEffectiveAlkalinitySource();
-  const calciumSource = getEffectiveCalciumSource();
-  const magnesiumSource = getEffectiveMagnesiumSource();
+  const alkalinitySource = options.alkalinitySource !== undefined ? options.alkalinitySource : getEffectiveAlkalinitySource();
+  const calciumSource = options.calciumSource !== undefined ? options.calciumSource : getEffectiveCalciumSource();
+  const magnesiumSource = options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
   const findings = [];
 
   function addFinding(severity, message) {
