@@ -184,6 +184,64 @@ main > .card:last-child {
   min-width: 0;
 }
 
+/* Collapsible card (e.g. Available Minerals on Settings); hint stays visible when collapsed */
+.card-collapsible-summary {
+  display: block;
+  width: 100%;
+  text-align: left;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  padding: 0 2rem 0 0;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  outline: none;
+  border: none;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+}
+
+.card-collapsible-summary::after {
+  content: "";
+  position: absolute;
+  right: 0.25rem;
+  top: 50%;
+  transform: translateY(-50%) rotate(-135deg);
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--gray-500);
+  border-bottom: 2px solid var(--gray-500);
+  transition: transform 0.2s ease;
+}
+
+.card-collapsible-summary[aria-expanded="true"]::after {
+  transform: translateY(-50%) rotate(45deg);
+}
+
+.card-collapsible-summary:hover,
+.card-collapsible-summary:focus-visible {
+  color: var(--blue-600);
+}
+
+.card-collapsible-summary:focus-visible::after {
+  border-color: var(--blue-600);
+}
+
+.card-collapsible-title {
+  display: block;
+}
+
+.card-collapsible-content {
+  margin-top: 0.75rem;
+  padding-top: 0;
+}
+
+.card-collapsible-summary[aria-expanded="false"] ~ .card-collapsible-content {
+  display: none;
+}
+
 .hint {
   font-size: 0.85rem;
   color: var(--gray-500);
@@ -325,6 +383,20 @@ select:focus {
   flex-shrink: 0;
 }
 
+.brew-method-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.brew-method-label {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--gray-700);
+}
+
 .brew-method-toggle {
   display: flex;
   gap: 0.5rem;
@@ -333,6 +405,18 @@ select:focus {
   border: 1px solid var(--gray-200);
   border-radius: 10px;
   background: var(--gray-100);
+}
+
+.brew-method-row .brew-method-toggle {
+  margin: 0;
+}
+
+.brew-method-card .hint {
+  margin-bottom: 0.5rem;
+}
+
+.brew-method-card .brew-method-toggle {
+  margin-bottom: 0;
 }
 
 .brew-method-toggle .brew-method-btn {

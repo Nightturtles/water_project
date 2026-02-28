@@ -24,12 +24,16 @@
   </header>
 
   <main>
-    <!-- Available Minerals -->
-    <section class="card">
-      <h2>Available Minerals</h2>
+    <!-- Available Minerals (collapsible; hint always visible) -->
+    <section class="card card-collapsible">
+      <button type="button" class="card-collapsible-summary" id="available-minerals-summary" aria-expanded="true" aria-controls="available-minerals-content">
+        <span class="card-collapsible-title">Available Minerals</span>
+      </button>
       <p class="hint">Check the minerals you have. These will appear on the other pages.</p>
-      <div class="mineral-list" id="mineral-list">
-        <!-- Populated by JS -->
+      <div class="card-collapsible-content" id="available-minerals-content">
+        <div class="mineral-list" id="mineral-list">
+          <!-- Populated by JS -->
+        </div>
       </div>
     </section>
 
@@ -150,6 +154,16 @@
 
     function showSaved() {
       showSaveStatus("Saved!", false);
+    }
+
+    // --- Collapsible: toggle Available Minerals list (hint stays visible) ---
+    const availableMineralsSummary = document.getElementById("available-minerals-summary");
+    const availableMineralsContent = document.getElementById("available-minerals-content");
+    if (availableMineralsSummary && availableMineralsContent) {
+      availableMineralsSummary.addEventListener("click", () => {
+        const expanded = availableMineralsSummary.getAttribute("aria-expanded") !== "true";
+        availableMineralsSummary.setAttribute("aria-expanded", expanded);
+      });
     }
 
     // --- Refresh on bfcache restore ---

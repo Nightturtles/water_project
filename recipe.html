@@ -121,6 +121,16 @@
       </div>
     </section>
 
+    <!-- Brew Method -->
+    <section class="card brew-method-card">
+      <h2>Brew Method</h2>
+      <p class="hint">Select your intended brew method for this recipe.</p>
+      <div class="brew-method-toggle" id="recipe-brew-method-toggle">
+        <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
+        <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
+      </div>
+    </section>
+
     <!-- Mineral Additions -->
     <section class="card">
       <h2>Add Minerals</h2>
@@ -240,6 +250,30 @@
   <script src="ui-shared.js"></script>
   <script src="source-water-ui.js"></script>
   <script>
+    // --- Brew method (persisted across pages; default Filter) ---
+    let activeBrewMethod = loadBrewMethod();
+    const recipeBrewMethodToggle = document.getElementById("recipe-brew-method-toggle");
+    function setRecipeBrewMethod(method) {
+      activeBrewMethod = method === "espresso" ? "espresso" : "filter";
+      saveBrewMethod(activeBrewMethod);
+      if (recipeBrewMethodToggle) {
+        recipeBrewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+        });
+      }
+    }
+    if (recipeBrewMethodToggle) {
+      recipeBrewMethodToggle.addEventListener("click", (e) => {
+        const btn = e.target.closest(".brew-method-btn");
+        if (!btn) return;
+        if (btn.dataset.brewMethod === activeBrewMethod) return;
+        setRecipeBrewMethod(btn.dataset.brewMethod);
+      });
+      recipeBrewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+      });
+    }
+
     // --- Source water section (shared module) ---
     let lastTotalIons = null;
     const sourceSection = initSourceWaterSection({
@@ -427,7 +461,7 @@
 
       const profiles = loadCustomTargetProfiles();
       const ions = lastTotalIons || {};
-      profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: loadBrewMethod() });
+      profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
       if (!saveCustomTargetProfiles(profiles)) {
         showRecipeSaveStatus("Storage full — could not save.", true);
         return;
