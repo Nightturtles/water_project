@@ -33,55 +33,6 @@
       </div>
     </section>
 
-    <!-- Alkalinity Source -->
-    <section class="card">
-      <h2>Alkalinity source</h2>
-      <p class="hint">Select which mineral to use for alkalinity. You must have at least one of these checked above.</p>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="alkalinity-source" value="baking-soda">
-          <span>Baking Soda (NaHCO₃)</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="alkalinity-source" value="potassium-bicarbonate">
-          <span>Potassium Bicarbonate (KHCO₃)</span>
-        </label>
-      </div>
-      <p class="hint error" id="alkalinity-warning" style="display:none; margin-top:0.75rem;">No alkalinity source is selected above. The Calculator needs at least Baking Soda or Potassium Bicarbonate checked.</p>
-    </section>
-
-    <section class="card">
-      <h2>Calcium source</h2>
-      <p class="hint">Select which mineral to use for calcium. You must have at least one of these checked above.</p>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="calcium-source" value="calcium-chloride">
-          <span>Calcium Chloride (CaCl₂·2H₂O)</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="calcium-source" value="gypsum">
-          <span>Gypsum (CaSO₄·2H₂O)</span>
-        </label>
-      </div>
-      <p class="hint error" id="calcium-warning" style="display:none; margin-top:0.75rem;">No calcium source is selected above. The Calculator needs at least Calcium Chloride or Gypsum checked.</p>
-    </section>
-
-    <section class="card">
-      <h2>Magnesium source</h2>
-      <p class="hint">Select which mineral to use for magnesium. You must have at least one of these checked above.</p>
-      <div class="radio-group">
-        <label class="radio-option">
-          <input type="radio" name="magnesium-source" value="epsom-salt">
-          <span>Epsom Salt (MgSO₄·7H₂O)</span>
-        </label>
-        <label class="radio-option">
-          <input type="radio" name="magnesium-source" value="magnesium-chloride">
-          <span>Magnesium Chloride (MgCl₂·6H₂O)</span>
-        </label>
-      </div>
-      <p class="hint error" id="magnesium-warning" style="display:none; margin-top:0.75rem;">No magnesium source is selected above. The Calculator needs at least Epsom Salt or Magnesium Chloride checked.</p>
-    </section>
-
     <section class="card">
       <h2>Mineral Display Mode</h2>
       <p class="hint">Choose how much detail to show across the app.</p>
@@ -164,75 +115,6 @@
     }
 
     // --- Handle mineral-source availability and auto-selection ---
-    function updateMineralSourceWarnings() {
-      const checked = mineralListEl.querySelectorAll("input:checked");
-      const ids = Array.from(checked).map(cb => cb.value);
-
-      const hasBs = ids.includes("baking-soda");
-      const hasPb = ids.includes("potassium-bicarbonate");
-      const hasAlk = hasBs || hasPb;
-      document.getElementById("alkalinity-warning").style.display = hasAlk ? "none" : "block";
-
-      const bsRadio = document.querySelector('input[name="alkalinity-source"][value="baking-soda"]');
-      const pbRadio = document.querySelector('input[name="alkalinity-source"][value="potassium-bicarbonate"]');
-      bsRadio.disabled = !hasBs;
-      pbRadio.disabled = !hasPb;
-      bsRadio.closest(".radio-option").style.opacity = hasBs ? "1" : "0.4";
-      pbRadio.closest(".radio-option").style.opacity = hasPb ? "1" : "0.4";
-      if (hasAlk) {
-        const effectiveAlk = getEffectiveAlkalinitySource();
-        if (effectiveAlk === "potassium-bicarbonate") {
-          pbRadio.checked = true;
-          saveAlkalinitySource("potassium-bicarbonate");
-        } else {
-          bsRadio.checked = true;
-          saveAlkalinitySource("baking-soda");
-        }
-      }
-
-      const hasCaCl2 = ids.includes("calcium-chloride");
-      const hasGypsum = ids.includes("gypsum");
-      const hasCa = hasCaCl2 || hasGypsum;
-      document.getElementById("calcium-warning").style.display = hasCa ? "none" : "block";
-      const cacl2Radio = document.querySelector('input[name="calcium-source"][value="calcium-chloride"]');
-      const gypsumRadio = document.querySelector('input[name="calcium-source"][value="gypsum"]');
-      cacl2Radio.disabled = !hasCaCl2;
-      gypsumRadio.disabled = !hasGypsum;
-      cacl2Radio.closest(".radio-option").style.opacity = hasCaCl2 ? "1" : "0.4";
-      gypsumRadio.closest(".radio-option").style.opacity = hasGypsum ? "1" : "0.4";
-      if (hasCa) {
-        const effectiveCa = getEffectiveCalciumSource();
-        if (effectiveCa === "gypsum") {
-          gypsumRadio.checked = true;
-          saveCalciumSource("gypsum");
-        } else {
-          cacl2Radio.checked = true;
-          saveCalciumSource("calcium-chloride");
-        }
-      }
-
-      const hasEpsom = ids.includes("epsom-salt");
-      const hasMgCl2 = ids.includes("magnesium-chloride");
-      const hasMg = hasEpsom || hasMgCl2;
-      document.getElementById("magnesium-warning").style.display = hasMg ? "none" : "block";
-      const epsomRadio = document.querySelector('input[name="magnesium-source"][value="epsom-salt"]');
-      const mgcl2Radio = document.querySelector('input[name="magnesium-source"][value="magnesium-chloride"]');
-      epsomRadio.disabled = !hasEpsom;
-      mgcl2Radio.disabled = !hasMgCl2;
-      epsomRadio.closest(".radio-option").style.opacity = hasEpsom ? "1" : "0.4";
-      mgcl2Radio.closest(".radio-option").style.opacity = hasMgCl2 ? "1" : "0.4";
-      if (hasMg) {
-        const effectiveMg = getEffectiveMagnesiumSource();
-        if (effectiveMg === "magnesium-chloride") {
-          mgcl2Radio.checked = true;
-          saveMagnesiumSource("magnesium-chloride");
-        } else {
-          epsomRadio.checked = true;
-          saveMagnesiumSource("epsom-salt");
-        }
-      }
-    }
-
     mineralListEl.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
       const item = e.target.closest(".mineral-item");
@@ -241,7 +123,6 @@
       const checked = mineralListEl.querySelectorAll("input:checked");
       const ids = Array.from(checked).map(cb => cb.value);
       saveSelectedMinerals(ids);
-      updateMineralSourceWarnings();
       showSaved();
     });
 
@@ -265,40 +146,11 @@
       });
     });
 
-    // --- Alkalinity source (Bug 6: safe radio selection) ---
-    selectRadioByValue("alkalinity-source", loadAlkalinitySource());
-    document.querySelectorAll('input[name="alkalinity-source"]').forEach(radio => {
-      radio.addEventListener("change", () => {
-        saveAlkalinitySource(radio.value);
-        showSaved();
-      });
-    });
-
-    // --- Calcium source (Bug 6: safe radio selection) ---
-    selectRadioByValue("calcium-source", loadCalciumSource());
-    document.querySelectorAll('input[name="calcium-source"]').forEach(radio => {
-      radio.addEventListener("change", () => {
-        saveCalciumSource(radio.value);
-        showSaved();
-      });
-    });
-
-    // --- Magnesium source (Bug 6: safe radio selection) ---
-    selectRadioByValue("magnesium-source", loadMagnesiumSource());
-    document.querySelectorAll('input[name="magnesium-source"]').forEach(radio => {
-      radio.addEventListener("change", () => {
-        saveMagnesiumSource(radio.value);
-        showSaved();
-      });
-    });
     const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
 
     function showSaved() {
       showSaveStatus("Saved!", false);
     }
-
-    // --- Initialize ---
-    updateMineralSourceWarnings();
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

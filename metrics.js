@@ -42,6 +42,68 @@ function calculateSo4ClRatio(ions) {
   return sulfate / chloride;
 }
 
+// --- Best Ca/Mg source combination (minimize side-effect ion deltas; tie-break: Epsom, CaCl2) ---
+function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
+  const caSources = getEffectiveCalciumSources();
+  const mgSources = getEffectiveMagnesiumSources();
+  const needCa = deltaCa > 0 && caSources.length > 0;
+  const needMg = deltaMg > 0 && mgSources.length > 0;
+
+  const caCandidates = needCa ? caSources : (caSources.length ? caSources : []);
+  const mgCandidates = needMg ? mgSources : (mgSources.length ? mgSources : []);
+
+  if (caCandidates.length === 0 && mgCandidates.length === 0) {
+    return {
+      caSource: caSources.length === 1 ? caSources[0] : (caSources.length === 2 ? "calcium-chloride" : null),
+      mgSource: mgSources.length === 1 ? mgSources[0] : (mgSources.length === 2 ? "epsom-salt" : null)
+    };
+  }
+
+  const targetCl = targetProfile && Number.isFinite(Number(targetProfile.chloride)) ? Number(targetProfile.chloride) : null;
+  const targetSO4 = targetProfile && Number.isFinite(Number(targetProfile.sulfate)) ? Number(targetProfile.sulfate) : null;
+  const srcCl = (sourceWater && Number(sourceWater.chloride)) || 0;
+  const srcSO4 = (sourceWater && Number(sourceWater.sulfate)) || 0;
+
+  let best = { caSource: null, mgSource: null, error: Infinity, tieBreak: Infinity };
+
+  const caOpts = caCandidates.length ? caCandidates : [null];
+  const mgOpts = mgCandidates.length ? mgCandidates : [null];
+
+  for (const caSrc of caOpts) {
+    for (const mgSrc of mgOpts) {
+      const mineralGrams = {};
+      if (caSrc && deltaCa > 0) {
+        const caFrac = MINERAL_DB[caSrc] && MINERAL_DB[caSrc].ions ? MINERAL_DB[caSrc].ions.calcium : 0;
+        if (caFrac > 0) mineralGrams[caSrc] = (deltaCa / 1000) / caFrac;
+      }
+      if (mgSrc && deltaMg > 0) {
+        const mgFrac = MINERAL_DB[mgSrc] && MINERAL_DB[mgSrc].ions ? MINERAL_DB[mgSrc].ions.magnesium : 0;
+        if (mgFrac > 0) mineralGrams[mgSrc] = (deltaMg / 1000) / mgFrac;
+      }
+      const added = calculateIonPPMs(mineralGrams);
+      const result = {};
+      ION_FIELDS.forEach((ion) => {
+        result[ion] = (sourceWater && sourceWater[ion] ? Number(sourceWater[ion]) : 0) + (added[ion] || 0);
+      });
+      let error;
+      if (targetCl != null && targetSO4 != null) {
+        error = Math.pow((result.chloride || 0) - targetCl, 2) + Math.pow((result.sulfate || 0) - targetSO4, 2);
+      } else {
+        error = Math.pow((result.chloride || 0) - srcCl, 2) + Math.pow((result.sulfate || 0) - srcSO4, 2);
+      }
+      const tieBreak = (caSrc === "gypsum" ? 1 : 0) + (mgSrc === "magnesium-chloride" ? 2 : 0);
+      if (error < best.error || (error === best.error && tieBreak < best.tieBreak)) {
+        best = { caSource: caSrc, mgSource: mgSrc, error, tieBreak };
+      }
+    }
+  }
+
+  return {
+    caSource: best.caSource,
+    mgSource: best.mgSource
+  };
+}
+
 // --- Water profile range evaluation ---
 function evaluateWaterProfileRanges(ions, options = {}) {
   const normalized = {};
@@ -51,7 +113,9 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   const metrics = calculateMetrics(normalized);
   const ratio = calculateSo4ClRatio(normalized);
   const includeAdvanced = options.includeAdvanced !== false;
-  const alkalinitySource = options.alkalinitySource !== undefined ? options.alkalinitySource : getEffectiveAlkalinitySource();
+  const alkalinitySources = options.alkalinitySources !== undefined
+    ? options.alkalinitySources
+    : (() => { const s = getEffectiveAlkalinitySource(); return s ? [s] : []; })();
   const calciumSource = options.calciumSource !== undefined ? options.calciumSource : getEffectiveCalciumSource();
   const magnesiumSource = options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
   const findings = [];
@@ -96,9 +160,10 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   addBandFinding("Calcium", normalized.calcium, "mg/L", 17, 85, 10, 110, 5, 150);
   addBandFinding("Magnesium", normalized.magnesium, "mg/L", 5, 30, 2, 45, 1, 70);
 
-  const sodiumPreferredMax = alkalinitySource === "baking-soda" ? 25 : 10;
-  const sodiumWarnMax = alkalinitySource === "baking-soda" ? 40 : 30;
-  const sodiumDangerMax = alkalinitySource === "baking-soda" ? 60 : 45;
+  const useBakingSodaSodiumLimits = Array.isArray(alkalinitySources) && alkalinitySources.includes("baking-soda");
+  const sodiumPreferredMax = useBakingSodaSodiumLimits ? 25 : 10;
+  const sodiumWarnMax = useBakingSodaSodiumLimits ? 40 : 30;
+  const sodiumDangerMax = useBakingSodaSodiumLimits ? 60 : 45;
   addBandFinding("Sodium", normalized.sodium, "mg/L", null, sodiumPreferredMax, null, sodiumWarnMax, null, sodiumDangerMax);
 
   if (includeAdvanced) {

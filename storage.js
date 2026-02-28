@@ -268,6 +268,7 @@ function loadSelectedMinerals() {
 }
 
 // --- Mineral source preferences ---
+// Legacy: no longer used by UI; kept for backward compatibility when loading old data.
 function saveAlkalinitySource(mineralId) {
   safeSetItem("cw_alkalinity_source", mineralId);
 }
@@ -278,6 +279,18 @@ function loadAlkalinitySource() {
   return "baking-soda";
 }
 
+/** Returns an array of enabled alkalinity source mineral ids (baking-soda and/or potassium-bicarbonate). */
+function getEffectiveAlkalinitySources() {
+  const selected = loadSelectedMinerals();
+  const hasBakingSoda = selected.includes("baking-soda");
+  const hasPotBicarb = selected.includes("potassium-bicarbonate");
+  if (!hasBakingSoda && !hasPotBicarb) return [];
+  if (hasBakingSoda && hasPotBicarb) return ["baking-soda", "potassium-bicarbonate"];
+  if (hasBakingSoda) return ["baking-soda"];
+  return ["potassium-bicarbonate"];
+}
+
+// Legacy: no longer used by UI; kept for backward compatibility.
 function saveCalciumSource(mineralId) {
   safeSetItem("cw_calcium_source", mineralId);
 }
@@ -298,35 +311,47 @@ function loadMagnesiumSource() {
   return "epsom-salt";
 }
 
+/** Returns an array of enabled calcium source mineral ids (calcium-chloride and/or gypsum). */
+function getEffectiveCalciumSources() {
+  const selected = loadSelectedMinerals();
+  const out = [];
+  if (selected.includes("calcium-chloride")) out.push("calcium-chloride");
+  if (selected.includes("gypsum")) out.push("gypsum");
+  return out;
+}
+
+/** Returns an array of enabled magnesium source mineral ids (epsom-salt and/or magnesium-chloride). */
+function getEffectiveMagnesiumSources() {
+  const selected = loadSelectedMinerals();
+  const out = [];
+  if (selected.includes("epsom-salt")) out.push("epsom-salt");
+  if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
+  return out;
+}
+
 // --- Effective mineral sources ---
+/** Returns a single alkalinity source when only one is enabled; when both are enabled returns "potassium-bicarbonate" as fallback; when none, null. Use getEffectiveAlkalinitySources() when both can contribute. */
 function getEffectiveAlkalinitySource() {
-  const selected = loadSelectedMinerals();
-  const hasBakingSoda = selected.includes("baking-soda");
-  const hasPotBicarb = selected.includes("potassium-bicarbonate");
-  if (!hasBakingSoda && !hasPotBicarb) return null;
-  if (hasBakingSoda && !hasPotBicarb) return "baking-soda";
-  if (!hasBakingSoda && hasPotBicarb) return "potassium-bicarbonate";
-  return loadAlkalinitySource();
+  const sources = getEffectiveAlkalinitySources();
+  if (sources.length === 0) return null;
+  if (sources.length === 1) return sources[0];
+  return "potassium-bicarbonate";
 }
 
+/** Returns a single calcium source when only one is enabled; when both enabled returns "calcium-chloride" (tie-breaker); when none, null. */
 function getEffectiveCalciumSource() {
-  const selected = loadSelectedMinerals();
-  const hasCaCl2 = selected.includes("calcium-chloride");
-  const hasGypsum = selected.includes("gypsum");
-  if (!hasCaCl2 && !hasGypsum) return null;
-  if (hasCaCl2 && !hasGypsum) return "calcium-chloride";
-  if (!hasCaCl2 && hasGypsum) return "gypsum";
-  return loadCalciumSource();
+  const sources = getEffectiveCalciumSources();
+  if (sources.length === 0) return null;
+  if (sources.length === 1) return sources[0];
+  return "calcium-chloride";
 }
 
+/** Returns a single magnesium source when only one is enabled; when both enabled returns "epsom-salt" (tie-breaker); when none, null. */
 function getEffectiveMagnesiumSource() {
-  const selected = loadSelectedMinerals();
-  const hasEpsom = selected.includes("epsom-salt");
-  const hasMgCl2 = selected.includes("magnesium-chloride");
-  if (!hasEpsom && !hasMgCl2) return null;
-  if (hasEpsom && !hasMgCl2) return "epsom-salt";
-  if (!hasEpsom && hasMgCl2) return "magnesium-chloride";
-  return loadMagnesiumSource();
+  const sources = getEffectiveMagnesiumSources();
+  if (sources.length === 0) return null;
+  if (sources.length === 1) return sources[0];
+  return "epsom-salt";
 }
 
 // --- Target presets aggregation + cache ---

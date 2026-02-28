@@ -53,8 +53,8 @@ const sourceSection = initSourceWaterSection({
 // --- Result items: show only minerals selected in Settings ---
 
 function renderResultItems() {
-  const alkalinitySource = getEffectiveAlkalinitySource();
-  if (alkalinitySource === null) {
+  const alkalinitySources = getEffectiveAlkalinitySources();
+  if (alkalinitySources.length === 0) {
     resultsContainer.innerHTML = '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
     lastCalculatedIons = null;
     updateSummaryMetrics({});
@@ -62,14 +62,14 @@ function renderResultItems() {
   }
 
   const selected = loadSelectedMinerals();
-  const bufferMineralId = alkalinitySource;
-  const mgSource = getEffectiveMagnesiumSource();
-  const caSource = getEffectiveCalciumSource();
+  const mgSourceIds = getEffectiveMagnesiumSources();
+  const caSourceIds = getEffectiveCalciumSources();
 
+  const bufferIds = alkalinitySources;
   const toShow = [
-    { id: mgSource, order: 0 },
-    { id: bufferMineralId, order: 1 },
-    { id: caSource, order: 2 }
+    ...mgSourceIds.map((id, i) => ({ id, order: 0 + i * 0.1 })),
+    ...bufferIds.map((id, i) => ({ id, order: 1 + i * 0.1 })),
+    ...caSourceIds.map((id, i) => ({ id, order: 2 + i * 0.1 }))
   ].filter(item => item.id && selected.includes(item.id))
    .sort((a, b) => a.order - b.order);
 
@@ -374,6 +374,35 @@ volumeUnit.addEventListener("change", () => {
   calculate();
 });
 
+// --- Split alkalinity delta between baking soda and potassium bicarbonate when both are enabled ---
+function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile) {
+  const result = {};
+  if (alkalinitySources.length === 0) return result;
+  if (alkalinitySources.length === 1) {
+    result[alkalinitySources[0]] = deltaAlkAsCaCO3;
+    return result;
+  }
+  // Both baking-soda and potassium-bicarbonate enabled: split by target sodium vs potassium if present
+  const targetNa = targetProfile && Number.isFinite(Number(targetProfile.sodium)) ? Number(targetProfile.sodium) : null;
+  const targetK = targetProfile && Number.isFinite(Number(targetProfile.potassium)) ? Number(targetProfile.potassium) : null;
+  const sourceNa = sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
+  const sourceK = sourceWater && Number.isFinite(Number(sourceWater.potassium)) ? Number(sourceWater.potassium) : 0;
+  const deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
+  const deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
+
+  if (deltaNa > 0 && deltaK > 0) {
+    const total = deltaNa + deltaK;
+    result["baking-soda"] = (deltaAlkAsCaCO3 * deltaNa) / total;
+    result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * deltaK) / total;
+  } else if (deltaNa > 0) {
+    result["baking-soda"] = deltaAlkAsCaCO3;
+  } else {
+    // deltaK > 0 or both absent: fall back to potassium bicarbonate per AC
+    result["potassium-bicarbonate"] = deltaAlkAsCaCO3;
+  }
+  return result;
+}
+
 // --- Core calculation ---
 function calculate() {
   const warningsEl = document.getElementById("result-warnings");
@@ -386,29 +415,27 @@ function calculate() {
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
-    const alk = getEffectiveAlkalinitySource();
-    const mgSource = getEffectiveMagnesiumSource();
-    const caSource = getEffectiveCalciumSource();
+    const alkSources = getEffectiveAlkalinitySources();
+    const mgSourceIds = getEffectiveMagnesiumSources();
+    const caSourceIds = getEffectiveCalciumSources();
     if (warningsEl) warningsEl.textContent = "";
     lastCalculatedIons = null;
-    updateResultValues({
-      ...(mgSource ? { [mgSource]: 0 } : {}),
-      ...(caSource ? { [caSource]: 0 } : {}),
-      ...(alk ? { [alk]: 0 } : {})
-    });
+    const zeroValues = {};
+    alkSources.forEach(id => { zeroValues[id] = 0; });
+    mgSourceIds.forEach(id => { zeroValues[id] = 0; });
+    caSourceIds.forEach(id => { zeroValues[id] = 0; });
+    updateResultValues(zeroValues);
     updateSummaryMetrics({});
     return;
   }
 
-  const currentBuffer = getEffectiveAlkalinitySource();
-  if (currentBuffer === null) {
+  const alkalinitySources = getEffectiveAlkalinitySources();
+  if (alkalinitySources.length === 0) {
     if (warningsEl) warningsEl.textContent = "";
     lastCalculatedIons = null;
     updateSummaryMetrics({});
     return;
   }
-  const mgSource = getEffectiveMagnesiumSource();
-  const caSource = getEffectiveCalciumSource();
 
   // Read source water from shared module
   const sourceWater = sourceSection.getSourceWater();
@@ -429,46 +456,61 @@ function calculate() {
   const deltaMg = Math.max(0, rawDeltaMg);
   const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
 
-  // Warn when source exceeds target
+  const targetProfile = getTargetProfileByKey(currentProfile);
+  const { caSource, mgSource } = pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg);
+
+  // Warn when source exceeds target or when we need a source but none is enabled
+  const hasMgSource = getEffectiveMagnesiumSources().length > 0;
+  const hasCaSource = getEffectiveCalciumSources().length > 0;
   const warnings = [];
   if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
   if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
   if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
-  if (!mgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
-  if (!caSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
+  if (!hasMgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
+  if (!hasCaSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
 
   if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
-  // Compute salt dosing (per L)
+  // Compute salt dosing (per L) using auto-selected sources
   const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
   const caFraction = caSource ? (MINERAL_DB[caSource]?.ions?.calcium || 0) : 0;
   const mgSaltPerL = mgFraction > 0 ? (deltaMg / mgFraction) / 1000 : 0;
   const caSaltPerL = caFraction > 0 ? (deltaCa / caFraction) / 1000 : 0;
 
-  let bufferPerL;
-  if (currentBuffer === "potassium-bicarbonate") {
-    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_POTASSIUM_BICARB) / 1000;
-  } else {
-    bufferPerL = (deltaAlkAsCaCO3 * ALK_TO_BAKING_SODA) / 1000;
+  // Alkalinity: one source or split between baking soda and potassium bicarbonate
+  const alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile);
+  const bufferGramsPerL = {};
+  if (alkAllocation["baking-soda"] != null && alkAllocation["baking-soda"] > 0) {
+    bufferGramsPerL["baking-soda"] = (alkAllocation["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
+  }
+  if (alkAllocation["potassium-bicarbonate"] != null && alkAllocation["potassium-bicarbonate"] > 0) {
+    bufferGramsPerL["potassium-bicarbonate"] = (alkAllocation["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
   }
 
-  // Total grams for the full volume
+  // Total grams for the full volume; show 0 for unchosen Ca/Mg sources so UI indicates which were chosen
   const mgSaltTotal = mgSaltPerL * volumeL;
-  const bufferTotal = bufferPerL * volumeL;
   const caSaltTotal = caSaltPerL * volumeL;
+  const bufferTotals = {};
+  for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
+    bufferTotals[id] = gPerL * volumeL;
+  }
+  const resultValues = { ...bufferTotals };
+  if (mgSource) resultValues[mgSource] = mgSaltTotal;
+  if (caSource) resultValues[caSource] = caSaltTotal;
+  const mgSourceIds = getEffectiveMagnesiumSources();
+  const caSourceIds = getEffectiveCalciumSources();
+  mgSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
+  caSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
 
-  // Display grams (only update elements that exist for selected minerals)
-  updateResultValues({
-    ...(mgSource ? { [mgSource]: mgSaltTotal } : {}),
-    ...(caSource ? { [caSource]: caSaltTotal } : {}),
-    [currentBuffer]: bufferTotal
-  });
+  updateResultValues(resultValues);
 
   // Compute resulting ions (mg/L)
   const mineralGramsPerL = {};
   if (mgSource && mgSaltPerL > 0) mineralGramsPerL[mgSource] = mgSaltPerL;
   if (caSource && caSaltPerL > 0) mineralGramsPerL[caSource] = caSaltPerL;
-  if (currentBuffer && bufferPerL > 0) mineralGramsPerL[currentBuffer] = bufferPerL;
+  for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
+    if (gPerL > 0) mineralGramsPerL[id] = gPerL;
+  }
   const addedIons = calculateIonPPMs(mineralGramsPerL);
   const finalIons = {};
   ION_FIELDS.forEach((ion) => {
@@ -490,6 +532,7 @@ function calculate() {
   const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
   const baselineRatio = calculateSo4ClRatio(sourceWater || {});
 
+  const alkalinitySourcesForRange = getEffectiveAlkalinitySources();
   updateSummaryMetrics({
     gh: GH_asCaCO3,
     kh: KH_asCaCO3,
@@ -500,7 +543,7 @@ function calculate() {
     so4ToCl,
     baselineRatio,
     advancedMode,
-    alkalinitySource: currentBuffer,
+    alkalinitySources: alkalinitySourcesForRange,
     calciumSource: caSource,
     magnesiumSource: mgSource
   });
@@ -556,15 +599,16 @@ function updateSummaryMetrics(payload) {
 
   const rangeWarningsEl = document.getElementById("calc-range-warnings");
   if (rangeWarningsEl) {
-    const alkalinitySource = payload.alkalinitySource;
+    const alkalinitySources = payload.alkalinitySources;
     const calciumSource = payload.calciumSource;
     const magnesiumSource = payload.magnesiumSource;
+    const hasAlkalinitySource = alkalinitySources && alkalinitySources.length > 0;
     if (!Number.isFinite(gh) || !Number.isFinite(kh) || !Number.isFinite(tds)) {
       renderRangeGuidance(rangeWarningsEl, []);
-    } else if (alkalinitySource != null && calciumSource != null && magnesiumSource != null) {
+    } else if (hasAlkalinitySource && calciumSource != null && magnesiumSource != null) {
       const evaluation = evaluateWaterProfileRanges(ions, {
         includeAdvanced: advancedMode,
-        alkalinitySource,
+        alkalinitySources,
         calciumSource,
         magnesiumSource
       });
@@ -605,6 +649,13 @@ function updateResultValues(valuesByMineral) {
     if (item) {
       const valEl = item.querySelector(".result-value");
       if (valEl) valEl.textContent = formatGrams(grams);
+      const nameEl = item.querySelector(".result-name");
+      const name = nameEl ? nameEl.textContent : MINERAL_DB[mineralId]?.name || mineralId;
+      if (grams > 0) {
+        item.setAttribute("aria-label", name + ", " + formatGrams(grams) + ", auto-selected for this recipe");
+      } else {
+        item.removeAttribute("aria-label");
+      }
     }
   }
 }

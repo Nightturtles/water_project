@@ -370,7 +370,10 @@
 
       const rangeWarningsEl = document.getElementById("recipe-range-warnings");
       if (rangeWarningsEl) {
-        const evaluation = evaluateWaterProfileRanges(totalIons, { includeAdvanced: isAdvancedMineralDisplayMode() });
+        const evaluation = evaluateWaterProfileRanges(totalIons, {
+          includeAdvanced: isAdvancedMineralDisplayMode(),
+          alkalinitySources: getEffectiveAlkalinitySources()
+        });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
       }
     }
