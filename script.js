@@ -499,7 +499,10 @@ function calculate() {
     baselineMetrics,
     so4ToCl,
     baselineRatio,
-    advancedMode
+    advancedMode,
+    alkalinitySource: currentBuffer,
+    calciumSource: caSource,
+    magnesiumSource: mgSource
   });
 }
 
@@ -553,16 +556,21 @@ function updateSummaryMetrics(payload) {
 
   const rangeWarningsEl = document.getElementById("calc-range-warnings");
   if (rangeWarningsEl) {
+    const alkalinitySource = payload.alkalinitySource;
+    const calciumSource = payload.calciumSource;
+    const magnesiumSource = payload.magnesiumSource;
     if (!Number.isFinite(gh) || !Number.isFinite(kh) || !Number.isFinite(tds)) {
       renderRangeGuidance(rangeWarningsEl, []);
-    } else {
+    } else if (alkalinitySource != null && calciumSource != null && magnesiumSource != null) {
       const evaluation = evaluateWaterProfileRanges(ions, {
         includeAdvanced: advancedMode,
-        alkalinitySource: currentBuffer,
-        calciumSource: caSource,
-        magnesiumSource: mgSource
+        alkalinitySource,
+        calciumSource,
+        magnesiumSource
       });
       renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+    } else {
+      renderRangeGuidance(rangeWarningsEl, []);
     }
   }
 }
@@ -623,6 +631,71 @@ if (!allTargetPresets[currentProfile]) {
   saveTargetPresetName(currentProfile);
 }
 activateProfile(currentProfile);
+
+// --- Welcome modal (one-time, Calculator page only) ---
+(function initWelcomeModal() {
+  const overlay = document.getElementById("welcome-modal-overlay");
+  const closeBtn = document.getElementById("welcome-modal-close");
+  const okBtn = document.getElementById("welcome-modal-ok");
+  if (!overlay || !closeBtn || !okBtn) return;
+
+  let keyHandler = null;
+
+  function getFocusReturnTarget() {
+    const main = document.querySelector("main");
+    if (!main) return null;
+    const focusable = main.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])");
+    return focusable || null;
+  }
+
+  function closeWelcomeModal() {
+    overlay.style.display = "none";
+    document.body.classList.remove("welcome-modal-open");
+    saveCalculatorWelcomeDismissed();
+    if (keyHandler) {
+      document.removeEventListener("keydown", keyHandler);
+      keyHandler = null;
+    }
+    closeBtn.removeEventListener("click", closeWelcomeModal);
+    okBtn.removeEventListener("click", closeWelcomeModal);
+    const returnTarget = getFocusReturnTarget();
+    if (returnTarget && returnTarget.focus) {
+      returnTarget.focus();
+    }
+  }
+
+  function showWelcomeModal() {
+    if (loadCalculatorWelcomeDismissed()) return;
+    const focusReturnTarget = getFocusReturnTarget();
+    overlay.style.display = "flex";
+    document.body.classList.add("welcome-modal-open");
+    closeBtn.focus();
+
+    keyHandler = function(e) {
+      if (e.key === "Escape") {
+        closeWelcomeModal();
+        return;
+      }
+      if (e.key === "Tab") {
+        const focusable = [closeBtn, okBtn];
+        const idx = focusable.indexOf(document.activeElement);
+        if (idx === -1) return;
+        e.preventDefault();
+        if (e.shiftKey) {
+          focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
+        } else {
+          focusable[(idx + 1) % focusable.length].focus();
+        }
+      }
+    };
+
+    document.addEventListener("keydown", keyHandler);
+    closeBtn.addEventListener("click", closeWelcomeModal);
+    okBtn.addEventListener("click", closeWelcomeModal);
+  }
+
+  showWelcomeModal();
+})();
 
 // --- Refresh on bfcache restore ---
 window.addEventListener("pageshow", (e) => {

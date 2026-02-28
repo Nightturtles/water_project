@@ -475,6 +475,17 @@ function saveThemePreference(mode) {
   safeSetItem(THEME_KEY, mode);
 }
 
+// --- Calculator welcome modal (one-time) ---
+const WELCOME_MODAL_DISMISSED_KEY = "cw_calculator_welcome_dismissed";
+
+function loadCalculatorWelcomeDismissed() {
+  return safeGetItem(WELCOME_MODAL_DISMISSED_KEY) === "true";
+}
+
+function saveCalculatorWelcomeDismissed() {
+  safeSetItem(WELCOME_MODAL_DISMISSED_KEY, "true");
+}
+
 // --- Bicarbonate <-> Alkalinity conversion ---
 function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
   const alkRounded = Math.round(parseFloat(alkAsCaCO3) || 0);

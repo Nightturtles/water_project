@@ -745,6 +745,83 @@ select:focus {
   justify-content: center;
 }
 
+/* Welcome modal (Calculator page, one-time) */
+body.welcome-modal-open {
+  overflow: hidden;
+}
+
+.welcome-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.welcome-dialog {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  padding-top: 2.5rem;
+  max-width: 400px;
+  width: 90%;
+}
+
+.welcome-modal-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
+  color: var(--gray-600);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--radius);
+}
+
+.welcome-modal-close:hover {
+  color: var(--gray-800);
+  background: var(--gray-100);
+}
+
+.welcome-dialog h2,
+.welcome-modal-title {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+
+.welcome-modal-body {
+  margin-bottom: 1.25rem;
+  font-size: 0.95rem;
+}
+
+.welcome-modal-body p {
+  margin: 0 0 0.75rem;
+}
+
+.welcome-modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.welcome-modal-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.welcome-modal-actions .preset-btn {
+  min-height: 44px;
+  min-width: 88px;
+}
+
 /* Save status toast */
 .save-status {
   text-align: center;
