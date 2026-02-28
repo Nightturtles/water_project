@@ -126,13 +126,13 @@ const TARGET_PRESETS = {
     label: "Light and Bright",
     calcium: 24,
     magnesium: 0,
-    alkalinity: 30,
+    alkalinity: 25,
     description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees."
   },
   "lotus-simple-sweet": {
     label: "Simple and Sweet",
-    calcium: 21.6,
-    magnesium: 8.7,
+    calcium: 24,
+    magnesium: 7.3,
     alkalinity: 40,
     description: "Lotus balanced profile with added sweetness and approachable acidity."
   },
@@ -140,7 +140,7 @@ const TARGET_PRESETS = {
     label: "Light and Bright (espresso)",
     calcium: 0,
     magnesium: 4.9,
-    alkalinity: 50,
+    alkalinity: 45,
     description: "Lotus espresso profile for clarity-forward shots with restrained hardness."
   },
   "lotus-simple-sweet-espresso": {
