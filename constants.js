@@ -159,6 +159,7 @@ const TARGET_PRESETS = {
   },
   "eaf-holy-water": {
     label: "Holy Water",
+    brewMethod: "filter",
     calcium: 0,
     magnesium: 15,
     alkalinity: 23,
@@ -171,6 +172,7 @@ const TARGET_PRESETS = {
   },
   "eaf-melbourne-water": {
     label: "Melbourne Water",
+    brewMethods: ["filter", "espresso"],
     calcium: 0,
     magnesium: 12,
     alkalinity: 20.2,
@@ -195,6 +197,7 @@ const TARGET_PRESETS = {
   },
   "eaf-bh-water-4": {
     label: "Barista Hustle Water #4",
+    brewMethods: ["filter", "espresso"],
     calcium: 0,
     magnesium: 19.4,
     alkalinity: 40,

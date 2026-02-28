@@ -400,6 +400,19 @@ function inferTargetProfileBrewMethod(key, profile) {
   return "filter";
 }
 
+function targetProfileSupportsBrewMethod(key, profile, method) {
+  const brewMethod = normalizeBrewMethod(method);
+  if (profile && Array.isArray(profile.brewMethods)) {
+    const allowed = new Set(
+      profile.brewMethods
+        .map((value) => normalizeBrewMethod(value))
+        .filter((value, index, array) => array.indexOf(value) === index)
+    );
+    return allowed.has(brewMethod);
+  }
+  return inferTargetProfileBrewMethod(key, profile) === brewMethod;
+}
+
 function getTargetPresetsForBrewMethod(method) {
   const brewMethod = normalizeBrewMethod(method);
   const allPresets = getAllTargetPresets();
@@ -409,7 +422,7 @@ function getTargetPresetsForBrewMethod(method) {
       filtered[key] = profile;
       continue;
     }
-    if (inferTargetProfileBrewMethod(key, profile) === brewMethod) {
+    if (targetProfileSupportsBrewMethod(key, profile, brewMethod)) {
       filtered[key] = profile;
     }
   }
