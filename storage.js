@@ -231,7 +231,7 @@ function getLotusDropMl() {
   const selectedMl = LOTUS_DROPPER_ML && Number(LOTUS_DROPPER_ML[selectedType]);
   if (Number.isFinite(selectedMl) && selectedMl > 0) return selectedMl;
   const fallbackMl = LOTUS_DROPPER_ML && Number(LOTUS_DROPPER_ML.round);
-  return Number.isFinite(fallbackMl) && fallbackMl > 0 ? fallbackMl : 0.0716;
+  return Number.isFinite(fallbackMl) && fallbackMl > 0 ? fallbackMl : 0.067;
 }
 
 // --- Source presets aggregation + cache ---
