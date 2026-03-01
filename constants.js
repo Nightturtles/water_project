@@ -313,8 +313,12 @@ const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_
 
 // --- Brand name concentrates (fixed strength, equivalent grams of mineral per mL) ---
 // Lotus Coffee Water Drops: concentrations derived from official round-tip dropper recipes
-// (round drop ≈ 0.0716 mL, straight drop ≈ 0.0385 mL). gramsPerMl = equivalent grams of
+// (round drop ≈ 0.0716 mL, straight drop ≈ 0.0386 mL). gramsPerMl = equivalent grams of
 // the mapped MINERAL_DB salt per mL of concentrate (for dosing math).
+const LOTUS_DROPPER_ML = {
+  round: 0.0716,
+  straight: 0.0386
+};
 const BRAND_CONCENTRATES = {
   "brand:lotus:calcium": {
     name: "Calcium",

@@ -343,7 +343,7 @@
         mineralInputsEl.appendChild(div);
       });
 
-      // Concentrates (DIY + brand) — mL
+      // Concentrates (DIY + brand) — mL (Lotus supports mL or drops)
       selectedConcentrates.forEach((concentrateId) => {
         const mineralId = getConcentrateMineralId(concentrateId);
         if (!mineralId) return;
@@ -352,17 +352,28 @@
           : MINERAL_DB[mineralId];
         if (!mineral) return;
 
+        const isLotusConcentrate = concentrateId.startsWith("brand:lotus:");
         const savedVal = recipeConcentrateInputs[concentrateId];
-        const value = savedVal == null ? "0" : String(savedVal);
+        let savedMl = "0";
+        let savedDrops = "0";
+        if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
+          savedMl = savedVal.ml == null ? "0" : String(savedVal.ml);
+          savedDrops = savedVal.drops == null ? "0" : String(savedVal.drops);
+        } else if (savedVal != null) {
+          savedMl = String(savedVal);
+        }
 
         const div = document.createElement("div");
         div.className = "mineral-input-row";
+        div.dataset.concentrateId = concentrateId;
+        div.dataset.mineralId = mineralId;
+        if (isLotusConcentrate) div.dataset.lotusConcentrate = "true";
         const info = document.createElement("div");
         info.className = "mineral-input-info";
         const nameSpan = document.createElement("span");
         nameSpan.className = "mineral-input-name";
         nameSpan.textContent = mineral.name;
-        if (concentrateId.startsWith("brand:lotus:")) {
+        if (isLotusConcentrate) {
           const lotusBadge = document.createElement("span");
           lotusBadge.className = "badge badge-lotus";
           lotusBadge.textContent = "Lotus";
@@ -379,24 +390,95 @@
         info.appendChild(formulaSpan);
         const field = document.createElement("div");
         field.className = "mineral-input-field";
-        const input = document.createElement("input");
-        input.type = "number";
-        input.id = "add-" + concentrateId;
-        input.value = value;
-        input.min = "0";
-        input.step = "0.001";
-        input.dataset.concentrate = concentrateId;
-        input.dataset.mineralId = mineralId;
-        const unit = document.createElement("span");
-        unit.className = "mineral-input-unit";
-        unit.textContent = "mL";
-        field.appendChild(input);
-        field.appendChild(unit);
+        if (isLotusConcentrate) {
+          field.classList.add("mineral-input-field-lotus");
+          const dualInputs = document.createElement("div");
+          dualInputs.className = "lotus-concentrate-inputs";
+
+          const mlWrap = document.createElement("div");
+          mlWrap.className = "lotus-concentrate-input";
+          const mlInput = document.createElement("input");
+          mlInput.type = "number";
+          mlInput.id = "add-" + concentrateId + "-ml";
+          mlInput.value = savedMl;
+          mlInput.min = "0";
+          mlInput.step = "0.001";
+          mlInput.dataset.concentrate = concentrateId;
+          mlInput.dataset.mineralId = mineralId;
+          mlInput.dataset.concentrateField = "ml";
+          mlInput.dataset.lotusInput = "true";
+          const mlUnit = document.createElement("span");
+          mlUnit.className = "mineral-input-unit";
+          mlUnit.textContent = "mL";
+          mlWrap.appendChild(mlInput);
+          mlWrap.appendChild(mlUnit);
+
+          const dropsWrap = document.createElement("div");
+          dropsWrap.className = "lotus-concentrate-input";
+          const dropsInput = document.createElement("input");
+          dropsInput.type = "number";
+          dropsInput.id = "add-" + concentrateId + "-drops";
+          dropsInput.value = savedDrops;
+          dropsInput.min = "0";
+          dropsInput.step = "1";
+          dropsInput.dataset.concentrate = concentrateId;
+          dropsInput.dataset.mineralId = mineralId;
+          dropsInput.dataset.concentrateField = "drops";
+          dropsInput.dataset.lotusInput = "true";
+          const dropsUnit = document.createElement("span");
+          dropsUnit.className = "mineral-input-unit";
+          dropsUnit.textContent = "drops";
+          dropsWrap.appendChild(dropsInput);
+          dropsWrap.appendChild(dropsUnit);
+
+          dualInputs.appendChild(mlWrap);
+          dualInputs.appendChild(dropsWrap);
+          field.appendChild(dualInputs);
+        } else {
+          const input = document.createElement("input");
+          input.type = "number";
+          input.id = "add-" + concentrateId;
+          input.value = savedMl;
+          input.min = "0";
+          input.step = "0.001";
+          input.dataset.concentrate = concentrateId;
+          input.dataset.mineralId = mineralId;
+          input.dataset.concentrateField = "ml";
+          const unit = document.createElement("span");
+          unit.className = "mineral-input-unit";
+          unit.textContent = "mL";
+          field.appendChild(input);
+          field.appendChild(unit);
+        }
         div.appendChild(info);
         div.appendChild(field);
+        if (isLotusConcentrate) {
+          const errorEl = document.createElement("div");
+          errorEl.className = "concentrate-input-error";
+          errorEl.setAttribute("aria-live", "polite");
+          div.appendChild(errorEl);
+        }
         mineralInputsEl.appendChild(div);
       });
     }
+
+    function validateLotusConcentrateRow(row) {
+      if (!row || row.dataset.lotusConcentrate !== "true") return true;
+      const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+      const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
+      const errorEl = row.querySelector(".concentrate-input-error");
+      const ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
+      const drops = Math.max(0, parseFloat(dropsInput && dropsInput.value) || 0);
+      const valid = !(ml > 0 && drops > 0);
+      if (errorEl) {
+        errorEl.textContent = valid ? "" : "You must choose between ml and drops";
+      }
+      return valid;
+    }
+
+    document.querySelectorAll('#mineral-inputs .mineral-input-row[data-lotus-concentrate="true"]').forEach((row) => {
+      validateLotusConcentrateRow(row);
+    });
 
     // --- Recalculate on any change ---
     const volumeInput = document.getElementById("recipe-volume");
@@ -411,7 +493,18 @@
         const el = e.target;
         if (el && el.dataset && el.dataset.concentrate) {
           const key = el.dataset.concentrate;
-          recipeConcentrateInputs[key] = el.value;
+          const row = el.closest(".mineral-input-row");
+          if (row && row.dataset.lotusConcentrate === "true") {
+            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+            const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
+            recipeConcentrateInputs[key] = {
+              ml: mlInput ? mlInput.value : "0",
+              drops: dropsInput ? dropsInput.value : "0"
+            };
+            validateLotusConcentrateRow(row);
+          } else {
+            recipeConcentrateInputs[key] = el.value;
+          }
           saveRecipeConcentrateInputs(recipeConcentrateInputs);
         }
         debouncedRecalculate();
@@ -444,12 +537,25 @@
           }
         });
 
-        // Concentrates (DIY + brand): convert mL -> grams using concentrate strength
-        document.querySelectorAll("#mineral-inputs input[data-concentrate]").forEach((input) => {
-          const concentrateId = input.dataset.concentrate;
-          const mineralId = input.dataset.mineralId;
-          const ml = Math.max(0, parseFloat(input.value) || 0);
-          if (!mineralId || ml <= 0) return;
+        // Concentrates (DIY + brand): convert mL or drops -> grams using concentrate strength
+        document.querySelectorAll("#mineral-inputs .mineral-input-row[data-concentrate-id]").forEach((row) => {
+          const concentrateId = row.dataset.concentrateId;
+          const mineralId = row.dataset.mineralId;
+          if (!concentrateId || !mineralId) return;
+          const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
+          let ml = 0;
+          if (isLotusConcentrate) {
+            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+            const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
+            if (!validateLotusConcentrateRow(row)) return;
+            const mlVal = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
+            const dropsVal = Math.max(0, parseFloat(dropsInput && dropsInput.value) || 0);
+            ml = mlVal > 0 ? mlVal : (dropsVal > 0 ? dropsVal * getLotusDropMl() : 0);
+          } else {
+            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+            ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
+          }
+          if (ml <= 0) return;
           const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
           if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
           const totalGrams = ml * gramsPerMl;

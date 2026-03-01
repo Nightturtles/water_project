@@ -149,7 +149,11 @@ function renderResultItems() {
     resultInfo.appendChild(detailSpan);
     const valueSpan = document.createElement("span");
     valueSpan.className = "result-value";
-    valueSpan.textContent = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
+    if (item.kind === "concentrate" && item.id.startsWith("brand:lotus:")) {
+      valueSpan.textContent = "0.0 ml / 0 drops";
+    } else {
+      valueSpan.textContent = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
+    }
     div.appendChild(resultInfo);
     div.appendChild(valueSpan);
     resultsContainer.appendChild(div);
@@ -734,6 +738,13 @@ function formatMl(ml) {
   return ml.toFixed(3) + " mL";
 }
 
+function formatLotusMlAndDrops(ml) {
+  if (!isFinite(ml) || ml <= 0) return "0.0 ml / 0 drops";
+  const dropMl = getLotusDropMl();
+  const drops = (isFinite(dropMl) && dropMl > 0) ? Math.round(ml / dropMl) : 0;
+  return ml.toFixed(1) + " ml / " + drops + " drops";
+}
+
 function updateResultValues(valuesByMineral) {
   for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
     const item = resultsContainer.querySelector(`[data-mineral="${CSS.escape(mineralId)}"]`);
@@ -756,11 +767,13 @@ function updateConcentrateValues(valuesByConcentrate) {
     const item = resultsContainer.querySelector(`[data-concentrate="${CSS.escape(concentrateId)}"]`);
     if (!item) continue;
     const valEl = item.querySelector(".result-value");
-    if (valEl) valEl.textContent = formatMl(ml);
+    const isLotus = concentrateId.startsWith("brand:lotus:");
+    const displayValue = isLotus ? formatLotusMlAndDrops(ml) : formatMl(ml);
+    if (valEl) valEl.textContent = displayValue;
     if (ml > 0) {
       const nameEl = item.querySelector(".result-name");
       const name = nameEl ? nameEl.textContent : concentrateId;
-      item.setAttribute("aria-label", name + ", " + formatMl(ml));
+      item.setAttribute("aria-label", name + ", " + displayValue);
     } else {
       item.removeAttribute("aria-label");
     }

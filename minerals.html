@@ -56,8 +56,14 @@
       </button>
       <p class="hint">Pre-made concentrates with fixed concentration. Select the ones you have; they appear on the calculator and recipe pages.</p>
       <div class="card-collapsible-content" id="brand-concentrates-content">
-        <h3 class="concentrate-subsection-title">Lotus Coffee Water Drops</h3>
-        <p class="hint">Each drop is about 0.0716 mL</p>
+        <div class="concentrate-subsection-header">
+          <h3 class="concentrate-subsection-title">Lotus Coffee Water Drops</h3>
+          <div class="brew-method-toggle lotus-dropper-toggle" id="lotus-dropper-toggle" role="group" aria-label="Lotus dropper style">
+            <button type="button" class="preset-btn brew-method-btn" data-lotus-dropper="round">Round Dropper</button>
+            <button type="button" class="preset-btn brew-method-btn" data-lotus-dropper="straight">Straight Dropper</button>
+          </div>
+        </div>
+        <p class="hint" id="lotus-drop-size-hint">Each drop is about 0.0716 mL</p>
         <div class="concentrate-list" id="lotus-concentrate-list">
           <!-- Populated by JS -->
         </div>
@@ -329,6 +335,32 @@
     }
 
     // --- Brand concentrates: Lotus Coffee Water Drops ---
+    const lotusDropperToggle = document.getElementById("lotus-dropper-toggle");
+    const lotusDropSizeHint = document.getElementById("lotus-drop-size-hint");
+    function updateLotusDropperUi(dropperType) {
+      const normalized = normalizeLotusDropperType(dropperType);
+      if (lotusDropperToggle) {
+        lotusDropperToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.lotusDropper === normalized);
+        });
+      }
+      if (lotusDropSizeHint) {
+        lotusDropSizeHint.textContent = "Each drop is about " + getLotusDropMl().toFixed(4) + " mL";
+      }
+    }
+    updateLotusDropperUi(loadLotusDropperType());
+    if (lotusDropperToggle) {
+      lotusDropperToggle.addEventListener("click", (e) => {
+        const btn = e.target.closest(".brew-method-btn");
+        if (!btn) return;
+        const nextType = normalizeLotusDropperType(btn.dataset.lotusDropper);
+        if (nextType === loadLotusDropperType()) return;
+        saveLotusDropperType(nextType);
+        updateLotusDropperUi(nextType);
+        showSaved();
+      });
+    }
+
     const lotusListEl = document.getElementById("lotus-concentrate-list");
     if (lotusListEl && typeof LOTUS_CONCENTRATE_IDS !== "undefined") {
       LOTUS_CONCENTRATE_IDS.forEach((concentrateId) => {
