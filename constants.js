@@ -276,15 +276,8 @@ const TARGET_PRESETS = {
     alkalinity: 40,
     description: "Lotus-style Rao recipe target with balanced sweetness and structure."
   },
-  "hendon-light": {
-    label: "Hendon Light Roast",
-    calcium: 25,
-    magnesium: 35,
-    alkalinity: 25,
-    description: "Higher magnesium for light roasts. Enhances fruity and floral notes."
-  },
   "hendon-espresso": {
-    label: "Hendon Espresso",
+    label: "Hendon Water",
     calcium: 0,
     magnesium: 24,
     alkalinity: 31,
