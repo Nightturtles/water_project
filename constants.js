@@ -285,10 +285,10 @@ const TARGET_PRESETS = {
   },
   "hendon-espresso": {
     label: "Hendon Espresso",
-    calcium: 70,
-    magnesium: 20,
-    alkalinity: 50,
-    description: "Higher hardness for espresso. More body and texture in the cup."
+    calcium: 0,
+    magnesium: 24,
+    alkalinity: 31,
+    description: "Matches Espresso Aficionados Hendon Water target (GH 99 / KH 31 as CaCO3)."
   }
 };
 
