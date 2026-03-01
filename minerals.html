@@ -51,12 +51,16 @@
         </div>
       </div>
 
-      <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="false" aria-controls="brand-concentrates-content">
+      <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="true" aria-controls="brand-concentrates-content">
         <span class="card-collapsible-title">Brand Name Concentrates</span>
       </button>
-      <p class="hint">Coming soon.</p>
+      <p class="hint">Pre-made concentrates with fixed concentration. Select the ones you have; they appear on the calculator and recipe pages.</p>
       <div class="card-collapsible-content" id="brand-concentrates-content">
-        <p class="hint">Coming soon.</p>
+        <h3 class="concentrate-subsection-title">Lotus Coffee Water Drops</h3>
+        <p class="hint">Each drop is about 0.0716 mL</p>
+        <div class="concentrate-list" id="lotus-concentrate-list">
+          <!-- Populated by JS -->
+        </div>
       </div>
     </section>
 
@@ -321,6 +325,41 @@
       brandSummary.addEventListener("click", () => {
         const expanded = brandSummary.getAttribute("aria-expanded") !== "true";
         brandSummary.setAttribute("aria-expanded", expanded);
+      });
+    }
+
+    // --- Brand concentrates: Lotus Coffee Water Drops ---
+    const lotusListEl = document.getElementById("lotus-concentrate-list");
+    if (lotusListEl && typeof LOTUS_CONCENTRATE_IDS !== "undefined") {
+      LOTUS_CONCENTRATE_IDS.forEach((concentrateId) => {
+        const brand = BRAND_CONCENTRATES[concentrateId];
+        if (!brand) return;
+        const checked = selectedConcentrates.includes(concentrateId);
+        const div = document.createElement("div");
+        div.className = "concentrate-item" + (checked ? " selected" : "");
+        div.dataset.concentrateId = concentrateId;
+        div.innerHTML = `
+          <label class="concentrate-label">
+            <input type="checkbox" value="${concentrateId}" ${checked ? "checked" : ""}>
+            <div class="concentrate-info">
+              <span class="mineral-name">${brand.name}<span class="badge badge-lotus">Lotus</span></span>
+              <span class="mineral-formula">${brand.formula}</span>
+              <span class="mineral-desc">${brand.description}</span>
+            </div>
+          </label>
+        `;
+        lotusListEl.appendChild(div);
+      });
+      lotusListEl.addEventListener("change", (e) => {
+        if (e.target.type !== "checkbox") return;
+        const item = e.target.closest(".concentrate-item");
+        if (!item) return;
+        item.classList.toggle("selected", e.target.checked);
+        const existing = loadSelectedConcentrates().filter((id) => typeof id === "string" && !BRAND_CONCENTRATE_IDS.includes(id));
+        const brandChecked = lotusListEl.querySelectorAll('input[type="checkbox"]:checked');
+        const brandIds = Array.from(brandChecked).map((cb) => cb.value);
+        saveSelectedConcentrates(existing.concat(brandIds));
+        showSaved();
       });
     }
 

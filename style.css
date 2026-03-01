@@ -242,6 +242,18 @@ main > .card:last-child {
   display: none;
 }
 
+/* Concentrates card: each summary only controls its own content (same parent has two collapsibles) */
+#diy-concentrates-summary[aria-expanded="false"] ~ #diy-concentrates-content {
+  display: none;
+}
+#diy-concentrates-summary[aria-expanded="true"] ~ #diy-concentrates-content,
+#brand-concentrates-summary[aria-expanded="true"] ~ #brand-concentrates-content {
+  display: block;
+}
+#brand-concentrates-summary[aria-expanded="false"] ~ #brand-concentrates-content {
+  display: none;
+}
+
 .hint {
   font-size: 0.85rem;
   color: var(--gray-500);
@@ -539,6 +551,11 @@ select:focus {
   color: var(--gray-700);
 }
 
+.badge-lotus {
+  background: #f0d5d3;
+  color: #b14e4a;
+}
+
 .result-detail {
   font-size: 0.8rem;
   color: var(--gray-500);
@@ -631,6 +648,13 @@ select:focus {
 .mineral-item.selected {
   border-color: var(--blue-500);
   background: var(--blue-50);
+}
+
+.concentrate-subsection-title {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  color: var(--gray-800);
 }
 
 .concentrate-list {

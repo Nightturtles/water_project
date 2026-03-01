@@ -318,6 +318,47 @@ const MW_CACO3 = 100.09;               // Molecular weight of CaCO3
 const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
 const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
 
+// --- Brand name concentrates (fixed strength, equivalent grams of mineral per mL) ---
+// Lotus Coffee Water Drops: concentrations derived from official round-tip dropper recipes
+// (round drop ≈ 0.0716 mL, straight drop ≈ 0.0385 mL). gramsPerMl = equivalent grams of
+// the mapped MINERAL_DB salt per mL of concentrate (for dosing math).
+const BRAND_CONCENTRATES = {
+  "brand:lotus:calcium": {
+    name: "Calcium",
+    mineralId: "calcium-chloride",
+    formula: "CaCl\u2082\u00b72H\u2082O",
+    gramsPerMl: 0.1757,
+    description: "~119.7 mg/mL hardness as CaCO\u2083 (\u2248 47.9 mg/mL Ca\u00B2\u207A). Source: calcium chloride."
+  },
+  "brand:lotus:magnesium": {
+    name: "Magnesium",
+    mineralId: "magnesium-chloride",
+    formula: "MgCl\u2082\u00b76H\u2082O",
+    gramsPerMl: 0.2430,
+    description: "~119.7 mg/mL hardness as CaCO\u2083 (\u2248 29.1 mg/mL Mg\u00B2\u207A). Source: magnesium chloride."
+  },
+  "brand:lotus:sodium-bicarbonate": {
+    name: "Sodium Bicarbonate",
+    mineralId: "baking-soda",
+    formula: "NaHCO\u2083",
+    gramsPerMl: 0.0977,
+    description: "~58.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.7 mg/mL Na\u207A). Source: sodium bicarbonate."
+  },
+  "brand:lotus:potassium-bicarbonate": {
+    name: "Potassium Bicarbonate",
+    mineralId: "potassium-bicarbonate",
+    formula: "KHCO\u2083",
+    gramsPerMl: 0.1164,
+    description: "~58.2 mg/mL alkalinity as CaCO\u2083 (\u2248 45.5 mg/mL K\u207A). Source: potassium bicarbonate."
+  }
+};
+
+/** All brand concentrate IDs (for iteration). */
+const BRAND_CONCENTRATE_IDS = Object.keys(BRAND_CONCENTRATES);
+
+/** Lotus Coffee Water Drops subset (for settings subsection). */
+const LOTUS_CONCENTRATE_IDS = BRAND_CONCENTRATE_IDS.filter((id) => id.startsWith("brand:lotus:"));
+
 // --- Range severity ordering ---
 const RANGE_SEVERITY_ORDER = { danger: 0, warn: 1, info: 2 };
 

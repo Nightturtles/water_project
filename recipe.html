@@ -282,7 +282,7 @@
 
     // --- Load selected minerals + concentrates and build inputs ---
     const selectedMinerals = loadSelectedMinerals();
-    const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && id.startsWith("diy:"));
+    const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:")));
     const mineralInputsEl = document.getElementById("mineral-inputs");
 
     function loadRecipeConcentrateInputs() {
@@ -343,11 +343,13 @@
         mineralInputsEl.appendChild(div);
       });
 
-      // DIY concentrates (mL)
+      // Concentrates (DIY + brand) — mL
       selectedConcentrates.forEach((concentrateId) => {
-        const mineralId = parseDiyConcentrateId(concentrateId);
+        const mineralId = getConcentrateMineralId(concentrateId);
         if (!mineralId) return;
-        const mineral = MINERAL_DB[mineralId];
+        const mineral = (typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId])
+          ? { name: BRAND_CONCENTRATES[concentrateId].name, formula: BRAND_CONCENTRATES[concentrateId].formula }
+          : MINERAL_DB[mineralId];
         if (!mineral) return;
 
         const savedVal = recipeConcentrateInputs[concentrateId];
@@ -360,6 +362,12 @@
         const nameSpan = document.createElement("span");
         nameSpan.className = "mineral-input-name";
         nameSpan.textContent = mineral.name;
+        if (concentrateId.startsWith("brand:lotus:")) {
+          const lotusBadge = document.createElement("span");
+          lotusBadge.className = "badge badge-lotus";
+          lotusBadge.textContent = "Lotus";
+          nameSpan.appendChild(lotusBadge);
+        }
         const formulaSpan = document.createElement("span");
         formulaSpan.className = "mineral-input-formula";
         formulaSpan.textContent = mineral.formula + " ";
@@ -436,12 +444,13 @@
           }
         });
 
-        // DIY concentrates: convert mL -> grams using DIY bottle strength
+        // Concentrates (DIY + brand): convert mL -> grams using concentrate strength
         document.querySelectorAll("#mineral-inputs input[data-concentrate]").forEach((input) => {
+          const concentrateId = input.dataset.concentrate;
           const mineralId = input.dataset.mineralId;
           const ml = Math.max(0, parseFloat(input.value) || 0);
           if (!mineralId || ml <= 0) return;
-          const gramsPerMl = getDiyConcentrateGramsPerMl(mineralId);
+          const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
           if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
           const totalGrams = ml * gramsPerMl;
           if (totalGrams <= 0) return;

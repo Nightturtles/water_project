@@ -302,6 +302,14 @@ function parseDiyConcentrateId(concentrateId) {
   return mineralId || null;
 }
 
+/** Returns the MINERAL_DB id that this concentrate contributes (for ion math). DIY: mineral id; brand: mapped mineralId; else null. */
+function getConcentrateMineralId(concentrateId) {
+  if (typeof concentrateId !== "string") return null;
+  if (concentrateId.startsWith("diy:")) return parseDiyConcentrateId(concentrateId);
+  const brand = typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId];
+  return brand ? brand.mineralId : null;
+}
+
 function getDiyConcentrateGramsPerMl(mineralId) {
   const specs = loadDiyConcentrateSpecs();
   const spec = specs && specs[mineralId] ? specs[mineralId] : null;
@@ -312,12 +320,24 @@ function getDiyConcentrateGramsPerMl(mineralId) {
   return gramsPerBottle / bottleMl;
 }
 
+/** Grams of equivalent mineral salt per mL of concentrate. Works for DIY (from specs) and brand (from BRAND_CONCENTRATES). */
+function getConcentrateGramsPerMl(concentrateId) {
+  if (typeof concentrateId !== "string") return 0;
+  if (concentrateId.startsWith("diy:")) {
+    const mineralId = parseDiyConcentrateId(concentrateId);
+    return mineralId ? getDiyConcentrateGramsPerMl(mineralId) : 0;
+  }
+  const brand = typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId];
+  if (brand && Number.isFinite(brand.gramsPerMl)) return brand.gramsPerMl;
+  return 0;
+}
+
 function getAvailableMineralIds() {
   const out = new Set(loadSelectedMinerals());
   const concentrates = loadSelectedConcentrates();
   for (const cid of concentrates) {
-    const diyMineral = parseDiyConcentrateId(cid);
-    if (diyMineral) out.add(diyMineral);
+    const mineralId = getConcentrateMineralId(cid);
+    if (mineralId) out.add(mineralId);
   }
   return Array.from(out);
 }
