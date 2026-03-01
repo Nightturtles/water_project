@@ -297,25 +297,49 @@
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
 
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
-      mineralInputsEl.innerHTML = '<p class="hint">No minerals or concentrates selected. Go to <a href="minerals.html">Settings</a> to pick some.</p>';
+      const p = document.createElement("p");
+      p.className = "hint";
+      p.textContent = "No minerals or concentrates selected. Go to ";
+      const a = document.createElement("a");
+      a.href = "minerals.html";
+      a.textContent = "Settings";
+      p.appendChild(a);
+      p.appendChild(document.createTextNode(" to pick some."));
+      mineralInputsEl.appendChild(p);
     } else {
-      // Minerals (grams) - unchanged
+      // Minerals (grams)
       selectedMinerals.forEach(id => {
         const mineral = MINERAL_DB[id];
         if (!mineral) return;
 
         const div = document.createElement("div");
         div.className = "mineral-input-row";
-        div.innerHTML = `
-          <div class="mineral-input-info">
-            <span class="mineral-input-name">${mineral.name}</span>
-            <span class="mineral-input-formula">${mineral.formula}</span>
-          </div>
-          <div class="mineral-input-field">
-            <input type="number" id="add-${id}" value="0" min="0" step="0.01" data-mineral="${id}">
-            <span class="mineral-input-unit">g</span>
-          </div>
-        `;
+        const info = document.createElement("div");
+        info.className = "mineral-input-info";
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "mineral-input-name";
+        nameSpan.textContent = mineral.name;
+        const formulaSpan = document.createElement("span");
+        formulaSpan.className = "mineral-input-formula";
+        formulaSpan.textContent = mineral.formula;
+        info.appendChild(nameSpan);
+        info.appendChild(formulaSpan);
+        const field = document.createElement("div");
+        field.className = "mineral-input-field";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.id = "add-" + id;
+        input.value = "0";
+        input.min = "0";
+        input.step = "0.01";
+        input.dataset.mineral = id;
+        const unit = document.createElement("span");
+        unit.className = "mineral-input-unit";
+        unit.textContent = "g";
+        field.appendChild(input);
+        field.appendChild(unit);
+        div.appendChild(info);
+        div.appendChild(field);
         mineralInputsEl.appendChild(div);
       });
 
@@ -331,16 +355,37 @@
 
         const div = document.createElement("div");
         div.className = "mineral-input-row";
-        div.innerHTML = `
-          <div class="mineral-input-info">
-            <span class="mineral-input-name">${mineral.name}</span>
-            <span class="mineral-input-formula">${mineral.formula} <span class="badge badge-concentrate">CONCENTRATE</span></span>
-          </div>
-          <div class="mineral-input-field">
-            <input type="number" id="add-${concentrateId}" value="${value}" min="0" step="0.001" data-concentrate="${concentrateId}" data-mineral-id="${mineralId}">
-            <span class="mineral-input-unit">mL</span>
-          </div>
-        `;
+        const info = document.createElement("div");
+        info.className = "mineral-input-info";
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "mineral-input-name";
+        nameSpan.textContent = mineral.name;
+        const formulaSpan = document.createElement("span");
+        formulaSpan.className = "mineral-input-formula";
+        formulaSpan.textContent = mineral.formula + " ";
+        const badge = document.createElement("span");
+        badge.className = "badge badge-concentrate";
+        badge.textContent = "CONCENTRATE";
+        formulaSpan.appendChild(badge);
+        info.appendChild(nameSpan);
+        info.appendChild(formulaSpan);
+        const field = document.createElement("div");
+        field.className = "mineral-input-field";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.id = "add-" + concentrateId;
+        input.value = value;
+        input.min = "0";
+        input.step = "0.001";
+        input.dataset.concentrate = concentrateId;
+        input.dataset.mineralId = mineralId;
+        const unit = document.createElement("span");
+        unit.className = "mineral-input-unit";
+        unit.textContent = "mL";
+        field.appendChild(input);
+        field.appendChild(unit);
+        div.appendChild(info);
+        div.appendChild(field);
         mineralInputsEl.appendChild(div);
       });
     }
@@ -464,7 +509,9 @@
       if (rangeWarningsEl) {
         const evaluation = evaluateWaterProfileRanges(totalIons, {
           includeAdvanced: isAdvancedMineralDisplayMode(),
-          alkalinitySources: getEffectiveAlkalinitySources()
+          alkalinitySources: getEffectiveAlkalinitySources(),
+          calciumSource: getEffectiveCalciumSource(),
+          magnesiumSource: getEffectiveMagnesiumSource()
         });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
       }

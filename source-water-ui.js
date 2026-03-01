@@ -44,6 +44,7 @@ function initSourceWaterSection(options) {
   function saveCurrentSourceWaterInputs() {
     saveSourceWater(getSourceWater());
   }
+  const debouncedSave = typeof debounce === "function" ? debounce(saveCurrentSourceWaterInputs, 300) : saveCurrentSourceWaterInputs;
 
   function updateSourceAlkalinityFromBicarbonate() {
     const bicarb = parseFloat(sourceBicarbonateInput.value) || 0;
@@ -77,7 +78,7 @@ function initSourceWaterSection(options) {
 
   function highlightSourcePreset(presetName) {
     sourcePresetsContainer.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
-    const btn = sourcePresetsContainer.querySelector('[data-preset="' + presetName + '"]');
+    const btn = sourcePresetsContainer.querySelector('[data-preset="' + CSS.escape(presetName) + '"]');
     if (btn) btn.classList.add("active");
     if (sourceSaveBar) sourceSaveBar.style.display = presetName === "custom" ? "flex" : "none";
     if (sourceEditBar) sourceEditBar.style.display = "none";
@@ -127,7 +128,7 @@ function initSourceWaterSection(options) {
         const del = document.createElement("span");
         del.className = "preset-delete";
         del.dataset.delete = key;
-        del.innerHTML = "&times;";
+        del.textContent = "\u00d7";
         btn.appendChild(del);
       }
       sourcePresetsContainer.appendChild(btn);
@@ -213,7 +214,7 @@ function initSourceWaterSection(options) {
             "Editing: " + (preset && preset.label ? preset.label : activeSourcePreset);
         }
       }
-      saveCurrentSourceWaterInputs();
+      debouncedSave();
       updateSourceAlkalinityFromBicarbonate();
       renderSourceReadonlyTags();
       onChanged();

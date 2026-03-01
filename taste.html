@@ -409,7 +409,7 @@
           const del = document.createElement("span");
           del.className = "preset-delete";
           del.dataset.delete = key;
-          del.innerHTML = "&times;";
+          del.textContent = "\u00d7";
           btn.appendChild(del);
         }
         tastePresetsContainer.appendChild(btn);
@@ -536,7 +536,7 @@
     function getAdjustedProfile() {
       const base = {};
       ION_FIELDS.forEach(ion => {
-        base[ion] = parseFloat(document.getElementById("cur-" + ion).value) || 0;
+        base[ion] = readNonNegative(document.getElementById("cur-" + ion));
       });
       const adjusted = { ...base };
       SLIDERS.forEach(slider => {
@@ -617,7 +617,12 @@
 
       const rangeWarningsEl = document.getElementById("taste-range-warnings");
       if (rangeWarningsEl) {
-        const evaluation = evaluateWaterProfileRanges(adjusted, { includeAdvanced: isAdvancedMineralDisplayMode() });
+        const evaluation = evaluateWaterProfileRanges(adjusted, {
+          includeAdvanced: isAdvancedMineralDisplayMode(),
+          alkalinitySources: getEffectiveAlkalinitySources(),
+          calciumSource: getEffectiveCalciumSource(),
+          magnesiumSource: getEffectiveMagnesiumSource()
+        });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
       }
     }
@@ -771,6 +776,9 @@
       const profile = profiles[targetKey];
       const label = profile && profile.label ? profile.label : targetKey;
       showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
+        if (TARGET_PRESETS[targetKey]) {
+          addDeletedTargetPreset(targetKey);
+        }
         deleteCustomTargetProfile(targetKey);
         const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
         renderTastePresets(fallback);

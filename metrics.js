@@ -42,6 +42,18 @@ function calculateSo4ClRatio(ions) {
   return sulfate / chloride;
 }
 
+// --- Bicarbonate <-> Alkalinity conversion ---
+function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
+  const alkRounded = Math.round(parseFloat(alkAsCaCO3) || 0);
+  const candidate = Math.round(alkRounded * CACO3_TO_HCO3 * 10) / 10;
+  const existing = Math.round((parseFloat(existingBicarbonate) || 0) * 10) / 10;
+  const candidateAlk = Math.round(candidate * HCO3_TO_CACO3);
+  const existingAlk = Math.round(existing * HCO3_TO_CACO3);
+  if (existingAlk === alkRounded) return existing;
+  if (candidateAlk === alkRounded) return candidate;
+  return candidate;
+}
+
 // --- Best Ca/Mg source combination (minimize side-effect ion deltas; tie-break: Epsom, CaCl2) ---
 function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
   const caSources = getEffectiveCalciumSources();

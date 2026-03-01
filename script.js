@@ -86,11 +86,24 @@ function renderResultItems() {
 
   resultsContainer.innerHTML = "";
   if (toShow.length === 0) {
+    const p = document.createElement("p");
+    p.className = "hint";
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
-      resultsContainer.innerHTML = '<p class="hint">No minerals or concentrates selected. Go to <a href="minerals.html">Settings</a> to pick some.</p>';
+      p.textContent = "No minerals or concentrates selected. Go to ";
+      const a = document.createElement("a");
+      a.href = "minerals.html";
+      a.textContent = "Settings";
+      p.appendChild(a);
+      p.appendChild(document.createTextNode(" to pick some."));
     } else {
-      resultsContainer.innerHTML = '<p class="hint">Select minerals or concentrates in <a href="minerals.html">Settings</a> to see what to add.</p>';
+      p.textContent = "Select minerals or concentrates in ";
+      const a = document.createElement("a");
+      a.href = "minerals.html";
+      a.textContent = "Settings";
+      p.appendChild(a);
+      p.appendChild(document.createTextNode(" to see what to add."));
     }
+    resultsContainer.appendChild(p);
     lastCalculatedIons = null;
     updateSummaryMetrics({});
     return;
@@ -106,15 +119,29 @@ function renderResultItems() {
     } else {
       div.dataset.mineral = item.id;
     }
-    const detailContent = item.kind === "concentrate" ? `${mineral.formula} <span class="badge badge-concentrate">CONCENTRATE</span>` : mineral.formula;
-    const valueText = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
-    div.innerHTML = `
-      <div class="result-info">
-        <span class="result-name">${mineral.name}</span>
-        <span class="result-detail">${detailContent}</span>
-      </div>
-      <span class="result-value">${valueText}</span>
-    `;
+    const resultInfo = document.createElement("div");
+    resultInfo.className = "result-info";
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "result-name";
+    nameSpan.textContent = mineral.name;
+    const detailSpan = document.createElement("span");
+    detailSpan.className = "result-detail";
+    if (item.kind === "concentrate") {
+      detailSpan.textContent = mineral.formula + " ";
+      const badge = document.createElement("span");
+      badge.className = "badge badge-concentrate";
+      badge.textContent = "CONCENTRATE";
+      detailSpan.appendChild(badge);
+    } else {
+      detailSpan.textContent = mineral.formula;
+    }
+    resultInfo.appendChild(nameSpan);
+    resultInfo.appendChild(detailSpan);
+    const valueSpan = document.createElement("span");
+    valueSpan.className = "result-value";
+    valueSpan.textContent = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
+    div.appendChild(resultInfo);
+    div.appendChild(valueSpan);
     resultsContainer.appendChild(div);
   }
 }
@@ -132,7 +159,7 @@ function renderProfileButtons() {
       const del = document.createElement("span");
       del.className = "preset-delete";
       del.dataset.delete = key;
-      del.innerHTML = "&times;";
+      del.textContent = "\u00d7";
       btn.appendChild(del);
     }
     profileButtonsContainer.appendChild(btn);
@@ -187,7 +214,7 @@ document.getElementById("restore-target-defaults").addEventListener("click", (e)
 
 function highlightProfile(profileName) {
   profileButtonsContainer.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
-  const btn = profileButtonsContainer.querySelector(`[data-profile="${profileName}"]`);
+  const btn = profileButtonsContainer.querySelector(`[data-profile="${CSS.escape(profileName)}"]`);
   if (btn) btn.classList.add("active");
   targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
   targetEditBar.style.display = "none";
@@ -699,7 +726,7 @@ function formatMl(ml) {
 
 function updateResultValues(valuesByMineral) {
   for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
-    const item = resultsContainer.querySelector(`[data-mineral="${mineralId}"]`);
+    const item = resultsContainer.querySelector(`[data-mineral="${CSS.escape(mineralId)}"]`);
     if (item) {
       const valEl = item.querySelector(".result-value");
       if (valEl) valEl.textContent = formatGrams(grams);
@@ -716,7 +743,7 @@ function updateResultValues(valuesByMineral) {
 
 function updateConcentrateValues(valuesByConcentrate) {
   for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
-    const item = resultsContainer.querySelector(`[data-concentrate="${concentrateId}"]`);
+    const item = resultsContainer.querySelector(`[data-concentrate="${CSS.escape(concentrateId)}"]`);
     if (!item) continue;
     const valEl = item.querySelector(".result-value");
     if (valEl) valEl.textContent = formatMl(ml);
@@ -787,7 +814,6 @@ activateProfile(currentProfile);
 
   function showWelcomeModal() {
     if (loadCalculatorWelcomeDismissed()) return;
-    const focusReturnTarget = getFocusReturnTarget();
     overlay.style.display = "flex";
     document.body.classList.add("welcome-modal-open");
     closeBtn.focus();
