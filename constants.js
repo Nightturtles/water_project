@@ -87,6 +87,19 @@ const MINERAL_DB = {
   }
 };
 
+// --- Approximate solubility limits (g/L at ~25C) ---
+// Used only to warn when DIY concentrate strengths are likely to precipitate.
+const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
+  "calcium-chloride": 700,
+  "epsom-salt": 700,
+  "baking-soda": 96,
+  "potassium-bicarbonate": 330,
+  "magnesium-chloride": 560,
+  "gypsum": 2,
+  "potassium-chloride": 340,
+  "sodium-chloride": 360
+};
+
 // --- Shared ion field list and labels ---
 const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
 const ION_LABELS = { calcium: "Ca", magnesium: "Mg", potassium: "K", sodium: "Na", sulfate: "SO\u2084", chloride: "Cl", bicarbonate: "HCO\u2083" };

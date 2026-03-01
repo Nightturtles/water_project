@@ -37,6 +37,29 @@
       </div>
     </section>
 
+    <!-- Available Concentrates -->
+    <section class="card">
+      <h2>Available Concentrates</h2>
+
+      <button type="button" class="card-collapsible-summary" id="diy-concentrates-summary" aria-expanded="true" aria-controls="diy-concentrates-content">
+        <span class="card-collapsible-title">DIY Concentrates</span>
+      </button>
+      <p class="hint">All concentrates assumed to be made with Distilled / RO water</p>
+      <div class="card-collapsible-content" id="diy-concentrates-content">
+        <div class="concentrate-list" id="diy-concentrate-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="false" aria-controls="brand-concentrates-content">
+        <span class="card-collapsible-title">Brand Name Concentrates</span>
+      </button>
+      <p class="hint">Coming soon.</p>
+      <div class="card-collapsible-content" id="brand-concentrates-content">
+        <p class="hint">Coming soon.</p>
+      </div>
+    </section>
+
     <section class="card">
       <h2>Mineral Display Mode</h2>
       <p class="hint">Choose how much detail to show across the app.</p>
@@ -96,6 +119,7 @@
   <script src="ui-shared.js"></script>
   <script>
     const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
+    const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
 
     // --- Populate mineral list ---
     const mineralListEl = document.getElementById("mineral-list");
@@ -130,6 +154,111 @@
       showSaved();
     });
 
+    // --- DIY concentrates ---
+    const diyListEl = document.getElementById("diy-concentrate-list");
+    const selectedConcentrates = loadSelectedConcentrates();
+    const diySpecs = loadDiyConcentrateSpecs();
+
+    function getSolubilityLimitGPerL(mineralId) {
+      const v = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX ? MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[mineralId] : null;
+      return Number.isFinite(Number(v)) ? Number(v) : null;
+    }
+
+    function updateDiySolubilityWarning(mineralId, itemEl) {
+      if (!itemEl) return;
+      const bottleEl = itemEl.querySelector('input[data-field="bottle-ml"]');
+      const gramsEl = itemEl.querySelector('input[data-field="grams-per-bottle"]');
+      const warningEl = itemEl.querySelector(".concentrate-warning");
+      if (!bottleEl || !gramsEl || !warningEl) return;
+
+      const bottleMl = Math.max(0, parseFloat(bottleEl.value) || 0);
+      const gramsPerBottle = Math.max(0, parseFloat(gramsEl.value) || 0);
+      const limit = getSolubilityLimitGPerL(mineralId);
+      if (!bottleMl || bottleMl <= 0 || !gramsPerBottle || gramsPerBottle <= 0 || limit == null) {
+        warningEl.style.display = "none";
+        return;
+      }
+      const gPerL = gramsPerBottle / (bottleMl / 1000);
+      warningEl.style.display = gPerL >= limit ? "" : "none";
+    }
+
+    function renderDiyConcentrates() {
+      if (!diyListEl) return;
+      diyListEl.innerHTML = "";
+      for (const [mineralId, mineral] of Object.entries(MINERAL_DB)) {
+        const concentrateId = "diy:" + mineralId;
+        const checked = selectedConcentrates.includes(concentrateId);
+        const spec = diySpecs && diySpecs[mineralId] ? diySpecs[mineralId] : {};
+        const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
+        const gramsPerBottle = Number.isFinite(Number(spec.gramsPerBottle)) ? Number(spec.gramsPerBottle) : 0;
+
+        const div = document.createElement("div");
+        div.className = "concentrate-item" + (checked ? " selected" : "");
+        div.dataset.mineralId = mineralId;
+        div.innerHTML = `
+          <label class="concentrate-label">
+            <input type="checkbox" value="${concentrateId}" ${checked ? "checked" : ""}>
+            <div class="concentrate-info">
+              <span class="mineral-name">${mineral.name}</span>
+              <span class="mineral-formula">${mineral.formula}</span>
+            </div>
+          </label>
+          <div class="concentrate-inputs">
+            <div class="input-group">
+              <label>Bottle mL</label>
+              <input type="number" min="0" step="1" value="${bottleMl}" data-field="bottle-ml">
+            </div>
+            <div class="input-group">
+              <label>Grams per bottle</label>
+              <input type="number" min="0" step="0.01" value="${gramsPerBottle}" data-field="grams-per-bottle">
+            </div>
+          </div>
+          <div class="concentrate-warning" style="display:none;">You’ve reached the solubility limit for this mineral, try a lower concentration.</div>
+        `;
+        diyListEl.appendChild(div);
+        updateDiySolubilityWarning(mineralId, div);
+      }
+    }
+
+    renderDiyConcentrates();
+
+    if (diyListEl) {
+      diyListEl.addEventListener("change", (e) => {
+        if (e.target.type !== "checkbox") return;
+        const item = e.target.closest(".concentrate-item");
+        if (!item) return;
+        item.classList.toggle("selected", e.target.checked);
+        updateDiySolubilityWarning(item.dataset.mineralId, item);
+        const checked = diyListEl.querySelectorAll('input[type="checkbox"]:checked');
+        const diyIds = Array.from(checked).map(cb => cb.value);
+        // Keep non-DIY concentrates (future) intact.
+        const existing = loadSelectedConcentrates().filter((id) => typeof id === "string" && !id.startsWith("diy:"));
+        saveSelectedConcentrates(existing.concat(diyIds));
+        showSaved();
+      });
+
+      diyListEl.addEventListener("input", (e) => {
+        const input = e.target;
+        if (!input || input.tagName !== "INPUT") return;
+        if (input.type !== "number") return;
+        const item = input.closest(".concentrate-item");
+        if (!item) return;
+        const mineralId = item.dataset.mineralId;
+        if (!mineralId) return;
+
+        const bottleEl = item.querySelector('input[data-field="bottle-ml"]');
+        const gramsEl = item.querySelector('input[data-field="grams-per-bottle"]');
+        const bottleMl = bottleEl ? Math.max(0, parseFloat(bottleEl.value) || 0) : 0;
+        const gramsPerBottle = gramsEl ? Math.max(0, parseFloat(gramsEl.value) || 0) : 0;
+
+        const specs = loadDiyConcentrateSpecs();
+        specs[mineralId] = { bottleMl, gramsPerBottle };
+        saveDiyConcentrateSpecs(specs);
+        updateDiySolubilityWarning(mineralId, item);
+        showSaved();
+      });
+    }
+
     // --- Theme (Bug 6: safe radio selection) ---
     const themeInputs = document.querySelectorAll('input[name="theme"]');
     selectRadioByValue("theme", loadThemePreference());
@@ -150,8 +279,6 @@
       });
     });
 
-    const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
-
     function showSaved() {
       showSaveStatus("Saved!", false);
     }
@@ -163,6 +290,24 @@
       availableMineralsSummary.addEventListener("click", () => {
         const expanded = availableMineralsSummary.getAttribute("aria-expanded") !== "true";
         availableMineralsSummary.setAttribute("aria-expanded", expanded);
+      });
+    }
+
+    const diySummary = document.getElementById("diy-concentrates-summary");
+    const diyContent = document.getElementById("diy-concentrates-content");
+    if (diySummary && diyContent) {
+      diySummary.addEventListener("click", () => {
+        const expanded = diySummary.getAttribute("aria-expanded") !== "true";
+        diySummary.setAttribute("aria-expanded", expanded);
+      });
+    }
+
+    const brandSummary = document.getElementById("brand-concentrates-summary");
+    const brandContent = document.getElementById("brand-concentrates-content");
+    if (brandSummary && brandContent) {
+      brandSummary.addEventListener("click", () => {
+        const expanded = brandSummary.getAttribute("aria-expanded") !== "true";
+        brandSummary.setAttribute("aria-expanded", expanded);
       });
     }
 

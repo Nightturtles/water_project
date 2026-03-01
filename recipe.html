@@ -280,13 +280,26 @@
       onChanged: recalculate
     });
 
-    // --- Load selected minerals and build inputs ---
+    // --- Load selected minerals + concentrates and build inputs ---
     const selectedMinerals = loadSelectedMinerals();
+    const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && id.startsWith("diy:"));
     const mineralInputsEl = document.getElementById("mineral-inputs");
 
-    if (selectedMinerals.length === 0) {
-      mineralInputsEl.innerHTML = '<p class="hint">No minerals selected. Go to <a href="minerals.html">Settings</a> to pick some.</p>';
+    function loadRecipeConcentrateInputs() {
+      const parsed = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), {});
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }
+
+    function saveRecipeConcentrateInputs(values) {
+      safeSetItem("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
+    }
+
+    const recipeConcentrateInputs = loadRecipeConcentrateInputs();
+
+    if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
+      mineralInputsEl.innerHTML = '<p class="hint">No minerals or concentrates selected. Go to <a href="minerals.html">Settings</a> to pick some.</p>';
     } else {
+      // Minerals (grams) - unchanged
       selectedMinerals.forEach(id => {
         const mineral = MINERAL_DB[id];
         if (!mineral) return;
@@ -305,6 +318,31 @@
         `;
         mineralInputsEl.appendChild(div);
       });
+
+      // DIY concentrates (mL)
+      selectedConcentrates.forEach((concentrateId) => {
+        const mineralId = parseDiyConcentrateId(concentrateId);
+        if (!mineralId) return;
+        const mineral = MINERAL_DB[mineralId];
+        if (!mineral) return;
+
+        const savedVal = recipeConcentrateInputs[concentrateId];
+        const value = savedVal == null ? "0" : String(savedVal);
+
+        const div = document.createElement("div");
+        div.className = "mineral-input-row";
+        div.innerHTML = `
+          <div class="mineral-input-info">
+            <span class="mineral-input-name">${mineral.name}</span>
+            <span class="mineral-input-formula">${mineral.formula} <span class="badge badge-concentrate">CONCENTRATE</span></span>
+          </div>
+          <div class="mineral-input-field">
+            <input type="number" id="add-${concentrateId}" value="${value}" min="0" step="0.001" data-concentrate="${concentrateId}" data-mineral-id="${mineralId}">
+            <span class="mineral-input-unit">mL</span>
+          </div>
+        `;
+        mineralInputsEl.appendChild(div);
+      });
     }
 
     // --- Recalculate on any change ---
@@ -316,7 +354,15 @@
 
     const debouncedRecalculate = debounce(recalculate, 120);
     document.querySelectorAll("#mineral-inputs input").forEach(input => {
-      input.addEventListener("input", debouncedRecalculate);
+      input.addEventListener("input", (e) => {
+        const el = e.target;
+        if (el && el.dataset && el.dataset.concentrate) {
+          const key = el.dataset.concentrate;
+          recipeConcentrateInputs[key] = el.value;
+          saveRecipeConcentrateInputs(recipeConcentrateInputs);
+        }
+        debouncedRecalculate();
+      });
     });
     function onVolumeChanged() {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
@@ -343,6 +389,18 @@
           if (totalGrams > 0) {
             mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
           }
+        });
+
+        // DIY concentrates: convert mL -> grams using DIY bottle strength
+        document.querySelectorAll("#mineral-inputs input[data-concentrate]").forEach((input) => {
+          const mineralId = input.dataset.mineralId;
+          const ml = Math.max(0, parseFloat(input.value) || 0);
+          if (!mineralId || ml <= 0) return;
+          const gramsPerMl = getDiyConcentrateGramsPerMl(mineralId);
+          if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
+          const totalGrams = ml * gramsPerMl;
+          if (totalGrams <= 0) return;
+          mineralGramsPerLiter[mineralId] = (mineralGramsPerLiter[mineralId] || 0) + (totalGrams / volumeL);
         });
       }
 

@@ -267,6 +267,61 @@ function loadSelectedMinerals() {
   return selectedMineralsCache;
 }
 
+// --- Selected concentrates + DIY specs ---
+let selectedConcentratesCache = null;
+let diyConcentrateSpecsCache = null;
+
+function saveSelectedConcentrates(concentrateIds) {
+  safeSetItem("cw_selected_concentrates", JSON.stringify(concentrateIds));
+  selectedConcentratesCache = null;
+}
+
+function loadSelectedConcentrates() {
+  if (selectedConcentratesCache) return selectedConcentratesCache;
+  const parsed = safeParse(safeGetItem("cw_selected_concentrates"), null);
+  selectedConcentratesCache = Array.isArray(parsed) ? parsed : [];
+  return selectedConcentratesCache;
+}
+
+function saveDiyConcentrateSpecs(specs) {
+  safeSetItem("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
+  diyConcentrateSpecsCache = null;
+}
+
+function loadDiyConcentrateSpecs() {
+  if (diyConcentrateSpecsCache) return Object.assign({}, diyConcentrateSpecsCache);
+  const parsed = safeParse(safeGetItem("cw_diy_concentrate_specs"), {});
+  diyConcentrateSpecsCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  return Object.assign({}, diyConcentrateSpecsCache);
+}
+
+function parseDiyConcentrateId(concentrateId) {
+  if (typeof concentrateId !== "string") return null;
+  if (!concentrateId.startsWith("diy:")) return null;
+  const mineralId = concentrateId.slice(4);
+  return mineralId || null;
+}
+
+function getDiyConcentrateGramsPerMl(mineralId) {
+  const specs = loadDiyConcentrateSpecs();
+  const spec = specs && specs[mineralId] ? specs[mineralId] : null;
+  const bottleMl = spec ? Number(spec.bottleMl) : 0;
+  const gramsPerBottle = spec ? Number(spec.gramsPerBottle) : 0;
+  if (!Number.isFinite(bottleMl) || !Number.isFinite(gramsPerBottle)) return 0;
+  if (bottleMl <= 0 || gramsPerBottle <= 0) return 0;
+  return gramsPerBottle / bottleMl;
+}
+
+function getAvailableMineralIds() {
+  const out = new Set(loadSelectedMinerals());
+  const concentrates = loadSelectedConcentrates();
+  for (const cid of concentrates) {
+    const diyMineral = parseDiyConcentrateId(cid);
+    if (diyMineral) out.add(diyMineral);
+  }
+  return Array.from(out);
+}
+
 // --- Mineral source preferences ---
 // Legacy: no longer used by UI; kept for backward compatibility when loading old data.
 function saveAlkalinitySource(mineralId) {
@@ -281,7 +336,7 @@ function loadAlkalinitySource() {
 
 /** Returns an array of enabled alkalinity source mineral ids (baking-soda and/or potassium-bicarbonate). */
 function getEffectiveAlkalinitySources() {
-  const selected = loadSelectedMinerals();
+  const selected = getAvailableMineralIds();
   const hasBakingSoda = selected.includes("baking-soda");
   const hasPotBicarb = selected.includes("potassium-bicarbonate");
   if (!hasBakingSoda && !hasPotBicarb) return [];
@@ -313,7 +368,7 @@ function loadMagnesiumSource() {
 
 /** Returns an array of enabled calcium source mineral ids (calcium-chloride and/or gypsum). */
 function getEffectiveCalciumSources() {
-  const selected = loadSelectedMinerals();
+  const selected = getAvailableMineralIds();
   const out = [];
   if (selected.includes("calcium-chloride")) out.push("calcium-chloride");
   if (selected.includes("gypsum")) out.push("gypsum");
@@ -322,7 +377,7 @@ function getEffectiveCalciumSources() {
 
 /** Returns an array of enabled magnesium source mineral ids (epsom-salt and/or magnesium-chloride). */
 function getEffectiveMagnesiumSources() {
-  const selected = loadSelectedMinerals();
+  const selected = getAvailableMineralIds();
   const out = [];
   if (selected.includes("epsom-salt")) out.push("epsom-salt");
   if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
@@ -542,6 +597,8 @@ window.addEventListener("storage", function(e) {
   if (e.key === "cw_custom_profiles") { customProfilesCache = null; invalidateSourcePresetsCache(); }
   if (e.key === "cw_custom_target_profiles") { customTargetProfilesCache = null; invalidateTargetPresetsCache(); }
   if (e.key === "cw_selected_minerals") { selectedMineralsCache = null; }
+  if (e.key === "cw_selected_concentrates") { selectedConcentratesCache = null; }
+  if (e.key === "cw_diy_concentrate_specs") { diyConcentrateSpecsCache = null; }
   if (e.key === "cw_deleted_presets") { invalidateSourcePresetsCache(); }
   if (e.key === "cw_deleted_target_presets") { invalidateTargetPresetsCache(); }
 });

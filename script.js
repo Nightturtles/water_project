@@ -61,37 +61,59 @@ function renderResultItems() {
     return;
   }
 
-  const selected = loadSelectedMinerals();
+  const selectedMinerals = loadSelectedMinerals();
+  const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && id.startsWith("diy:"));
   const mgSourceIds = getEffectiveMagnesiumSources();
   const caSourceIds = getEffectiveCalciumSources();
 
   const bufferIds = alkalinitySources;
-  const toShow = [
-    ...mgSourceIds.map((id, i) => ({ id, order: 0 + i * 0.1 })),
-    ...bufferIds.map((id, i) => ({ id, order: 1 + i * 0.1 })),
-    ...caSourceIds.map((id, i) => ({ id, order: 2 + i * 0.1 }))
-  ].filter(item => item.id && selected.includes(item.id))
-   .sort((a, b) => a.order - b.order);
+  const candidates = [
+    ...mgSourceIds.map((id, i) => ({ mineralId: id, order: 0 + i * 0.1 })),
+    ...bufferIds.map((id, i) => ({ mineralId: id, order: 1 + i * 0.1 })),
+    ...caSourceIds.map((id, i) => ({ mineralId: id, order: 2 + i * 0.1 }))
+  ].filter((x) => x && x.mineralId);
+
+  const toShow = [];
+  for (const c of candidates) {
+    const mineralId = c.mineralId;
+    const diyId = "diy:" + mineralId;
+    const showMineral = selectedMinerals.includes(mineralId);
+    const showConcentrate = selectedConcentrates.includes(diyId);
+    if (showMineral) toShow.push({ kind: "mineral", id: mineralId, order: c.order });
+    if (showConcentrate) toShow.push({ kind: "concentrate", id: diyId, mineralId, order: c.order + 0.05 });
+  }
+  toShow.sort((a, b) => a.order - b.order);
 
   resultsContainer.innerHTML = "";
   if (toShow.length === 0) {
-    resultsContainer.innerHTML = '<p class="hint">Select minerals in <a href="minerals.html">Settings</a> to see what to add.</p>';
+    if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
+      resultsContainer.innerHTML = '<p class="hint">No minerals or concentrates selected. Go to <a href="minerals.html">Settings</a> to pick some.</p>';
+    } else {
+      resultsContainer.innerHTML = '<p class="hint">Select minerals or concentrates in <a href="minerals.html">Settings</a> to see what to add.</p>';
+    }
     lastCalculatedIons = null;
     updateSummaryMetrics({});
     return;
   }
-  for (const { id } of toShow) {
-    const mineral = MINERAL_DB[id];
+  for (const item of toShow) {
+    const mineralId = item.kind === "concentrate" ? item.mineralId : item.id;
+    const mineral = MINERAL_DB[mineralId];
     if (!mineral) continue;
     const div = document.createElement("div");
     div.className = "result-item";
-    div.dataset.mineral = id;
+    if (item.kind === "concentrate") {
+      div.dataset.concentrate = item.id;
+    } else {
+      div.dataset.mineral = item.id;
+    }
+    const detailContent = item.kind === "concentrate" ? `${mineral.formula} <span class="badge badge-concentrate">CONCENTRATE</span>` : mineral.formula;
+    const valueText = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
     div.innerHTML = `
       <div class="result-info">
         <span class="result-name">${mineral.name}</span>
-        <span class="result-detail">${mineral.formula}</span>
+        <span class="result-detail">${detailContent}</span>
       </div>
-      <span class="result-value">0.00 g</span>
+      <span class="result-value">${valueText}</span>
     `;
     resultsContainer.appendChild(div);
   }
@@ -463,13 +485,22 @@ function calculate() {
   const hasMgSource = getEffectiveMagnesiumSources().length > 0;
   const hasCaSource = getEffectiveCalciumSources().length > 0;
   const warnings = [];
+  const selectedMinerals = loadSelectedMinerals();
+  const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && id.startsWith("diy:"));
+  const conflictMineralIds = new Set();
+  selectedConcentrates.forEach((cid) => {
+    const mineralId = parseDiyConcentrateId(cid);
+    if (!mineralId) return;
+    if (selectedMinerals.includes(mineralId)) conflictMineralIds.add(mineralId);
+  });
+  if (conflictMineralIds.size > 0) {
+    warnings.push("You’ve selected both the normal and concentrate version of a mineral. We will default to using the concentrate.");
+  }
   if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
   if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
   if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
   if (!hasMgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
   if (!hasCaSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
-
-  if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
   // Compute salt dosing (per L) using auto-selected sources
   const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
@@ -502,7 +533,25 @@ function calculate() {
   mgSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
   caSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
 
-  updateResultValues(resultValues);
+  const displayMineralGrams = { ...resultValues };
+  conflictMineralIds.forEach((mineralId) => { displayMineralGrams[mineralId] = 0; });
+  updateResultValues(displayMineralGrams);
+
+  const concentrateValues = {};
+  selectedConcentrates.forEach((cid) => {
+    const mineralId = parseDiyConcentrateId(cid);
+    if (!mineralId) return;
+    const grams = resultValues[mineralId] != null ? Number(resultValues[mineralId]) : 0;
+    const gramsPerMl = getDiyConcentrateGramsPerMl(mineralId);
+    if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
+      concentrateValues[cid] = 0;
+      if (grams > 0) warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
+      return;
+    }
+    concentrateValues[cid] = Math.max(0, grams / gramsPerMl);
+  });
+  updateConcentrateValues(concentrateValues);
+  if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
   // Compute resulting ions (mg/L)
   const mineralGramsPerL = {};
@@ -643,6 +692,11 @@ function formatGrams(g) {
   return g.toFixed(2) + " g";
 }
 
+function formatMl(ml) {
+  if (!isFinite(ml) || ml <= 0) return "0.000 mL";
+  return ml.toFixed(3) + " mL";
+}
+
 function updateResultValues(valuesByMineral) {
   for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
     const item = resultsContainer.querySelector(`[data-mineral="${mineralId}"]`);
@@ -656,6 +710,22 @@ function updateResultValues(valuesByMineral) {
       } else {
         item.removeAttribute("aria-label");
       }
+    }
+  }
+}
+
+function updateConcentrateValues(valuesByConcentrate) {
+  for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
+    const item = resultsContainer.querySelector(`[data-concentrate="${concentrateId}"]`);
+    if (!item) continue;
+    const valEl = item.querySelector(".result-value");
+    if (valEl) valEl.textContent = formatMl(ml);
+    if (ml > 0) {
+      const nameEl = item.querySelector(".result-name");
+      const name = nameEl ? nameEl.textContent : concentrateId;
+      item.setAttribute("aria-label", name + ", " + formatMl(ml));
+    } else {
+      item.removeAttribute("aria-label");
     }
   }
 }
