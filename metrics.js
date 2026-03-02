@@ -209,39 +209,70 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   return { findings, metrics, ratio };
 }
 
+// --- Split alkalinity delta between baking soda and potassium bicarbonate when both are enabled ---
+function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile) {
+  var result = {};
+  if (alkalinitySources.length === 0) return result;
+  if (alkalinitySources.length === 1) {
+    result[alkalinitySources[0]] = deltaAlkAsCaCO3;
+    return result;
+  }
+  // Both baking-soda and potassium-bicarbonate enabled: split by target sodium vs potassium if present
+  var targetNa = targetProfile && Number.isFinite(Number(targetProfile.sodium)) ? Number(targetProfile.sodium) : null;
+  var targetK = targetProfile && Number.isFinite(Number(targetProfile.potassium)) ? Number(targetProfile.potassium) : null;
+  var sourceNa = sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
+  var sourceK = sourceWater && Number.isFinite(Number(sourceWater.potassium)) ? Number(sourceWater.potassium) : 0;
+  var deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
+  var deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
+
+  if (deltaNa > 0 && deltaK > 0) {
+    var total = deltaNa + deltaK;
+    result["baking-soda"] = (deltaAlkAsCaCO3 * deltaNa) / total;
+    result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * deltaK) / total;
+  } else if (deltaNa > 0) {
+    result["baking-soda"] = deltaAlkAsCaCO3;
+  } else {
+    // deltaK > 0 or both absent: fall back to potassium bicarbonate per AC
+    result["potassium-bicarbonate"] = deltaAlkAsCaCO3;
+  }
+  return result;
+}
+
 // --- Compute full 7-ion profile from a Ca/Mg/Alk target ---
+// Uses the same pickBestCaMgSources and splitAlkalinityDelta logic as the Calculator
+// to ensure consistent ion math across all pages.
 function computeFullProfile(target) {
-  const hasExplicitIons = target && ION_FIELDS.every((ion) => Number.isFinite(Number(target[ion])));
+  var hasExplicitIons = target && ION_FIELDS.every(function(ion) { return Number.isFinite(Number(target[ion])); });
   if (hasExplicitIons) {
-    const explicit = {};
-    ION_FIELDS.forEach((ion) => {
+    var explicit = {};
+    ION_FIELDS.forEach(function(ion) {
       explicit[ion] = Math.round(Number(target[ion]) || 0);
     });
     return explicit;
   }
 
-  const sourceWater = getSourceWaterByPreset(loadSourcePresetName());
-  const alkSource = getEffectiveAlkalinitySource();
-  const caSource = getEffectiveCalciumSource();
-  const mgSource = getEffectiveMagnesiumSource();
+  var sourceWater = getSourceWaterByPreset(loadSourcePresetName());
+  var alkalinitySources = getEffectiveAlkalinitySources();
 
-  const sourceAlk = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
-  const deltaCa = Math.max(0, (target.calcium || 0) - (sourceWater.calcium || 0));
-  const deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
-  const deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
+  var sourceAlk = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
+  var deltaCa = Math.max(0, (target.calcium || 0) - (sourceWater.calcium || 0));
+  var deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
+  var deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
 
-  const caFraction = caSource ? (MINERAL_DB[caSource]?.ions?.calcium || 0) : 0;
-  const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
-  const mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
-  const mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
-  let mgL_buffer = 0;
-  if (alkSource === "potassium-bicarbonate") {
-    mgL_buffer = deltaAlk * ALK_TO_POTASSIUM_BICARB;
-  } else if (alkSource === "baking-soda") {
-    mgL_buffer = deltaAlk * ALK_TO_BAKING_SODA;
-  }
+  // Use same Ca/Mg source optimization as Calculator
+  var picked = pickBestCaMgSources(sourceWater, target, deltaCa, deltaMg);
+  var caSource = picked.caSource;
+  var mgSource = picked.mgSource;
 
-  const result = {
+  var caFraction = caSource ? (MINERAL_DB[caSource] && MINERAL_DB[caSource].ions ? MINERAL_DB[caSource].ions.calcium || 0 : 0) : 0;
+  var mgFraction = mgSource ? (MINERAL_DB[mgSource] && MINERAL_DB[mgSource].ions ? MINERAL_DB[mgSource].ions.magnesium || 0 : 0) : 0;
+  var mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
+  var mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
+
+  // Use same alkalinity split logic as Calculator
+  var alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlk, sourceWater, target);
+
+  var result = {
     calcium: sourceWater.calcium || 0,
     magnesium: sourceWater.magnesium || 0,
     potassium: sourceWater.potassium || 0,
@@ -251,25 +282,41 @@ function computeFullProfile(target) {
     bicarbonate: sourceWater.bicarbonate || 0
   };
 
-  if (caSource && mgL_caSalt > 0) {
-    for (const [ion, fraction] of Object.entries(MINERAL_DB[caSource].ions)) {
-      result[ion] += mgL_caSalt * fraction;
+  if (caSource && mgL_caSalt > 0 && MINERAL_DB[caSource]) {
+    for (var ionCa in MINERAL_DB[caSource].ions) {
+      if (MINERAL_DB[caSource].ions.hasOwnProperty(ionCa)) {
+        result[ionCa] += mgL_caSalt * MINERAL_DB[caSource].ions[ionCa];
+      }
     }
   }
 
-  if (mgSource && mgL_mgSalt > 0) {
-    for (const [ion, fraction] of Object.entries(MINERAL_DB[mgSource].ions)) {
-      result[ion] += mgL_mgSalt * fraction;
+  if (mgSource && mgL_mgSalt > 0 && MINERAL_DB[mgSource]) {
+    for (var ionMg in MINERAL_DB[mgSource].ions) {
+      if (MINERAL_DB[mgSource].ions.hasOwnProperty(ionMg)) {
+        result[ionMg] += mgL_mgSalt * MINERAL_DB[mgSource].ions[ionMg];
+      }
     }
   }
 
-  if (alkSource && mgL_buffer > 0) {
-    for (const [ion, fraction] of Object.entries(MINERAL_DB[alkSource].ions)) {
-      result[ion] += mgL_buffer * fraction;
+  // Apply each alkalinity source from the split allocation
+  var alkSources = ["baking-soda", "potassium-bicarbonate"];
+  alkSources.forEach(function(alkId) {
+    var alkDelta = alkAllocation[alkId];
+    if (!alkDelta || alkDelta <= 0 || !MINERAL_DB[alkId]) return;
+    var mgL_buffer;
+    if (alkId === "potassium-bicarbonate") {
+      mgL_buffer = alkDelta * ALK_TO_POTASSIUM_BICARB;
+    } else {
+      mgL_buffer = alkDelta * ALK_TO_BAKING_SODA;
     }
-  }
+    for (var ionAlk in MINERAL_DB[alkId].ions) {
+      if (MINERAL_DB[alkId].ions.hasOwnProperty(ionAlk)) {
+        result[ionAlk] += mgL_buffer * MINERAL_DB[alkId].ions[ionAlk];
+      }
+    }
+  });
 
-  ION_FIELDS.forEach(ion => { result[ion] = Math.round(result[ion]); });
+  ION_FIELDS.forEach(function(ion) { result[ion] = Math.round(result[ion]); });
   return result;
 }
 

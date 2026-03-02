@@ -349,6 +349,13 @@ function loadSelectedConcentrates() {
   return selectedConcentratesCache;
 }
 
+/** Returns only valid concentrate IDs (diy: or brand: prefixed) from the selected concentrates list. */
+function loadValidSelectedConcentrates() {
+  return loadSelectedConcentrates().filter(function(id) {
+    return typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:"));
+  });
+}
+
 function saveDiyConcentrateSpecs(specs) {
   safeSetItem("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
@@ -409,16 +416,6 @@ function getAvailableMineralIds() {
 }
 
 // --- Mineral source preferences ---
-// Legacy: no longer used by UI; kept for backward compatibility when loading old data.
-function saveAlkalinitySource(mineralId) {
-  safeSetItem("cw_alkalinity_source", mineralId);
-}
-
-function loadAlkalinitySource() {
-  const saved = safeGetItem("cw_alkalinity_source");
-  if (saved === "potassium-bicarbonate") return "potassium-bicarbonate";
-  return "baking-soda";
-}
 
 /** Returns an array of enabled alkalinity source mineral ids (baking-soda and/or potassium-bicarbonate). */
 function getEffectiveAlkalinitySources() {
@@ -429,27 +426,6 @@ function getEffectiveAlkalinitySources() {
   if (hasBakingSoda && hasPotBicarb) return ["baking-soda", "potassium-bicarbonate"];
   if (hasBakingSoda) return ["baking-soda"];
   return ["potassium-bicarbonate"];
-}
-
-// Legacy: no longer used by UI; kept for backward compatibility.
-function saveCalciumSource(mineralId) {
-  safeSetItem("cw_calcium_source", mineralId);
-}
-
-function loadCalciumSource() {
-  const saved = safeGetItem("cw_calcium_source");
-  if (saved === "gypsum") return "gypsum";
-  return "calcium-chloride";
-}
-
-function saveMagnesiumSource(mineralId) {
-  safeSetItem("cw_magnesium_source", mineralId);
-}
-
-function loadMagnesiumSource() {
-  const saved = safeGetItem("cw_magnesium_source");
-  if (saved === "magnesium-chloride") return "magnesium-chloride";
-  return "epsom-salt";
 }
 
 /** Returns an array of enabled calcium source mineral ids (calcium-chloride and/or gypsum). */

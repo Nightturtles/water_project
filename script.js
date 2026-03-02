@@ -62,7 +62,7 @@ function renderResultItems() {
   }
 
   const selectedMinerals = loadSelectedMinerals();
-  const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:")));
+  const selectedConcentrates = loadValidSelectedConcentrates();
   const mgSourceIds = getEffectiveMagnesiumSources();
   const caSourceIds = getEffectiveCalciumSources();
 
@@ -459,35 +459,6 @@ volumeUnit.addEventListener("change", () => {
   calculate();
 });
 
-// --- Split alkalinity delta between baking soda and potassium bicarbonate when both are enabled ---
-function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile) {
-  const result = {};
-  if (alkalinitySources.length === 0) return result;
-  if (alkalinitySources.length === 1) {
-    result[alkalinitySources[0]] = deltaAlkAsCaCO3;
-    return result;
-  }
-  // Both baking-soda and potassium-bicarbonate enabled: split by target sodium vs potassium if present
-  const targetNa = targetProfile && Number.isFinite(Number(targetProfile.sodium)) ? Number(targetProfile.sodium) : null;
-  const targetK = targetProfile && Number.isFinite(Number(targetProfile.potassium)) ? Number(targetProfile.potassium) : null;
-  const sourceNa = sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
-  const sourceK = sourceWater && Number.isFinite(Number(sourceWater.potassium)) ? Number(sourceWater.potassium) : 0;
-  const deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
-  const deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
-
-  if (deltaNa > 0 && deltaK > 0) {
-    const total = deltaNa + deltaK;
-    result["baking-soda"] = (deltaAlkAsCaCO3 * deltaNa) / total;
-    result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * deltaK) / total;
-  } else if (deltaNa > 0) {
-    result["baking-soda"] = deltaAlkAsCaCO3;
-  } else {
-    // deltaK > 0 or both absent: fall back to potassium bicarbonate per AC
-    result["potassium-bicarbonate"] = deltaAlkAsCaCO3;
-  }
-  return result;
-}
-
 // --- Core calculation ---
 function calculate() {
   const warningsEl = document.getElementById("result-warnings");
@@ -549,7 +520,7 @@ function calculate() {
   const hasCaSource = getEffectiveCalciumSources().length > 0;
   const warnings = [];
   const selectedMinerals = loadSelectedMinerals();
-  const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:")));
+  const selectedConcentrates = loadValidSelectedConcentrates();
   const conflictMineralIds = new Set();
   selectedConcentrates.forEach((cid) => {
     const mineralId = getConcentrateMineralId(cid);
@@ -579,6 +550,15 @@ function calculate() {
   }
   if (alkAllocation["potassium-bicarbonate"] != null && alkAllocation["potassium-bicarbonate"] > 0) {
     bufferGramsPerL["potassium-bicarbonate"] = (alkAllocation["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
+  }
+
+  // Warn when both alkalinity sources are enabled but the split is entirely one-sided
+  if (alkalinitySources.length === 2 && deltaAlkAsCaCO3 > 0) {
+    const usedSources = Object.keys(alkAllocation).filter(function(k) { return alkAllocation[k] > 0; });
+    if (usedSources.length === 1) {
+      const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
+      warnings.push("Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split — using only " + usedName + ".");
+    }
   }
 
   // Total grams for the full volume; show 0 for unchosen Ca/Mg sources so UI indicates which were chosen
@@ -750,23 +730,23 @@ function setActiveBrewMethod(method) {
 
 // --- Bug 3: Fixed formatGrams to handle sub-threshold display ---
 function formatGrams(g) {
-  if (!isFinite(g) || g <= 0) return "0.00 g";
+  if (!Number.isFinite(g) || g <= 0) return "0.00 g";
   if (g < 0.01) return "<0.01 g";
   return g.toFixed(2) + " g";
 }
 
 function formatMl(ml) {
-  if (!isFinite(ml) || ml <= 0) return "0.000 mL";
+  if (!Number.isFinite(ml) || ml <= 0) return "0.000 mL";
   return ml.toFixed(3) + " mL";
 }
 
 function formatLotusConcentrateValue(ml, unit) {
   if (unit === "ml") {
-    if (!isFinite(ml) || ml <= 0) return "0.000";
+    if (!Number.isFinite(ml) || ml <= 0) return "0.000";
     return ml.toFixed(3);
   }
   const dropMl = getLotusDropMl();
-  const drops = (isFinite(dropMl) && dropMl > 0) ? Math.round(ml / dropMl) : 0;
+  const drops = (Number.isFinite(dropMl) && dropMl > 0) ? Math.round(ml / dropMl) : 0;
   return String(drops);
 }
 

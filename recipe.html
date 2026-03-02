@@ -282,8 +282,17 @@
 
     // --- Load selected minerals + concentrates and build inputs ---
     const selectedMinerals = loadSelectedMinerals();
-    const selectedConcentrates = loadSelectedConcentrates().filter((id) => typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:")));
+    const selectedConcentrates = loadValidSelectedConcentrates();
     const mineralInputsEl = document.getElementById("mineral-inputs");
+
+    function loadRecipeMineralInputs() {
+      const parsed = safeParse(safeGetItem("cw_recipe_mineral_inputs"), {});
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }
+
+    function saveRecipeMineralInputs(values) {
+      safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(values || {}));
+    }
 
     function loadRecipeConcentrateInputs() {
       const parsed = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), {});
@@ -294,6 +303,7 @@
       safeSetItem("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
     }
 
+    const recipeMineralInputs = loadRecipeMineralInputs();
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
 
     function normalizeRecipeLotusInputValue(savedVal) {
@@ -341,7 +351,7 @@
         const input = document.createElement("input");
         input.type = "number";
         input.id = "add-" + id;
-        input.value = "0";
+        input.value = recipeMineralInputs[id] != null ? String(recipeMineralInputs[id]) : "0";
         input.min = "0";
         input.step = "0.01";
         input.dataset.mineral = id;
@@ -462,7 +472,10 @@
     document.querySelectorAll("#mineral-inputs input").forEach(input => {
       input.addEventListener("input", (e) => {
         const el = e.target;
-        if (el && el.dataset && el.dataset.concentrate) {
+        if (el && el.dataset && el.dataset.mineral && !el.dataset.concentrate) {
+          recipeMineralInputs[el.dataset.mineral] = el.value;
+          saveRecipeMineralInputs(recipeMineralInputs);
+        } else if (el && el.dataset && el.dataset.concentrate) {
           const key = el.dataset.concentrate;
           const row = el.closest(".mineral-input-row");
           if (row && row.dataset.lotusConcentrate === "true") {
@@ -700,6 +713,13 @@
 
     // --- Initial calculation ---
     recalculate();
+
+    // --- Multi-tab sync: reload when mineral selections change in another tab ---
+    window.addEventListener("storage", function(e) {
+      if (e.key === "cw_selected_minerals" || e.key === "cw_selected_concentrates") {
+        location.reload();
+      }
+    });
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {
