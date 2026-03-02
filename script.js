@@ -241,10 +241,10 @@ function activateProfile(profileName) {
     profileName = findFallbackPreset(visibleProfiles);
   }
   currentProfile = profileName;
-  highlightProfile(profileName);
   saveTargetPresetName(profileName);
 
   if (profileName === "custom") {
+    highlightProfile(profileName);
     profileDesc.textContent = "Enter your own target values above.";
     calculate();
     return;
@@ -257,6 +257,8 @@ function activateProfile(profileName) {
     targetAlk.value = profile.alkalinity;
     profileDesc.textContent = profile.description || "";
   }
+  // Render profile state after input values are assigned so readonly tags are in sync.
+  highlightProfile(profileName);
   calculate();
 }
 

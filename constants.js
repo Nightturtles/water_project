@@ -137,37 +137,62 @@ const TARGET_PRESETS = {
   },
   "lotus-light-bright": {
     label: "Light and Bright",
-    calcium: 24,
+    calcium: 22.832,
     magnesium: 0,
-    alkalinity: 25,
+    alkalinity: 24.245,
+    potassium: 18.941,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 40.395,
+    bicarbonate: 29.56,
     description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees."
   },
   "lotus-simple-sweet": {
     label: "Simple and Sweet",
-    calcium: 24,
-    magnesium: 7.3,
-    alkalinity: 40,
+    calcium: 22.832,
+    magnesium: 7.882,
+    alkalinity: 40.476,
+    potassium: 12.628,
+    sodium: 11.169,
+    sulfate: 0,
+    chloride: 63.389,
+    bicarbonate: 49.35,
     description: "Lotus balanced profile with added sweetness and approachable acidity."
   },
   "lotus-light-bright-espresso": {
     label: "Light and Bright (espresso)",
     calcium: 0,
-    magnesium: 4.9,
-    alkalinity: 45,
+    magnesium: 3.941,
+    alkalinity: 44.449,
+    potassium: 34.726,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 11.497,
+    bicarbonate: 54.194,
     description: "Lotus espresso profile for clarity-forward shots with restrained hardness."
   },
   "lotus-simple-sweet-espresso": {
     label: "Simple and Sweet (espresso)",
     calcium: 0,
-    magnesium: 4.9,
-    alkalinity: 55,
+    magnesium: 3.941,
+    alkalinity: 56.73,
+    potassium: 0,
+    sodium: 26.061,
+    sulfate: 0,
+    chloride: 11.497,
+    bicarbonate: 69.167,
     description: "Lotus espresso profile with higher buffer for sweeter, rounder shots."
   },
   "lotus-bright-juicy": {
     label: "Bright and Juicy",
-    calcium: 14.4,
-    magnesium: 8.7,
-    alkalinity: 18,
+    calcium: 13.047,
+    magnesium: 7.882,
+    alkalinity: 16.186,
+    potassium: 6.314,
+    sodium: 3.723,
+    sulfate: 0,
+    chloride: 46.077,
+    bicarbonate: 19.734,
     description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity."
   },
   "eaf-holy-water": {
@@ -313,40 +338,40 @@ const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_
 
 // --- Brand name concentrates (fixed strength, equivalent grams of mineral per mL) ---
 // Lotus Coffee Water Drops: concentrations derived from official round-tip dropper recipes
-// (round drop ≈ 0.067 mL, straight drop ≈ 0.0375 mL). gramsPerMl = equivalent grams of
+// (round drop ≈ 0.0716 mL, straight drop ≈ 0.0386 mL). gramsPerMl = equivalent grams of
 // the mapped MINERAL_DB salt per mL of concentrate (for dosing math).
 const LOTUS_DROPPER_ML = {
-  round: 0.067,
-  straight: 0.0375
+  round: 0.0716,
+  straight: 0.0386
 };
 const BRAND_CONCENTRATES = {
   "brand:lotus:calcium": {
     name: "Calcium",
     mineralId: "calcium-chloride",
     formula: "CaCl\u2082\u00b72H\u2082O",
-    gramsPerMl: 0.1757,
-    description: "~119.7 mg/mL hardness as CaCO\u2083 (\u2248 47.9 mg/mL Ca\u00B2\u207A). Source: calcium chloride."
+    gramsPerMl: 0.1671,
+    description: "~113.7 mg/mL hardness as CaCO\u2083 (\u2248 45.5 mg/mL Ca\u00B2\u207A). Calibrated so 69 round drops in 15L yields ~15 mg/L Ca and ~26.5 mg/L Cl."
   },
   "brand:lotus:magnesium": {
     name: "Magnesium",
     mineralId: "magnesium-chloride",
     formula: "MgCl\u2082\u00b76H\u2082O",
-    gramsPerMl: 0.2430,
-    description: "~119.7 mg/mL hardness as CaCO\u2083 (\u2248 29.1 mg/mL Mg\u00B2\u207A). Source: magnesium chloride."
+    gramsPerMl: 0.2302,
+    description: "~113.4 mg/mL hardness as CaCO\u2083 (\u2248 27.5 mg/mL Mg\u00B2\u207A). Calibrated so 274 round drops in 15L yields ~36 mg/L Mg and ~105.0 mg/L Cl."
   },
   "brand:lotus:sodium-bicarbonate": {
     name: "Sodium Bicarbonate",
     mineralId: "baking-soda",
     formula: "NaHCO\u2083",
-    gramsPerMl: 0.0977,
-    description: "~58.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.7 mg/mL Na\u207A). Source: sodium bicarbonate."
+    gramsPerMl: 0.0950,
+    description: "~150.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.0 mg/mL Na\u207A; \u2248 69.0 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~69 mg/L Na and ~183.1 mg/L HCO\u2083."
   },
   "brand:lotus:potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
     mineralId: "potassium-bicarbonate",
     formula: "KHCO\u2083",
-    gramsPerMl: 0.1164,
-    description: "~58.2 mg/mL alkalinity as CaCO\u2083 (\u2248 45.5 mg/mL K\u207A). Source: potassium bicarbonate."
+    gramsPerMl: 0.1129,
+    description: "~149.8 mg/mL alkalinity as CaCO\u2083 (\u2248 44.1 mg/mL K\u207A; \u2248 68.8 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~117 mg/L K and ~182.6 mg/L HCO\u2083."
   }
 };
 
