@@ -234,6 +234,51 @@ function getLotusDropMl() {
   return Number.isFinite(fallbackMl) && fallbackMl > 0 ? fallbackMl : 0.0716;
 }
 
+function normalizeLotusConcentrateUnit(unit) {
+  return unit === "ml" ? "ml" : "drops";
+}
+
+function saveLotusConcentrateUnit(unit) {
+  safeSetItem("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
+}
+
+function loadLotusConcentrateUnit() {
+  return normalizeLotusConcentrateUnit(safeGetItem("cw_lotus_concentrate_unit"));
+}
+
+function loadLotusConcentrateUnits() {
+  const parsed = safeParse(safeGetItem("cw_lotus_concentrate_units"), {});
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+  const normalized = {};
+  Object.keys(parsed).forEach((key) => {
+    normalized[key] = normalizeLotusConcentrateUnit(parsed[key]);
+  });
+  return normalized;
+}
+
+function saveLotusConcentrateUnits(units) {
+  const safeUnits = {};
+  if (units && typeof units === "object" && !Array.isArray(units)) {
+    Object.keys(units).forEach((key) => {
+      safeUnits[key] = normalizeLotusConcentrateUnit(units[key]);
+    });
+  }
+  safeSetItem("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
+}
+
+function loadLotusConcentrateUnitFor(concentrateId) {
+  const units = loadLotusConcentrateUnits();
+  if (concentrateId && units[concentrateId]) return units[concentrateId];
+  return "drops";
+}
+
+function saveLotusConcentrateUnitFor(concentrateId, unit) {
+  if (!concentrateId) return;
+  const units = loadLotusConcentrateUnits();
+  units[concentrateId] = normalizeLotusConcentrateUnit(unit);
+  saveLotusConcentrateUnits(units);
+}
+
 // --- Source presets aggregation + cache ---
 let sourcePresetsCache = null;
 function invalidateSourcePresetsCache() {

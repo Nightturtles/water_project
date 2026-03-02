@@ -147,15 +147,35 @@ function renderResultItems() {
     }
     resultInfo.appendChild(nameSpan);
     resultInfo.appendChild(detailSpan);
-    const valueSpan = document.createElement("span");
-    valueSpan.className = "result-value";
-    if (item.kind === "concentrate" && item.id.startsWith("brand:lotus:")) {
-      valueSpan.textContent = "0.0 ml / 0 drops";
-    } else {
-      valueSpan.textContent = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
-    }
     div.appendChild(resultInfo);
-    div.appendChild(valueSpan);
+    if (item.kind === "concentrate" && item.id.startsWith("brand:lotus:")) {
+      const valueWrap = document.createElement("div");
+      valueWrap.className = "lotus-value-field";
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "result-value";
+      const defaultUnit = loadLotusConcentrateUnitFor(item.id);
+      valueSpan.textContent = formatLotusConcentrateValue(0, defaultUnit);
+      const unitSelect = document.createElement("select");
+      unitSelect.className = "lotus-unit-select";
+      unitSelect.dataset.lotusUnitFor = item.id;
+      const dropsOption = document.createElement("option");
+      dropsOption.value = "drops";
+      dropsOption.textContent = "drops";
+      const mlOption = document.createElement("option");
+      mlOption.value = "ml";
+      mlOption.textContent = "mL";
+      unitSelect.appendChild(dropsOption);
+      unitSelect.appendChild(mlOption);
+      unitSelect.value = defaultUnit;
+      valueWrap.appendChild(valueSpan);
+      valueWrap.appendChild(unitSelect);
+      div.appendChild(valueWrap);
+    } else {
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "result-value";
+      valueSpan.textContent = item.kind === "concentrate" ? "0.000 mL" : "0.00 g";
+      div.appendChild(valueSpan);
+    }
     resultsContainer.appendChild(div);
   }
 }
@@ -740,11 +760,14 @@ function formatMl(ml) {
   return ml.toFixed(3) + " mL";
 }
 
-function formatLotusMlAndDrops(ml) {
-  if (!isFinite(ml) || ml <= 0) return "0.0 ml / 0 drops";
+function formatLotusConcentrateValue(ml, unit) {
+  if (unit === "ml") {
+    if (!isFinite(ml) || ml <= 0) return "0.000";
+    return ml.toFixed(3);
+  }
   const dropMl = getLotusDropMl();
   const drops = (isFinite(dropMl) && dropMl > 0) ? Math.round(ml / dropMl) : 0;
-  return ml.toFixed(1) + " ml / " + drops + " drops";
+  return String(drops);
 }
 
 function updateResultValues(valuesByMineral) {
@@ -770,12 +793,15 @@ function updateConcentrateValues(valuesByConcentrate) {
     if (!item) continue;
     const valEl = item.querySelector(".result-value");
     const isLotus = concentrateId.startsWith("brand:lotus:");
-    const displayValue = isLotus ? formatLotusMlAndDrops(ml) : formatMl(ml);
+    const unitSelect = isLotus ? item.querySelector("[data-lotus-unit-for]") : null;
+    const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+    const displayValue = isLotus ? formatLotusConcentrateValue(ml, unit) : formatMl(ml);
     if (valEl) valEl.textContent = displayValue;
     if (ml > 0) {
       const nameEl = item.querySelector(".result-name");
       const name = nameEl ? nameEl.textContent : concentrateId;
-      item.setAttribute("aria-label", name + ", " + displayValue);
+      const ariaValue = isLotus ? (displayValue + " " + unit) : displayValue;
+      item.setAttribute("aria-label", name + ", " + ariaValue);
     } else {
       item.removeAttribute("aria-label");
     }
@@ -794,6 +820,13 @@ if (brewMethodToggle) {
     btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
   });
 }
+resultsContainer.addEventListener("change", (e) => {
+  const select = e.target.closest("[data-lotus-unit-for]");
+  if (!select) return;
+  const concentrateId = select.dataset.lotusUnitFor;
+  saveLotusConcentrateUnitFor(concentrateId, select.value);
+  calculate();
+});
 renderResultItems();
 renderProfileButtons();
 updateTargetModeUI();

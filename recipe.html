@@ -296,6 +296,18 @@
 
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
 
+    function normalizeRecipeLotusInputValue(savedVal) {
+      if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
+        const ml = Math.max(0, parseFloat(savedVal.ml) || 0);
+        const drops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        return { ml, drops };
+      }
+      const ml = Math.max(0, parseFloat(savedVal) || 0);
+      const dropMl = getLotusDropMl();
+      const drops = (dropMl > 0) ? Math.round(ml / dropMl) : 0;
+      return { ml, drops };
+    }
+
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
       const p = document.createElement("p");
       p.className = "hint";
@@ -355,11 +367,7 @@
         const isLotusConcentrate = concentrateId.startsWith("brand:lotus:");
         const savedVal = recipeConcentrateInputs[concentrateId];
         let savedMl = "0";
-        let savedDrops = "0";
-        if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
-          savedMl = savedVal.ml == null ? "0" : String(savedVal.ml);
-          savedDrops = savedVal.drops == null ? "0" : String(savedVal.drops);
-        } else if (savedVal != null) {
+        if (savedVal != null && typeof savedVal !== "object") {
           savedMl = String(savedVal);
         }
 
@@ -391,49 +399,35 @@
         const field = document.createElement("div");
         field.className = "mineral-input-field";
         if (isLotusConcentrate) {
-          field.classList.add("mineral-input-field-lotus");
-          const dualInputs = document.createElement("div");
-          dualInputs.className = "lotus-concentrate-inputs";
-
-          const mlWrap = document.createElement("div");
-          mlWrap.className = "lotus-concentrate-input";
-          const mlInput = document.createElement("input");
-          mlInput.type = "number";
-          mlInput.id = "add-" + concentrateId + "-ml";
-          mlInput.value = savedMl;
-          mlInput.min = "0";
-          mlInput.step = "0.001";
-          mlInput.dataset.concentrate = concentrateId;
-          mlInput.dataset.mineralId = mineralId;
-          mlInput.dataset.concentrateField = "ml";
-          mlInput.dataset.lotusInput = "true";
-          const mlUnit = document.createElement("span");
-          mlUnit.className = "mineral-input-unit";
-          mlUnit.textContent = "mL";
-          mlWrap.appendChild(mlInput);
-          mlWrap.appendChild(mlUnit);
-
-          const dropsWrap = document.createElement("div");
-          dropsWrap.className = "lotus-concentrate-input";
-          const dropsInput = document.createElement("input");
-          dropsInput.type = "number";
-          dropsInput.id = "add-" + concentrateId + "-drops";
-          dropsInput.value = savedDrops;
-          dropsInput.min = "0";
-          dropsInput.step = "1";
-          dropsInput.dataset.concentrate = concentrateId;
-          dropsInput.dataset.mineralId = mineralId;
-          dropsInput.dataset.concentrateField = "drops";
-          dropsInput.dataset.lotusInput = "true";
-          const dropsUnit = document.createElement("span");
-          dropsUnit.className = "mineral-input-unit";
-          dropsUnit.textContent = "drops";
-          dropsWrap.appendChild(dropsInput);
-          dropsWrap.appendChild(dropsUnit);
-
-          dualInputs.appendChild(mlWrap);
-          dualInputs.appendChild(dropsWrap);
-          field.appendChild(dualInputs);
+          const normalized = normalizeRecipeLotusInputValue(savedVal);
+          recipeConcentrateInputs[concentrateId] = normalized;
+          const unit = loadLotusConcentrateUnitFor(concentrateId);
+          const input = document.createElement("input");
+          input.type = "number";
+          input.id = "add-" + concentrateId + "-lotus";
+          input.value = unit === "ml" ? String(normalized.ml) : String(normalized.drops);
+          input.min = "0";
+          input.step = unit === "ml" ? "0.001" : "1";
+          input.dataset.concentrate = concentrateId;
+          input.dataset.mineralId = mineralId;
+          input.dataset.concentrateField = "lotus-value";
+          input.dataset.lotusInput = "true";
+          const unitSelect = document.createElement("select");
+          unitSelect.className = "lotus-unit-select";
+          unitSelect.dataset.lotusUnitSelect = "true";
+          unitSelect.dataset.concentrate = concentrateId;
+          const dropsOption = document.createElement("option");
+          dropsOption.value = "drops";
+          dropsOption.textContent = "drops";
+          const mlOption = document.createElement("option");
+          mlOption.value = "ml";
+          mlOption.textContent = "mL";
+          unitSelect.appendChild(dropsOption);
+          unitSelect.appendChild(mlOption);
+          unitSelect.value = unit;
+          unitSelect.dataset.currentUnit = unit;
+          field.appendChild(input);
+          field.appendChild(unitSelect);
         } else {
           const input = document.createElement("input");
           input.type = "number";
@@ -452,33 +446,9 @@
         }
         div.appendChild(info);
         div.appendChild(field);
-        if (isLotusConcentrate) {
-          const errorEl = document.createElement("div");
-          errorEl.className = "concentrate-input-error";
-          errorEl.setAttribute("aria-live", "polite");
-          div.appendChild(errorEl);
-        }
         mineralInputsEl.appendChild(div);
       });
     }
-
-    function validateLotusConcentrateRow(row) {
-      if (!row || row.dataset.lotusConcentrate !== "true") return true;
-      const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
-      const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
-      const errorEl = row.querySelector(".concentrate-input-error");
-      const ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
-      const drops = Math.max(0, parseFloat(dropsInput && dropsInput.value) || 0);
-      const valid = !(ml > 0 && drops > 0);
-      if (errorEl) {
-        errorEl.textContent = valid ? "" : "You must choose between ml and drops";
-      }
-      return valid;
-    }
-
-    document.querySelectorAll('#mineral-inputs .mineral-input-row[data-lotus-concentrate="true"]').forEach((row) => {
-      validateLotusConcentrateRow(row);
-    });
 
     // --- Recalculate on any change ---
     const volumeInput = document.getElementById("recipe-volume");
@@ -486,6 +456,7 @@
     const savedVolume = loadVolumePreference("recipe", { value: volumeInput.value, unit: volumeUnit.value });
     volumeInput.value = savedVolume.value;
     volumeUnit.value = savedVolume.unit;
+    saveRecipeConcentrateInputs(recipeConcentrateInputs);
 
     const debouncedRecalculate = debounce(recalculate, 120);
     document.querySelectorAll("#mineral-inputs input").forEach(input => {
@@ -495,19 +466,56 @@
           const key = el.dataset.concentrate;
           const row = el.closest(".mineral-input-row");
           if (row && row.dataset.lotusConcentrate === "true") {
-            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
-            const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
-            recipeConcentrateInputs[key] = {
-              ml: mlInput ? mlInput.value : "0",
-              drops: dropsInput ? dropsInput.value : "0"
-            };
-            validateLotusConcentrateRow(row);
+            const inputValue = Math.max(0, parseFloat(el.value) || 0);
+            const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
+            const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+            if (unit === "ml") {
+              const dropMl = getLotusDropMl();
+              recipeConcentrateInputs[key] = {
+                ml: inputValue,
+                drops: (dropMl > 0) ? Math.round(inputValue / dropMl) : 0
+              };
+            } else {
+              recipeConcentrateInputs[key] = {
+                ml: inputValue * getLotusDropMl(),
+                drops: Math.round(inputValue)
+              };
+            }
           } else {
             recipeConcentrateInputs[key] = el.value;
           }
           saveRecipeConcentrateInputs(recipeConcentrateInputs);
         }
         debouncedRecalculate();
+      });
+    });
+    document.querySelectorAll('#mineral-inputs select[data-lotus-unit-select="true"]').forEach((select) => {
+      select.addEventListener("change", (e) => {
+        const el = e.target;
+        const key = el.dataset.concentrate;
+        const row = el.closest(".mineral-input-row");
+        const input = row ? row.querySelector('input[data-concentrate-field="lotus-value"]') : null;
+        if (!key || !row || !input) return;
+        const previousUnit = normalizeLotusConcentrateUnit(el.dataset.currentUnit);
+        const nextUnit = normalizeLotusConcentrateUnit(el.value);
+        const currentValue = Math.max(0, parseFloat(input.value) || 0);
+        const dropMl = getLotusDropMl();
+        let ml = 0;
+        let drops = 0;
+        if (previousUnit === "ml") {
+          ml = currentValue;
+          drops = dropMl > 0 ? Math.round(currentValue / dropMl) : 0;
+        } else {
+          drops = Math.round(currentValue);
+          ml = currentValue * dropMl;
+        }
+        recipeConcentrateInputs[key] = { ml, drops };
+        input.step = nextUnit === "ml" ? "0.001" : "1";
+        input.value = nextUnit === "ml" ? String(ml) : String(drops);
+        el.dataset.currentUnit = nextUnit;
+        saveLotusConcentrateUnitFor(key, nextUnit);
+        saveRecipeConcentrateInputs(recipeConcentrateInputs);
+        recalculate();
       });
     });
     function onVolumeChanged() {
@@ -545,12 +553,11 @@
           const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
           let ml = 0;
           if (isLotusConcentrate) {
-            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
-            const dropsInput = row.querySelector('input[data-concentrate-field="drops"]');
-            if (!validateLotusConcentrateRow(row)) return;
-            const mlVal = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
-            const dropsVal = Math.max(0, parseFloat(dropsInput && dropsInput.value) || 0);
-            ml = mlVal > 0 ? mlVal : (dropsVal > 0 ? dropsVal * getLotusDropMl() : 0);
+            const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
+            const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
+            const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+            const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
+            ml = unit === "ml" ? value : (value * getLotusDropMl());
           } else {
             const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
             ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
