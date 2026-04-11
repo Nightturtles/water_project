@@ -1030,6 +1030,16 @@ body.welcome-modal-open {
   font-weight: bold;
 }
 
+.welcome-modal-title-row {
+  display: block;
+  text-align: center;
+}
+
+.welcome-modal-title-row--brand {
+  margin-top: 0.35rem;
+  font-weight: 700;
+}
+
 .welcome-modal-body {
   margin-bottom: 1.25rem;
   font-size: 0.95rem;
