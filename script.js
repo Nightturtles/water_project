@@ -882,6 +882,14 @@ activateProfile(currentProfile);
   showWelcomeModal();
 })();
 
+// --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
+window.addEventListener("storage", function(e) {
+  if (e.key === "cw_selected_minerals" || e.key === "cw_selected_concentrates") {
+    renderResultItems();
+    calculate();
+  }
+});
+
 // --- Refresh on bfcache restore ---
 window.addEventListener("pageshow", (e) => {
   if (e.persisted) location.reload();
