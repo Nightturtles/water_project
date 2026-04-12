@@ -1630,9 +1630,16 @@ footer {
     margin-right: 0;
   }
 
+  .nav-auth {
+    position: static;
+    margin-left: auto;
+  }
+
   .nav-links {
-    flex: 1;
+    flex: unset;
+    width: 100%;
     justify-content: center;
+    order: 1;
   }
 
   .nav-links a {
@@ -1706,9 +1713,14 @@ footer {
   }
 
   .nav-brand {
-    width: 100%;
+    width: auto;
     justify-content: center;
     margin-right: 0;
+  }
+
+  .nav-auth {
+    position: static;
+    margin-left: auto;
   }
 
   .nav-brand-wordmark {
@@ -1717,9 +1729,10 @@ footer {
 
   .nav-links {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 0.25rem;
     width: 100%;
+    order: 1;
   }
 
   .nav-links a {
