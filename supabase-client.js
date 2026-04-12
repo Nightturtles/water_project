@@ -8,6 +8,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq';
 // any inline script that needs raw Supabase access.
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 window.supabaseClient = supabase;
+console.log('supabase-client.js loaded, supabaseClient:', typeof window.supabaseClient);
 
 window.getUser = function() {
   return supabase.auth.getUser();

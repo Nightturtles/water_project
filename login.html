@@ -112,6 +112,10 @@
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
+      console.log('Form submit fired, mode:', mode);
+      console.log('signUpWithEmail available:', typeof window.signUpWithEmail);
+      console.log('signInWithEmail available:', typeof window.signInWithEmail);
+      console.log('supabaseClient available:', typeof window.supabaseClient);
       const email = emailInput.value.trim();
       const password = passwordInput.value;
       if (!email || !password) {
@@ -122,19 +126,23 @@
       clearMessages();
       try {
         if (mode === 'signin') {
-          const { error } = await signInWithEmail(email, password);
+          console.log('Calling signInWithEmail...');
+          const { data, error } = await window.signInWithEmail(email, password);
+          console.log('signIn response:', data, error);
           if (error) { showError(error.message); return; }
           if (typeof handleFirstLoginMerge === 'function') await handleFirstLoginMerge();
           window.location.href = 'index.html';
         } else {
-          const { error } = await signUpWithEmail(email, password);
+          console.log('Calling signUpWithEmail...');
+          const { data, error } = await window.signUpWithEmail(email, password);
+          console.log('signUp response:', data, error);
           if (error) { showError(error.message); return; }
           setMode('signin');
           showSuccess('Check your email to confirm your account, then sign in.');
         }
-      } catch (err) {
-        showError(err.message || 'Something went wrong. Please try again.');
-        console.error('[login] submit error:', err);
+      } catch (e) {
+        console.error('Submit handler error:', e);
+        showError(e.message || 'Something went wrong. Please try again.');
       } finally {
         submitBtn.disabled = false;
       }
