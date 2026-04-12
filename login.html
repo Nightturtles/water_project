@@ -64,6 +64,7 @@
 
   <script src="constants.js"></script>
   <script src="storage.js"></script>
+  <script src="sync.js"></script>
   <script src="ui-shared.js"></script>
   <script>
     const signinTab = document.getElementById('signin-tab');
@@ -123,6 +124,7 @@
         if (mode === 'signin') {
           const { error } = await signInWithEmail(email, password);
           if (error) { showError(error.message); return; }
+          if (typeof handleFirstLoginMerge === 'function') await handleFirstLoginMerge();
           window.location.href = 'index.html';
         } else {
           const { error } = await signUpWithEmail(email, password);
