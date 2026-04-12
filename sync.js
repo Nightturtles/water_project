@@ -26,7 +26,7 @@
   // --- Get currently logged-in user ID, or null ---
   async function getLoggedInUserId() {
     try {
-      var result = await supabase.auth.getUser();
+      var result = await window.supabaseClient.auth.getUser();
       return result.data && result.data.user ? result.data.user.id : null;
     } catch (_) {
       return null;
@@ -81,8 +81,8 @@
     };
 
     var results = await Promise.all([
-      supabase.from('user_settings').upsert(settingsPayload, { onConflict: 'user_id' }),
-      supabase.from('user_selections').upsert(selectionsPayload, { onConflict: 'user_id' })
+      window.supabaseClient.from('user_settings').upsert(settingsPayload, { onConflict: 'user_id' }),
+      window.supabaseClient.from('user_selections').upsert(selectionsPayload, { onConflict: 'user_id' })
     ]);
 
     if (results[0].error) console.warn('[sync] user_settings upsert failed:', results[0].error);
@@ -99,8 +99,8 @@
 
     // Fetch current cloud slugs to detect deletions
     var cloudResults = await Promise.all([
-      supabase.from('source_profiles').select('slug').eq('user_id', userId),
-      supabase.from('target_profiles').select('slug').eq('user_id', userId)
+      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId),
+      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId)
     ]);
 
     // Source profiles — delete cloud rows that no longer exist locally
@@ -110,7 +110,7 @@
         .map(function (r) { return r.slug; })
         .filter(function (slug) { return !localSourceSlugs.includes(slug); });
       if (toDeleteSource.length > 0) {
-        await supabase.from('source_profiles').delete()
+        await window.supabaseClient.from('source_profiles').delete()
           .eq('user_id', userId).in('slug', toDeleteSource);
       }
     }
@@ -134,7 +134,7 @@
           updated_at: now
         };
       });
-      var srcResult = await supabase.from('source_profiles')
+      var srcResult = await window.supabaseClient.from('source_profiles')
         .upsert(sourceRows, { onConflict: 'user_id,slug' });
       if (srcResult.error) console.warn('[sync] source_profiles upsert failed:', srcResult.error);
     }
@@ -146,7 +146,7 @@
         .map(function (r) { return r.slug; })
         .filter(function (slug) { return !localTargetSlugs.includes(slug); });
       if (toDeleteTarget.length > 0) {
-        await supabase.from('target_profiles').delete()
+        await window.supabaseClient.from('target_profiles').delete()
           .eq('user_id', userId).in('slug', toDeleteTarget);
       }
     }
@@ -168,7 +168,7 @@
           updated_at: now
         };
       });
-      var tgtResult = await supabase.from('target_profiles')
+      var tgtResult = await window.supabaseClient.from('target_profiles')
         .upsert(targetRows, { onConflict: 'user_id,slug' });
       if (tgtResult.error) console.warn('[sync] target_profiles upsert failed:', tgtResult.error);
     }
@@ -180,10 +180,10 @@
     if (!userId) return;
 
     var results = await Promise.all([
-      supabase.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('user_selections').select('*').eq('user_id', userId).maybeSingle(),
-      supabase.from('source_profiles').select('*').eq('user_id', userId),
-      supabase.from('target_profiles').select('*').eq('user_id', userId)
+      window.supabaseClient.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
+      window.supabaseClient.from('user_selections').select('*').eq('user_id', userId).maybeSingle(),
+      window.supabaseClient.from('source_profiles').select('*').eq('user_id', userId),
+      window.supabaseClient.from('target_profiles').select('*').eq('user_id', userId)
     ]);
 
     var settings = results[0].data;
@@ -276,10 +276,10 @@
   // --- Returns true if Supabase has any stored data for this user ---
   async function hasCloudData(userId) {
     var results = await Promise.all([
-      supabase.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
-      supabase.from('user_selections').select('user_id').eq('user_id', userId).maybeSingle(),
-      supabase.from('source_profiles').select('slug').eq('user_id', userId).limit(1),
-      supabase.from('target_profiles').select('slug').eq('user_id', userId).limit(1)
+      window.supabaseClient.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
+      window.supabaseClient.from('user_selections').select('user_id').eq('user_id', userId).maybeSingle(),
+      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId).limit(1),
+      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId).limit(1)
     ]);
     return !!(results[0].data || results[1].data ||
       (results[2].data && results[2].data.length > 0) ||
@@ -364,7 +364,7 @@
   // --- Background pull on page load (if already logged in) ---
   async function initSync() {
     try {
-      var result = await supabase.auth.getSession();
+      var result = await window.supabaseClient.auth.getSession();
       if (result.data && result.data.session) {
         pullFromCloud().catch(function (err) {
           console.warn('[sync] background pull on page load failed:', err);
