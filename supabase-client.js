@@ -1,38 +1,41 @@
 const SUPABASE_URL = 'https://srlwgayrxzamxlodpsrq.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq';
 
+// NOTE: Because this script declares `const supabase` which shadows the CDN's
+// window.supabase, V8 will not hoist function declarations from this script to
+// window. All public functions must be assigned to window explicitly.
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-function getUser() {
+window.getUser = function() {
   return supabase.auth.getUser();
-}
+};
 
-function isLoggedIn() {
+window.isLoggedIn = function() {
   return supabase.auth.getSession().then(({ data }) => !!data.session);
-}
+};
 
-async function signInWithEmail(email, password) {
+window.signInWithEmail = async function(email, password) {
   return supabase.auth.signInWithPassword({ email, password });
-}
+};
 
-async function signUpWithEmail(email, password) {
+window.signUpWithEmail = async function(email, password) {
   return supabase.auth.signUp({ email, password });
-}
+};
 
-async function signInWithGoogle() {
+window.signInWithGoogle = async function() {
   return supabase.auth.signInWithOAuth({
     provider: 'google',
     options: { redirectTo: 'https://cafelytic.com/login.html' }
   });
-}
+};
 
-async function signInWithApple() {
+window.signInWithApple = async function() {
   return supabase.auth.signInWithOAuth({
     provider: 'apple',
     options: { redirectTo: 'https://cafelytic.com/login.html' }
   });
-}
+};
 
-async function signOut() {
+window.signOut = async function() {
   return supabase.auth.signOut();
-}
+};
