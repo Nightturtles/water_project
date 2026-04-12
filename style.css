@@ -1742,3 +1742,212 @@ footer {
     max-width: calc((100% - 2 * 0.5rem) / 3);
   }
 }
+
+/* ========================
+   Nav auth (right side)
+   ======================== */
+.nav-auth {
+  position: absolute;
+  right: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.nav-auth-email {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Shared style for "Log in" link and "Log out" button */
+.nav-auth-btn {
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease, background 0.15s ease;
+  font-family: inherit;
+}
+
+.nav-auth-btn:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.nav-auth-btn.active {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .nav-auth-email {
+    display: none;
+  }
+}
+
+/* ========================
+   Login page
+   ======================== */
+.login-page main {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1rem 1rem;
+}
+
+.login-card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  border: 1px solid var(--gray-200);
+  width: 100%;
+  max-width: 400px;
+}
+
+.login-mode-toggle {
+  display: flex;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.login-mode-btn {
+  flex: 1;
+  padding: 0.5rem 1rem;
+  border: none;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+  font-family: inherit;
+}
+
+.login-mode-btn.active {
+  background: var(--blue-50);
+  color: var(--blue-700);
+  font-weight: 600;
+}
+
+.login-form .input-group {
+  margin-bottom: 1rem;
+}
+
+.login-form label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--gray-700);
+  margin-bottom: 0.375rem;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--gray-50);
+  color: var(--gray-900);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.login-form input:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.login-error {
+  min-height: 1.25rem;
+  font-size: 0.85rem;
+  color: var(--red-600);
+  margin-bottom: 0.75rem;
+}
+
+.login-success {
+  font-size: 0.85rem;
+  color: var(--green-600);
+  margin-bottom: 0.75rem;
+}
+
+.login-submit-btn {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--blue-600);
+  color: #fff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  margin-bottom: 1.25rem;
+}
+
+.login-submit-btn:hover {
+  background: var(--blue-700);
+}
+
+.login-submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  color: var(--gray-500);
+  font-size: 0.8rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gray-200);
+}
+
+.login-google-btn {
+  width: 100%;
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+}
+
+.login-google-btn:hover {
+  background: var(--gray-100);
+  border-color: var(--gray-500);
+}
+
+.login-google-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

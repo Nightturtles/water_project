@@ -314,7 +314,48 @@ function injectNav() {
   });
   nav.appendChild(linksWrap);
 
+  // Auth element (right side) — populated async after nav is in the DOM
+  const authWrap = document.createElement("div");
+  authWrap.className = "nav-auth";
+  nav.appendChild(authWrap);
+
   document.body.insertBefore(nav, document.body.firstChild);
+
+  _updateNavAuth(authWrap, currentPage);
+}
+
+async function _updateNavAuth(authWrap, currentPage) {
+  if (typeof supabase === "undefined") return;
+  try {
+    const { data } = await supabase.auth.getSession();
+    const session = data && data.session;
+
+    if (session && session.user) {
+      const email = document.createElement("span");
+      email.className = "nav-auth-email";
+      email.textContent = session.user.email;
+
+      const logoutBtn = document.createElement("button");
+      logoutBtn.type = "button";
+      logoutBtn.className = "nav-auth-btn";
+      logoutBtn.textContent = "Log out";
+      logoutBtn.addEventListener("click", async () => {
+        await signOut();
+        window.location.href = "index.html";
+      });
+
+      authWrap.appendChild(email);
+      authWrap.appendChild(logoutBtn);
+    } else {
+      const loginLink = document.createElement("a");
+      loginLink.href = "login.html";
+      loginLink.className = "nav-auth-btn" + (currentPage === "login.html" ? " active" : "");
+      loginLink.textContent = "Log in";
+      authWrap.appendChild(loginLink);
+    }
+  } catch (_) {
+    // Silently skip auth nav if Supabase is unavailable
+  }
 }
 
 // --- Shared restore bar helpers (Inconsistency 7) ---
