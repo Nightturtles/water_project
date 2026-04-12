@@ -129,8 +129,8 @@
         } else {
           const { error } = await signUpWithEmail(email, password);
           if (error) { showError(error.message); return; }
-          showSuccess('Check your email to confirm your account, then sign in.');
           setMode('signin');
+          showSuccess('Check your email to confirm your account, then sign in.');
         }
       } finally {
         submitBtn.disabled = false;
