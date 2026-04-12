@@ -283,6 +283,7 @@ function injectNav() {
     { href: "index.html",    label: "Calculator" },
     { href: "recipe.html",   label: "Recipe Builder" },
     { href: "taste.html",    label: "Taste Tuner" },
+    { href: "library.html",  label: "Library" },
     { href: "minerals.html", label: "Settings" }
   ];
 

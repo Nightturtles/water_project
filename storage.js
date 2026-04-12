@@ -659,6 +659,16 @@ function saveThemePreference(mode) {
   if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
 }
 
+// --- Creator display name (for recipe library publishing) ---
+function loadCreatorDisplayName() {
+  return safeGetItem("cw_creator_display_name") || "";
+}
+
+function saveCreatorDisplayName(name) {
+  safeSetItem("cw_creator_display_name", name);
+  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+}
+
 // --- Calculator welcome modal (one-time) ---
 const WELCOME_MODAL_DISMISSED_KEY = "cw_calculator_welcome_dismissed";
 

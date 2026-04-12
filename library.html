@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Recipe Library — Cafelytic</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BGJWVRGJJC"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'G-BGJWVRGJJC');
+  </script>
+  <script src="theme-init.js"></script>
+</head>
+<body>
+  <header>
+    <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Recipe Library</h1>
+    <p class="subtitle">Browse community recipes and add them to your collection.</p>
+  </header>
+
+  <main>
+    <!-- Auth gate: shown when not logged in -->
+    <section class="card library-auth-gate" id="library-auth-gate">
+      <div class="library-auth-gate-inner">
+        <h2>Sign in to browse recipes</h2>
+        <p>The Recipe Library requires an account so you can save recipes to your collection.</p>
+        <a href="login.html" class="login-submit-btn">Sign in</a>
+      </div>
+    </section>
+
+    <!-- Library content: shown when logged in -->
+    <div id="library-content" style="display:none;">
+
+      <!-- My Published Recipes -->
+      <section class="card" id="my-published-section" style="display:none;">
+        <div class="section-header-actions">
+          <h2>My Published Recipes</h2>
+        </div>
+        <div class="library-grid" id="my-published-grid"></div>
+      </section>
+
+      <!-- Search + Filters -->
+      <section class="card">
+        <div class="library-controls">
+          <div class="library-search">
+            <input type="text" id="library-search-input" placeholder="Search recipes..." autocomplete="off">
+          </div>
+          <div class="brew-method-toggle" id="library-brew-filter">
+            <button type="button" class="preset-btn brew-method-btn active" data-filter="all">All</button>
+            <button type="button" class="preset-btn brew-method-btn" data-filter="filter">Filter</button>
+            <button type="button" class="preset-btn brew-method-btn" data-filter="espresso">Espresso</button>
+          </div>
+        </div>
+        <div class="library-tags" id="library-tag-filters"></div>
+      </section>
+
+      <!-- Recipe grid -->
+      <section id="library-results-section">
+        <div class="library-count" id="library-count"></div>
+        <div class="library-grid" id="library-grid"></div>
+        <div class="library-empty" id="library-empty" style="display:none;">
+          <p>No recipes match your filters.</p>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <footer>
+    <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="sync.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
+  <script src="library-data.js"></script>
+  <script src="library-ui.js"></script>
+</body>
+</html>

@@ -67,6 +67,7 @@
       diy_concentrate_specs: loadDiyConcentrateSpecs(),
       lotus_concentrate_units: loadLotusConcentrateUnits(),
       volume_preferences: collectVolumePreferences(),
+      creator_display_name: loadCreatorDisplayName(),
       updated_at: now
     };
 
@@ -164,7 +165,15 @@
           calcium: Number(p.calcium) || 0,
           magnesium: Number(p.magnesium) || 0,
           alkalinity: Number(p.alkalinity) || 0,
+          potassium: Number(p.potassium) || 0,
+          sodium: Number(p.sodium) || 0,
+          sulfate: Number(p.sulfate) || 0,
+          chloride: Number(p.chloride) || 0,
+          bicarbonate: Number(p.bicarbonate) || 0,
           description: p.description || '',
+          is_public: !!p.isPublic,
+          creator_display_name: p.creatorDisplayName || '',
+          tags: Array.isArray(p.tags) ? p.tags : [],
           updated_at: now
         };
       });
@@ -206,6 +215,7 @@
           safeSetItem('cw_volume_' + entry[0], JSON.stringify(entry[1]));
         });
       }
+      if (settings.creator_display_name) safeSetItem('cw_creator_display_name', settings.creator_display_name);
     }
 
     // Apply user_selections
@@ -245,7 +255,15 @@
           calcium: row.calcium,
           magnesium: row.magnesium,
           alkalinity: row.alkalinity,
-          description: row.description
+          potassium: row.potassium,
+          sodium: row.sodium,
+          sulfate: row.sulfate,
+          chloride: row.chloride,
+          bicarbonate: row.bicarbonate,
+          description: row.description,
+          isPublic: !!row.is_public,
+          creatorDisplayName: row.creator_display_name || '',
+          tags: Array.isArray(row.tags) ? row.tags : []
         };
       });
       safeSetItem('cw_custom_target_profiles', JSON.stringify(tgtProfiles));

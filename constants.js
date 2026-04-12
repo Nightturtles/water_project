@@ -195,118 +195,12 @@ const TARGET_PRESETS = {
     bicarbonate: 19.734,
     description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity."
   },
-  "eaf-holy-water": {
-    label: "Holy Water",
-    brewMethod: "filter",
-    calcium: 0,
-    magnesium: 15,
-    alkalinity: 23,
-    potassium: 18,
-    sodium: 0,
-    sulfate: 59,
-    chloride: 0,
-    bicarbonate: 28,
-    description: "Espresso Aficionados direct dosing: 1.520g Epsom + 0.460g KHCO3 per 10L."
-  },
-  "eaf-melbourne-water": {
-    label: "Melbourne Water",
-    brewMethods: ["filter", "espresso"],
-    calcium: 0,
-    magnesium: 12,
-    alkalinity: 20.2,
-    potassium: 0,
-    sodium: 9,
-    sulfate: 48,
-    chloride: 0,
-    bicarbonate: 24.7,
-    description: "Espresso Aficionados direct dosing: 1.220g Epsom + 0.340g Baking Soda per 10L."
-  },
-  "eaf-hendon-water": {
-    label: "Hendon Water (Direct Dosing)",
-    calcium: 0,
-    magnesium: 24,
-    alkalinity: 31,
-    potassium: 0,
-    sodium: 14,
-    sulfate: 95,
-    chloride: 0,
-    bicarbonate: 37.8,
-    description: "Espresso Aficionados direct dosing: 2.430g Epsom + 0.520g Baking Soda per 10L."
-  },
-  "eaf-bh-water-4": {
-    label: "Barista Hustle Water #4",
-    brewMethods: ["filter", "espresso"],
-    calcium: 0,
-    magnesium: 19.4,
-    alkalinity: 40,
-    potassium: 0,
-    sodium: 18,
-    sulfate: 77,
-    chloride: 0,
-    bicarbonate: 48.7,
-    description: "Espresso Aficionados direct dosing: 1.970g Epsom + 0.671g Baking Soda per 10L."
-  },
-  "eaf-tww-espresso-inspired": {
-    label: "TWW Espresso Inspired",
-    calcium: 0,
-    magnesium: 38.9,
-    alkalinity: 67.5,
-    potassium: 53,
-    sodium: 0,
-    sulfate: 154,
-    chloride: 0,
-    bicarbonate: 82.3,
-    description: "Espresso Aficionados direct dosing: 3.940g Epsom + 1.350g KHCO3 per 10L."
-  },
-  "eaf-rpavlis": {
-    label: "RPavlis",
-    calcium: 0,
-    magnesium: 0,
-    alkalinity: 50,
-    potassium: 39,
-    sodium: 0,
-    sulfate: 0,
-    chloride: 0,
-    bicarbonate: 60.9,
-    description: "Espresso Aficionados direct dosing: 1.000g KHCO3 per 10L."
-  },
-  "eaf-fam-29th-wave": {
-    label: "Fam's 29th Wave",
-    calcium: 0,
-    magnesium: 4.9,
-    alkalinity: 90,
-    potassium: 0,
-    sodium: 41,
-    sulfate: 19,
-    chloride: 0,
-    bicarbonate: 109.7,
-    description: "Espresso Aficionados direct dosing: 0.493g Epsom + 1.511g Baking Soda per 10L."
-  },
-  "eaf-fam-69th-wave": {
-    label: "Fam's 69th Wave",
-    calcium: 0,
-    magnesium: 14.6,
-    alkalinity: 90,
-    potassium: 0,
-    sodium: 41,
-    sulfate: 58,
-    chloride: 0,
-    bicarbonate: 109.7,
-    description: "Espresso Aficionados direct dosing: 1.478g Epsom + 1.511g Baking Soda per 10L."
-  },
   rao: {
     label: "Rao's Recipe",
     calcium: 20.9,
     magnesium: 8.5,
     alkalinity: 40,
     description: "Lotus-style Rao recipe target with balanced sweetness and structure."
-  },
-  "hendon-espresso": {
-    label: "Hendon Water",
-    calcium: 0,
-    magnesium: 24,
-    alkalinity: 31,
-    description: "Matches Espresso Aficionados Hendon Water target (GH 99 / KH 31 as CaCO3)."
   }
 };
 

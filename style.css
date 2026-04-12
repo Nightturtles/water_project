@@ -1967,3 +1967,245 @@ footer {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+
+/* ===== Recipe Library ===== */
+
+.library-auth-gate {
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.library-auth-gate-inner {
+  max-width: 400px;
+  margin: 0 auto;
+}
+
+.library-auth-gate h2 {
+  margin-bottom: 0.5rem;
+  font-size: 1.15rem;
+}
+
+.library-auth-gate p {
+  color: var(--gray-500);
+  margin-bottom: 1.25rem;
+  font-size: 0.9rem;
+}
+
+.library-auth-gate .login-submit-btn {
+  display: inline-block;
+  text-decoration: none;
+  text-align: center;
+  max-width: 200px;
+}
+
+.library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.library-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.library-search input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-900);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease;
+}
+
+.library-search input:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.library-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.library-tags:empty {
+  display: none;
+}
+
+.library-tag-chip {
+  display: inline-block;
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-family: inherit;
+  border: 1px solid var(--gray-300);
+  background: var(--surface);
+  color: var(--gray-700);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.library-tag-chip:hover {
+  background: var(--gray-100);
+}
+
+.library-tag-chip.active {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+}
+
+.library-tag-chip.small {
+  font-size: 0.72rem;
+  padding: 0.15rem 0.5rem;
+  cursor: default;
+}
+
+.library-count {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  margin-bottom: 0.5rem;
+}
+
+.library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.75rem;
+}
+
+.library-card {
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  transition: border-color 0.15s ease;
+}
+
+.library-card:hover {
+  border-color: var(--gray-300);
+}
+
+.library-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.library-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-brew-badge {
+  font-size: 0.72rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--blue-50);
+  color: var(--blue-600);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.library-card-creator {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.library-card-ions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+}
+
+.library-ion-tag {
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+}
+
+.library-card-desc {
+  font-size: 0.82rem;
+  color: var(--gray-500);
+  line-height: 1.4;
+}
+
+.library-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.library-card-actions {
+  margin-top: auto;
+  padding-top: 0.25rem;
+}
+
+.library-add-btn {
+  font-size: 0.82rem;
+  padding: 0.375rem 0.75rem;
+}
+
+.library-add-btn.added {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.library-unpublish-btn {
+  font-size: 0.82rem;
+  padding: 0.375rem 0.75rem;
+  color: var(--red-600);
+}
+
+.library-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--gray-500);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .library-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .library-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* ===== Share to Library toggle ===== */
+
+.share-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.82rem;
+  color: var(--gray-700);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.share-toggle input[type="checkbox"] {
+  accent-color: var(--blue-500);
+}
