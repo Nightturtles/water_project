@@ -27,7 +27,7 @@
     <!-- Starting water (profile = main, volume = secondary) -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Starting water</h2>
+        <h2>Starting Water</h2>
         <button type="button" id="source-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Starting Water</button>
       </div>
       <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
@@ -124,7 +124,7 @@
     <!-- Target Profile -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Target water profile</h2>
+        <h2>Target Water Profile</h2>
         <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
       </div>
       <div class="brew-method-toggle" id="brew-method-toggle">
@@ -174,6 +174,41 @@
             <span class="input-suffix" aria-hidden="true">mg/L as CaCO3</span>
           </div>
         </div>
+        <div class="input-group advanced-only">
+          <label for="target-potassium">Potassium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-potassium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="target-sodium">Sodium</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-sodium" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="target-sulfate">Sulfate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-sulfate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group advanced-only">
+          <label for="target-chloride">Chloride</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-chloride" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
+        <div class="input-group always-hidden">
+          <label for="target-bicarbonate">Bicarbonate</label>
+          <div class="input-with-suffix">
+            <input type="number" id="target-bicarbonate" value="0" min="0" step="0.1">
+            <span class="input-suffix" aria-hidden="true">mg/L</span>
+          </div>
+        </div>
       </div>
       <div class="source-water-tags" id="target-readonly-tags" style="display:none;"></div>
       <p class="profile-description" id="profile-description">
@@ -183,7 +218,7 @@
 
     <!-- Results -->
     <section class="card results-card">
-      <h2>Add to your water</h2>
+      <h2>Add to Your Water</h2>
       <p class="hint" id="results-hint">Using distilled/RO water as your base, add these mineral salts:</p>
       <div class="results" id="results-container">
         <!-- Populated by JS from selected minerals in Settings -->
@@ -286,7 +321,7 @@
       <div id="welcome-modal-desc" class="welcome-modal-body">
         <p>Select the minerals you'll be using from the Settings page, then you'll be ready to get started!</p>
         <p></p>
-        <p>Send questions to info@cafelytic.com</p>
+        <p>Send questions to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
       </div>
       <div class="welcome-modal-actions">
         <button type="button" class="preset-btn" id="welcome-modal-ok">Okay</button>
@@ -296,7 +331,7 @@
 
   <footer>
     <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>
-    <p>For feedback or questions send an email to info@cafelytic.com</p>
+    <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

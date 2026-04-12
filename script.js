@@ -12,6 +12,11 @@ const volumeUnit = document.getElementById("volume-unit");
 const targetCa = document.getElementById("target-calcium");
 const targetMg = document.getElementById("target-magnesium");
 const targetAlk = document.getElementById("target-alkalinity");
+const targetK = document.getElementById("target-potassium");
+const targetNa = document.getElementById("target-sodium");
+const targetSO4 = document.getElementById("target-sulfate");
+const targetCl = document.getElementById("target-chloride");
+const targetHCO3 = document.getElementById("target-bicarbonate");
 const profileDesc = document.getElementById("profile-description");
 const resultsContainer = document.getElementById("results-container");
 const profileButtonsContainer = document.getElementById("profile-buttons");
@@ -212,6 +217,14 @@ function renderTargetReadonlyTags() {
     ["Mg", Math.round(mg), "mg/L"],
     ["Alkalinity", Math.round(alk), "mg/L as CaCO3"]
   ];
+  if (isAdvancedMineralDisplayMode()) {
+    tags.push(
+      ["K", Math.round(parseFloat(targetK.value) || 0), "mg/L"],
+      ["Na", Math.round(parseFloat(targetNa.value) || 0), "mg/L"],
+      ["SO\u2084", Math.round(parseFloat(targetSO4.value) || 0), "mg/L"],
+      ["Cl", Math.round(parseFloat(targetCl.value) || 0), "mg/L"]
+    );
+  }
   tags.forEach(function(t) {
     const span = document.createElement("span");
     span.className = "base-tag";
@@ -275,6 +288,11 @@ function activateProfile(profileName) {
     targetCa.value = profile.calcium;
     targetMg.value = profile.magnesium;
     targetAlk.value = profile.alkalinity;
+    targetK.value = profile.potassium || 0;
+    targetNa.value = profile.sodium || 0;
+    targetSO4.value = profile.sulfate || 0;
+    targetCl.value = profile.chloride || 0;
+    targetHCO3.value = profile.bicarbonate || 0;
     profileDesc.textContent = profile.description || "";
   }
   // Render profile state after input values are assigned so readonly tags are in sync.
@@ -286,9 +304,17 @@ function hasUnsavedTargetChanges() {
   if (currentProfile === "custom") return false;
   const profile = getTargetProfileByKey(currentProfile);
   if (!profile) return false;
-  return (parseFloat(targetCa.value) || 0) !== (profile.calcium || 0) ||
+  const changed = (parseFloat(targetCa.value) || 0) !== (profile.calcium || 0) ||
          (parseFloat(targetMg.value) || 0) !== (profile.magnesium || 0) ||
          (parseFloat(targetAlk.value) || 0) !== (profile.alkalinity || 0);
+  if (changed) return true;
+  if (isAdvancedMineralDisplayMode()) {
+    return (parseFloat(targetK.value) || 0) !== (profile.potassium || 0) ||
+           (parseFloat(targetNa.value) || 0) !== (profile.sodium || 0) ||
+           (parseFloat(targetSO4.value) || 0) !== (profile.sulfate || 0) ||
+           (parseFloat(targetCl.value) || 0) !== (profile.chloride || 0);
+  }
+  return false;
 }
 
 // --- Event delegation for profile buttons ---
@@ -318,7 +344,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
 });
 
 // --- Target input handling (Inefficiency 6: debounced) ---
-[targetCa, targetMg, targetAlk].forEach(input => {
+[targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach(input => {
   input.addEventListener("input", () => {
     renderTargetReadonlyTags();
     if (currentProfile !== "custom") {
@@ -360,8 +386,16 @@ targetSaveChangesBtn.addEventListener("click", () => {
     const hasExplicitIons = orig && ION_FIELDS.every(ion => Number.isFinite(Number(orig[ion])));
     let profile;
     if (hasExplicitIons) {
-      const ions = lastCalculatedIons || {};
-      profile = buildStoredTargetProfile(existing.label, ions, existing.description || "", {
+      const editIons = {
+        calcium: parseFloat(targetCa.value) || 0,
+        magnesium: parseFloat(targetMg.value) || 0,
+        potassium: parseFloat(targetK.value) || 0,
+        sodium: parseFloat(targetNa.value) || 0,
+        sulfate: parseFloat(targetSO4.value) || 0,
+        chloride: parseFloat(targetCl.value) || 0,
+        bicarbonate: parseFloat(targetHCO3.value) || 0
+      };
+      profile = buildStoredTargetProfile(existing.label, editIons, existing.description || "", {
         alkalinity: parseFloat(targetAlk.value) || 0,
         brewMethod: activeBrewMethod
       });
@@ -371,6 +405,11 @@ targetSaveChangesBtn.addEventListener("click", () => {
         calcium: parseFloat(targetCa.value) || 0,
         magnesium: parseFloat(targetMg.value) || 0,
         alkalinity: parseFloat(targetAlk.value) || 0,
+        potassium: parseFloat(targetK.value) || 0,
+        sodium: parseFloat(targetNa.value) || 0,
+        sulfate: parseFloat(targetSO4.value) || 0,
+        chloride: parseFloat(targetCl.value) || 0,
+        bicarbonate: parseFloat(targetHCO3.value) || 0,
         description: existing.description || "",
         brewMethod: activeBrewMethod
       };
@@ -429,8 +468,16 @@ targetSaveBtn.addEventListener("click", () => {
   calculate();
 
   const profiles = loadCustomTargetProfiles();
-  const ions = lastCalculatedIons || {};
-  profiles[key] = buildStoredTargetProfile(name, ions, "", {
+  const targetIons = {
+    calcium: parseFloat(targetCa.value) || 0,
+    magnesium: parseFloat(targetMg.value) || 0,
+    potassium: parseFloat(targetK.value) || 0,
+    sodium: parseFloat(targetNa.value) || 0,
+    sulfate: parseFloat(targetSO4.value) || 0,
+    chloride: parseFloat(targetCl.value) || 0,
+    bicarbonate: parseFloat(targetHCO3.value) || 0
+  };
+  profiles[key] = buildStoredTargetProfile(name, targetIons, "", {
     alkalinity: parseFloat(targetAlk.value) || 0,
     brewMethod: activeBrewMethod
   });
