@@ -519,7 +519,7 @@ function getAllTargetPresets() {
       result[ck] = cv;
     }
   }
-  result["custom"] = { label: "Custom Recipe" };
+  result["custom"] = { label: "+ Add Custom" };
   targetPresetsCache = result;
   return targetPresetsCache;
 }
@@ -572,7 +572,7 @@ function getTargetPresetsForBrewMethod(method) {
     }
   }
   if (!filtered.custom) {
-    filtered.custom = { label: "Custom Recipe" };
+    filtered.custom = { label: "+ Add Custom" };
   }
   return filtered;
 }

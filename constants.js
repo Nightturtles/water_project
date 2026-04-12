@@ -122,7 +122,7 @@ const SOURCE_PRESETS = {
     sulfate: 25, chloride: 30, bicarbonate: 120
   },
   custom: {
-    label: "Custom"
+    label: "+ Add Custom"
   }
 };
 

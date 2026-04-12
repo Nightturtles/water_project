@@ -541,6 +541,20 @@ select:focus {
   color: var(--blue-600);
 }
 
+.profile-btn[data-profile="custom"],
+.preset-btn[data-preset="custom"] {
+  border-style: dashed;
+  border-color: var(--blue-400);
+  color: var(--blue-600);
+  background: transparent;
+}
+
+.profile-btn[data-profile="custom"]:hover,
+.preset-btn[data-preset="custom"]:hover {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+}
+
 .profile-btn.active,
 .preset-btn.active,
 .taste-preset-btn.active {
