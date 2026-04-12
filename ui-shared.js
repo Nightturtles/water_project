@@ -288,13 +288,31 @@ function injectNav() {
 
   const nav = document.createElement("nav");
   nav.className = "site-nav";
+
+  // Brand logo + wordmark
+  const brand = document.createElement("a");
+  brand.href = "index.html";
+  brand.className = "nav-brand";
+  brand.setAttribute("aria-label", "Cafelytic home");
+  brand.innerHTML =
+    '<svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '<rect width="28" height="28" rx="3" fill="var(--brand-tile-fill)" stroke="var(--brand-tile-stroke)" stroke-width="1.5"/>' +
+      '<text x="14" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-size="13" font-weight="500" fill="var(--brand-tile-ca)">Ca</text>' +
+    '</svg>' +
+    '<span class="nav-brand-wordmark"><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span></span>';
+  nav.appendChild(brand);
+
+  // Nav links
+  const linksWrap = document.createElement("div");
+  linksWrap.className = "nav-links";
   pages.forEach(p => {
     const a = document.createElement("a");
     a.href = p.href;
     a.textContent = p.label;
     if (currentPage === p.href) a.className = "active";
-    nav.appendChild(a);
+    linksWrap.appendChild(a);
   });
+  nav.appendChild(linksWrap);
 
   document.body.insertBefore(nav, document.body.firstChild);
 }
