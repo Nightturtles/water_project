@@ -157,7 +157,7 @@
     });
 
     // Redirect if already logged in
-    supabase.auth.getSession().then(({ data }) => {
+    window.supabaseClient.auth.getSession().then(({ data }) => {
       if (data.session) window.location.href = 'index.html';
     });
   </script>
