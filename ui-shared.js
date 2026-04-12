@@ -396,6 +396,15 @@ function injectNav() {
     '<span class="nav-brand-wordmark"><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span></span>';
   nav.appendChild(brand);
 
+  // Hamburger toggle (mobile only, hidden on desktop via CSS)
+  const hamburger = document.createElement("button");
+  hamburger.type = "button";
+  hamburger.className = "nav-hamburger";
+  hamburger.setAttribute("aria-label", "Toggle menu");
+  hamburger.setAttribute("aria-expanded", "false");
+  hamburger.innerHTML = '<span></span><span></span><span></span>';
+  nav.appendChild(hamburger);
+
   // Nav links
   const linksWrap = document.createElement("div");
   linksWrap.className = "nav-links";
@@ -414,6 +423,20 @@ function injectNav() {
   nav.appendChild(authWrap);
 
   document.body.insertBefore(nav, document.body.firstChild);
+
+  // Hamburger toggle behavior
+  hamburger.addEventListener("click", function () {
+    var expanded = nav.classList.toggle("nav-open");
+    hamburger.setAttribute("aria-expanded", String(expanded));
+  });
+
+  // Close menu when a link is clicked
+  linksWrap.addEventListener("click", function (e) {
+    if (e.target.tagName === "A") {
+      nav.classList.remove("nav-open");
+      hamburger.setAttribute("aria-expanded", "false");
+    }
+  });
 
   _updateNavAuth(authWrap, currentPage);
 }
