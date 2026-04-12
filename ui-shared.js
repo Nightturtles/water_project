@@ -325,9 +325,9 @@ function injectNav() {
 }
 
 async function _updateNavAuth(authWrap, currentPage) {
-  if (typeof supabase === "undefined") return;
+  if (typeof window.supabaseClient === "undefined") return;
   try {
-    const { data } = await supabase.auth.getSession();
+    const { data } = await window.supabaseClient.auth.getSession();
     const session = data && data.session;
 
     if (session && session.user) {
