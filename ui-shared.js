@@ -177,6 +177,99 @@ function showConfirm(message, onYes) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
+// --- Share to Recipe Library prompt (post-save dialog) ---
+var sharePromptCleanup = null;
+
+async function showSharePrompt(profileKey) {
+  // Only show if logged in
+  if (typeof isLoggedIn !== "function" || !(await isLoggedIn())) return;
+
+  var overlay = document.getElementById("share-prompt-overlay");
+  if (!overlay) return;
+
+  if (sharePromptCleanup) sharePromptCleanup();
+
+  var nameGroup = document.getElementById("share-prompt-name-group");
+  var nameInput = document.getElementById("share-prompt-display-name");
+  var yesBtn = document.getElementById("share-prompt-yes");
+  var noBtn = document.getElementById("share-prompt-no");
+  var previousFocus = document.activeElement;
+
+  // Show display name field only if not already set
+  var existingName = loadCreatorDisplayName();
+  if (existingName) {
+    nameGroup.style.display = "none";
+  } else {
+    nameGroup.style.display = "";
+    nameInput.value = "";
+  }
+
+  overlay.style.display = "flex";
+  if (!existingName) {
+    nameInput.focus();
+  } else {
+    yesBtn.focus();
+  }
+
+  function close() {
+    overlay.style.display = "none";
+    yesBtn.removeEventListener("click", yesHandler);
+    noBtn.removeEventListener("click", noHandler);
+    document.removeEventListener("keydown", keyHandler);
+    overlay.removeEventListener("click", overlayClickHandler);
+    sharePromptCleanup = null;
+    if (previousFocus && previousFocus.focus) previousFocus.focus();
+  }
+
+  function yesHandler() {
+    var displayName = existingName || (nameInput.value || "").trim();
+    if (!displayName) {
+      nameInput.focus();
+      return;
+    }
+    if (!existingName) saveCreatorDisplayName(displayName);
+
+    // Update the saved profile with public fields
+    var profiles = loadCustomTargetProfiles();
+    if (profiles[profileKey]) {
+      profiles[profileKey].isPublic = true;
+      profiles[profileKey].creatorDisplayName = displayName;
+      profiles[profileKey].tags = profiles[profileKey].tags || [];
+      saveCustomTargetProfiles(profiles);
+    }
+
+    close();
+  }
+
+  function noHandler() { close(); }
+
+  function keyHandler(e) {
+    if (e.key === "Escape") { noHandler(); return; }
+    if (e.key === "Enter" && document.activeElement === nameInput) { yesHandler(); return; }
+    if (e.key === "Tab") {
+      var focusable = [nameInput, yesBtn, noBtn].filter(function(el) {
+        return el.offsetParent !== null;
+      });
+      var idx = focusable.indexOf(document.activeElement);
+      if (e.shiftKey) {
+        e.preventDefault();
+        focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
+      } else {
+        e.preventDefault();
+        focusable[(idx + 1) % focusable.length].focus();
+      }
+    }
+  }
+
+  function overlayClickHandler(e) { if (e.target === overlay) noHandler(); }
+
+  sharePromptCleanup = close;
+  yesBtn.addEventListener("click", yesHandler);
+  noBtn.addEventListener("click", noHandler);
+  document.addEventListener("keydown", keyHandler);
+  overlay.addEventListener("click", overlayClickHandler);
+}
+
 // --- Delta formatting ---
 function roundDelta(delta, decimals = 0) {
   if (!Number.isFinite(delta)) return null;

@@ -221,10 +221,6 @@
           <input type="text" id="recipe-target-name" placeholder="Name this profile..." maxlength="40">
           <div class="profile-name-error" id="recipe-target-name-error" aria-live="polite"></div>
         </div>
-        <label class="share-toggle" id="recipe-share-toggle" style="display:none;">
-          <input type="checkbox" id="recipe-share-to-library">
-          <span>Share to Recipe Library</span>
-        </label>
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status" aria-live="polite"></div>
@@ -239,6 +235,21 @@
       <div class="confirm-actions">
         <button id="confirm-yes" class="preset-btn">Yes</button>
         <button id="confirm-no" class="preset-btn">No</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="confirm-overlay" id="share-prompt-overlay" style="display:none;">
+    <div class="confirm-dialog share-prompt-dialog">
+      <p>Share this recipe to the Recipe Library?</p>
+      <p class="share-prompt-hint">Other users will be able to find and copy it.</p>
+      <div class="input-group" id="share-prompt-name-group" style="display:none;">
+        <label for="share-prompt-display-name">Your display name</label>
+        <input type="text" id="share-prompt-display-name" placeholder="e.g. CoffeeNerd42" maxlength="40">
+      </div>
+      <div class="confirm-actions">
+        <button id="share-prompt-yes" class="preset-btn">Share</button>
+        <button id="share-prompt-no" class="preset-btn">No thanks</button>
       </div>
     </div>
   </div>
@@ -708,46 +719,23 @@
 
       const profiles = loadCustomTargetProfiles();
       const ions = lastTotalIons || {};
-      var profile = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
-
-      // Handle "Share to Recipe Library" toggle
-      var shareCheckbox = document.getElementById("recipe-share-to-library");
-      if (shareCheckbox && shareCheckbox.checked) {
-        var displayName = loadCreatorDisplayName();
-        if (!displayName) {
-          displayName = (prompt("Enter your display name for the Recipe Library:") || "").trim();
-          if (!displayName) {
-            showRecipeSaveStatus("Display name is required to share.", true);
-            return;
-          }
-          saveCreatorDisplayName(displayName);
-        }
-        profile.isPublic = true;
-        profile.creatorDisplayName = displayName;
-        profile.tags = [];
-      }
-
-      profiles[key] = profile;
+      profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
       if (!saveCustomTargetProfiles(profiles)) {
         showRecipeSaveStatus("Storage full — could not save.", true);
         return;
       }
       recipeTargetNameInput.value = "";
-      if (shareCheckbox) shareCheckbox.checked = false;
       updateRecipeTargetNameError();
-      showRecipeSaveStatus(profile.isPublic ? "Saved and shared!" : "Saved! Use it as a target on the Calculator.", false);
+      showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
+
+      // Offer to share to Recipe Library (only if logged in)
+      if (typeof showSharePrompt === "function") {
+        showSharePrompt(key);
+      }
     });
 
     // --- Initial calculation ---
     recalculate();
-
-    // Show "Share to Library" toggle if logged in
-    (async function initShareToggle() {
-      var shareToggle = document.getElementById("recipe-share-toggle");
-      if (!shareToggle) return;
-      var loggedIn = typeof isLoggedIn === "function" && await isLoggedIn();
-      if (loggedIn) shareToggle.style.display = "";
-    })();
 
     // --- Multi-tab sync: reload when mineral selections change in another tab ---
     window.addEventListener("storage", function(e) {

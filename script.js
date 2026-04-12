@@ -482,23 +482,6 @@ targetSaveBtn.addEventListener("click", () => {
     brewMethod: activeBrewMethod
   });
 
-  // Handle "Share to Recipe Library" toggle
-  var shareCheckbox = document.getElementById("share-to-library");
-  if (shareCheckbox && shareCheckbox.checked) {
-    var displayName = loadCreatorDisplayName();
-    if (!displayName) {
-      displayName = (prompt("Enter your display name for the Recipe Library:") || "").trim();
-      if (!displayName) {
-        showTargetSaveStatus("Display name is required to share.", true);
-        return;
-      }
-      saveCreatorDisplayName(displayName);
-    }
-    profile.isPublic = true;
-    profile.creatorDisplayName = displayName;
-    profile.tags = [];
-  }
-
   profiles[key] = profile;
   if (!saveCustomTargetProfiles(profiles)) {
     showTargetSaveStatus("Storage full — could not save.", true);
@@ -508,9 +491,13 @@ targetSaveBtn.addEventListener("click", () => {
   renderProfileButtons();
   activateProfile(key);
   targetProfileNameInput.value = "";
-  if (shareCheckbox) shareCheckbox.checked = false;
   updateTargetProfileNameError();
-  showTargetSaveStatus(profile.isPublic ? "Saved and shared!" : "Saved!", false);
+  showTargetSaveStatus("Saved!", false);
+
+  // Offer to share to Recipe Library (only if logged in)
+  if (typeof showSharePrompt === "function") {
+    showSharePrompt(key);
+  }
 });
 
 const showTargetSaveStatus = createStatusHandler(targetSaveStatus);
@@ -884,14 +871,6 @@ if (!allTargetPresets[currentProfile]) {
   saveTargetPresetName(currentProfile);
 }
 activateProfile(currentProfile);
-
-// Show "Share to Library" toggle if logged in
-(async function initShareToggle() {
-  var shareToggle = document.getElementById("share-toggle");
-  if (!shareToggle) return;
-  var loggedIn = typeof isLoggedIn === "function" && await isLoggedIn();
-  if (loggedIn) shareToggle.style.display = "";
-})();
 
 // --- Welcome modal (one-time, Calculator page only) ---
 (function initWelcomeModal() {
