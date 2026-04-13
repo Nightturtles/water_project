@@ -261,6 +261,15 @@
     actions.className = "library-card-actions";
 
     if (isOwner) {
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "preset-btn";
+      editBtn.textContent = "Edit";
+      editBtn.addEventListener("click", function () {
+        openEditModal(recipe);
+      });
+      actions.appendChild(editBtn);
+
       var unpublishBtn = document.createElement("button");
       unpublishBtn.type = "button";
       unpublishBtn.className = "preset-btn library-unpublish-btn";
@@ -312,6 +321,257 @@
     // Remove from local cache and re-render
     allRecipes = allRecipes.filter(function (r) { return r.id !== recipe.id; });
     invalidatePublicRecipesCache();
+    renderMyPublished();
+    renderFilteredRecipes();
+  }
+
+  // --- Edit modal ---
+  var editingRecipe = null;
+  var editTags = [];
+
+  function openEditModal(recipe) {
+    editingRecipe = recipe;
+    editTags = (recipe.tags || []).slice();
+
+    var overlay = document.getElementById("edit-recipe-overlay");
+    if (!overlay) return;
+
+    // Populate fields
+    document.getElementById("edit-recipe-name").value = recipe.label || "";
+    document.getElementById("edit-recipe-desc").value = recipe.description || "";
+    document.getElementById("edit-calcium").value = Math.round(recipe.calcium || 0);
+    document.getElementById("edit-magnesium").value = Math.round(recipe.magnesium || 0);
+    document.getElementById("edit-alkalinity").value = Math.round(recipe.alkalinity || 0);
+    document.getElementById("edit-potassium").value = Math.round(recipe.potassium || 0);
+    document.getElementById("edit-sodium").value = Math.round(recipe.sodium || 0);
+    document.getElementById("edit-sulfate").value = Math.round(recipe.sulfate || 0);
+    document.getElementById("edit-chloride").value = Math.round(recipe.chloride || 0);
+    document.getElementById("edit-bicarbonate").value = Math.round(recipe.bicarbonate || 0);
+
+    // Brew method toggle
+    var brewMethod = recipe.brewMethod || "filter";
+    var toggle = document.getElementById("edit-brew-method-toggle");
+    if (toggle) {
+      toggle.querySelectorAll(".brew-method-btn").forEach(function (btn) {
+        btn.classList.toggle("active", btn.dataset.brewMethod === brewMethod);
+      });
+    }
+
+    // Tags
+    document.getElementById("edit-tag-input").value = "";
+    renderEditTags();
+
+    // Clear error
+    document.getElementById("edit-recipe-error").textContent = "";
+
+    overlay.style.display = "flex";
+    document.getElementById("edit-recipe-name").focus();
+
+    // Bind events (use named functions so we can remove them)
+    var saveBtn = document.getElementById("edit-recipe-save");
+    var cancelBtn = document.getElementById("edit-recipe-cancel");
+    var tagAddBtn = document.getElementById("edit-tag-add-btn");
+    var tagInput = document.getElementById("edit-tag-input");
+
+    function onSave() { handleEditSave(); }
+    function onCancel() { closeEditModal(); }
+    function onTagAdd() { addEditTag(); }
+    function onTagKeydown(e) { if (e.key === "Enter") { e.preventDefault(); addEditTag(); } }
+    function onOverlayClick(e) { if (e.target === overlay) closeEditModal(); }
+    function onKeydown(e) { if (e.key === "Escape") closeEditModal(); }
+
+    // Brew method toggle clicks
+    if (toggle) {
+      toggle.addEventListener("click", handleEditBrewToggle);
+    }
+
+    saveBtn.addEventListener("click", onSave);
+    cancelBtn.addEventListener("click", onCancel);
+    tagAddBtn.addEventListener("click", onTagAdd);
+    tagInput.addEventListener("keydown", onTagKeydown);
+    overlay.addEventListener("click", onOverlayClick);
+    document.addEventListener("keydown", onKeydown);
+
+    // Store cleanup references
+    overlay._editCleanup = function () {
+      saveBtn.removeEventListener("click", onSave);
+      cancelBtn.removeEventListener("click", onCancel);
+      tagAddBtn.removeEventListener("click", onTagAdd);
+      tagInput.removeEventListener("keydown", onTagKeydown);
+      overlay.removeEventListener("click", onOverlayClick);
+      document.removeEventListener("keydown", onKeydown);
+      if (toggle) toggle.removeEventListener("click", handleEditBrewToggle);
+    };
+  }
+
+  function closeEditModal() {
+    var overlay = document.getElementById("edit-recipe-overlay");
+    if (!overlay) return;
+    overlay.style.display = "none";
+    if (overlay._editCleanup) {
+      overlay._editCleanup();
+      overlay._editCleanup = null;
+    }
+    editingRecipe = null;
+  }
+
+  function handleEditBrewToggle(e) {
+    var btn = e.target.closest(".brew-method-btn");
+    if (!btn) return;
+    var toggle = document.getElementById("edit-brew-method-toggle");
+    if (!toggle) return;
+    toggle.querySelectorAll(".brew-method-btn").forEach(function (b) {
+      b.classList.toggle("active", b === btn);
+    });
+  }
+
+  function addEditTag() {
+    var input = document.getElementById("edit-tag-input");
+    var tag = (input.value || "").trim().toLowerCase();
+    if (!tag) return;
+    if (editTags.indexOf(tag) === -1) {
+      editTags.push(tag);
+      renderEditTags();
+    }
+    input.value = "";
+    input.focus();
+  }
+
+  function renderEditTags() {
+    var container = document.getElementById("edit-tag-chips");
+    if (!container) return;
+    container.innerHTML = "";
+    editTags.forEach(function (tag, idx) {
+      var chip = document.createElement("span");
+      chip.className = "library-tag-chip small library-edit-tag-removable";
+      chip.textContent = tag;
+
+      var removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "library-edit-tag-remove";
+      removeBtn.textContent = "\u00d7";
+      removeBtn.setAttribute("aria-label", "Remove tag " + tag);
+      removeBtn.addEventListener("click", function () {
+        editTags.splice(idx, 1);
+        renderEditTags();
+      });
+      chip.appendChild(removeBtn);
+      container.appendChild(chip);
+    });
+  }
+
+  async function handleEditSave() {
+    if (!editingRecipe) return;
+
+    var errorEl = document.getElementById("edit-recipe-error");
+    var name = (document.getElementById("edit-recipe-name").value || "").trim();
+    if (!name) {
+      errorEl.textContent = "Recipe name is required.";
+      return;
+    }
+
+    var newSlug = slugify(name);
+    if (!newSlug) {
+      errorEl.textContent = "Enter a valid name.";
+      return;
+    }
+
+    // Check for slug conflicts (allow keeping the same name)
+    if (newSlug !== editingRecipe.slug) {
+      var profiles = loadCustomTargetProfiles();
+      if (profiles[newSlug] || (typeof RESERVED_TARGET_KEYS !== "undefined" && RESERVED_TARGET_KEYS.has(newSlug))) {
+        errorEl.textContent = "A recipe with this name already exists.";
+        return;
+      }
+    }
+
+    errorEl.textContent = "";
+
+    // Read brew method from toggle
+    var activeBrewBtn = document.querySelector("#edit-brew-method-toggle .brew-method-btn.active");
+    var brewMethod = activeBrewBtn ? activeBrewBtn.dataset.brewMethod : "filter";
+
+    // Build updated profile
+    var updated = {
+      label: name,
+      calcium: parseFloat(document.getElementById("edit-calcium").value) || 0,
+      magnesium: parseFloat(document.getElementById("edit-magnesium").value) || 0,
+      alkalinity: parseFloat(document.getElementById("edit-alkalinity").value) || 0,
+      potassium: parseFloat(document.getElementById("edit-potassium").value) || 0,
+      sodium: parseFloat(document.getElementById("edit-sodium").value) || 0,
+      sulfate: parseFloat(document.getElementById("edit-sulfate").value) || 0,
+      chloride: parseFloat(document.getElementById("edit-chloride").value) || 0,
+      bicarbonate: parseFloat(document.getElementById("edit-bicarbonate").value) || 0,
+      description: (document.getElementById("edit-recipe-desc").value || "").trim(),
+      brewMethod: brewMethod,
+      isPublic: true,
+      creatorDisplayName: editingRecipe.creatorDisplayName || "",
+      tags: editTags.slice()
+    };
+
+    // Update localStorage
+    var profiles = loadCustomTargetProfiles();
+    if (newSlug !== editingRecipe.slug) {
+      delete profiles[editingRecipe.slug];
+    }
+    profiles[newSlug] = updated;
+    saveCustomTargetProfiles(profiles);
+
+    // Update directly in Supabase
+    if (typeof window.supabaseClient !== "undefined") {
+      var supabasePayload = {
+        slug: newSlug,
+        label: updated.label,
+        brew_method: updated.brewMethod,
+        calcium: updated.calcium,
+        magnesium: updated.magnesium,
+        alkalinity: updated.alkalinity,
+        potassium: updated.potassium,
+        sodium: updated.sodium,
+        sulfate: updated.sulfate,
+        chloride: updated.chloride,
+        bicarbonate: updated.bicarbonate,
+        description: updated.description,
+        tags: updated.tags,
+        is_public: true,
+        updated_at: new Date().toISOString()
+      };
+
+      var result = await window.supabaseClient
+        .from("target_profiles")
+        .update(supabasePayload)
+        .eq("id", editingRecipe.id);
+
+      if (result.error) {
+        console.warn("[library] edit update failed:", result.error);
+        errorEl.textContent = "Failed to save changes. Please try again.";
+        return;
+      }
+    }
+
+    // Update the recipe in the local allRecipes cache
+    for (var i = 0; i < allRecipes.length; i++) {
+      if (allRecipes[i].id === editingRecipe.id) {
+        allRecipes[i].slug = newSlug;
+        allRecipes[i].label = updated.label;
+        allRecipes[i].brewMethod = updated.brewMethod;
+        allRecipes[i].calcium = updated.calcium;
+        allRecipes[i].magnesium = updated.magnesium;
+        allRecipes[i].alkalinity = updated.alkalinity;
+        allRecipes[i].potassium = updated.potassium;
+        allRecipes[i].sodium = updated.sodium;
+        allRecipes[i].sulfate = updated.sulfate;
+        allRecipes[i].chloride = updated.chloride;
+        allRecipes[i].bicarbonate = updated.bicarbonate;
+        allRecipes[i].description = updated.description;
+        allRecipes[i].tags = updated.tags;
+        break;
+      }
+    }
+
+    invalidatePublicRecipesCache();
+    closeEditModal();
+    buildTagFilters();
     renderMyPublished();
     renderFilteredRecipes();
   }
