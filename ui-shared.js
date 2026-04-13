@@ -417,10 +417,10 @@ function injectNav() {
   });
   nav.appendChild(linksWrap);
 
-  // Auth element (right side) — populated async after nav is in the DOM
+  // Auth element — inside the links dropdown on mobile, beside links on desktop
   const authWrap = document.createElement("div");
   authWrap.className = "nav-auth";
-  nav.appendChild(authWrap);
+  linksWrap.appendChild(authWrap);
 
   document.body.insertBefore(nav, document.body.firstChild);
 
