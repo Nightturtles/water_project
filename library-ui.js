@@ -5,6 +5,8 @@
 (function () {
   "use strict";
 
+  var MY_RECIPES_TAG = "My Recipes";
+
   var allRecipes = [];
   var currentUserId = null;
   var activeBrewFilter = "all";
@@ -65,7 +67,6 @@
     }
 
     renderFilteredRecipes();
-    renderMyPublished();
   });
 
   // --- Tag filters ---
@@ -81,7 +82,27 @@
     if (!container) return;
     container.innerHTML = "";
 
-    // Sort tags by count descending
+    // "My Recipes" pinned first (count = user's own recipes)
+    var myCount = currentUserId ? allRecipes.filter(function (r) { return r.userId === currentUserId; }).length : 0;
+    if (myCount > 0) {
+      var myChip = document.createElement("button");
+      myChip.type = "button";
+      myChip.className = "library-tag-chip" + (activeTags.has(MY_RECIPES_TAG) ? " active" : "");
+      myChip.textContent = MY_RECIPES_TAG;
+      myChip.addEventListener("click", function () {
+        if (activeTags.has(MY_RECIPES_TAG)) {
+          activeTags.delete(MY_RECIPES_TAG);
+          myChip.classList.remove("active");
+        } else {
+          activeTags.add(MY_RECIPES_TAG);
+          myChip.classList.add("active");
+        }
+        renderFilteredRecipes();
+      });
+      container.appendChild(myChip);
+    }
+
+    // Sort remaining tags by count descending
     var sortedTags = Object.keys(tagCounts).sort(function (a, b) {
       return tagCounts[b] - tagCounts[a];
     });
@@ -89,7 +110,7 @@
     sortedTags.forEach(function (tag) {
       var chip = document.createElement("button");
       chip.type = "button";
-      chip.className = "library-tag-chip";
+      chip.className = "library-tag-chip" + (activeTags.has(tag) ? " active" : "");
       chip.textContent = tag;
       chip.dataset.tag = tag;
       chip.addEventListener("click", function () {
@@ -108,18 +129,28 @@
 
   // --- Filtering ---
   function getFilteredRecipes() {
+    var filterMyRecipes = activeTags.has(MY_RECIPES_TAG);
+    // Regular tags (excluding the virtual "My Recipes" tag)
+    var regularTags = new Set();
+    activeTags.forEach(function (t) {
+      if (t !== MY_RECIPES_TAG) regularTags.add(t);
+    });
+
     return allRecipes.filter(function (r) {
+      // "My Recipes" filter — must be owned by current user
+      if (filterMyRecipes && r.userId !== currentUserId) return false;
+
       // Brew method
       if (activeBrewFilter !== "all") {
         var brewMethod = (r.brewMethod || "filter").toLowerCase();
         if (brewMethod !== activeBrewFilter) return false;
       }
 
-      // Tags
-      if (activeTags.size > 0) {
+      // Regular tags
+      if (regularTags.size > 0) {
         var recipeTags = new Set((r.tags || []).map(function (t) { return t.toLowerCase(); }));
         var match = false;
-        activeTags.forEach(function (t) {
+        regularTags.forEach(function (t) {
           if (recipeTags.has(t.toLowerCase())) match = true;
         });
         if (!match) return false;
@@ -149,44 +180,19 @@
 
     var filtered = getFilteredRecipes();
 
-    // Exclude user's own public recipes from main grid (shown in "My Published" section)
-    var displayRecipes = filtered.filter(function (r) {
-      return r.userId !== currentUserId;
-    });
-
     grid.innerHTML = "";
 
-    if (displayRecipes.length === 0) {
+    if (filtered.length === 0) {
       if (emptyEl) emptyEl.style.display = "";
       if (countEl) countEl.textContent = "";
     } else {
       if (emptyEl) emptyEl.style.display = "none";
-      if (countEl) countEl.textContent = displayRecipes.length + " recipe" + (displayRecipes.length !== 1 ? "s" : "");
+      if (countEl) countEl.textContent = filtered.length + " recipe" + (filtered.length !== 1 ? "s" : "");
     }
 
-    displayRecipes.forEach(function (recipe) {
-      grid.appendChild(createRecipeCard(recipe, false));
-    });
-  }
-
-  function renderMyPublished() {
-    var section = document.getElementById("my-published-section");
-    var grid = document.getElementById("my-published-grid");
-    if (!section || !grid || !currentUserId) return;
-
-    var myRecipes = allRecipes.filter(function (r) {
-      return r.userId === currentUserId;
-    });
-
-    if (myRecipes.length === 0) {
-      section.style.display = "none";
-      return;
-    }
-
-    section.style.display = "";
-    grid.innerHTML = "";
-    myRecipes.forEach(function (recipe) {
-      grid.appendChild(createRecipeCard(recipe, true));
+    filtered.forEach(function (recipe) {
+      var isOwner = currentUserId && recipe.userId === currentUserId;
+      grid.appendChild(createRecipeCard(recipe, isOwner));
     });
   }
 
@@ -322,7 +328,7 @@
     // Remove from local cache and re-render
     allRecipes = allRecipes.filter(function (r) { return r.id !== recipe.id; });
     invalidatePublicRecipesCache();
-    renderMyPublished();
+    buildTagFilters();
     renderFilteredRecipes();
   }
 
@@ -573,7 +579,6 @@
     invalidatePublicRecipesCache();
     closeEditModal();
     buildTagFilters();
-    renderMyPublished();
     renderFilteredRecipes();
   }
 })();
