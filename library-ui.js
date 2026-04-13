@@ -71,6 +71,7 @@
 
   // --- Tag filters ---
   function buildTagFilters() {
+    // Count which predefined tags are actually used
     var tagCounts = {};
     allRecipes.forEach(function (r) {
       (r.tags || []).forEach(function (t) {
@@ -82,49 +83,36 @@
     if (!container) return;
     container.innerHTML = "";
 
-    // "My Recipes" pinned first (count = user's own recipes)
+    // "My Recipes" pinned first
     var myCount = currentUserId ? allRecipes.filter(function (r) { return r.userId === currentUserId; }).length : 0;
     if (myCount > 0) {
-      var myChip = document.createElement("button");
-      myChip.type = "button";
-      myChip.className = "library-tag-chip" + (activeTags.has(MY_RECIPES_TAG) ? " active" : "");
-      myChip.textContent = MY_RECIPES_TAG;
-      myChip.addEventListener("click", function () {
-        if (activeTags.has(MY_RECIPES_TAG)) {
-          activeTags.delete(MY_RECIPES_TAG);
-          myChip.classList.remove("active");
-        } else {
-          activeTags.add(MY_RECIPES_TAG);
-          myChip.classList.add("active");
-        }
-        renderFilteredRecipes();
-      });
-      container.appendChild(myChip);
+      container.appendChild(createFilterChip(MY_RECIPES_TAG));
     }
 
-    // Sort remaining tags by count descending
-    var sortedTags = Object.keys(tagCounts).sort(function (a, b) {
-      return tagCounts[b] - tagCounts[a];
+    // Predefined tags — only show those with at least 1 recipe
+    LIBRARY_TAGS.forEach(function (tag) {
+      if (tagCounts[tag] && tagCounts[tag] > 0) {
+        container.appendChild(createFilterChip(tag));
+      }
     });
+  }
 
-    sortedTags.forEach(function (tag) {
-      var chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "library-tag-chip" + (activeTags.has(tag) ? " active" : "");
-      chip.textContent = tag;
-      chip.dataset.tag = tag;
-      chip.addEventListener("click", function () {
-        if (activeTags.has(tag)) {
-          activeTags.delete(tag);
-          chip.classList.remove("active");
-        } else {
-          activeTags.add(tag);
-          chip.classList.add("active");
-        }
-        renderFilteredRecipes();
-      });
-      container.appendChild(chip);
+  function createFilterChip(tag) {
+    var chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "library-tag-chip" + (activeTags.has(tag) ? " active" : "");
+    chip.textContent = tag;
+    chip.addEventListener("click", function () {
+      if (activeTags.has(tag)) {
+        activeTags.delete(tag);
+        chip.classList.remove("active");
+      } else {
+        activeTags.add(tag);
+        chip.classList.add("active");
+      }
+      renderFilteredRecipes();
     });
+    return chip;
   }
 
   // --- Filtering ---
@@ -365,7 +353,6 @@
     }
 
     // Tags
-    document.getElementById("edit-tag-input").value = "";
     renderEditTags();
 
     // Clear error
@@ -377,13 +364,9 @@
     // Bind events (use named functions so we can remove them)
     var saveBtn = document.getElementById("edit-recipe-save");
     var cancelBtn = document.getElementById("edit-recipe-cancel");
-    var tagAddBtn = document.getElementById("edit-tag-add-btn");
-    var tagInput = document.getElementById("edit-tag-input");
 
     function onSave() { handleEditSave(); }
     function onCancel() { closeEditModal(); }
-    function onTagAdd() { addEditTag(); }
-    function onTagKeydown(e) { if (e.key === "Enter") { e.preventDefault(); addEditTag(); } }
     function onOverlayClick(e) { if (e.target === overlay) closeEditModal(); }
     function onKeydown(e) { if (e.key === "Escape") closeEditModal(); }
 
@@ -394,8 +377,6 @@
 
     saveBtn.addEventListener("click", onSave);
     cancelBtn.addEventListener("click", onCancel);
-    tagAddBtn.addEventListener("click", onTagAdd);
-    tagInput.addEventListener("keydown", onTagKeydown);
     overlay.addEventListener("click", onOverlayClick);
     document.addEventListener("keydown", onKeydown);
 
@@ -403,8 +384,6 @@
     overlay._editCleanup = function () {
       saveBtn.removeEventListener("click", onSave);
       cancelBtn.removeEventListener("click", onCancel);
-      tagAddBtn.removeEventListener("click", onTagAdd);
-      tagInput.removeEventListener("keydown", onTagKeydown);
       overlay.removeEventListener("click", onOverlayClick);
       document.removeEventListener("keydown", onKeydown);
       if (toggle) toggle.removeEventListener("click", handleEditBrewToggle);
@@ -432,37 +411,25 @@
     });
   }
 
-  function addEditTag() {
-    var input = document.getElementById("edit-tag-input");
-    var tag = (input.value || "").trim().toLowerCase();
-    if (!tag) return;
-    if (editTags.indexOf(tag) === -1) {
-      editTags.push(tag);
-      renderEditTags();
-    }
-    input.value = "";
-    input.focus();
-  }
-
   function renderEditTags() {
     var container = document.getElementById("edit-tag-chips");
     if (!container) return;
     container.innerHTML = "";
-    editTags.forEach(function (tag, idx) {
-      var chip = document.createElement("span");
-      chip.className = "library-tag-chip small library-edit-tag-removable";
+    LIBRARY_TAGS.forEach(function (tag) {
+      var chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "library-tag-chip library-edit-tag-toggle" + (editTags.indexOf(tag) !== -1 ? " active" : "");
       chip.textContent = tag;
-
-      var removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "library-edit-tag-remove";
-      removeBtn.textContent = "\u00d7";
-      removeBtn.setAttribute("aria-label", "Remove tag " + tag);
-      removeBtn.addEventListener("click", function () {
-        editTags.splice(idx, 1);
-        renderEditTags();
+      chip.addEventListener("click", function () {
+        var idx = editTags.indexOf(tag);
+        if (idx !== -1) {
+          editTags.splice(idx, 1);
+          chip.classList.remove("active");
+        } else {
+          editTags.push(tag);
+          chip.classList.add("active");
+        }
       });
-      chip.appendChild(removeBtn);
       container.appendChild(chip);
     });
   }

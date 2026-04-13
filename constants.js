@@ -206,6 +206,12 @@ const TARGET_PRESETS = {
 
 const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 
+// --- Predefined library tags ---
+const LIBRARY_TAGS = [
+  "Full Body", "Balanced", "Bright", "Sweet", "Delicate",
+  "Juicy", "Low TDS", "High TDS", "Round", "Clarity"
+];
+
 // --- Custom target profile helpers ---
 const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
 const RESERVED_TARGET_KEYS = new Set([...BUILTIN_TARGET_KEYS, "custom"]);
