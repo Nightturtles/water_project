@@ -679,6 +679,7 @@
       tasteProfileNameInput.value = "";
       updateTasteProfileNameError();
       showTasteSaveStatus("Saved! Use it on the Calculator page.", false);
+      if (typeof syncNow === "function") syncNow();
     });
 
     // --- Save current water profile (from Current Water Profile section) ---
@@ -738,6 +739,7 @@
       currentProfileNameInput.value = "";
       updateCurrentProfileNameError();
       showCurrentSaveStatus("Saved! Use it as a preset or on the Calculator page.", false);
+      if (typeof syncNow === "function") syncNow();
     });
 
     // --- Update selected custom profile with current grid values ---
@@ -763,6 +765,7 @@
         }
         renderTastePresets(targetKey);
         showCurrentSaveStatus("Profile updated.", false);
+        if (typeof syncNow === "function") syncNow();
       });
     });
 

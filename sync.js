@@ -23,6 +23,15 @@
     }, SYNC_DEBOUNCE_MS);
   }
 
+  // --- Immediate sync (no debounce) ---
+  function syncNow() {
+    clearTimeout(syncTimer);
+    syncTimer = null;
+    return pushAllToCloud().catch(function (err) {
+      console.warn('[sync] immediate push failed:', err);
+    });
+  }
+
   // --- Get currently logged-in user ID, or null ---
   async function getLoggedInUserId() {
     try {
@@ -407,6 +416,7 @@
 
   // Expose public API
   window.scheduleSyncToCloud = scheduleSyncToCloud;
+  window.syncNow = syncNow;
   window.pushAllToCloud = pushAllToCloud;
   window.pullFromCloud = pullFromCloud;
   window.handleFirstLoginMerge = handleFirstLoginMerge;
