@@ -402,6 +402,12 @@ targetSaveChangesBtn.addEventListener("click", () => {
         brewMethod: activeBrewMethod
       };
     }
+    // Preserve library sharing fields from the original profile
+    if (orig) {
+      if (orig.isPublic) profile.isPublic = true;
+      if (orig.creatorDisplayName) profile.creatorDisplayName = orig.creatorDisplayName;
+      if (orig.tags) profile.tags = orig.tags;
+    }
     const profiles = loadCustomTargetProfiles();
     profiles[currentProfile] = profile;
     if (!saveCustomTargetProfiles(profiles)) {

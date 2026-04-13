@@ -751,7 +751,12 @@
 
       showConfirm("Are you sure you want to change this profile?", () => {
         const ions = getCurrentProfileIons();
-        profiles[targetKey] = buildStoredTargetProfile(existing.label, ions, existing.description || "", { brewMethod: activeBrewMethod });
+        var profile = buildStoredTargetProfile(existing.label, ions, existing.description || "", { brewMethod: activeBrewMethod });
+        // Preserve library sharing fields
+        if (existing.isPublic) profile.isPublic = true;
+        if (existing.creatorDisplayName) profile.creatorDisplayName = existing.creatorDisplayName;
+        if (existing.tags) profile.tags = existing.tags;
+        profiles[targetKey] = profile;
         if (!saveCustomTargetProfiles(profiles)) {
           showCurrentSaveStatus("Storage full — could not save.", true);
           return;
