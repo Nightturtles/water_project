@@ -28,7 +28,8 @@
 
     // Get current user for "my published" detection
     if (typeof getUser === "function") {
-      var user = await getUser();
+      var userResult = await getUser();
+      var user = userResult && userResult.data && userResult.data.user;
       if (user) currentUserId = user.id;
     }
 
