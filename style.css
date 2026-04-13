@@ -1798,7 +1798,7 @@ footer {
 
 .nav-auth-email {
   font-size: 0.8rem;
-  color: var(--gray-500);
+  color: #ffffff;
   max-width: 140px;
   overflow: hidden;
   text-overflow: ellipsis;
