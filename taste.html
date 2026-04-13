@@ -39,11 +39,6 @@
       <div class="profile-buttons" id="taste-presets">
         <!-- Populated by JS -->
       </div>
-      <div class="restore-bar" id="restore-target-bar" style="display:none;">
-        <span>Some built-in presets were deleted.</span>
-        <a href="#" id="restore-target-defaults">Restore defaults</a>
-      </div>
-
       <div class="source-grid">
         <div class="input-group">
           <label for="cur-calcium">Calcium</label>
@@ -482,13 +477,9 @@
         if (!isTasteEditMode) return;
         e.stopPropagation();
         showConfirm("Are you sure you want to delete this profile?", () => {
-          if (TARGET_PRESETS[deleteKey]) {
-            addDeletedTargetPreset(deleteKey);
-          }
           deleteCustomTargetProfile(deleteKey);
           const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
           renderTastePresets(fallback);
-          updateRestoreTargetBar();
           showCurrentSaveStatus("Profile deleted.", false);
         });
         return;
@@ -779,13 +770,9 @@
       const profile = profiles[targetKey];
       const label = profile && profile.label ? profile.label : targetKey;
       showConfirm("Delete \u201c" + label + "\u201d? This cannot be undone.", () => {
-        if (TARGET_PRESETS[targetKey]) {
-          addDeletedTargetPreset(targetKey);
-        }
         deleteCustomTargetProfile(targetKey);
         const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
         renderTastePresets(fallback);
-        updateRestoreTargetBar();
         showCurrentSaveStatus("Profile deleted.", false);
       });
     });
@@ -804,14 +791,6 @@
       const nextPreset = visible[savedPreset] ? savedPreset : fallback;
       renderTastePresets(nextPreset);
     }
-
-    // --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
-    document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
-      e.preventDefault();
-      restoreTargetPresetDefaults();
-      renderTastePresets();
-      updateRestoreTargetBar();
-    });
 
     // --- Initialize ---
     if (brewMethodToggle) {
@@ -836,7 +815,6 @@
     }
     renderTastePresets();
     updateTasteModeUI();
-    updateRestoreTargetBar();
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

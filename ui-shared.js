@@ -475,13 +475,7 @@ async function _updateNavAuth(authWrap, currentPage) {
   }
 }
 
-// --- Shared restore bar helpers (Inconsistency 7) ---
-function updateRestoreTargetBar() {
-  const el = document.getElementById("restore-target-bar");
-  if (!el) return;
-  el.style.display = loadDeletedTargetPresets().length > 0 ? "flex" : "none";
-}
-
+// --- Shared restore bar helpers ---
 function updateRestoreSourceBar() {
   const el = document.getElementById("restore-source-bar");
   if (!el) return;

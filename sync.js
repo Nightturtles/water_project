@@ -77,7 +77,6 @@
       source_water: loadSourceWater(),
       target_preset: loadTargetPresetName(),
       deleted_source_presets: loadDeletedPresets(),
-      deleted_target_presets: loadDeletedTargetPresets(),
       updated_at: now
     };
 
@@ -224,7 +223,6 @@
       if (selections.source_water) safeSetItem('cw_source_water', JSON.stringify(selections.source_water));
       if (selections.target_preset) safeSetItem('cw_target_preset', selections.target_preset);
       if (selections.deleted_source_presets) safeSetItem('cw_deleted_presets', JSON.stringify(selections.deleted_source_presets));
-      if (selections.deleted_target_presets) safeSetItem('cw_deleted_target_presets', JSON.stringify(selections.deleted_target_presets));
     }
 
     // Apply source profiles
@@ -280,7 +278,6 @@
     var noCustomSource = Object.keys(loadCustomProfiles()).length === 0;
     var noCustomTarget = Object.keys(loadCustomTargetProfiles()).length === 0;
     var noDeletedSource = loadDeletedPresets().length === 0;
-    var noDeletedTarget = loadDeletedTargetPresets().length === 0;
 
     var defaultMinerals = ['calcium-chloride', 'epsom-salt', 'baking-soda', 'potassium-bicarbonate'];
     var minerals = loadSelectedMinerals();
@@ -288,7 +285,7 @@
       defaultMinerals.every(function (m) { return minerals.includes(m); });
 
     return allZeroSource && noCustomSource && noCustomTarget &&
-      noDeletedSource && noDeletedTarget && mineralsAreDefault;
+      noDeletedSource && mineralsAreDefault;
   }
 
   // --- Returns true if Supabase has any stored data for this user ---

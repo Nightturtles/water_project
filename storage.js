@@ -155,29 +155,12 @@ function deleteCustomTargetProfile(key) {
   saveCustomTargetProfiles(profiles);
 }
 
-// --- Deleted target preset tracking ---
-function loadDeletedTargetPresets() {
-  const parsed = safeParse(safeGetItem("cw_deleted_target_presets"), []);
-  return Array.isArray(parsed) ? parsed : [];
-}
-
-function addDeletedTargetPreset(key) {
-  const deleted = loadDeletedTargetPresets();
-  if (!deleted.includes(key)) {
-    deleted.push(key);
-    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
-    invalidateTargetPresetsCache();
-    if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
-  }
-}
-
 // --- Label helpers (for unique name enforcement) ---
 function getExistingTargetProfileLabels() {
-  const deleted = loadDeletedTargetPresets();
   const custom = loadCustomTargetProfiles();
   const labels = new Set();
   for (const key of BUILTIN_TARGET_KEYS) {
-    if (!deleted.includes(key) && BUILTIN_TARGET_LABELS[key]) {
+    if (BUILTIN_TARGET_LABELS[key]) {
       labels.add(BUILTIN_TARGET_LABELS[key].trim().toLowerCase());
     }
   }
@@ -508,10 +491,8 @@ function invalidateTargetPresetsCache() {
 function getAllTargetPresets() {
   if (targetPresetsCache) return targetPresetsCache;
   const custom = loadCustomTargetProfiles();
-  const deleted = loadDeletedTargetPresets();
   const result = {};
   for (const [key, value] of Object.entries(TARGET_PRESETS)) {
-    if (deleted.includes(key)) continue;
     result[key] = custom[key] || value;
   }
   for (const [ck, cv] of Object.entries(custom)) {
@@ -638,15 +619,6 @@ function restoreSourcePresetDefaults() {
   saveCustomProfiles(custom);
 }
 
-function restoreTargetPresetDefaults() {
-  safeRemoveItem("cw_deleted_target_presets");
-  const custom = loadCustomTargetProfiles();
-  for (const key of BUILTIN_TARGET_KEYS) {
-    delete custom[key];
-  }
-  saveCustomTargetProfiles(custom);
-}
-
 // --- Theme ---
 function loadThemePreference() {
   const saved = safeGetItem(THEME_KEY);
@@ -689,5 +661,4 @@ window.addEventListener("storage", function(e) {
   if (e.key === "cw_selected_concentrates") { selectedConcentratesCache = null; }
   if (e.key === "cw_diy_concentrate_specs") { diyConcentrateSpecsCache = null; }
   if (e.key === "cw_deleted_presets") { invalidateSourcePresetsCache(); }
-  if (e.key === "cw_deleted_target_presets") { invalidateTargetPresetsCache(); }
 });

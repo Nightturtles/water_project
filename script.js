@@ -251,14 +251,6 @@ function updateTargetModeUI() {
   renderTargetReadonlyTags();
 }
 
-// --- Restore defaults for target presets (uses shared updateRestoreTargetBar) ---
-document.getElementById("restore-target-defaults").addEventListener("click", (e) => {
-  e.preventDefault();
-  restoreTargetPresetDefaults();
-  renderProfileButtons();
-  updateRestoreTargetBar();
-});
-
 function highlightProfile(profileName) {
   profileButtonsContainer.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
   const btn = profileButtonsContainer.querySelector(`[data-profile="${CSS.escape(profileName)}"]`);
@@ -324,12 +316,8 @@ profileButtonsContainer.addEventListener("click", (e) => {
     if (!isTargetEditMode) return;
     e.stopPropagation();
     showConfirm("Are you sure you want to delete this profile?", () => {
-      if (TARGET_PRESETS[deleteKey]) {
-        addDeletedTargetPreset(deleteKey);
-      }
       deleteCustomTargetProfile(deleteKey);
       renderProfileButtons();
-      updateRestoreTargetBar();
       if (currentProfile === deleteKey) {
         const fallback = findFallbackPreset(getTargetPresetsForBrewMethod(activeBrewMethod));
         activateProfile(fallback);
@@ -864,7 +852,6 @@ resultsContainer.addEventListener("change", (e) => {
 renderResultItems();
 renderProfileButtons();
 updateTargetModeUI();
-updateRestoreTargetBar();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
 if (!allTargetPresets[currentProfile]) {
   currentProfile = findFallbackPreset(allTargetPresets);
