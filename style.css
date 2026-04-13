@@ -1677,7 +1677,7 @@ footer {
   }
 
   .nav-auth {
-    position: static;
+    margin-left: 0;
     padding: 0.25rem 0;
     border-top: 1px solid var(--gray-200);
     margin-top: 0.25rem;
@@ -1793,8 +1793,15 @@ footer {
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  position: absolute;
-  right: 1rem;
+  margin-left: auto;
+}
+
+@media (min-width: 769px) {
+  .nav-auth {
+    position: absolute;
+    right: 1rem;
+    margin-left: 0;
+  }
 }
 
 .nav-auth-email {
