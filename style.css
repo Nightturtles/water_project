@@ -1664,6 +1664,7 @@ footer {
   .site-nav {
     padding: 0.5rem 0.75rem;
     flex-wrap: wrap;
+    gap: 0.375rem;
   }
 
   .nav-brand {
@@ -1673,11 +1674,13 @@ footer {
 
   .nav-hamburger {
     display: flex;
+    order: 2;
   }
 
   .nav-auth {
     position: static;
     margin-left: 0;
+    order: 1;
   }
 
   .nav-links {
