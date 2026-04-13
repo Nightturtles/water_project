@@ -238,6 +238,26 @@ async function showSharePrompt(profileKey) {
       saveCustomTargetProfiles(profiles);
     }
 
+    // Also update directly in Supabase so it takes effect immediately
+    if (typeof window.supabaseClient !== "undefined") {
+      window.supabaseClient.auth.getUser().then(function (res) {
+        var user = res && res.data && res.data.user;
+        if (!user) return;
+        window.supabaseClient
+          .from("target_profiles")
+          .update({
+            is_public: true,
+            creator_display_name: displayName,
+            tags: profiles[profileKey] ? profiles[profileKey].tags : []
+          })
+          .eq("user_id", user.id)
+          .eq("slug", profileKey)
+          .then(function (result) {
+            if (result.error) console.warn("[share] direct update failed:", result.error);
+          });
+      });
+    }
+
     close();
   }
 
