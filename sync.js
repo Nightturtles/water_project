@@ -385,13 +385,19 @@
     safeSetItem('cw_synced_user_id', userId);
   }
 
-  // --- Background pull on page load (if already logged in) ---
+  // --- Background sync on page load (if already logged in) ---
+  // Push first to ensure any locally-saved data reaches the cloud before
+  // pulling, which prevents pullFromCloud from overwriting fresh local
+  // saves with stale cloud data.
   async function initSync() {
     try {
       var result = await window.supabaseClient.auth.getSession();
       if (result.data && result.data.session) {
+        await pushAllToCloud().catch(function (err) {
+          console.warn('[sync] push on page load failed:', err);
+        });
         pullFromCloud().catch(function (err) {
-          console.warn('[sync] background pull on page load failed:', err);
+          console.warn('[sync] pull on page load failed:', err);
         });
       }
     } catch (_) {}
