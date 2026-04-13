@@ -1578,7 +1578,7 @@ footer {
 /* ========================
    Responsive
    ======================== */
-@media (min-width: 350px) and (max-width: 768px) {
+@media (max-width: 768px) {
   .input-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
