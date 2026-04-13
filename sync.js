@@ -388,6 +388,23 @@
     } catch (_) {}
   }
 
+  // --- Flush pending sync when navigating away ---
+  function flushPendingSync() {
+    if (syncTimer) {
+      clearTimeout(syncTimer);
+      syncTimer = null;
+      pushAllToCloud().catch(function (err) {
+        console.warn('[sync] flush on leave failed:', err);
+      });
+    }
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushPendingSync();
+  });
+
+  window.addEventListener('beforeunload', flushPendingSync);
+
   // Expose public API
   window.scheduleSyncToCloud = scheduleSyncToCloud;
   window.pushAllToCloud = pushAllToCloud;
