@@ -5,7 +5,9 @@
 // On write: localStorage is updated immediately, then a debounced push
 // to Supabase fires 2 seconds later if the user is logged in.
 // On login: merge local and cloud data (see handleFirstLoginMerge).
-// On page load: if logged in, pull latest cloud data in the background.
+// On page load: if logged in, sync based on dirty flag — push-first when
+// there are unpushed local changes, pull-first otherwise (so other
+// devices' data arrives without being overwritten).
 
 (function () {
   'use strict';
@@ -13,12 +15,41 @@
   var syncTimer = null;
   var SYNC_DEBOUNCE_MS = 2000;
 
+  // --- Sync failure tracking (Issue 10) ---
+  var consecutiveFailures = 0;
+  var FAILURE_THRESHOLD = 2;
+
+  function onSyncSuccess() {
+    consecutiveFailures = 0;
+    safeSetItem('cw_sync_dirty', 'false');
+    updateSyncIndicator(false);
+  }
+
+  function onSyncFailure(err) {
+    consecutiveFailures++;
+    if (consecutiveFailures >= FAILURE_THRESHOLD) {
+      updateSyncIndicator(true);
+    }
+    console.warn('[sync] push failed:', err);
+  }
+
+  function updateSyncIndicator(show) {
+    var el = document.getElementById('sync-status');
+    if (!el) return;
+    el.style.display = show ? '' : 'none';
+  }
+
   // --- Debounced sync trigger (called from storage.js save functions) ---
+  // Sets a dirty flag so initSync knows there are unpushed local changes,
+  // even if the page closes before the debounce fires (Issue 1 & 3).
   function scheduleSyncToCloud() {
+    safeSetItem('cw_sync_dirty', 'true');
     clearTimeout(syncTimer);
     syncTimer = setTimeout(function () {
-      pushAllToCloud().catch(function (err) {
-        console.warn('[sync] push failed:', err);
+      pushAllToCloud().then(function () {
+        onSyncSuccess();
+      }).catch(function (err) {
+        onSyncFailure(err);
       });
     }, SYNC_DEBOUNCE_MS);
   }
@@ -27,15 +58,18 @@
   function syncNow() {
     clearTimeout(syncTimer);
     syncTimer = null;
-    return pushAllToCloud().catch(function (err) {
-      console.warn('[sync] immediate push failed:', err);
+    safeSetItem('cw_sync_dirty', 'true');
+    return pushAllToCloud().then(function () {
+      onSyncSuccess();
+    }).catch(function (err) {
+      onSyncFailure(err);
     });
   }
 
   // --- Get currently logged-in user ID, or null ---
   async function getLoggedInUserId() {
     try {
-      var result = await window.supabaseClient.auth.getUser();
+      var result = await CW.auth.client.auth.getUser();
       return result.data && result.data.user ? result.data.user.id : null;
     } catch (_) {
       return null;
@@ -90,8 +124,8 @@
     };
 
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').upsert(settingsPayload, { onConflict: 'user_id' }),
-      window.supabaseClient.from('user_selections').upsert(selectionsPayload, { onConflict: 'user_id' })
+      CW.auth.client.from('user_settings').upsert(settingsPayload, { onConflict: 'user_id' }),
+      CW.auth.client.from('user_selections').upsert(selectionsPayload, { onConflict: 'user_id' })
     ]);
 
     if (results[0].error) console.warn('[sync] user_settings upsert failed:', results[0].error);
@@ -108,8 +142,8 @@
 
     // Fetch current cloud slugs to detect deletions
     var cloudResults = await Promise.all([
-      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId),
-      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId)
+      CW.auth.client.from('source_profiles').select('slug').eq('user_id', userId),
+      CW.auth.client.from('target_profiles').select('slug').eq('user_id', userId)
     ]);
 
     // Source profiles — delete cloud rows that no longer exist locally
@@ -119,7 +153,7 @@
         .map(function (r) { return r.slug; })
         .filter(function (slug) { return !localSourceSlugs.includes(slug); });
       if (toDeleteSource.length > 0) {
-        await window.supabaseClient.from('source_profiles').delete()
+        await CW.auth.client.from('source_profiles').delete()
           .eq('user_id', userId).in('slug', toDeleteSource);
       }
     }
@@ -143,7 +177,7 @@
           updated_at: now
         };
       });
-      var srcResult = await window.supabaseClient.from('source_profiles')
+      var srcResult = await CW.auth.client.from('source_profiles')
         .upsert(sourceRows, { onConflict: 'user_id,slug' });
       if (srcResult.error) console.warn('[sync] source_profiles upsert failed:', srcResult.error);
     }
@@ -155,7 +189,7 @@
         .map(function (r) { return r.slug; })
         .filter(function (slug) { return !localTargetSlugs.includes(slug); });
       if (toDeleteTarget.length > 0) {
-        await window.supabaseClient.from('target_profiles').delete()
+        await CW.auth.client.from('target_profiles').delete()
           .eq('user_id', userId).in('slug', toDeleteTarget);
       }
     }
@@ -185,7 +219,7 @@
           updated_at: now
         };
       });
-      var tgtResult = await window.supabaseClient.from('target_profiles')
+      var tgtResult = await CW.auth.client.from('target_profiles')
         .upsert(targetRows, { onConflict: 'user_id,slug' });
       if (tgtResult.error) console.warn('[sync] target_profiles upsert failed:', tgtResult.error);
     }
@@ -197,10 +231,10 @@
     if (!userId) return;
 
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('user_selections').select('*').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('source_profiles').select('*').eq('user_id', userId),
-      window.supabaseClient.from('target_profiles').select('*').eq('user_id', userId)
+      CW.auth.client.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
+      CW.auth.client.from('user_selections').select('*').eq('user_id', userId).maybeSingle(),
+      CW.auth.client.from('source_profiles').select('*').eq('user_id', userId),
+      CW.auth.client.from('target_profiles').select('*').eq('user_id', userId)
     ]);
 
     var settings = results[0].data;
@@ -300,10 +334,10 @@
   // --- Returns true if Supabase has any stored data for this user ---
   async function hasCloudData(userId) {
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('user_selections').select('user_id').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId).limit(1),
-      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId).limit(1)
+      CW.auth.client.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
+      CW.auth.client.from('user_selections').select('user_id').eq('user_id', userId).maybeSingle(),
+      CW.auth.client.from('source_profiles').select('slug').eq('user_id', userId).limit(1),
+      CW.auth.client.from('target_profiles').select('slug').eq('user_id', userId).limit(1)
     ]);
     return !!(results[0].data || results[1].data ||
       (results[2].data && results[2].data.length > 0) ||
@@ -383,32 +417,57 @@
     }
 
     safeSetItem('cw_synced_user_id', userId);
+    safeSetItem('cw_sync_dirty', 'false');
   }
 
   // --- Background sync on page load (if already logged in) ---
-  // Push first to ensure any locally-saved data reaches the cloud before
-  // pulling, which prevents pullFromCloud from overwriting fresh local
-  // saves with stale cloud data.
+  // Uses a dirty flag to decide sync order (Issue 1):
+  //   - If there are unpushed local changes (dirty=true), push first so
+  //     they reach the cloud, then pull to pick up any other-device changes.
+  //   - If local is clean (dirty=false), pull first so other-device data
+  //     arrives without being overwritten by stale local state.
+  // Skip on login page (it redirects immediately if already logged in,
+  // so syncing here just wastes API calls and races with the redirect).
   async function initSync() {
+    var page = window.location.pathname.split('/').pop() || '';
+    if (page === 'login.html') return;
+
     try {
-      var result = await window.supabaseClient.auth.getSession();
+      var result = await CW.auth.client.auth.getSession();
       if (result.data && result.data.session) {
-        await pushAllToCloud().catch(function (err) {
-          console.warn('[sync] push on page load failed:', err);
-        });
-        pullFromCloud().catch(function (err) {
-          console.warn('[sync] pull on page load failed:', err);
-        });
+        var isDirty = safeGetItem('cw_sync_dirty') === 'true';
+        if (isDirty) {
+          // Local changes haven't been pushed yet — push first, then pull
+          await pushAllToCloud().then(function () {
+            onSyncSuccess();
+          }).catch(function (err) {
+            onSyncFailure(err);
+          });
+          pullFromCloud().catch(function (err) {
+            console.warn('[sync] pull on page load failed:', err);
+          });
+        } else {
+          // No unpushed local changes — pull first to get other-device data
+          await pullFromCloud().catch(function (err) {
+            console.warn('[sync] pull on page load failed:', err);
+          });
+        }
       }
     } catch (_) {}
   }
 
   // --- Flush pending sync when navigating away ---
+  // Best-effort: the dirty flag ensures any missed flush is retried
+  // on the next page load via initSync() (Issue 3).
   function flushPendingSync() {
     if (syncTimer) {
       clearTimeout(syncTimer);
       syncTimer = null;
-      pushAllToCloud().catch(function (err) {
+      pushAllToCloud().then(function () {
+        onSyncSuccess();
+      }).catch(function (err) {
+        // Push may fail if the page is closing — the dirty flag
+        // stays set so initSync retries on next load.
         console.warn('[sync] flush on leave failed:', err);
       });
     }
@@ -420,12 +479,12 @@
 
   window.addEventListener('beforeunload', flushPendingSync);
 
-  // Expose public API
-  window.scheduleSyncToCloud = scheduleSyncToCloud;
-  window.syncNow = syncNow;
-  window.pushAllToCloud = pushAllToCloud;
-  window.pullFromCloud = pullFromCloud;
-  window.handleFirstLoginMerge = handleFirstLoginMerge;
+  // Populate CW.sync namespace (stubs defined in constants.js)
+  CW.sync.schedule = scheduleSyncToCloud;
+  CW.sync.now = syncNow;
+  CW.sync.push = pushAllToCloud;
+  CW.sync.pull = pullFromCloud;
+  CW.sync.handleFirstLoginMerge = handleFirstLoginMerge;
 
   // Kick off background sync
   initSync();

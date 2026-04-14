@@ -415,7 +415,7 @@ targetSaveChangesBtn.addEventListener("click", () => {
       return;
     }
     targetEditBar.style.display = "none";
-    if (typeof syncNow === "function") syncNow();
+    CW.sync.now();
     renderProfileButtons();
   });
 });
@@ -490,7 +490,7 @@ targetSaveBtn.addEventListener("click", () => {
   showTargetSaveStatus("Saved!", false);
 
   // Sync immediately so the save persists even if the user navigates away
-  if (typeof syncNow === "function") syncNow();
+  CW.sync.now();
 
   // Offer to share to Recipe Library (only if logged in)
   if (typeof showSharePrompt === "function") {

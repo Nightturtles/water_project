@@ -112,10 +112,6 @@
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      console.log('Form submit fired, mode:', mode);
-      console.log('signUpWithEmail available:', typeof window.signUpWithEmail);
-      console.log('signInWithEmail available:', typeof window.signInWithEmail);
-      console.log('supabaseClient available:', typeof window.supabaseClient);
       const email = emailInput.value.trim();
       const password = passwordInput.value;
       if (!email || !password) {
@@ -126,22 +122,17 @@
       clearMessages();
       try {
         if (mode === 'signin') {
-          console.log('Calling signInWithEmail...');
-          const { data, error } = await window.signInWithEmail(email, password);
-          console.log('signIn response:', data, error);
+          const { data, error } = await CW.auth.signIn(email, password);
           if (error) { showError(error.message); return; }
-          if (typeof handleFirstLoginMerge === 'function') await handleFirstLoginMerge();
+          if (CW.sync.handleFirstLoginMerge) await CW.sync.handleFirstLoginMerge();
           window.location.href = 'index.html';
         } else {
-          console.log('Calling signUpWithEmail...');
-          const { data, error } = await window.signUpWithEmail(email, password);
-          console.log('signUp response:', data, error);
+          const { data, error } = await CW.auth.signUp(email, password);
           if (error) { showError(error.message); return; }
           setMode('signin');
           showSuccess('Check your email to confirm your account, then sign in.');
         }
       } catch (e) {
-        console.error('Submit handler error:', e);
         showError(e.message || 'Something went wrong. Please try again.');
       } finally {
         submitBtn.disabled = false;
@@ -152,7 +143,7 @@
       googleBtn.disabled = true;
       clearMessages();
       try {
-        const { error } = await signInWithGoogle();
+        const { error } = await CW.auth.signInWithGoogle();
         if (error) {
           showError(error.message);
           googleBtn.disabled = false;
@@ -165,7 +156,7 @@
     });
 
     // Redirect if already logged in
-    window.supabaseClient.auth.getSession().then(({ data }) => {
+    CW.auth.client.auth.getSession().then(({ data }) => {
       if (data.session) window.location.href = 'index.html';
     });
   </script>

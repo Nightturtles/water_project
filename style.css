@@ -1840,6 +1840,42 @@ footer {
 }
 
 /* ========================
+   Sync status indicator
+   ======================== */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.2rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--orange-700, #c2410c);
+  background: var(--orange-50, #fff7ed);
+  border: 1px solid var(--orange-200, #fed7aa);
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.sync-status::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--orange-500, #f97316);
+}
+
+[data-theme="dark"] .sync-status {
+  color: #fdba74;
+  background: rgba(251, 146, 60, 0.12);
+  border-color: rgba(251, 146, 60, 0.25);
+}
+
+[data-theme="dark"] .sync-status::before {
+  background: #fb923c;
+}
+
+/* ========================
    Login page
    ======================== */
 .login-page main {

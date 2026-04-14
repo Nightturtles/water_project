@@ -22,9 +22,9 @@
       } catch (e) { /* ignore */ }
     }
 
-    if (typeof window.supabaseClient === "undefined") return [];
+    if (!CW.auth.client) return [];
 
-    var result = await window.supabaseClient
+    var result = await CW.auth.client
       .from("target_profiles")
       .select("id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, created_at")
       .eq("is_public", true)
@@ -128,9 +128,9 @@
     return false;
   }
 
-  // Expose on window
-  window.fetchPublicRecipes = fetchPublicRecipes;
-  window.invalidatePublicRecipesCache = invalidatePublicRecipesCache;
-  window.copyRecipeToMyProfiles = copyRecipeToMyProfiles;
-  window.isRecipeInMyProfiles = isRecipeInMyProfiles;
+  // Populate CW.library namespace (stubs defined in constants.js)
+  CW.library.fetchRecipes = fetchPublicRecipes;
+  CW.library.invalidateCache = invalidatePublicRecipesCache;
+  CW.library.copyRecipe = copyRecipeToMyProfiles;
+  CW.library.isInMyProfiles = isRecipeInMyProfiles;
 })();

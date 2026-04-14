@@ -2,6 +2,18 @@
 // Constants — pure data, no side effects
 // ============================================
 
+// --- Global namespace (populated by supabase-client.js, sync.js, library-data.js) ---
+// Stubs allow storage.js to call CW.sync.schedule() safely before sync.js loads.
+window.CW = {
+  auth: { client: null, getUser: null, isLoggedIn: null,
+          signIn: null, signUp: null, signInWithGoogle: null,
+          signInWithApple: null, signOut: null },
+  sync: { schedule: function(){}, now: function(){},
+          push: null, pull: null, handleFirstLoginMerge: null },
+  library: { fetchRecipes: null, invalidateCache: null,
+             copyRecipe: null, isInMyProfiles: null }
+};
+
 // --- Mineral database ---
 // Each mineral salt and the ions it contributes per gram dissolved in 1 liter
 const MINERAL_DB = {

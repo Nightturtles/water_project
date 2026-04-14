@@ -27,7 +27,7 @@ function safeParse(json, fallback) {
 // --- Source water ---
 function saveSourceWater(profile) {
   const ok = safeSetItem("cw_source_water", JSON.stringify(profile));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
   return ok;
 }
 
@@ -39,7 +39,7 @@ function loadSourceWater() {
 
 function saveSourcePresetName(name) {
   safeSetItem("cw_source_preset", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadSourcePresetName() {
@@ -49,7 +49,7 @@ function loadSourcePresetName() {
 // --- Mineral display mode ---
 function saveMineralDisplayMode(mode) {
   safeSetItem("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadMineralDisplayMode() {
@@ -69,7 +69,7 @@ function saveVolumePreference(pageKey, value, unit) {
     unit: unit === "gallons" ? "gallons" : "liters"
   };
   safeSetItem(key, JSON.stringify(payload));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadVolumePreference(pageKey, defaults = {}) {
@@ -105,7 +105,7 @@ function saveCustomProfiles(profiles) {
   const ok = safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
   return ok;
 }
 
@@ -127,7 +127,7 @@ function addDeletedPreset(key) {
     deleted.push(key);
     safeSetItem("cw_deleted_presets", JSON.stringify(deleted));
     invalidateSourcePresetsCache();
-    if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+    CW.sync.schedule();
   }
 }
 
@@ -145,7 +145,7 @@ function saveCustomTargetProfiles(profiles) {
   const ok = safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
   return ok;
 }
 
@@ -186,7 +186,7 @@ function getExistingSourceProfileLabels() {
 // --- Target preset name ---
 function saveTargetPresetName(name) {
   safeSetItem("cw_target_preset", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadTargetPresetName() {
@@ -200,7 +200,7 @@ function normalizeBrewMethod(method) {
 
 function saveBrewMethod(method) {
   safeSetItem("cw_brew_method", normalizeBrewMethod(method));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadBrewMethod() {
@@ -214,7 +214,7 @@ function normalizeLotusDropperType(type) {
 
 function saveLotusDropperType(type) {
   safeSetItem("cw_lotus_dropper_type", normalizeLotusDropperType(type));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadLotusDropperType() {
@@ -235,7 +235,7 @@ function normalizeLotusConcentrateUnit(unit) {
 
 function saveLotusConcentrateUnit(unit) {
   safeSetItem("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadLotusConcentrateUnit() {
@@ -260,7 +260,7 @@ function saveLotusConcentrateUnits(units) {
     });
   }
   safeSetItem("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadLotusConcentrateUnitFor(concentrateId) {
@@ -332,7 +332,7 @@ let selectedMineralsCache = null;
 function saveSelectedMinerals(mineralIds) {
   safeSetItem("cw_selected_minerals", JSON.stringify(mineralIds));
   selectedMineralsCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadSelectedMinerals() {
@@ -349,7 +349,7 @@ let diyConcentrateSpecsCache = null;
 function saveSelectedConcentrates(concentrateIds) {
   safeSetItem("cw_selected_concentrates", JSON.stringify(concentrateIds));
   selectedConcentratesCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadSelectedConcentrates() {
@@ -369,7 +369,7 @@ function loadValidSelectedConcentrates() {
 function saveDiyConcentrateSpecs(specs) {
   safeSetItem("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 function loadDiyConcentrateSpecs() {
@@ -628,7 +628,7 @@ function loadThemePreference() {
 
 function saveThemePreference(mode) {
   safeSetItem(THEME_KEY, mode);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 // --- Creator display name (for recipe library publishing) ---
@@ -638,7 +638,7 @@ function loadCreatorDisplayName() {
 
 function saveCreatorDisplayName(name) {
   safeSetItem("cw_creator_display_name", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  CW.sync.schedule();
 }
 
 // --- Calculator welcome modal (one-time) ---

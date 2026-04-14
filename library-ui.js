@@ -15,7 +15,7 @@
 
   // --- Init ---
   document.addEventListener("DOMContentLoaded", async function () {
-    var loggedIn = typeof isLoggedIn === "function" && await isLoggedIn();
+    var loggedIn = CW.auth.isLoggedIn && await CW.auth.isLoggedIn();
     var authGate = document.getElementById("library-auth-gate");
     var content = document.getElementById("library-content");
 
@@ -29,14 +29,14 @@
     content.style.display = "";
 
     // Get current user for "my published" detection
-    if (typeof getUser === "function") {
-      var userResult = await getUser();
+    if (CW.auth.getUser) {
+      var userResult = await CW.auth.getUser();
       var user = userResult && userResult.data && userResult.data.user;
       if (user) currentUserId = user.id;
     }
 
     // Fetch recipes
-    allRecipes = await fetchPublicRecipes(true);
+    allRecipes = await CW.library.fetchRecipes(true);
 
     // Build tag filter chips
     buildTagFilters();
@@ -274,14 +274,14 @@
       });
       actions.appendChild(unpublishBtn);
     } else {
-      var added = isRecipeInMyProfiles(recipe);
+      var added = CW.library.isInMyProfiles(recipe);
       var addBtn = document.createElement("button");
       addBtn.type = "button";
       addBtn.className = "preset-btn library-add-btn" + (added ? " added" : "");
       addBtn.textContent = added ? "Added" : "Add to My Recipes";
       addBtn.disabled = added;
       addBtn.addEventListener("click", function () {
-        copyRecipeToMyProfiles(recipe);
+        CW.library.copyRecipe(recipe);
         addBtn.textContent = "Added";
         addBtn.classList.add("added");
         addBtn.disabled = true;
@@ -305,17 +305,19 @@
       saveCustomTargetProfiles(profiles);
     }
 
-    // Also update directly in Supabase
-    if (typeof window.supabaseClient !== "undefined") {
-      await window.supabaseClient
+    // Also update directly in Supabase (filter by user_id for defense-in-depth)
+    if (CW.auth.client && currentUserId) {
+      var unpubResult = await CW.auth.client
         .from("target_profiles")
         .update({ is_public: false })
-        .eq("id", recipe.id);
+        .eq("id", recipe.id)
+        .eq("user_id", currentUserId);
+      if (unpubResult.error) console.warn("[library] unpublish failed:", unpubResult.error);
     }
 
     // Remove from local cache and re-render
     allRecipes = allRecipes.filter(function (r) { return r.id !== recipe.id; });
-    invalidatePublicRecipesCache();
+    CW.library.invalidateCache();
     buildTagFilters();
     renderFilteredRecipes();
   }
@@ -491,8 +493,8 @@
     profiles[newSlug] = updated;
     saveCustomTargetProfiles(profiles);
 
-    // Update directly in Supabase
-    if (typeof window.supabaseClient !== "undefined") {
+    // Update directly in Supabase (filter by user_id for defense-in-depth)
+    if (CW.auth.client && currentUserId) {
       var supabasePayload = {
         slug: newSlug,
         label: updated.label,
@@ -511,10 +513,11 @@
         updated_at: new Date().toISOString()
       };
 
-      var result = await window.supabaseClient
+      var result = await CW.auth.client
         .from("target_profiles")
         .update(supabasePayload)
-        .eq("id", editingRecipe.id);
+        .eq("id", editingRecipe.id)
+        .eq("user_id", currentUserId);
 
       if (result.error) {
         console.warn("[library] edit update failed:", result.error);
@@ -543,7 +546,7 @@
       }
     }
 
-    invalidatePublicRecipesCache();
+    CW.library.invalidateCache();
     closeEditModal();
     buildTagFilters();
     renderFilteredRecipes();

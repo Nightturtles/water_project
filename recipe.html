@@ -729,7 +729,7 @@
       showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
 
       // Sync immediately so the save persists even if the user navigates away
-      if (typeof syncNow === "function") syncNow();
+      CW.sync.now();
 
       // Offer to share to Recipe Library (only if logged in)
       if (typeof showSharePrompt === "function") {

@@ -182,7 +182,7 @@ var sharePromptCleanup = null;
 
 async function showSharePrompt(profileKey) {
   // Only show if logged in
-  if (typeof isLoggedIn !== "function" || !(await isLoggedIn())) return;
+  if (!CW.auth.isLoggedIn || !(await CW.auth.isLoggedIn())) return;
 
   var overlay = document.getElementById("share-prompt-overlay");
   if (!overlay) return;
@@ -239,11 +239,11 @@ async function showSharePrompt(profileKey) {
     }
 
     // Also update directly in Supabase so it takes effect immediately
-    if (typeof window.supabaseClient !== "undefined") {
-      window.supabaseClient.auth.getUser().then(function (res) {
+    if (CW.auth.client) {
+      CW.auth.client.auth.getUser().then(function (res) {
         var user = res && res.data && res.data.user;
         if (!user) return;
-        window.supabaseClient
+        CW.auth.client
           .from("target_profiles")
           .update({
             is_public: true,
@@ -437,6 +437,16 @@ function injectNav() {
   });
   nav.appendChild(linksWrap);
 
+  // Sync status indicator (hidden by default, shown on repeated failures)
+  const syncStatus = document.createElement("span");
+  syncStatus.id = "sync-status";
+  syncStatus.className = "sync-status";
+  syncStatus.style.display = "none";
+  syncStatus.setAttribute("role", "status");
+  syncStatus.setAttribute("aria-live", "polite");
+  syncStatus.textContent = "Sync offline";
+  linksWrap.appendChild(syncStatus);
+
   // Auth element — inside the links dropdown on mobile, beside links on desktop
   const authWrap = document.createElement("div");
   authWrap.className = "nav-auth";
@@ -462,9 +472,9 @@ function injectNav() {
 }
 
 async function _updateNavAuth(authWrap, currentPage) {
-  if (typeof window.supabaseClient === "undefined") return;
+  if (!CW.auth.client) return;
   try {
-    const { data } = await window.supabaseClient.auth.getSession();
+    const { data } = await CW.auth.client.auth.getSession();
     const session = data && data.session;
 
     if (session && session.user) {
@@ -477,7 +487,7 @@ async function _updateNavAuth(authWrap, currentPage) {
       logoutBtn.className = "nav-auth-btn";
       logoutBtn.textContent = "Log out";
       logoutBtn.addEventListener("click", async () => {
-        await signOut();
+        await CW.auth.signOut();
         window.location.href = "index.html";
       });
 
