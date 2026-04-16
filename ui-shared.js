@@ -523,9 +523,50 @@ function debounce(fn, ms) {
   };
 }
 
+// --- Recipes-moved toaster (one-time, all pages) ---
+function showRecipesToaster() {
+  if (loadRecipesToasterDismissed()) return;
+
+  var toaster = document.createElement("div");
+  toaster.className = "recipes-toaster";
+  toaster.setAttribute("role", "status");
+
+  var link = document.createElement("a");
+  link.href = "library.html";
+  link.className = "recipes-toaster-link";
+  link.textContent = "Recipes have moved to the new library section. Check it out!";
+  toaster.appendChild(link);
+
+  var closeBtn = document.createElement("button");
+  closeBtn.type = "button";
+  closeBtn.className = "recipes-toaster-close";
+  closeBtn.setAttribute("aria-label", "Dismiss notification");
+  closeBtn.textContent = "\u00d7";
+  toaster.appendChild(closeBtn);
+
+  function dismiss(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    saveRecipesToasterDismissed();
+    toaster.classList.add("recipes-toaster--hiding");
+    toaster.addEventListener("animationend", function () {
+      toaster.remove();
+    });
+  }
+
+  closeBtn.addEventListener("click", dismiss);
+
+  document.body.appendChild(toaster);
+  // Trigger entrance animation on next frame
+  requestAnimationFrame(function () {
+    toaster.classList.add("recipes-toaster--visible");
+  });
+}
+
 // --- Run shared UI setup on load ---
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
   applyMineralDisplayMode();
   initThemeListeners();
+  showRecipesToaster();
 });
