@@ -393,20 +393,24 @@
   }
 
   // --- Background sync on page load (if already logged in) ---
-  // Pull first so data created on other devices is merged into localStorage
-  // before we push.  This prevents syncCustomProfiles from deleting cloud
-  // rows that only exist on another device.  The small risk of overwriting
-  // a very-recent local save is mitigated by flushPendingSync on
-  // beforeunload / visibilitychange, which pushes before the page unloads.
+  // Push first so any unsynced local writes (e.g. a save made immediately
+  // before navigating to this page) are propagated to the cloud before
+  // pull reads it back.  Otherwise pull can race an in-flight keepalive
+  // push and overwrite fresh local data with stale cloud state.
+  //
+  // Safe because syncCustomProfiles now deletes via the local tombstone
+  // list rather than diffing slugs, so push can't wipe rows created on
+  // another device.  (Before that fix, 9f89a2e had to reverse the order
+  // to pull-first to avoid cross-device data loss.)
   async function initSync() {
     try {
       var result = await window.supabaseClient.auth.getSession();
       if (!result.data || !result.data.session) return;
-      await pullFromCloud().catch(function (err) {
-        console.warn('[sync] pull on page load failed:', err);
-      });
       await pushAllToCloud().catch(function (err) {
         console.warn('[sync] push on page load failed:', err);
+      });
+      await pullFromCloud().catch(function (err) {
+        console.warn('[sync] pull on page load failed:', err);
       });
     } catch (err) {
       console.warn('[sync] initSync failed:', err);
