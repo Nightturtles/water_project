@@ -15,7 +15,6 @@ reviews:
   path_filters:
     - "!supabase/migrations/**"
     - "!**/*.svg"
-    - "!cafelytic_logo.svg"
   path_instructions:
     - path: "**/*.js"
       instructions: |

@@ -14,7 +14,7 @@ The DSN is a public identifier — it's embedded in the HTML served to every
 visitor and is safe to commit. The secret auth token (for source-map uploads
 and CLI) is not stored here and is not needed until Phase 3.
 
-```
+```text
 https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4511243165433856
 ```
 
@@ -36,7 +36,12 @@ Every HTML entry point loads the Sentry loader in `<head>` right after
 
 ## SDK init options
 
-Set inside `Sentry.onLoad(() => Sentry.init({ ... }))`:
+Defined on `window.sentryOnLoad = function () { Sentry.init({ ... }) }` — the
+Sentry Loader invokes this hook before its default init, so custom options
+take effect. **Define it before the `<script src="js.sentry-cdn.com/…">` tag**
+so the hook is in place no matter how the loader is scheduled. Do not confuse
+this with `Sentry.onLoad(callback)` (different API — that callback runs
+*after* default init, too late to override options).
 
 - `tracesSampleRate: 0.1` — 10% performance sampling (requires BrowserTracing integration enabled in the Sentry dashboard under Project Settings → Loader Script).
 - `replaysSessionSampleRate: 0` — do not record sessions for everyone.
