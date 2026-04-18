@@ -11,7 +11,7 @@
   'use strict';
 
   var syncTimer = null;
-  var SYNC_DEBOUNCE_MS = 2000;
+  var SYNC_DEBOUNCE_MS = 500;
 
   // --- Debounced sync trigger (called from storage.js save functions) ---
   function scheduleSyncToCloud() {
@@ -86,6 +86,7 @@
       source_water: loadSourceWater(),
       target_preset: loadTargetPresetName(),
       deleted_source_presets: loadDeletedPresets(),
+      deleted_target_presets: loadDeletedTargetPresets(),
       updated_at: now
     };
 
@@ -105,23 +106,31 @@
     now = now || new Date().toISOString();
     var localSource = loadCustomProfiles();
     var localTarget = loadCustomTargetProfiles();
+    var deletedSources = loadDeletedPresets();
+    var deletedTargets = loadDeletedTargetPresets();
 
-    // Fetch current cloud slugs to detect deletions
-    var cloudResults = await Promise.all([
-      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId),
-      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId)
-    ]);
-
-    // Source profiles — delete cloud rows that no longer exist locally
-    if (cloudResults[0].data && cloudResults[0].data.length > 0) {
-      var localSourceSlugs = Object.keys(localSource);
-      var toDeleteSource = cloudResults[0].data
-        .map(function (r) { return r.slug; })
-        .filter(function (slug) { return !localSourceSlugs.includes(slug); });
-      if (toDeleteSource.length > 0) {
-        await window.supabaseClient.from('source_profiles').delete()
-          .eq('user_id', userId).in('slug', toDeleteSource);
-      }
+    // Delete cloud rows for tombstoned slugs.  This replaces the previous
+    // SELECT+diff pattern, which could delete rows created on other devices
+    // whenever local state was stale (e.g. a debounced push that ran without
+    // a fresh pull).  Tombstones are the authoritative record of deletion.
+    var deleteCalls = [];
+    if (deletedSources.length > 0) {
+      deleteCalls.push(
+        window.supabaseClient.from('source_profiles').delete()
+          .eq('user_id', userId).in('slug', deletedSources)
+      );
+    }
+    if (deletedTargets.length > 0) {
+      deleteCalls.push(
+        window.supabaseClient.from('target_profiles').delete()
+          .eq('user_id', userId).in('slug', deletedTargets)
+      );
+    }
+    if (deleteCalls.length > 0) {
+      var delResults = await Promise.all(deleteCalls);
+      delResults.forEach(function (r) {
+        if (r.error) console.warn('[sync] tombstone delete failed:', r.error);
+      });
     }
 
     // Upsert local source profiles
@@ -146,18 +155,6 @@
       var srcResult = await window.supabaseClient.from('source_profiles')
         .upsert(sourceRows, { onConflict: 'user_id,slug' });
       if (srcResult.error) console.warn('[sync] source_profiles upsert failed:', srcResult.error);
-    }
-
-    // Target profiles — delete cloud rows that no longer exist locally
-    if (cloudResults[1].data && cloudResults[1].data.length > 0) {
-      var localTargetSlugs = Object.keys(localTarget);
-      var toDeleteTarget = cloudResults[1].data
-        .map(function (r) { return r.slug; })
-        .filter(function (slug) { return !localTargetSlugs.includes(slug); });
-      if (toDeleteTarget.length > 0) {
-        await window.supabaseClient.from('target_profiles').delete()
-          .eq('user_id', userId).in('slug', toDeleteTarget);
-      }
     }
 
     // Upsert local target profiles
@@ -232,12 +229,17 @@
       if (selections.source_water) safeSetItem('cw_source_water', JSON.stringify(selections.source_water));
       if (selections.target_preset) safeSetItem('cw_target_preset', selections.target_preset);
       if (selections.deleted_source_presets) safeSetItem('cw_deleted_presets', JSON.stringify(selections.deleted_source_presets));
+      if (selections.deleted_target_presets) safeSetItem('cw_deleted_target_presets', JSON.stringify(selections.deleted_target_presets));
     }
 
-    // Apply source profiles
+    // Apply source profiles, skipping any that are tombstoned locally.
+    // (Cloud deletion and tombstone push aren't atomic, so a slug can still
+    // be present in source_profiles briefly after deletion.)
     if (sourceRows && sourceRows.length > 0) {
+      var tombstonedSources = loadDeletedPresets();
       var srcProfiles = {};
       sourceRows.forEach(function (row) {
+        if (tombstonedSources.indexOf(row.slug) !== -1) return;
         srcProfiles[row.slug] = {
           label: row.label,
           calcium: row.calcium,
@@ -252,10 +254,14 @@
       safeSetItem('cw_custom_profiles', JSON.stringify(srcProfiles));
     }
 
-    // Apply target profiles
+    // Apply target profiles, skipping any that are tombstoned locally
+    // (cloud deletion and tombstone push aren't atomic, so a slug may still
+    // be in cloud target_profiles briefly after deletion).
     if (targetRows && targetRows.length > 0) {
+      var tombstonedTargets = loadDeletedTargetPresets();
       var tgtProfiles = {};
       targetRows.forEach(function (row) {
+        if (tombstonedTargets.indexOf(row.slug) !== -1) return;
         tgtProfiles[row.slug] = {
           label: row.label,
           brewMethod: row.brew_method,
@@ -287,6 +293,7 @@
     var noCustomSource = Object.keys(loadCustomProfiles()).length === 0;
     var noCustomTarget = Object.keys(loadCustomTargetProfiles()).length === 0;
     var noDeletedSource = loadDeletedPresets().length === 0;
+    var noDeletedTarget = loadDeletedTargetPresets().length === 0;
 
     var defaultMinerals = ['calcium-chloride', 'epsom-salt', 'baking-soda', 'potassium-bicarbonate'];
     var minerals = loadSelectedMinerals();
@@ -294,7 +301,7 @@
       defaultMinerals.every(function (m) { return minerals.includes(m); });
 
     return allZeroSource && noCustomSource && noCustomTarget &&
-      noDeletedSource && mineralsAreDefault;
+      noDeletedSource && noDeletedTarget && mineralsAreDefault;
   }
 
   // --- Returns true if Supabase has any stored data for this user ---
@@ -394,15 +401,16 @@
   async function initSync() {
     try {
       var result = await window.supabaseClient.auth.getSession();
-      if (result.data && result.data.session) {
-        await pullFromCloud().catch(function (err) {
-          console.warn('[sync] pull on page load failed:', err);
-        });
-        pushAllToCloud().catch(function (err) {
-          console.warn('[sync] push on page load failed:', err);
-        });
-      }
-    } catch (_) {}
+      if (!result.data || !result.data.session) return;
+      await pullFromCloud().catch(function (err) {
+        console.warn('[sync] pull on page load failed:', err);
+      });
+      await pushAllToCloud().catch(function (err) {
+        console.warn('[sync] push on page load failed:', err);
+      });
+    } catch (err) {
+      console.warn('[sync] initSync failed:', err);
+    }
   }
 
   // --- Flush pending sync when navigating away ---
@@ -421,6 +429,9 @@
   });
 
   window.addEventListener('beforeunload', flushPendingSync);
+  // pagehide fires reliably on mobile (iOS) and on bfcache evictions, where
+  // beforeunload is often skipped.
+  window.addEventListener('pagehide', flushPendingSync);
 
   // Expose public API
   window.scheduleSyncToCloud = scheduleSyncToCloud;

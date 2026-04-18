@@ -113,6 +113,7 @@ function deleteCustomProfile(key) {
   const profiles = loadCustomProfiles();
   delete profiles[key];
   saveCustomProfiles(profiles);
+  addDeletedPreset(key);
 }
 
 // --- Deleted source preset tracking ---
@@ -153,6 +154,23 @@ function deleteCustomTargetProfile(key) {
   const profiles = loadCustomTargetProfiles();
   delete profiles[key];
   saveCustomTargetProfiles(profiles);
+  addDeletedTargetPreset(key);
+}
+
+// --- Deleted target preset tracking (tombstones so deletions survive pull) ---
+function loadDeletedTargetPresets() {
+  const parsed = safeParse(safeGetItem("cw_deleted_target_presets"), []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+function addDeletedTargetPreset(key) {
+  const deleted = loadDeletedTargetPresets();
+  if (!deleted.includes(key)) {
+    deleted.push(key);
+    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
+    invalidateTargetPresetsCache();
+    if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  }
 }
 
 // --- Label helpers (for unique name enforcement) ---
@@ -610,7 +628,14 @@ function validateTargetProfileName(rawName, options = {}) {
 
 // --- Restore defaults ---
 function restoreSourcePresetDefaults() {
-  safeRemoveItem("cw_deleted_presets");
+  // Clear tombstones for builtin presets only.  Tombstones for purely-custom
+  // slugs must be preserved so deleted customs don't resurrect from the cloud.
+  const preserved = loadDeletedPresets().filter(function (key) {
+    return !SOURCE_PRESETS[key];
+  });
+  safeSetItem("cw_deleted_presets", JSON.stringify(preserved));
+  invalidateSourcePresetsCache();
+  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
   const custom = loadCustomProfiles();
   for (const key of Object.keys(SOURCE_PRESETS)) {
     if (key === "custom") continue;
@@ -672,4 +697,5 @@ window.addEventListener("storage", function(e) {
   if (e.key === "cw_selected_concentrates") { selectedConcentratesCache = null; }
   if (e.key === "cw_diy_concentrate_specs") { diyConcentrateSpecsCache = null; }
   if (e.key === "cw_deleted_presets") { invalidateSourcePresetsCache(); }
+  if (e.key === "cw_deleted_target_presets") { invalidateTargetPresetsCache(); }
 });
