@@ -355,8 +355,81 @@ profileButtonsContainer.addEventListener("click", (e) => {
   });
 });
 
+// --- Persist edits to the currently-loaded target profile.
+// Returns { saved, profile, wasCreator } so callers can trigger follow-up
+// actions (render refresh, share prompt) consistently. ---
+function persistTargetProfileEdits() {
+  calculate();
+  const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
+  const existing = allProfiles[currentProfile];
+  if (!existing) return { saved: false };
+  const orig = getTargetProfileByKey(currentProfile);
+  const hasExplicitIons = orig && ION_FIELDS.every(ion => Number.isFinite(Number(orig[ion])));
+  let profile;
+  if (hasExplicitIons) {
+    const editIons = {
+      calcium: parseFloat(targetCa.value) || 0,
+      magnesium: parseFloat(targetMg.value) || 0,
+      potassium: parseFloat(targetK.value) || 0,
+      sodium: parseFloat(targetNa.value) || 0,
+      sulfate: parseFloat(targetSO4.value) || 0,
+      chloride: parseFloat(targetCl.value) || 0,
+      bicarbonate: parseFloat(targetHCO3.value) || 0
+    };
+    profile = buildStoredTargetProfile(existing.label, editIons, existing.description || "", {
+      alkalinity: parseFloat(targetAlk.value) || 0,
+      brewMethod: activeBrewMethod
+    });
+  } else {
+    profile = {
+      label: existing.label,
+      calcium: parseFloat(targetCa.value) || 0,
+      magnesium: parseFloat(targetMg.value) || 0,
+      alkalinity: parseFloat(targetAlk.value) || 0,
+      potassium: parseFloat(targetK.value) || 0,
+      sodium: parseFloat(targetNa.value) || 0,
+      sulfate: parseFloat(targetSO4.value) || 0,
+      chloride: parseFloat(targetCl.value) || 0,
+      bicarbonate: parseFloat(targetHCO3.value) || 0,
+      description: existing.description || "",
+      brewMethod: activeBrewMethod
+    };
+  }
+  // Preserve library sharing / attribution fields from the original profile.
+  if (orig) {
+    if (orig.isPublic) profile.isPublic = true;
+    if (orig.creatorDisplayName) profile.creatorDisplayName = orig.creatorDisplayName;
+    if (orig.tags) profile.tags = orig.tags;
+    if ("creatorUserId" in orig) profile.creatorUserId = orig.creatorUserId;
+  }
+  const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(orig || profile) : false;
+  const profiles = loadCustomTargetProfiles();
+  profiles[currentProfile] = profile;
+  if (!saveCustomTargetProfiles(profiles)) {
+    showTargetSaveStatus("Storage full — could not save.", true);
+    return { saved: false };
+  }
+  targetEditBar.style.display = "none";
+  if (typeof syncNow === "function") syncNow();
+  return { saved: true, profile: profile, wasCreator: wasCreator };
+}
+
+// Offer the share prompt after an edit-save, but only to the recipe's creator.
+function offerShareAfterEdit(profileKey, wasCreator) {
+  if (!wasCreator) return;
+  if (typeof showSharePrompt === "function") showSharePrompt(profileKey);
+}
+
 if (targetEditModeBtn) {
   targetEditModeBtn.addEventListener("click", () => {
+    // Leaving edit mode with unsaved ion changes: persist them.
+    // "Done Editing" is a natural commit point — no extra confirmation.
+    if (isTargetEditMode && hasUnsavedTargetChanges()) {
+      const key = currentProfile;
+      const result = persistTargetProfileEdits();
+      if (!result.saved) return;  // storage error — stay in edit mode
+      offerShareAfterEdit(key, result.wasCreator);
+    }
     isTargetEditMode = !isTargetEditMode;
     renderProfileButtons();
     updateTargetModeUI();
@@ -366,57 +439,11 @@ if (targetEditModeBtn) {
 // --- Save changes to existing target profile (Bug 1: alkalinity drift fix) ---
 targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {
-    calculate();
-    const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
-    const existing = allProfiles[currentProfile];
-    if (!existing) return;
-    const orig = getTargetProfileByKey(currentProfile);
-    const hasExplicitIons = orig && ION_FIELDS.every(ion => Number.isFinite(Number(orig[ion])));
-    let profile;
-    if (hasExplicitIons) {
-      const editIons = {
-        calcium: parseFloat(targetCa.value) || 0,
-        magnesium: parseFloat(targetMg.value) || 0,
-        potassium: parseFloat(targetK.value) || 0,
-        sodium: parseFloat(targetNa.value) || 0,
-        sulfate: parseFloat(targetSO4.value) || 0,
-        chloride: parseFloat(targetCl.value) || 0,
-        bicarbonate: parseFloat(targetHCO3.value) || 0
-      };
-      profile = buildStoredTargetProfile(existing.label, editIons, existing.description || "", {
-        alkalinity: parseFloat(targetAlk.value) || 0,
-        brewMethod: activeBrewMethod
-      });
-    } else {
-      profile = {
-        label: existing.label,
-        calcium: parseFloat(targetCa.value) || 0,
-        magnesium: parseFloat(targetMg.value) || 0,
-        alkalinity: parseFloat(targetAlk.value) || 0,
-        potassium: parseFloat(targetK.value) || 0,
-        sodium: parseFloat(targetNa.value) || 0,
-        sulfate: parseFloat(targetSO4.value) || 0,
-        chloride: parseFloat(targetCl.value) || 0,
-        bicarbonate: parseFloat(targetHCO3.value) || 0,
-        description: existing.description || "",
-        brewMethod: activeBrewMethod
-      };
-    }
-    // Preserve library sharing fields from the original profile
-    if (orig) {
-      if (orig.isPublic) profile.isPublic = true;
-      if (orig.creatorDisplayName) profile.creatorDisplayName = orig.creatorDisplayName;
-      if (orig.tags) profile.tags = orig.tags;
-    }
-    const profiles = loadCustomTargetProfiles();
-    profiles[currentProfile] = profile;
-    if (!saveCustomTargetProfiles(profiles)) {
-      showTargetSaveStatus("Storage full — could not save.", true);
-      return;
-    }
-    targetEditBar.style.display = "none";
-    if (typeof syncNow === "function") syncNow();
+    const key = currentProfile;
+    const result = persistTargetProfileEdits();
+    if (!result.saved) return;
     renderProfileButtons();
+    offerShareAfterEdit(key, result.wasCreator);
   });
 });
 

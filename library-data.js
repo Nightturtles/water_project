@@ -107,7 +107,12 @@
       chloride: Number(recipe.chloride) || 0,
       bicarbonate: Number(recipe.bicarbonate) || 0,
       description: recipe.description || "",
-      brewMethod: recipe.brewMethod || "filter"
+      brewMethod: recipe.brewMethod || "filter",
+      // Preserve attribution so the copy is recognisably "not my recipe"
+      // on every device.  creatorUserId is the authoritative creator check;
+      // creatorDisplayName is kept for display.
+      creatorUserId: recipe.userId || null,
+      creatorDisplayName: recipe.creatorDisplayName || ""
     };
 
     var profiles = loadCustomTargetProfiles();

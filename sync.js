@@ -178,6 +178,10 @@
           description: p.description || '',
           is_public: !!p.isPublic,
           creator_display_name: p.creatorDisplayName || '',
+          // Default creator_user_id to the current user for locally-created
+          // profiles that haven't yet been attributed.  Library copies
+          // explicitly set creatorUserId to the original author.
+          creator_user_id: p.creatorUserId !== undefined ? p.creatorUserId : userId,
           tags: Array.isArray(p.tags) ? p.tags : [],
           updated_at: now
         };
@@ -276,6 +280,7 @@
           description: row.description,
           isPublic: !!row.is_public,
           creatorDisplayName: row.creator_display_name || '',
+          creatorUserId: row.creator_user_id || null,
           tags: Array.isArray(row.tags) ? row.tags : []
         };
       });

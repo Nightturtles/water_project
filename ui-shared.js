@@ -177,6 +177,55 @@ function showConfirm(message, onYes) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
+// --- Current user id cache (avoids awaiting getUser() on every check) ---
+var _currentUserIdCache = null;
+var _currentUserIdFetch = null;
+
+function primeCurrentUserId() {
+  if (typeof window.supabaseClient === "undefined") return Promise.resolve(null);
+  if (_currentUserIdCache) return Promise.resolve(_currentUserIdCache);
+  if (_currentUserIdFetch) return _currentUserIdFetch;
+  _currentUserIdFetch = window.supabaseClient.auth.getUser().then(function (res) {
+    _currentUserIdCache = res && res.data && res.data.user ? res.data.user.id : null;
+    _currentUserIdFetch = null;
+    return _currentUserIdCache;
+  }).catch(function () {
+    _currentUserIdFetch = null;
+    return null;
+  });
+  return _currentUserIdFetch;
+}
+
+function getCurrentUserIdSync() {
+  return _currentUserIdCache;
+}
+
+// Prime the cache on load so ownership checks elsewhere are synchronous.
+if (typeof window !== "undefined" && typeof window.supabaseClient !== "undefined") {
+  primeCurrentUserId();
+}
+
+// --- Creator ownership check ---
+// Returns true if the logged-in user is the original creator of this profile,
+// i.e. they are allowed to push updates to a public/library version.
+//
+// Rules:
+//  - If profile has no creatorUserId (not yet synced to cloud) → treat as
+//    creator (newly-created local profile that will be attributed on push).
+//  - If creatorUserId matches current user's id → creator.
+//  - Otherwise (copy from library, or not logged in) → not creator.
+function isUserTheCreator(profile) {
+  if (!profile) return false;
+  if (!("creatorUserId" in profile) || profile.creatorUserId === undefined) return true;
+  var currentId = getCurrentUserIdSync();
+  if (!currentId) return false;
+  return profile.creatorUserId === currentId;
+}
+
+window.primeCurrentUserId = primeCurrentUserId;
+window.getCurrentUserIdSync = getCurrentUserIdSync;
+window.isUserTheCreator = isUserTheCreator;
+
 // --- Share to Recipe Library prompt (post-save dialog) ---
 var sharePromptCleanup = null;
 
@@ -189,11 +238,29 @@ async function showSharePrompt(profileKey) {
 
   if (sharePromptCleanup) sharePromptCleanup();
 
+  var titleEl = document.getElementById("share-prompt-title");
+  var hintEl = document.getElementById("share-prompt-hint");
   var nameGroup = document.getElementById("share-prompt-name-group");
   var nameInput = document.getElementById("share-prompt-display-name");
   var yesBtn = document.getElementById("share-prompt-yes");
   var noBtn = document.getElementById("share-prompt-no");
   var previousFocus = document.activeElement;
+
+  // Tailor the wording: first-time share vs updating an already-public recipe.
+  var profiles = loadCustomTargetProfiles();
+  var thisProfile = profiles[profileKey];
+  var isUpdating = !!(thisProfile && thisProfile.isPublic);
+  if (titleEl) {
+    titleEl.textContent = isUpdating
+      ? "Publish these updates to the Recipe Library?"
+      : "Share this recipe to the Recipe Library?";
+  }
+  if (hintEl) {
+    hintEl.textContent = isUpdating
+      ? "Your existing library entry will be updated with these changes."
+      : "Other users will be able to find and copy it.";
+  }
+  if (yesBtn) yesBtn.textContent = isUpdating ? "Publish updates" : "Share";
 
   // Show display name field only if not already set
   var existingName = loadCreatorDisplayName();

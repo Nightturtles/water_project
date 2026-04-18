@@ -288,6 +288,21 @@
     </div>
   </div>
 
+  <div class="confirm-overlay" id="share-prompt-overlay" style="display:none;">
+    <div class="confirm-dialog share-prompt-dialog">
+      <p id="share-prompt-title">Share this recipe to the Recipe Library?</p>
+      <p class="share-prompt-hint" id="share-prompt-hint">Other users will be able to find and copy it.</p>
+      <div class="input-group" id="share-prompt-name-group" style="display:none;">
+        <label for="share-prompt-display-name">Your display name</label>
+        <input type="text" id="share-prompt-display-name" placeholder="e.g. CoffeeNerd42" maxlength="40">
+      </div>
+      <div class="confirm-actions">
+        <button id="share-prompt-yes" class="preset-btn">Share</button>
+        <button id="share-prompt-no" class="preset-btn">No thanks</button>
+      </div>
+    </div>
+  </div>
+
   <footer>
     <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
@@ -754,10 +769,12 @@
       showConfirm("Are you sure you want to change this profile?", () => {
         const ions = getCurrentProfileIons();
         var profile = buildStoredTargetProfile(existing.label, ions, existing.description || "", { brewMethod: activeBrewMethod });
-        // Preserve library sharing fields
+        // Preserve library sharing / attribution fields
         if (existing.isPublic) profile.isPublic = true;
         if (existing.creatorDisplayName) profile.creatorDisplayName = existing.creatorDisplayName;
         if (existing.tags) profile.tags = existing.tags;
+        if ("creatorUserId" in existing) profile.creatorUserId = existing.creatorUserId;
+        const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(existing) : false;
         profiles[targetKey] = profile;
         if (!saveCustomTargetProfiles(profiles)) {
           showCurrentSaveStatus("Storage full — could not save.", true);
@@ -766,6 +783,7 @@
         renderTastePresets(targetKey);
         showCurrentSaveStatus("Profile updated.", false);
         if (typeof syncNow === "function") syncNow();
+        if (wasCreator && typeof showSharePrompt === "function") showSharePrompt(targetKey);
       });
     });
 
