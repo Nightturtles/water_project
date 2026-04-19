@@ -109,12 +109,20 @@ declare global {
   var scheduleSyncToCloud: (() => void) | undefined;
 
   // Supabase — loaded from CDN via <script src="https://cdn.jsdelivr.net/.../supabase.js">
-  // then wrapped in supabase-client.js as window.supabaseClient. Typed as `any`
-  // in Partial Phase 3 since we haven't imported @supabase/supabase-js from
-  // npm. A future PR that moves to npm gets real types for free.
+  // then wrapped in supabase-client.js as window.supabaseClient.
+  //
+  // @supabase/supabase-js is installed as a DEV DEPENDENCY only — we use its
+  // type definitions at `tsc --noEmit` time but the runtime client still
+  // comes from the CDN. This gives @ts-checked files (sync.js) method-chain
+  // and auth-response narrowing (e.g. auth.getUser()'s { data: { user: User |
+  // null } } shape). It does NOT give row-level narrowing on
+  // `.from('table').select('*')` results — those stay loose because we
+  // haven't supplied a Database schema type to SupabaseClient<Database>.
+  // A future PR can generate that via `supabase gen types typescript` to
+  // catch column-name typos and wrong-shape upserts.
   interface Window {
-    supabase: any;
-    supabaseClient: any;
+    supabase: typeof import('@supabase/supabase-js');
+    supabaseClient: import('@supabase/supabase-js').SupabaseClient;
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;
