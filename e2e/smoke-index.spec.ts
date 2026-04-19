@@ -61,7 +61,9 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("step 5: FOUC guard — theme marker is on documentElement after load", async ({ page }) => {
+  test("step 5: FOUC guard — data-theme resolved to light|dark on documentElement", async ({
+    page,
+  }) => {
     // theme-init.js is a plain synchronous <script> tag in <head>. Classic
     // sync scripts block HTML parsing until they finish, so by construction
     // the theme marker is applied before <body> is parsed and therefore
@@ -69,14 +71,13 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     // risk is someone adding `async` or `defer` to the theme-init tag or
     // moving it below other scripts — both of which this assertion catches
     // because theme-init would fail to run in time on a fresh visit.
-    const state = await page.evaluate(() => ({
-      className: document.documentElement.className,
-      dataset: { ...(document.documentElement.dataset as DOMStringMap) },
-    }));
-    const haystack = `${state.className} ${JSON.stringify(state.dataset)}`;
-    expect(
-      /light|dark|system/i.test(haystack),
-      `Expected a theme marker on documentElement; got: ${haystack}`,
-    ).toBe(true);
+    //
+    // Explicit attribute check (not a regex sweep over the whole dataset) so
+    // unrelated data-* attributes can't accidentally satisfy it. Expects the
+    // resolved value — "system" is resolved to "light" or "dark" at load.
+    const theme = await page.evaluate(() =>
+      document.documentElement.getAttribute("data-theme"),
+    );
+    expect(theme, "theme-init.js must set data-theme on documentElement").toMatch(/^(light|dark)$/);
   });
 });

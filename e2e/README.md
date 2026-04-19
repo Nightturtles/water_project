@@ -17,9 +17,13 @@ npx playwright test --debug   # step-through debugger
 
 The `webServer` config in `playwright.config.ts` boots `npx http-server . -c-1 -p 8080` automatically — no need to start it separately. Locally, an already-running server on 8080 is reused; in CI a fresh one is spawned per run.
 
-## When to reach for the MCP runbooks vs. specs
+## When to reach for what
 
-See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md). Short version: when there's a `.spec.ts` for the flow, run it. When there isn't (e.g. anything needing a logged-in Supabase session), follow the `.md` runbook via the Playwright MCP.
+See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full decision matrix. Short version:
+
+- **Single-page, single-flow change during development** → Claude Preview MCP (`preview_start` + `preview_eval`/`preview_snapshot`/`preview_console_logs`). Fast, sandboxed to the local server, zero setup cost per run.
+- **Flow that has a `.spec.ts` here** → `npm run test:e2e`. Deterministic, gated in CI.
+- **Flow that only has a `.md` runbook here** (typically anything needing a logged-in Supabase session, multiple browser contexts, or production-origin checks) → Playwright MCP driving the `.md` runbook step-by-step.
 
 ## Index
 
