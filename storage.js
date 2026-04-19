@@ -37,15 +37,26 @@
 // --- Safe localStorage wrappers (Bug 4) ---
 /** @param {string} key @returns {string | null} */
 function safeGetItem(key) {
-  try { return localStorage.getItem(key); } catch(e) { return null; }
+  try {
+    return localStorage.getItem(key);
+  } catch (e) {
+    return null;
+  }
 }
 /** @param {string} key @param {string} value @returns {boolean} */
 function safeSetItem(key, value) {
-  try { localStorage.setItem(key, value); return true; } catch(e) { return false; }
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 /** @param {string} key */
 function safeRemoveItem(key) {
-  try { localStorage.removeItem(key); } catch(e) {}
+  try {
+    localStorage.removeItem(key);
+  } catch (e) {}
 }
 
 // --- JSON parse helper ---
@@ -69,12 +80,20 @@ function safeParse(json, fallback) {
 /** @param {SourceProfile} profile */
 function saveSourceWater(profile) {
   const ok = safeSetItem("cw_source_water", JSON.stringify(profile));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
 
 function loadSourceWater() {
-  const fallback = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+  const fallback = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
+  };
   const parsed = safeParse(safeGetItem("cw_source_water"), fallback);
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
 }
@@ -82,7 +101,7 @@ function loadSourceWater() {
 /** @param {string} name */
 function saveSourcePresetName(name) {
   safeSetItem("cw_source_preset", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadSourcePresetName() {
@@ -93,7 +112,7 @@ function loadSourcePresetName() {
 /** @param {string} mode */
 function saveMineralDisplayMode(mode) {
   safeSetItem("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadMineralDisplayMode() {
@@ -115,10 +134,10 @@ function saveVolumePreference(pageKey, value, unit) {
   const key = "cw_volume_" + pageKey;
   const payload = {
     value: String(value ?? ""),
-    unit: unit === "gallons" ? "gallons" : "liters"
+    unit: unit === "gallons" ? "gallons" : "liters",
   };
   safeSetItem(key, JSON.stringify(payload));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 /**
@@ -130,7 +149,7 @@ function loadVolumePreference(pageKey, defaults = {}) {
   /** @type {{ value: string, unit: "gallons" | "liters" }} */
   const fallback = {
     value: String(defaults.value ?? "1"),
-    unit: defaults.unit === "gallons" ? "gallons" : "liters"
+    unit: defaults.unit === "gallons" ? "gallons" : "liters",
   };
   if (!pageKey) return fallback;
   const key = "cw_volume_" + pageKey;
@@ -144,7 +163,11 @@ function loadVolumePreference(pageKey, defaults = {}) {
 // --- Slugify ---
 /** @param {string} name */
 function slugify(name) {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
 }
 
 // --- Custom source profiles + cache ---
@@ -155,7 +178,8 @@ let customProfilesCache = null;
 function loadCustomProfiles() {
   if (customProfilesCache) return Object.assign({}, customProfilesCache);
   const parsed = safeParse(safeGetItem("cw_custom_profiles"), {});
-  customProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  customProfilesCache =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customProfilesCache);
 }
 
@@ -164,7 +188,7 @@ function saveCustomProfiles(profiles) {
   const ok = safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
 
@@ -190,7 +214,7 @@ function addDeletedPreset(key) {
     deleted.push(key);
     safeSetItem("cw_deleted_presets", JSON.stringify(deleted));
     invalidateSourcePresetsCache();
-    if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+    if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
 }
 
@@ -202,7 +226,8 @@ let customTargetProfilesCache = null;
 function loadCustomTargetProfiles() {
   if (customTargetProfilesCache) return Object.assign({}, customTargetProfilesCache);
   const parsed = safeParse(safeGetItem("cw_custom_target_profiles"), {});
-  customTargetProfilesCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  customTargetProfilesCache =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customTargetProfilesCache);
 }
 
@@ -211,7 +236,7 @@ function saveCustomTargetProfiles(profiles) {
   const ok = safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
 
@@ -237,7 +262,7 @@ function addDeletedTargetPreset(key) {
     deleted.push(key);
     safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
     invalidateTargetPresetsCache();
-    if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+    if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
 }
 
@@ -273,7 +298,7 @@ function getExistingSourceProfileLabels() {
 /** @param {string} name */
 function saveTargetPresetName(name) {
   safeSetItem("cw_target_preset", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadTargetPresetName() {
@@ -292,7 +317,7 @@ function normalizeBrewMethod(method) {
 /** @param {string | null | undefined} method */
 function saveBrewMethod(method) {
   safeSetItem("cw_brew_method", normalizeBrewMethod(method));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadBrewMethod() {
@@ -311,7 +336,7 @@ function normalizeLotusDropperType(type) {
 /** @param {string | null | undefined} type */
 function saveLotusDropperType(type) {
   safeSetItem("cw_lotus_dropper_type", normalizeLotusDropperType(type));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadLotusDropperType() {
@@ -337,7 +362,7 @@ function normalizeLotusConcentrateUnit(unit) {
 /** @param {string | null | undefined} unit */
 function saveLotusConcentrateUnit(unit) {
   safeSetItem("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadLotusConcentrateUnit() {
@@ -366,7 +391,7 @@ function saveLotusConcentrateUnits(units) {
     });
   }
   safeSetItem("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 /** @param {string | null | undefined} concentrateId */
@@ -449,14 +474,16 @@ let selectedMineralsCache = null;
 function saveSelectedMinerals(mineralIds) {
   safeSetItem("cw_selected_minerals", JSON.stringify(mineralIds));
   selectedMineralsCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 /** @returns {string[]} */
 function loadSelectedMinerals() {
   if (selectedMineralsCache) return selectedMineralsCache;
   const parsed = safeParse(safeGetItem("cw_selected_minerals"), null);
-  selectedMineralsCache = Array.isArray(parsed) ? parsed : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+  selectedMineralsCache = Array.isArray(parsed)
+    ? parsed
+    : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
   return selectedMineralsCache;
 }
 
@@ -470,7 +497,7 @@ let diyConcentrateSpecsCache = null;
 function saveSelectedConcentrates(concentrateIds) {
   safeSetItem("cw_selected_concentrates", JSON.stringify(concentrateIds));
   selectedConcentratesCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 /** @returns {string[]} */
@@ -483,7 +510,7 @@ function loadSelectedConcentrates() {
 
 /** Returns only valid concentrate IDs (diy: or brand: prefixed) from the selected concentrates list. */
 function loadValidSelectedConcentrates() {
-  return loadSelectedConcentrates().filter(function(id) {
+  return loadSelectedConcentrates().filter(function (id) {
     return typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:"));
   });
 }
@@ -492,14 +519,15 @@ function loadValidSelectedConcentrates() {
 function saveDiyConcentrateSpecs(specs) {
   safeSetItem("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 /** @returns {Record<string, DiyConcentrateSpec>} */
 function loadDiyConcentrateSpecs() {
   if (diyConcentrateSpecsCache) return Object.assign({}, diyConcentrateSpecsCache);
   const parsed = safeParse(safeGetItem("cw_diy_concentrate_specs"), {});
-  diyConcentrateSpecsCache = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  diyConcentrateSpecsCache =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, diyConcentrateSpecsCache);
 }
 
@@ -671,7 +699,9 @@ function inferTargetProfileBrewMethod(key, profile) {
     return "espresso";
   }
   const label = (profile && profile.label ? String(profile.label) : "").toLowerCase();
-  const description = (profile && profile.description ? String(profile.description) : "").toLowerCase();
+  const description = (
+    profile && profile.description ? String(profile.description) : ""
+  ).toLowerCase();
   if (label.includes("espresso") || description.includes("espresso")) {
     return "espresso";
   }
@@ -689,7 +719,7 @@ function targetProfileSupportsBrewMethod(key, profile, method) {
     const allowed = new Set(
       /** @type {unknown[]} */ (profile.brewMethods)
         .map((value) => normalizeBrewMethod(/** @type {string | null | undefined} */ (value)))
-        .filter((value, index, array) => array.indexOf(value) === index)
+        .filter((value, index, array) => array.indexOf(value) === index),
     );
     return allowed.has(brewMethod);
   }
@@ -727,7 +757,8 @@ function validateProfileName(rawName, options = {}) {
   const allowEmpty = !!options.allowEmpty;
   const emptyMessage = options.emptyMessage || "Enter a profile name.";
   const invalidMessage = options.invalidMessage || "Enter a valid name.";
-  const reservedMessage = options.reservedMessage || "That name is reserved. Choose a different name.";
+  const reservedMessage =
+    options.reservedMessage || "That name is reserved. Choose a different name.";
   const duplicateMessage = options.duplicateMessage || "A profile with this name already exists.";
   const name = (rawName || "").trim();
 
@@ -773,7 +804,7 @@ function validateTargetProfileName(rawName, options = {}) {
     allowEmpty: options.allowEmpty,
     builtinKeys: RESERVED_TARGET_KEYS,
     existingKeys: new Set(Object.keys(loadCustomTargetProfiles())),
-    existingLabels: getExistingTargetProfileLabels()
+    existingLabels: getExistingTargetProfileLabels(),
   });
 }
 
@@ -786,7 +817,7 @@ function restoreSourcePresetDefaults() {
   });
   safeSetItem("cw_deleted_presets", JSON.stringify(preserved));
   invalidateSourcePresetsCache();
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   const custom = loadCustomProfiles();
   for (const key of Object.keys(SOURCE_PRESETS)) {
     if (key === "custom") continue;
@@ -805,7 +836,7 @@ function loadThemePreference() {
 /** @param {string} mode */
 function saveThemePreference(mode) {
   safeSetItem(THEME_KEY, mode);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 // --- Creator display name (for recipe library publishing) ---
@@ -816,7 +847,7 @@ function loadCreatorDisplayName() {
 /** @param {string} name */
 function saveCreatorDisplayName(name) {
   safeSetItem("cw_creator_display_name", name);
-  if (typeof scheduleSyncToCloud === 'function') scheduleSyncToCloud();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 // --- Recipes-moved toaster (one-time) ---
@@ -842,13 +873,29 @@ function saveCalculatorWelcomeDismissed() {
 }
 
 // --- Multi-tab cache invalidation (Inefficiency 4) ---
-window.addEventListener("storage", function(e) {
+window.addEventListener("storage", function (e) {
   if (!e.key) return;
-  if (e.key === "cw_custom_profiles") { customProfilesCache = null; invalidateSourcePresetsCache(); }
-  if (e.key === "cw_custom_target_profiles") { customTargetProfilesCache = null; invalidateTargetPresetsCache(); }
-  if (e.key === "cw_selected_minerals") { selectedMineralsCache = null; }
-  if (e.key === "cw_selected_concentrates") { selectedConcentratesCache = null; }
-  if (e.key === "cw_diy_concentrate_specs") { diyConcentrateSpecsCache = null; }
-  if (e.key === "cw_deleted_presets") { invalidateSourcePresetsCache(); }
-  if (e.key === "cw_deleted_target_presets") { invalidateTargetPresetsCache(); }
+  if (e.key === "cw_custom_profiles") {
+    customProfilesCache = null;
+    invalidateSourcePresetsCache();
+  }
+  if (e.key === "cw_custom_target_profiles") {
+    customTargetProfilesCache = null;
+    invalidateTargetPresetsCache();
+  }
+  if (e.key === "cw_selected_minerals") {
+    selectedMineralsCache = null;
+  }
+  if (e.key === "cw_selected_concentrates") {
+    selectedConcentratesCache = null;
+  }
+  if (e.key === "cw_diy_concentrate_specs") {
+    diyConcentrateSpecsCache = null;
+  }
+  if (e.key === "cw_deleted_presets") {
+    invalidateSourcePresetsCache();
+  }
+  if (e.key === "cw_deleted_target_presets") {
+    invalidateTargetPresetsCache();
+  }
 });

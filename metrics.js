@@ -19,7 +19,7 @@ function calculateIonPPMs(mineralGrams) {
     sodium: 0,
     sulfate: 0,
     chloride: 0,
-    bicarbonate: 0
+    bicarbonate: 0,
   };
 
   for (const [mineralId, grams] of Object.entries(mineralGrams)) {
@@ -43,8 +43,14 @@ function calculateIonPPMs(mineralGrams) {
 function calculateMetrics(ions) {
   const gh = (ions.calcium || 0) * CA_TO_CACO3 + (ions.magnesium || 0) * MG_TO_CACO3;
   const kh = (ions.bicarbonate || 0) * HCO3_TO_CACO3;
-  const tds = (ions.calcium || 0) + (ions.magnesium || 0) + (ions.potassium || 0) +
-              (ions.sodium || 0) + (ions.sulfate || 0) + (ions.chloride || 0) + (ions.bicarbonate || 0);
+  const tds =
+    (ions.calcium || 0) +
+    (ions.magnesium || 0) +
+    (ions.potassium || 0) +
+    (ions.sodium || 0) +
+    (ions.sulfate || 0) +
+    (ions.chloride || 0) +
+    (ions.bicarbonate || 0);
   return { gh, kh, tds };
 }
 
@@ -92,18 +98,34 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
   const needCa = deltaCa > 0 && caSources.length > 0;
   const needMg = deltaMg > 0 && mgSources.length > 0;
 
-  const caCandidates = needCa ? caSources : (caSources.length ? caSources : []);
-  const mgCandidates = needMg ? mgSources : (mgSources.length ? mgSources : []);
+  const caCandidates = needCa ? caSources : caSources.length ? caSources : [];
+  const mgCandidates = needMg ? mgSources : mgSources.length ? mgSources : [];
 
   if (caCandidates.length === 0 && mgCandidates.length === 0) {
     return {
-      caSource: caSources.length === 1 ? (caSources[0] ?? null) : (caSources.length === 2 ? "calcium-chloride" : null),
-      mgSource: mgSources.length === 1 ? (mgSources[0] ?? null) : (mgSources.length === 2 ? "epsom-salt" : null)
+      caSource:
+        caSources.length === 1
+          ? (caSources[0] ?? null)
+          : caSources.length === 2
+            ? "calcium-chloride"
+            : null,
+      mgSource:
+        mgSources.length === 1
+          ? (mgSources[0] ?? null)
+          : mgSources.length === 2
+            ? "epsom-salt"
+            : null,
     };
   }
 
-  const targetCl = targetProfile && Number.isFinite(Number(targetProfile.chloride)) ? Number(targetProfile.chloride) : null;
-  const targetSO4 = targetProfile && Number.isFinite(Number(targetProfile.sulfate)) ? Number(targetProfile.sulfate) : null;
+  const targetCl =
+    targetProfile && Number.isFinite(Number(targetProfile.chloride))
+      ? Number(targetProfile.chloride)
+      : null;
+  const targetSO4 =
+    targetProfile && Number.isFinite(Number(targetProfile.sulfate))
+      ? Number(targetProfile.sulfate)
+      : null;
   const srcCl = (sourceWater && Number(sourceWater.chloride)) || 0;
   const srcSO4 = (sourceWater && Number(sourceWater.sulfate)) || 0;
 
@@ -120,25 +142,38 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
       /** @type {MineralGrams} */
       const mineralGrams = {};
       if (caSrc && deltaCa > 0) {
-        const caFrac = MINERAL_DB[caSrc] && MINERAL_DB[caSrc].ions ? (MINERAL_DB[caSrc].ions.calcium ?? 0) : 0;
-        if (caFrac > 0) mineralGrams[caSrc] = (deltaCa / 1000) / caFrac;
+        const caFrac =
+          MINERAL_DB[caSrc] && MINERAL_DB[caSrc].ions ? (MINERAL_DB[caSrc].ions.calcium ?? 0) : 0;
+        if (caFrac > 0) mineralGrams[caSrc] = deltaCa / 1000 / caFrac;
       }
       if (mgSrc && deltaMg > 0) {
-        const mgFrac = MINERAL_DB[mgSrc] && MINERAL_DB[mgSrc].ions ? (MINERAL_DB[mgSrc].ions.magnesium ?? 0) : 0;
-        if (mgFrac > 0) mineralGrams[mgSrc] = (deltaMg / 1000) / mgFrac;
+        const mgFrac =
+          MINERAL_DB[mgSrc] && MINERAL_DB[mgSrc].ions ? (MINERAL_DB[mgSrc].ions.magnesium ?? 0) : 0;
+        if (mgFrac > 0) mineralGrams[mgSrc] = deltaMg / 1000 / mgFrac;
       }
       const added = calculateIonPPMs(mineralGrams);
       /** @type {Record<IonName, number>} */
-      const result = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+      const result = {
+        calcium: 0,
+        magnesium: 0,
+        potassium: 0,
+        sodium: 0,
+        sulfate: 0,
+        chloride: 0,
+        bicarbonate: 0,
+      };
       ION_FIELDS.forEach((ion) => {
         const src = sourceWater ? sourceWater[ion] : undefined;
         result[ion] = (src ? Number(src) : 0) + (added[ion] || 0);
       });
       let error;
       if (targetCl != null && targetSO4 != null) {
-        error = Math.pow((result.chloride || 0) - targetCl, 2) + Math.pow((result.sulfate || 0) - targetSO4, 2);
+        error =
+          Math.pow((result.chloride || 0) - targetCl, 2) +
+          Math.pow((result.sulfate || 0) - targetSO4, 2);
       } else {
-        error = Math.pow((result.chloride || 0) - srcCl, 2) + Math.pow((result.sulfate || 0) - srcSO4, 2);
+        error =
+          Math.pow((result.chloride || 0) - srcCl, 2) + Math.pow((result.sulfate || 0) - srcSO4, 2);
       }
       const tieBreak = (caSrc === "gypsum" ? 1 : 0) + (mgSrc === "magnesium-chloride" ? 2 : 0);
       if (error < best.error || (error === best.error && tieBreak < best.tieBreak)) {
@@ -149,7 +184,7 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
 
   return {
     caSource: best.caSource,
-    mgSource: best.mgSource
+    mgSource: best.mgSource,
   };
 }
 
@@ -164,7 +199,15 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
  */
 function evaluateWaterProfileRanges(ions, options = {}) {
   /** @type {Record<IonName, number>} */
-  const normalized = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
+  const normalized = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
+  };
   ION_FIELDS.forEach((ion) => {
     const raw = ions ? ions[ion] : undefined;
     normalized[ion] = Number.isFinite(Number(raw)) ? Number(raw) : 0;
@@ -172,11 +215,17 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   const metrics = calculateMetrics(normalized);
   const ratio = calculateSo4ClRatio(normalized);
   const includeAdvanced = options.includeAdvanced !== false;
-  const alkalinitySources = options.alkalinitySources !== undefined
-    ? options.alkalinitySources
-    : (() => { const s = getEffectiveAlkalinitySource(); return s ? [s] : []; })();
-  const calciumSource = options.calciumSource !== undefined ? options.calciumSource : getEffectiveCalciumSource();
-  const magnesiumSource = options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
+  const alkalinitySources =
+    options.alkalinitySources !== undefined
+      ? options.alkalinitySources
+      : (() => {
+          const s = getEffectiveAlkalinitySource();
+          return s ? [s] : [];
+        })();
+  const calciumSource =
+    options.calciumSource !== undefined ? options.calciumSource : getEffectiveCalciumSource();
+  const magnesiumSource =
+    options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
   /** @typedef {"danger" | "warn" | "info"} Severity */
   /** @type {{ severity: Severity, message: string }[]} */
   const findings = [];
@@ -209,26 +258,49 @@ function evaluateWaterProfileRanges(ions, options = {}) {
    * @param {number | null} dangerMin
    * @param {number | null} dangerMax
    */
-  function addBandFinding(label, value, unit, preferredMin, preferredMax, warnMin, warnMax, dangerMin, dangerMax) {
+  function addBandFinding(
+    label,
+    value,
+    unit,
+    preferredMin,
+    preferredMax,
+    warnMin,
+    warnMax,
+    dangerMin,
+    dangerMax,
+  ) {
     if (!Number.isFinite(value)) return;
     const rounded = Math.round(value * 10) / 10;
     const valueText = `${rounded}${unit ? " " + unit : ""}`;
     const preferredBand = formatBand(preferredMin, preferredMax, unit);
-    const direction = (
+    const direction =
       (preferredMin != null && value < preferredMin) ||
       (warnMin != null && value < warnMin) ||
       (dangerMin != null && value < dangerMin)
-    ) ? "low" : "high";
+        ? "low"
+        : "high";
     if ((dangerMin != null && value < dangerMin) || (dangerMax != null && value > dangerMax)) {
-      addFinding("danger", `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`);
+      addFinding(
+        "danger",
+        `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`,
+      );
       return;
     }
     if ((warnMin != null && value < warnMin) || (warnMax != null && value > warnMax)) {
-      addFinding("warn", `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`);
+      addFinding(
+        "warn",
+        `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`,
+      );
       return;
     }
-    if ((preferredMin != null && value < preferredMin) || (preferredMax != null && value > preferredMax)) {
-      addFinding("info", `${label} is slightly ${direction} at ${valueText} (recommended ${preferredBand}).`);
+    if (
+      (preferredMin != null && value < preferredMin) ||
+      (preferredMax != null && value > preferredMax)
+    ) {
+      addFinding(
+        "info",
+        `${label} is slightly ${direction} at ${valueText} (recommended ${preferredBand}).`,
+      );
     }
   }
 
@@ -238,31 +310,62 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   addBandFinding("Calcium", normalized.calcium, "mg/L", 17, 85, 10, 110, 5, 150);
   addBandFinding("Magnesium", normalized.magnesium, "mg/L", 5, 30, 2, 45, 1, 70);
 
-  const useBakingSodaSodiumLimits = Array.isArray(alkalinitySources) && alkalinitySources.includes("baking-soda");
+  const useBakingSodaSodiumLimits =
+    Array.isArray(alkalinitySources) && alkalinitySources.includes("baking-soda");
   const sodiumPreferredMax = useBakingSodaSodiumLimits ? 25 : 10;
   const sodiumWarnMax = useBakingSodaSodiumLimits ? 40 : 30;
   const sodiumDangerMax = useBakingSodaSodiumLimits ? 60 : 45;
-  addBandFinding("Sodium", normalized.sodium, "mg/L", null, sodiumPreferredMax, null, sodiumWarnMax, null, sodiumDangerMax);
+  addBandFinding(
+    "Sodium",
+    normalized.sodium,
+    "mg/L",
+    null,
+    sodiumPreferredMax,
+    null,
+    sodiumWarnMax,
+    null,
+    sodiumDangerMax,
+  );
 
   if (includeAdvanced) {
-    const chlorideHeavySource = calciumSource === "calcium-chloride" || magnesiumSource === "magnesium-chloride";
+    const chlorideHeavySource =
+      calciumSource === "calcium-chloride" || magnesiumSource === "magnesium-chloride";
     const chloridePreferredMax = chlorideHeavySource ? 90 : 30;
     const chlorideWarnMax = chlorideHeavySource ? 130 : 50;
     const chlorideDangerMax = chlorideHeavySource ? 180 : 100;
-    addBandFinding("Chloride", normalized.chloride, "mg/L", null, chloridePreferredMax, null, chlorideWarnMax, null, chlorideDangerMax);
+    addBandFinding(
+      "Chloride",
+      normalized.chloride,
+      "mg/L",
+      null,
+      chloridePreferredMax,
+      null,
+      chlorideWarnMax,
+      null,
+      chlorideDangerMax,
+    );
 
     if (normalized.sulfate < 5 || normalized.sulfate > 75) {
       const sulfateDirection = normalized.sulfate < 5 ? "low" : "high";
-      addFinding("info", `Sulfate is ${sulfateDirection} at ${Math.round(normalized.sulfate * 10) / 10} mg/L (heuristic 5-75 mg/L).`);
+      addFinding(
+        "info",
+        `Sulfate is ${sulfateDirection} at ${Math.round(normalized.sulfate * 10) / 10} mg/L (heuristic 5-75 mg/L).`,
+      );
     }
     if (normalized.potassium > 20) {
-      addFinding("info", `Potassium is high at ${Math.round(normalized.potassium * 10) / 10} mg/L (heuristic <=20 mg/L).`);
+      addFinding(
+        "info",
+        `Potassium is high at ${Math.round(normalized.potassium * 10) / 10} mg/L (heuristic <=20 mg/L).`,
+      );
     }
     if (ratio == null) {
       addFinding("info", "SO4:Cl ratio unavailable (chloride is 0).");
     } else if (ratio < 0.5 || ratio > 2.0) {
       const ratioDirection = ratio < 0.5 ? "low" : "high";
-      addFinding("info", `SO4:Cl ratio is ${ratioDirection} at ${ratio.toFixed(2)} (heuristic 0.50-2.00).`);
+      addFinding(
+        "info",
+        `SO4:Cl ratio is ${ratioDirection} at ${ratio.toFixed(2)} (heuristic 0.50-2.00).`,
+      );
     }
   }
 
@@ -292,10 +395,20 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
     return result;
   }
   // Both baking-soda and potassium-bicarbonate enabled: split by target sodium vs potassium if present
-  var targetNa = targetProfile && Number.isFinite(Number(targetProfile.sodium)) ? Number(targetProfile.sodium) : null;
-  var targetK = targetProfile && Number.isFinite(Number(targetProfile.potassium)) ? Number(targetProfile.potassium) : null;
-  var sourceNa = sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
-  var sourceK = sourceWater && Number.isFinite(Number(sourceWater.potassium)) ? Number(sourceWater.potassium) : 0;
+  var targetNa =
+    targetProfile && Number.isFinite(Number(targetProfile.sodium))
+      ? Number(targetProfile.sodium)
+      : null;
+  var targetK =
+    targetProfile && Number.isFinite(Number(targetProfile.potassium))
+      ? Number(targetProfile.potassium)
+      : null;
+  var sourceNa =
+    sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
+  var sourceK =
+    sourceWater && Number.isFinite(Number(sourceWater.potassium))
+      ? Number(sourceWater.potassium)
+      : 0;
   var deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
   var deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
 
@@ -320,11 +433,23 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
  * @returns {Record<IonName, number>}
  */
 function computeFullProfile(target) {
-  var hasExplicitIons = target && ION_FIELDS.every(function(ion) { return Number.isFinite(Number(target[ion])); });
+  var hasExplicitIons =
+    target &&
+    ION_FIELDS.every(function (ion) {
+      return Number.isFinite(Number(target[ion]));
+    });
   if (hasExplicitIons) {
     /** @type {Record<IonName, number>} */
-    var explicit = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
-    ION_FIELDS.forEach(function(ion) {
+    var explicit = {
+      calcium: 0,
+      magnesium: 0,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: 0,
+    };
+    ION_FIELDS.forEach(function (ion) {
       explicit[ion] = Math.round(Number(target[ion]) || 0);
     });
     return explicit;
@@ -345,8 +470,8 @@ function computeFullProfile(target) {
 
   const caEntry = caSource ? MINERAL_DB[caSource] : null;
   const mgEntry = mgSource ? MINERAL_DB[mgSource] : null;
-  var caFraction = caEntry ? (caEntry.ions.calcium || 0) : 0;
-  var mgFraction = mgEntry ? (mgEntry.ions.magnesium || 0) : 0;
+  var caFraction = caEntry ? caEntry.ions.calcium || 0 : 0;
+  var mgFraction = mgEntry ? mgEntry.ions.magnesium || 0 : 0;
   var mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
   var mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
 
@@ -360,7 +485,7 @@ function computeFullProfile(target) {
     sodium: sourceWater.sodium || 0,
     sulfate: sourceWater.sulfate || 0,
     chloride: sourceWater.chloride || 0,
-    bicarbonate: sourceWater.bicarbonate || 0
+    bicarbonate: sourceWater.bicarbonate || 0,
   };
 
   const caMineral = caSource ? MINERAL_DB[caSource] : null;
@@ -380,7 +505,7 @@ function computeFullProfile(target) {
   }
 
   // Apply each alkalinity source from the split allocation
-  /** @type {const} */ (["baking-soda", "potassium-bicarbonate"]).forEach(function(alkId) {
+  /** @type {const} */ (["baking-soda", "potassium-bicarbonate"]).forEach(function (alkId) {
     var alkDelta = alkAllocation[alkId];
     const alkMineral = MINERAL_DB[alkId];
     if (!alkDelta || alkDelta <= 0 || !alkMineral) return;
@@ -396,7 +521,9 @@ function computeFullProfile(target) {
     }
   });
 
-  ION_FIELDS.forEach(function(ion) { result[ion] = Math.round(result[ion]); });
+  ION_FIELDS.forEach(function (ion) {
+    result[ion] = Math.round(result[ion]);
+  });
   return result;
 }
 
@@ -410,26 +537,42 @@ function computeFullProfile(target) {
  */
 function buildStoredTargetProfile(label, ions, description, options) {
   options = options || {};
-  const brewMethod = options.brewMethod === "espresso" ? "espresso" : (options.brewMethod === "filter" ? "filter" : loadBrewMethod());
+  const brewMethod =
+    options.brewMethod === "espresso"
+      ? "espresso"
+      : options.brewMethod === "filter"
+        ? "filter"
+        : loadBrewMethod();
   /** @type {Record<IonName, number>} */
-  const normalized = { calcium: 0, magnesium: 0, potassium: 0, sodium: 0, sulfate: 0, chloride: 0, bicarbonate: 0 };
-  ION_FIELDS.forEach(function(ion) {
+  const normalized = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
+  };
+  ION_FIELDS.forEach(function (ion) {
     const raw = ions[ion];
-    normalized[ion] = Math.round(parseFloat(typeof raw === "number" ? String(raw) : (raw ?? "")) || 0);
+    normalized[ion] = Math.round(
+      parseFloat(typeof raw === "number" ? String(raw) : (raw ?? "")) || 0,
+    );
   });
   const metrics = calculateMetrics(normalized);
   return {
     label: label,
     calcium: normalized.calcium,
     magnesium: normalized.magnesium,
-    alkalinity: options.alkalinity != null ? Math.round(options.alkalinity) : Math.round(metrics.kh),
+    alkalinity:
+      options.alkalinity != null ? Math.round(options.alkalinity) : Math.round(metrics.kh),
     potassium: normalized.potassium,
     sodium: normalized.sodium,
     sulfate: normalized.sulfate,
     chloride: normalized.chloride,
     bicarbonate: normalized.bicarbonate,
     description: description || "",
-    brewMethod: brewMethod
+    brewMethod: brewMethod,
   };
 }
 
@@ -447,6 +590,6 @@ if (typeof module !== "undefined" && module.exports) {
     evaluateWaterProfileRanges,
     splitAlkalinityDelta,
     computeFullProfile,
-    buildStoredTargetProfile
+    buildStoredTargetProfile,
   };
 }

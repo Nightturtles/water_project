@@ -14,7 +14,7 @@ describe("calculateIonPPMs", () => {
       sodium: 0,
       sulfate: 0,
       chloride: 0,
-      bicarbonate: 0
+      bicarbonate: 0,
     });
   });
 
@@ -40,7 +40,7 @@ describe("calculateMetrics", () => {
     const { gh, kh, tds } = metrics.calculateMetrics({
       calcium: 40,
       magnesium: 10,
-      bicarbonate: 61
+      bicarbonate: 61,
     });
     // CA_TO_CACO3 = 100.09/40.078 ≈ 2.497, MG_TO_CACO3 = 100.09/24.305 ≈ 4.118
     expect(gh).toBeCloseTo(40 * (100.09 / 40.078) + 10 * (100.09 / 24.305), 3);

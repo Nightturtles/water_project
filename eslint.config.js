@@ -10,6 +10,7 @@
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
 const globals = require("globals");
+const prettierConfig = require("eslint-config-prettier");
 
 module.exports = tseslint.config(
   {
@@ -117,10 +118,7 @@ module.exports = tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-require-imports": "off",
-      "no-unused-vars": [
-        "error",
-        { args: "none", caughtErrorsIgnorePattern: "^_" },
-      ],
+      "no-unused-vars": ["error", { args: "none", caughtErrorsIgnorePattern: "^_" }],
     },
   },
 
@@ -136,4 +134,10 @@ module.exports = tseslint.config(
       "@typescript-eslint/no-require-imports": "off",
     },
   },
+
+  // Prettier compatibility — MUST be last so its rule overrides win. This
+  // only disables ESLint rules that conflict with Prettier's formatting
+  // (quotes, indentation, semicolons, etc.). It does NOT run Prettier;
+  // formatting is enforced separately via `npm run format:check`.
+  prettierConfig,
 );

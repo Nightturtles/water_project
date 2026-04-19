@@ -9,7 +9,7 @@
 // On page load: if logged in, pull latest cloud data in the background.
 
 (function () {
-  'use strict';
+  "use strict";
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   var syncTimer = undefined;
@@ -20,7 +20,7 @@
     clearTimeout(syncTimer);
     syncTimer = setTimeout(function () {
       pushAllToCloud().catch(function (err) {
-        console.warn('[sync] push failed:', err);
+        console.warn("[sync] push failed:", err);
       });
     }, SYNC_DEBOUNCE_MS);
   }
@@ -30,7 +30,7 @@
     clearTimeout(syncTimer);
     syncTimer = undefined;
     return pushAllToCloud().catch(function (err) {
-      console.warn('[sync] immediate push failed:', err);
+      console.warn("[sync] immediate push failed:", err);
     });
   }
 
@@ -51,8 +51,8 @@
     try {
       for (var i = 0; i < localStorage.length; i++) {
         var key = localStorage.key(i);
-        if (key && key.startsWith('cw_volume_')) {
-          var pageKey = key.slice('cw_volume_'.length);
+        if (key && key.startsWith("cw_volume_")) {
+          var pageKey = key.slice("cw_volume_".length);
           var val = safeParse(safeGetItem(key), null);
           if (val !== null) volumes[pageKey] = val;
         }
@@ -80,7 +80,7 @@
       lotus_concentrate_units: loadLotusConcentrateUnits(),
       volume_preferences: collectVolumePreferences(),
       creator_display_name: loadCreatorDisplayName(),
-      updated_at: now
+      updated_at: now,
     };
 
     var selectionsPayload = {
@@ -90,16 +90,20 @@
       target_preset: loadTargetPresetName(),
       deleted_source_presets: loadDeletedPresets(),
       deleted_target_presets: loadDeletedTargetPresets(),
-      updated_at: now
+      updated_at: now,
     };
 
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').upsert(settingsPayload, { onConflict: 'user_id' }),
-      window.supabaseClient.from('user_selections').upsert(selectionsPayload, { onConflict: 'user_id' })
+      window.supabaseClient
+        .from("user_settings")
+        .upsert(settingsPayload, { onConflict: "user_id" }),
+      window.supabaseClient
+        .from("user_selections")
+        .upsert(selectionsPayload, { onConflict: "user_id" }),
     ]);
 
-    if (results[0].error) console.warn('[sync] user_settings upsert failed:', results[0].error);
-    if (results[1].error) console.warn('[sync] user_selections upsert failed:', results[1].error);
+    if (results[0].error) console.warn("[sync] user_settings upsert failed:", results[0].error);
+    if (results[1].error) console.warn("[sync] user_selections upsert failed:", results[1].error);
 
     await syncCustomProfiles(userId, now);
   }
@@ -123,20 +127,26 @@
     var deleteCalls = [];
     if (deletedSources.length > 0) {
       deleteCalls.push(
-        window.supabaseClient.from('source_profiles').delete()
-          .eq('user_id', userId).in('slug', deletedSources)
+        window.supabaseClient
+          .from("source_profiles")
+          .delete()
+          .eq("user_id", userId)
+          .in("slug", deletedSources),
       );
     }
     if (deletedTargets.length > 0) {
       deleteCalls.push(
-        window.supabaseClient.from('target_profiles').delete()
-          .eq('user_id', userId).in('slug', deletedTargets)
+        window.supabaseClient
+          .from("target_profiles")
+          .delete()
+          .eq("user_id", userId)
+          .in("slug", deletedTargets),
       );
     }
     if (deleteCalls.length > 0) {
       var delResults = await Promise.all(deleteCalls);
       delResults.forEach(function (r) {
-        if (r.error) console.warn('[sync] tombstone delete failed:', r.error);
+        if (r.error) console.warn("[sync] tombstone delete failed:", r.error);
       });
     }
 
@@ -144,7 +154,8 @@
     var sourceEntries = Object.entries(localSource);
     if (sourceEntries.length > 0) {
       var sourceRows = sourceEntries.map(function (entry) {
-        var slug = entry[0], p = entry[1];
+        var slug = entry[0],
+          p = entry[1];
         return {
           user_id: userId,
           slug: slug,
@@ -156,24 +167,26 @@
           sulfate: Number(p.sulfate) || 0,
           chloride: Number(p.chloride) || 0,
           bicarbonate: Number(p.bicarbonate) || 0,
-          updated_at: now
+          updated_at: now,
         };
       });
-      var srcResult = await window.supabaseClient.from('source_profiles')
-        .upsert(sourceRows, { onConflict: 'user_id,slug' });
-      if (srcResult.error) console.warn('[sync] source_profiles upsert failed:', srcResult.error);
+      var srcResult = await window.supabaseClient
+        .from("source_profiles")
+        .upsert(sourceRows, { onConflict: "user_id,slug" });
+      if (srcResult.error) console.warn("[sync] source_profiles upsert failed:", srcResult.error);
     }
 
     // Upsert local target profiles
     var targetEntries = Object.entries(localTarget);
     if (targetEntries.length > 0) {
       var targetRows = targetEntries.map(function (entry) {
-        var slug = entry[0], p = entry[1];
+        var slug = entry[0],
+          p = entry[1];
         return {
           user_id: userId,
           slug: slug,
           label: p.label || slug,
-          brew_method: p.brewMethod || 'filter',
+          brew_method: p.brewMethod || "filter",
           calcium: Number(p.calcium) || 0,
           magnesium: Number(p.magnesium) || 0,
           alkalinity: Number(p.alkalinity) || 0,
@@ -182,20 +195,21 @@
           sulfate: Number(p.sulfate) || 0,
           chloride: Number(p.chloride) || 0,
           bicarbonate: Number(p.bicarbonate) || 0,
-          description: p.description || '',
+          description: p.description || "",
           is_public: !!p.isPublic,
-          creator_display_name: p.creatorDisplayName || '',
+          creator_display_name: p.creatorDisplayName || "",
           // Default creator_user_id to the current user for locally-created
           // profiles that haven't yet been attributed.  Library copies
           // explicitly set creatorUserId to the original author.
           creator_user_id: p.creatorUserId !== undefined ? p.creatorUserId : userId,
           tags: Array.isArray(p.tags) ? p.tags : [],
-          updated_at: now
+          updated_at: now,
         };
       });
-      var tgtResult = await window.supabaseClient.from('target_profiles')
-        .upsert(targetRows, { onConflict: 'user_id,slug' });
-      if (tgtResult.error) console.warn('[sync] target_profiles upsert failed:', tgtResult.error);
+      var tgtResult = await window.supabaseClient
+        .from("target_profiles")
+        .upsert(targetRows, { onConflict: "user_id,slug" });
+      if (tgtResult.error) console.warn("[sync] target_profiles upsert failed:", tgtResult.error);
     }
   }
 
@@ -205,10 +219,10 @@
     if (!userId) return;
 
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').select('*').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('user_selections').select('*').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('source_profiles').select('*').eq('user_id', userId),
-      window.supabaseClient.from('target_profiles').select('*').eq('user_id', userId)
+      window.supabaseClient.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
+      window.supabaseClient.from("user_selections").select("*").eq("user_id", userId).maybeSingle(),
+      window.supabaseClient.from("source_profiles").select("*").eq("user_id", userId),
+      window.supabaseClient.from("target_profiles").select("*").eq("user_id", userId),
     ]);
 
     var settings = results[0].data;
@@ -219,28 +233,38 @@
     // Apply user_settings
     if (settings) {
       if (settings.theme) safeSetItem(THEME_KEY, settings.theme);
-      if (settings.mineral_display_mode) safeSetItem('cw_mineral_display_mode', settings.mineral_display_mode);
-      if (settings.brew_method) safeSetItem('cw_brew_method', settings.brew_method);
-      if (settings.lotus_dropper_type) safeSetItem('cw_lotus_dropper_type', settings.lotus_dropper_type);
-      if (settings.selected_minerals) safeSetItem('cw_selected_minerals', JSON.stringify(settings.selected_minerals));
-      if (settings.selected_concentrates) safeSetItem('cw_selected_concentrates', JSON.stringify(settings.selected_concentrates));
-      if (settings.diy_concentrate_specs) safeSetItem('cw_diy_concentrate_specs', JSON.stringify(settings.diy_concentrate_specs));
-      if (settings.lotus_concentrate_units) safeSetItem('cw_lotus_concentrate_units', JSON.stringify(settings.lotus_concentrate_units));
-      if (settings.volume_preferences && typeof settings.volume_preferences === 'object') {
+      if (settings.mineral_display_mode)
+        safeSetItem("cw_mineral_display_mode", settings.mineral_display_mode);
+      if (settings.brew_method) safeSetItem("cw_brew_method", settings.brew_method);
+      if (settings.lotus_dropper_type)
+        safeSetItem("cw_lotus_dropper_type", settings.lotus_dropper_type);
+      if (settings.selected_minerals)
+        safeSetItem("cw_selected_minerals", JSON.stringify(settings.selected_minerals));
+      if (settings.selected_concentrates)
+        safeSetItem("cw_selected_concentrates", JSON.stringify(settings.selected_concentrates));
+      if (settings.diy_concentrate_specs)
+        safeSetItem("cw_diy_concentrate_specs", JSON.stringify(settings.diy_concentrate_specs));
+      if (settings.lotus_concentrate_units)
+        safeSetItem("cw_lotus_concentrate_units", JSON.stringify(settings.lotus_concentrate_units));
+      if (settings.volume_preferences && typeof settings.volume_preferences === "object") {
         Object.entries(settings.volume_preferences).forEach(function (entry) {
-          safeSetItem('cw_volume_' + entry[0], JSON.stringify(entry[1]));
+          safeSetItem("cw_volume_" + entry[0], JSON.stringify(entry[1]));
         });
       }
-      if (settings.creator_display_name) safeSetItem('cw_creator_display_name', settings.creator_display_name);
+      if (settings.creator_display_name)
+        safeSetItem("cw_creator_display_name", settings.creator_display_name);
     }
 
     // Apply user_selections
     if (selections) {
-      if (selections.source_preset) safeSetItem('cw_source_preset', selections.source_preset);
-      if (selections.source_water) safeSetItem('cw_source_water', JSON.stringify(selections.source_water));
-      if (selections.target_preset) safeSetItem('cw_target_preset', selections.target_preset);
-      if (selections.deleted_source_presets) safeSetItem('cw_deleted_presets', JSON.stringify(selections.deleted_source_presets));
-      if (selections.deleted_target_presets) safeSetItem('cw_deleted_target_presets', JSON.stringify(selections.deleted_target_presets));
+      if (selections.source_preset) safeSetItem("cw_source_preset", selections.source_preset);
+      if (selections.source_water)
+        safeSetItem("cw_source_water", JSON.stringify(selections.source_water));
+      if (selections.target_preset) safeSetItem("cw_target_preset", selections.target_preset);
+      if (selections.deleted_source_presets)
+        safeSetItem("cw_deleted_presets", JSON.stringify(selections.deleted_source_presets));
+      if (selections.deleted_target_presets)
+        safeSetItem("cw_deleted_target_presets", JSON.stringify(selections.deleted_target_presets));
     }
 
     // Apply source profiles, skipping any that are tombstoned locally.
@@ -250,20 +274,22 @@
       var tombstonedSources = loadDeletedPresets();
       /** @type {Record<string, SourceProfile>} */
       var srcProfiles = {};
-      sourceRows.forEach(/** @param {any} row */ function (row) {
-        if (tombstonedSources.indexOf(row.slug) !== -1) return;
-        srcProfiles[row.slug] = {
-          label: row.label,
-          calcium: row.calcium,
-          magnesium: row.magnesium,
-          potassium: row.potassium,
-          sodium: row.sodium,
-          sulfate: row.sulfate,
-          chloride: row.chloride,
-          bicarbonate: row.bicarbonate
-        };
-      });
-      safeSetItem('cw_custom_profiles', JSON.stringify(srcProfiles));
+      sourceRows.forEach(
+        /** @param {any} row */ function (row) {
+          if (tombstonedSources.indexOf(row.slug) !== -1) return;
+          srcProfiles[row.slug] = {
+            label: row.label,
+            calcium: row.calcium,
+            magnesium: row.magnesium,
+            potassium: row.potassium,
+            sodium: row.sodium,
+            sulfate: row.sulfate,
+            chloride: row.chloride,
+            bicarbonate: row.bicarbonate,
+          };
+        },
+      );
+      safeSetItem("cw_custom_profiles", JSON.stringify(srcProfiles));
     }
 
     // Apply target profiles, skipping any that are tombstoned locally
@@ -273,49 +299,67 @@
       var tombstonedTargets = loadDeletedTargetPresets();
       /** @type {Record<string, TargetProfile>} */
       var tgtProfiles = {};
-      targetRows.forEach(/** @param {any} row */ function (row) {
-        if (tombstonedTargets.indexOf(row.slug) !== -1) return;
-        tgtProfiles[row.slug] = {
-          label: row.label,
-          brewMethod: row.brew_method,
-          calcium: row.calcium,
-          magnesium: row.magnesium,
-          alkalinity: row.alkalinity,
-          potassium: row.potassium,
-          sodium: row.sodium,
-          sulfate: row.sulfate,
-          chloride: row.chloride,
-          bicarbonate: row.bicarbonate,
-          description: row.description,
-          isPublic: !!row.is_public,
-          creatorDisplayName: row.creator_display_name || '',
-          creatorUserId: row.creator_user_id || null,
-          tags: Array.isArray(row.tags) ? row.tags : []
-        };
-      });
-      safeSetItem('cw_custom_target_profiles', JSON.stringify(tgtProfiles));
+      targetRows.forEach(
+        /** @param {any} row */ function (row) {
+          if (tombstonedTargets.indexOf(row.slug) !== -1) return;
+          tgtProfiles[row.slug] = {
+            label: row.label,
+            brewMethod: row.brew_method,
+            calcium: row.calcium,
+            magnesium: row.magnesium,
+            alkalinity: row.alkalinity,
+            potassium: row.potassium,
+            sodium: row.sodium,
+            sulfate: row.sulfate,
+            chloride: row.chloride,
+            bicarbonate: row.bicarbonate,
+            description: row.description,
+            isPublic: !!row.is_public,
+            creatorDisplayName: row.creator_display_name || "",
+            creatorUserId: row.creator_user_id || null,
+            tags: Array.isArray(row.tags) ? row.tags : [],
+          };
+        },
+      );
+      safeSetItem("cw_custom_target_profiles", JSON.stringify(tgtProfiles));
     }
 
     // Invalidate all storage caches so next read picks up the new data
-    if (typeof invalidateAllCaches === 'function') invalidateAllCaches();
+    if (typeof invalidateAllCaches === "function") invalidateAllCaches();
   }
 
   // --- Returns true if local data is entirely default (no user customization) ---
   function isDefaultData() {
     var sourceWater = loadSourceWater();
-    var allZeroSource = Object.values(sourceWater).every(function (v) { return Number(v) === 0; });
+    var allZeroSource = Object.values(sourceWater).every(function (v) {
+      return Number(v) === 0;
+    });
     var noCustomSource = Object.keys(loadCustomProfiles()).length === 0;
     var noCustomTarget = Object.keys(loadCustomTargetProfiles()).length === 0;
     var noDeletedSource = loadDeletedPresets().length === 0;
     var noDeletedTarget = loadDeletedTargetPresets().length === 0;
 
-    var defaultMinerals = ['calcium-chloride', 'epsom-salt', 'baking-soda', 'potassium-bicarbonate'];
+    var defaultMinerals = [
+      "calcium-chloride",
+      "epsom-salt",
+      "baking-soda",
+      "potassium-bicarbonate",
+    ];
     var minerals = loadSelectedMinerals();
-    var mineralsAreDefault = minerals.length === defaultMinerals.length &&
-      defaultMinerals.every(function (m) { return minerals.includes(m); });
+    var mineralsAreDefault =
+      minerals.length === defaultMinerals.length &&
+      defaultMinerals.every(function (m) {
+        return minerals.includes(m);
+      });
 
-    return allZeroSource && noCustomSource && noCustomTarget &&
-      noDeletedSource && noDeletedTarget && mineralsAreDefault;
+    return (
+      allZeroSource &&
+      noCustomSource &&
+      noCustomTarget &&
+      noDeletedSource &&
+      noDeletedTarget &&
+      mineralsAreDefault
+    );
   }
 
   /**
@@ -324,40 +368,52 @@
    */
   async function hasCloudData(userId) {
     var results = await Promise.all([
-      window.supabaseClient.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('user_selections').select('user_id').eq('user_id', userId).maybeSingle(),
-      window.supabaseClient.from('source_profiles').select('slug').eq('user_id', userId).limit(1),
-      window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId).limit(1)
+      window.supabaseClient
+        .from("user_settings")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      window.supabaseClient
+        .from("user_selections")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      window.supabaseClient.from("source_profiles").select("slug").eq("user_id", userId).limit(1),
+      window.supabaseClient.from("target_profiles").select("slug").eq("user_id", userId).limit(1),
     ]);
-    return !!(results[0].data || results[1].data ||
+    return !!(
+      results[0].data ||
+      results[1].data ||
       (results[2].data && results[2].data.length > 0) ||
-      (results[3].data && results[3].data.length > 0));
+      (results[3].data && results[3].data.length > 0)
+    );
   }
 
   // --- Show merge conflict dialog, returns promise resolving to 'local' or 'cloud' ---
   function showMergeDialog() {
     return new Promise(function (resolve) {
-      var overlay = document.createElement('div');
-      overlay.className = 'confirm-overlay';
-      overlay.style.display = 'flex';
+      var overlay = document.createElement("div");
+      overlay.className = "confirm-overlay";
+      overlay.style.display = "flex";
 
-      var dialog = document.createElement('div');
-      dialog.className = 'confirm-dialog';
+      var dialog = document.createElement("div");
+      dialog.className = "confirm-dialog";
 
-      var msg = document.createElement('p');
-      msg.id = 'confirm-message';
-      msg.textContent = 'You have local data on this device and saved data in the cloud. Which would you like to keep?';
+      var msg = document.createElement("p");
+      msg.id = "confirm-message";
+      msg.textContent =
+        "You have local data on this device and saved data in the cloud. Which would you like to keep?";
 
-      var actions = document.createElement('div');
-      actions.className = 'confirm-actions';
+      var actions = document.createElement("div");
+      actions.className = "confirm-actions";
 
-      var localBtn = document.createElement('button');
-      localBtn.className = 'preset-btn';
-      localBtn.textContent = 'Keep local data';
+      var localBtn = document.createElement("button");
+      localBtn.className = "preset-btn";
+      localBtn.textContent = "Keep local data";
 
-      var cloudBtn = document.createElement('button');
-      cloudBtn.className = 'preset-btn';
-      cloudBtn.textContent = 'Use cloud data';
+      var cloudBtn = document.createElement("button");
+      cloudBtn.className = "preset-btn";
+      cloudBtn.textContent = "Use cloud data";
 
       actions.appendChild(localBtn);
       actions.appendChild(cloudBtn);
@@ -366,8 +422,14 @@
       overlay.appendChild(dialog);
       document.body.appendChild(overlay);
 
-      localBtn.addEventListener('click', function () { overlay.remove(); resolve('local'); });
-      cloudBtn.addEventListener('click', function () { overlay.remove(); resolve('cloud'); });
+      localBtn.addEventListener("click", function () {
+        overlay.remove();
+        resolve("local");
+      });
+      cloudBtn.addEventListener("click", function () {
+        overlay.remove();
+        resolve("cloud");
+      });
     });
   }
 
@@ -380,10 +442,10 @@
     if (!userId) return;
 
     // Already set up for this user on this device — just pull latest
-    var syncedUserId = safeGetItem('cw_synced_user_id');
+    var syncedUserId = safeGetItem("cw_synced_user_id");
     if (syncedUserId === userId) {
       pullFromCloud().catch(function (err) {
-        console.warn('[sync] background pull on re-login failed:', err);
+        console.warn("[sync] background pull on re-login failed:", err);
       });
       return;
     }
@@ -399,14 +461,14 @@
     } else {
       // Both local and cloud have non-default data: ask the user
       var choice = await showMergeDialog();
-      if (choice === 'local') {
+      if (choice === "local") {
         await pushAllToCloud();
       } else {
         await pullFromCloud();
       }
     }
 
-    safeSetItem('cw_synced_user_id', userId);
+    safeSetItem("cw_synced_user_id", userId);
   }
 
   // --- Background sync on page load (if already logged in) ---
@@ -424,13 +486,13 @@
       var result = await window.supabaseClient.auth.getSession();
       if (!result.data || !result.data.session) return;
       await pushAllToCloud().catch(function (err) {
-        console.warn('[sync] push on page load failed:', err);
+        console.warn("[sync] push on page load failed:", err);
       });
       await pullFromCloud().catch(function (err) {
-        console.warn('[sync] pull on page load failed:', err);
+        console.warn("[sync] pull on page load failed:", err);
       });
     } catch (err) {
-      console.warn('[sync] initSync failed:', err);
+      console.warn("[sync] initSync failed:", err);
     }
   }
 
@@ -440,19 +502,19 @@
       clearTimeout(syncTimer);
       syncTimer = undefined;
       pushAllToCloud().catch(function (err) {
-        console.warn('[sync] flush on leave failed:', err);
+        console.warn("[sync] flush on leave failed:", err);
       });
     }
   }
 
-  document.addEventListener('visibilitychange', function () {
-    if (document.visibilityState === 'hidden') flushPendingSync();
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "hidden") flushPendingSync();
   });
 
-  window.addEventListener('beforeunload', flushPendingSync);
+  window.addEventListener("beforeunload", flushPendingSync);
   // pagehide fires reliably on mobile (iOS) and on bfcache evictions, where
   // beforeunload is often skipped.
-  window.addEventListener('pagehide', flushPendingSync);
+  window.addEventListener("pagehide", flushPendingSync);
 
   // Expose public API
   window.scheduleSyncToCloud = scheduleSyncToCloud;

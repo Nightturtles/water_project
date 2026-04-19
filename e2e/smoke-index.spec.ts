@@ -75,9 +75,7 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     // Explicit attribute check (not a regex sweep over the whole dataset) so
     // unrelated data-* attributes can't accidentally satisfy it. Expects the
     // resolved value — "system" is resolved to "light" or "dark" at load.
-    const theme = await page.evaluate(() =>
-      document.documentElement.getAttribute("data-theme"),
-    );
+    const theme = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
     expect(theme, "theme-init.js must set data-theme on documentElement").toMatch(/^(light|dark)$/);
   });
 });
