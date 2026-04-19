@@ -1,3 +1,4 @@
+// @ts-check
 // ============================================
 // Sync — Cloud sync layer (localStorage-first)
 // ============================================
@@ -10,7 +11,8 @@
 (function () {
   'use strict';
 
-  var syncTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  var syncTimer = undefined;
   var SYNC_DEBOUNCE_MS = 500;
 
   // --- Debounced sync trigger (called from storage.js save functions) ---
@@ -26,7 +28,7 @@
   // --- Immediate sync (no debounce) ---
   function syncNow() {
     clearTimeout(syncTimer);
-    syncTimer = null;
+    syncTimer = undefined;
     return pushAllToCloud().catch(function (err) {
       console.warn('[sync] immediate push failed:', err);
     });
@@ -44,6 +46,7 @@
 
   // --- Collect all cw_volume_* entries from localStorage into one object ---
   function collectVolumePreferences() {
+    /** @type {Record<string, unknown>} */
     var volumes = {};
     try {
       for (var i = 0; i < localStorage.length; i++) {
@@ -101,7 +104,11 @@
     await syncCustomProfiles(userId, now);
   }
 
-  // --- Sync custom source and target profiles (upsert new/changed, delete removed) ---
+  /**
+   * Sync custom source and target profiles (upsert new/changed, delete removed).
+   * @param {string} userId
+   * @param {string} [now]
+   */
   async function syncCustomProfiles(userId, now) {
     now = now || new Date().toISOString();
     var localSource = loadCustomProfiles();
@@ -241,8 +248,9 @@
     // be present in source_profiles briefly after deletion.)
     if (sourceRows && sourceRows.length > 0) {
       var tombstonedSources = loadDeletedPresets();
+      /** @type {Record<string, SourceProfile>} */
       var srcProfiles = {};
-      sourceRows.forEach(function (row) {
+      sourceRows.forEach(/** @param {any} row */ function (row) {
         if (tombstonedSources.indexOf(row.slug) !== -1) return;
         srcProfiles[row.slug] = {
           label: row.label,
@@ -263,8 +271,9 @@
     // be in cloud target_profiles briefly after deletion).
     if (targetRows && targetRows.length > 0) {
       var tombstonedTargets = loadDeletedTargetPresets();
+      /** @type {Record<string, TargetProfile>} */
       var tgtProfiles = {};
-      targetRows.forEach(function (row) {
+      targetRows.forEach(/** @param {any} row */ function (row) {
         if (tombstonedTargets.indexOf(row.slug) !== -1) return;
         tgtProfiles[row.slug] = {
           label: row.label,
@@ -309,7 +318,10 @@
       noDeletedSource && noDeletedTarget && mineralsAreDefault;
   }
 
-  // --- Returns true if Supabase has any stored data for this user ---
+  /**
+   * Returns true if Supabase has any stored data for this user.
+   * @param {string} userId
+   */
   async function hasCloudData(userId) {
     var results = await Promise.all([
       window.supabaseClient.from('user_settings').select('user_id').eq('user_id', userId).maybeSingle(),
@@ -426,7 +438,7 @@
   function flushPendingSync() {
     if (syncTimer) {
       clearTimeout(syncTimer);
-      syncTimer = null;
+      syncTimer = undefined;
       pushAllToCloud().catch(function (err) {
         console.warn('[sync] flush on leave failed:', err);
       });
