@@ -343,3 +343,21 @@ function buildStoredTargetProfile(label, ions, description, options) {
     brewMethod: brewMethod
   };
 }
+
+// --- Node/Vitest UMD shim (harmless in browsers) ---
+// See constants.js for the pattern. Assumes constants.js has already loaded
+// and populated globalThis (both in browser script-scope and in tests that
+// require constants.js first).
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    calculateIonPPMs,
+    calculateMetrics,
+    calculateSo4ClRatio,
+    toStableBicarbonateFromAlkalinity,
+    pickBestCaMgSources,
+    evaluateWaterProfileRanges,
+    splitAlkalinityDelta,
+    computeFullProfile,
+    buildStoredTargetProfile
+  };
+}
