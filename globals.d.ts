@@ -102,4 +102,9 @@ declare global {
   function loadSourcePresetName(): string;
   function loadBrewMethod(): string;
   function isReservedTargetKey(key: string): boolean;
+
+  // From sync.js — feature-detected via `typeof scheduleSyncToCloud === 'function'`
+  // in several storage.js paths, so guard against the function being absent in
+  // contexts where sync.js hasn't loaded (tests, pages that skip sync).
+  var scheduleSyncToCloud: (() => void) | undefined;
 }
