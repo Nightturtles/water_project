@@ -30,8 +30,8 @@ theme-init.js
 # Prettier-compatible. Opt in one at a time in follow-ups.
 *.html
 
-# CSS — same reason as HTML.
-style.css
+# CSS — same reason as HTML. Covers style.css today and any future CSS files.
+*.css
 
 # Markdown — hand-authored documentation. Prettier's table-padding output
 # is ugly and makes hand-editing cells require repadding the whole table.
