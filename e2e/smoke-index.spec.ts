@@ -1,4 +1,4 @@
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect } from "@playwright/test";
 
 // Executable version of smoke-index.md. Intent matches the runbook — if the
 // runbook diverges, fix the spec first and update the runbook as docs.
