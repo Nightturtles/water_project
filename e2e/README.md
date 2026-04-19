@@ -1,31 +1,34 @@
-# E2E Smoke Runbooks
+# E2E — spec files + runbooks
 
-These are **runbooks for Claude** — not Playwright test files (`*.spec.ts`). Each `.md` in this directory is a playbook a Claude Code session follows step-by-step using the Playwright MCP server (`mcp__playwright__*` tools) to verify a user-observable flow.
+Two formats live here:
 
-## Why runbooks and not spec files
+- **`*.spec.ts`** — executable Playwright tests. Run locally with `npm run test:e2e`; gated in CI via the `e2e` job.
+- **`*.md`** — markdown runbooks for Claude to execute via the Playwright MCP server. Used for flows that aren't yet automated (usually because they need a test Supabase account or manual setup).
 
-- No Node, no `playwright` npm install, no test runner needed at Phase 2 — the MCP server drives a real Chromium in isolation, and Claude is the runner.
-- Runbooks describe **intent** ("verify share prompt only shows for the creator") instead of brittle selectors. When DOM IDs shift, Claude adapts the selectors; the intent remains true.
-- When Phase 3 lands Vite + Vitest, we may or may not add Playwright spec files. This directory is the forward-compatible starting point either way.
+Both formats describe the same flows; specs supersede runbooks where they exist, but the runbooks stay as living documentation and as fallback instructions for flows that can't be automated.
 
-## How to run one
+## Running locally
 
-In a Claude Code session:
-
-```text
-Run e2e/smoke-index.md against the local dev server.
+```bash
+npm run test:e2e              # all specs, one-shot
+npx playwright test --ui      # interactive UI mode for debugging
+npx playwright test --debug   # step-through debugger
 ```
 
-Claude starts `npx http-server` (or `vite preview` post-Phase-3) via the Claude Preview MCP, then drives the browser through each step via the Playwright MCP. For production smokes, substitute `https://cafelytic.com` as the base URL.
+The `webServer` config in `playwright.config.ts` boots `npx http-server . -c-1 -p 8080` automatically — no need to start it separately. Locally, an already-running server on 8080 is reused; in CI a fresh one is spawned per run.
 
-## When to reach for these vs. Claude Preview MCP
+## When to reach for what
 
-See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md).
+See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full decision matrix. Short version:
 
-## Runbook index
+- **Single-page, single-flow change during development** → Claude Preview MCP (`preview_start` + `preview_eval`/`preview_snapshot`/`preview_console_logs`). Fast, sandboxed to the local server, zero setup cost per run.
+- **Flow that has a `.spec.ts` here** → `npm run test:e2e`. Deterministic, gated in CI.
+- **Flow that only has a `.md` runbook here** (typically anything needing a logged-in Supabase session, multiple browser contexts, or production-origin checks) → Playwright MCP driving the `.md` runbook step-by-step.
 
-| File | Flow | Motivated by |
-|---|---|---|
-| [smoke-index.md](smoke-index.md) | Main Coffee Water Calculator page — starting water, target profile, mineral recommendations | Core golden path |
-| [smoke-recipe.md](smoke-recipe.md) | Recipe Builder — auto-save on Done Editing, creator-gated share prompt | Commits ae7376e, save-status regressions |
-| [smoke-sync.md](smoke-sync.md) | Multi-device sync — save-on-navigate, push-then-pull initSync, cross-device delete | Commits 6d8cd63, 6464fdb, 9f89a2e |
+## Index
+
+| Flow | Spec | Runbook | Notes |
+|---|---|---|---|
+| index.html golden path + Sentry wiring + FOUC guard | [smoke-index.spec.ts](smoke-index.spec.ts) | [smoke-index.md](smoke-index.md) | Spec is the source of truth; runbook mirrors it as prose |
+| Recipe Builder — auto-save + creator-gated share prompt | — | [smoke-recipe.md](smoke-recipe.md) | Needs a logged-in account; not yet specced |
+| Multi-device sync scenarios | — | [smoke-sync.md](smoke-sync.md) | Needs two contexts + a test account; not yet specced |

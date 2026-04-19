@@ -6,10 +6,13 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@playwright/test": "^1.59.1",
     "@supabase/supabase-js": "^2.103.3",
+    "http-server": "^14.1.1",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4"
   }
