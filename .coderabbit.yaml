@@ -18,13 +18,16 @@ reviews:
   path_instructions:
     - path: "**/*.js"
       instructions: |
-        This project is currently vanilla JavaScript served as-is via GitHub
-        Pages (no bundler, no TypeScript, no linter yet). Files are loaded as
-        script tags and use global scope. Prefer review comments about runtime
-        correctness, security (XSS via innerHTML, token handling), and Supabase
-        row-level-security implications over style nits. Do not recommend
-        TypeScript, ES module conversions, or build-tool changes — those are
-        tracked separately in a planned Phase 3 migration.
+        This project is vanilla JavaScript served as-is via GitHub Pages (no
+        bundler, script-tag loading, global scope). Four core files carry
+        `// @ts-check` with JSDoc types (constants.js, metrics.js, storage.js,
+        sync.js); others are untyped. Prefer review comments about runtime
+        correctness, security (XSS via innerHTML, token handling), and
+        Supabase row-level-security implications. Do not recommend ES module
+        conversions, Vite/Webpack, or moving @supabase/supabase-js to npm —
+        those are tracked as Full Phase 3, deliberately deferred. Do flag if a
+        file would benefit from being added to tsconfig.json's include list,
+        or if existing JSDoc types diverge from actual usage.
     - path: "**/*.html"
       instructions: |
         Six HTML files are independent entry points (index, recipe, taste,
