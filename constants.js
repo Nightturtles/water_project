@@ -286,3 +286,39 @@ const RANGE_SEVERITY_ORDER = { danger: 0, warn: 1, info: 2 };
 
 // --- Theme key ---
 const THEME_KEY = "cw_theme";
+
+// --- Node/Vitest UMD shim (harmless in browsers) ---
+// Browsers: `module` is undefined, the if-branch is skipped entirely.
+// Node/Vitest: exports all top-level names AND mirrors them to globalThis so
+// sibling files that reference these names via browser script-scope (e.g.
+// metrics.js's `MINERAL_DB`) can resolve them through the global scope chain.
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = {
+    MINERAL_DB,
+    MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+    ION_FIELDS,
+    ION_LABELS,
+    SOURCE_PRESETS,
+    TARGET_PRESETS,
+    NON_EDITABLE_TARGET_KEYS,
+    LIBRARY_TAGS,
+    BUILTIN_TARGET_KEYS,
+    RESERVED_TARGET_KEYS,
+    BUILTIN_TARGET_LABELS,
+    GALLONS_TO_LITERS,
+    CA_TO_CACO3,
+    MG_TO_CACO3,
+    HCO3_TO_CACO3,
+    CACO3_TO_HCO3,
+    MW_CACO3,
+    ALK_TO_BAKING_SODA,
+    ALK_TO_POTASSIUM_BICARB,
+    LOTUS_DROPPER_ML,
+    BRAND_CONCENTRATES,
+    BRAND_CONCENTRATE_IDS,
+    LOTUS_CONCENTRATE_IDS,
+    RANGE_SEVERITY_ORDER,
+    THEME_KEY
+  };
+  Object.assign(globalThis, module.exports);
+}

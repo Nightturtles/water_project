@@ -1,0 +1,15 @@
+{
+  "name": "cafelytic",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Coffee water / brew recipe calculator. Vanilla JS, GitHub Pages. This package.json exists only for local type-checking and unit tests — see CLAUDE.md.",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vitest": "^3.2.4"
+  }
+}
