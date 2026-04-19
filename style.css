@@ -1743,7 +1743,8 @@ footer {
 }
 
 @media (max-width: 480px) {
-  .source-grid {
+  .source-grid,
+  .input-row {
     grid-template-columns: 1fr;
   }
 }
