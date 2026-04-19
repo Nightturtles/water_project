@@ -107,4 +107,20 @@ declare global {
   // in several storage.js paths, so guard against the function being absent in
   // contexts where sync.js hasn't loaded (tests, pages that skip sync).
   var scheduleSyncToCloud: (() => void) | undefined;
+
+  // Supabase — loaded from CDN via <script src="https://cdn.jsdelivr.net/.../supabase.js">
+  // then wrapped in supabase-client.js as window.supabaseClient. Typed as `any`
+  // in Partial Phase 3 since we haven't imported @supabase/supabase-js from
+  // npm. A future PR that moves to npm gets real types for free.
+  interface Window {
+    supabase: any;
+    supabaseClient: any;
+    // Public API exposed from sync.js via `window.name = ...` at the bottom
+    // of the IIFE.
+    scheduleSyncToCloud?: () => void;
+    syncNow?: () => Promise<void> | void;
+    pushAllToCloud?: () => Promise<void>;
+    pullFromCloud?: () => Promise<void>;
+    handleFirstLoginMerge?: () => Promise<void>;
+  }
 }
