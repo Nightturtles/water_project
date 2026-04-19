@@ -1,6 +1,8 @@
+// @ts-check
 // ============================================
 // Constants — pure data, no side effects
 // ============================================
+// Shared type definitions live in globals.d.ts (IonName, IonMap, MineralEntry).
 
 // --- Mineral database ---
 // Each mineral salt and the ions it contributes per gram dissolved in 1 liter
@@ -215,11 +217,13 @@ const LIBRARY_TAGS = [
 // --- Custom target profile helpers ---
 const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
 const RESERVED_TARGET_KEYS = new Set([...BUILTIN_TARGET_KEYS, "custom"]);
+/** @type {Record<string, string>} */
 const BUILTIN_TARGET_LABELS = {};
 for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
   BUILTIN_TARGET_LABELS[key] = preset.label;
 }
 
+/** @param {string} key */
 function isReservedTargetKey(key) {
   return RESERVED_TARGET_KEYS.has(key);
 }
