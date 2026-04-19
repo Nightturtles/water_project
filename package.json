@@ -9,6 +9,7 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.103.3",
     "typescript": "^5.4.0",
     "vitest": "^3.2.4"
   }
