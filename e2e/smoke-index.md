@@ -35,7 +35,7 @@
 
 ### 6. Sentry is wired (production only)
 - Assert `window.Sentry && typeof window.Sentry.captureException === 'function'`.
-- Network: confirm **any** request whose URL matches `/^https:\/\/js\.sentry-cdn\.com\//` returned `200`. Match on host, not on the specific public-key filename — the DSN may rotate.
+- Network: confirm **any** request whose URL starts with `https://js.sentry-cdn.com/` returned `200`. Match on host (not on the specific public-key filename) — the DSN may rotate.
 
 ## Exit criteria
 
