@@ -26,7 +26,7 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 
 ## Verification stack (in progress)
 
-A multi-phase rollout is tracked at `/Users/kyleanderson/.claude/plans/i-d-like-to-create-synthetic-boole.md`.
+A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-synthetic-boole.md` (local to the Claude Code harness, not committed).
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.

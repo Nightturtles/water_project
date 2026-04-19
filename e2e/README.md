@@ -12,7 +12,7 @@ These are **runbooks for Claude** — not Playwright test files (`*.spec.ts`). E
 
 In a Claude Code session:
 
-```
+```text
 Run e2e/smoke-index.md against the local dev server.
 ```
 

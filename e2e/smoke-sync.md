@@ -38,7 +38,7 @@
 
 ### 6. Concurrent edits
 - Context A and B: within ~5 s of each other, each edit a *different* profile.
-- Wait 10 s (sync debounce).
+- On **both** contexts, poll until the save-status element for the edited section reads `Saved!` (emitted by `showSourceSaveStatus`/`showRecipeSaveStatus` once the local persist + cloud push both resolve). Use Playwright's `page.locator('#source-save-status, #recipe-save-status, #target-save-status').filter({ hasText: 'Saved!' }).first().waitFor({ timeout: 15000 })`. Failing this wait within 15 s is itself a regression — surface that as the assertion failure, not a timeout.
 - Reload both. Assert both edits are present on both devices — last-writer-wins should only apply at the same-profile level.
 
 ## Exit criteria
@@ -46,7 +46,7 @@
 - All six steps pass.
 - No "sync error" toasts in the save-status elements on either device.
 - Sentry Feed shows no new issues tagged with the sync code paths (`sync.js`, `storage.js`).
-- localStorage on both contexts is in sync with Supabase — spot-check via `preview_eval`: `Object.keys(localStorage).sort()` returns the same set on both.
+- localStorage on both contexts is in sync with Supabase — for each Playwright context, `await page.evaluate(() => Object.keys(localStorage).sort())` and assert the two arrays are deep-equal.
 
 ## Known limits
 
