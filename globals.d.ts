@@ -121,8 +121,8 @@ declare global {
   // A future PR can generate that via `supabase gen types typescript` to
   // catch column-name typos and wrong-shape upserts.
   interface Window {
-    supabase: typeof import('@supabase/supabase-js');
-    supabaseClient: import('@supabase/supabase-js').SupabaseClient;
+    supabase: typeof import("@supabase/supabase-js");
+    supabaseClient: import("@supabase/supabase-js").SupabaseClient;
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;

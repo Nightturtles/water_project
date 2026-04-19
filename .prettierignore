@@ -1,0 +1,40 @@
+# Same ignore list as eslint.config.js plus a few extra for directory-level
+# exclusions. Keep these in sync manually (tiny list; not worth a tool).
+node_modules/
+coverage/
+test-results/
+playwright-report/
+supabase/
+dist/
+
+# Claude Code internal worktrees — same reason as ESLint.
+.claude/
+
+# Files with pinned formatting or external authorship — don't touch.
+package-lock.json
+cafelytic_logo.svg
+favicon.svg
+
+# Untyped root .js files NOT yet under @ts-check/ESLint. Out of scope for
+# this initial Prettier rollout; reformatting them would create noisy diffs
+# with no review benefit. Revisit when each file is brought into scope.
+script.js
+ui-shared.js
+source-water-ui.js
+library-ui.js
+library-data.js
+supabase-client.js
+theme-init.js
+
+# HTML entry points — hand-edited, many are close to (but not exactly)
+# Prettier-compatible. Opt in one at a time in follow-ups.
+*.html
+
+# CSS — same reason as HTML. Covers style.css today and any future CSS files.
+*.css
+
+# Markdown — hand-authored documentation. Prettier's table-padding output
+# is ugly and makes hand-editing cells require repadding the whole table.
+# Not worth the churn. Applies to the e2e runbooks, the root docs (CLAUDE.md,
+# SENTRY_SETUP.md, SUPABASE_PLAN.md), and any future docs.
+*.md

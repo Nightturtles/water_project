@@ -10,6 +10,6 @@ window.sentryOnLoad = function () {
     beforeSend: function (event) {
       if (event.request && event.request.cookies) delete event.request.cookies;
       return event;
-    }
+    },
   });
 };

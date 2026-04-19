@@ -13,9 +13,9 @@ const MINERAL_DB = {
     mw: 147.01,
     description: "Adds calcium and chloride. Increases sweetness and body.",
     ions: {
-      calcium:  40.078  / 147.01,  // g Ca per g salt
-      chloride: 70.906  / 147.01   // g Cl per g salt (2 * 35.453)
-    }
+      calcium: 40.078 / 147.01, // g Ca per g salt
+      chloride: 70.906 / 147.01, // g Cl per g salt (2 * 35.453)
+    },
   },
   "epsom-salt": {
     name: "Epsom Salt",
@@ -23,9 +23,9 @@ const MINERAL_DB = {
     mw: 246.47,
     description: "Adds magnesium and sulfate. Enhances fruity notes and clarity.",
     ions: {
-      magnesium: 24.305  / 246.47,
-      sulfate:   96.06   / 246.47
-    }
+      magnesium: 24.305 / 246.47,
+      sulfate: 96.06 / 246.47,
+    },
   },
   "baking-soda": {
     name: "Baking Soda",
@@ -33,9 +33,9 @@ const MINERAL_DB = {
     mw: 84.007,
     description: "Adds sodium and bicarbonate (alkalinity/KH). Buffers acidity.",
     ions: {
-      sodium:      22.99   / 84.007,
-      bicarbonate: 61.017  / 84.007
-    }
+      sodium: 22.99 / 84.007,
+      bicarbonate: 61.017 / 84.007,
+    },
   },
   "potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
@@ -43,29 +43,29 @@ const MINERAL_DB = {
     mw: 100.115,
     description: "Sodium-free alkalinity source. Adds potassium and bicarbonate.",
     ions: {
-      potassium:   39.098  / 100.115,
-      bicarbonate: 61.017  / 100.115
-    }
+      potassium: 39.098 / 100.115,
+      bicarbonate: 61.017 / 100.115,
+    },
   },
   "magnesium-chloride": {
     name: "Magnesium Chloride",
     formula: "MgCl\u2082\u00b76H\u2082O",
-    mw: 203.30,
+    mw: 203.3,
     description: "Adds magnesium and chloride. Fruity notes with added body.",
     ions: {
-      magnesium: 24.305  / 203.30,
-      chloride:  70.906  / 203.30
-    }
+      magnesium: 24.305 / 203.3,
+      chloride: 70.906 / 203.3,
+    },
   },
-  "gypsum": {
+  gypsum: {
     name: "Gypsum",
     formula: "CaSO\u2084\u00b72H\u2082O",
     mw: 172.17,
     description: "Adds calcium and sulfate. Sweetness with crisp clarity.",
     ions: {
-      calcium: 40.078  / 172.17,
-      sulfate: 96.06   / 172.17
-    }
+      calcium: 40.078 / 172.17,
+      sulfate: 96.06 / 172.17,
+    },
   },
   "potassium-chloride": {
     name: "Potassium Chloride",
@@ -73,9 +73,9 @@ const MINERAL_DB = {
     mw: 74.551,
     description: "Adds potassium and chloride. Salt substitute, adds body.",
     ions: {
-      potassium: 39.098  / 74.551,
-      chloride:  35.453  / 74.551
-    }
+      potassium: 39.098 / 74.551,
+      chloride: 35.453 / 74.551,
+    },
   },
   "sodium-chloride": {
     name: "Sodium Chloride",
@@ -83,10 +83,10 @@ const MINERAL_DB = {
     mw: 58.44,
     description: "Table salt. Adds sodium and chloride. Small amounts enhance sweetness.",
     ions: {
-      sodium:   22.99   / 58.44,
-      chloride: 35.453  / 58.44
-    }
-  }
+      sodium: 22.99 / 58.44,
+      chloride: 35.453 / 58.44,
+    },
+  },
 };
 
 // --- Approximate solubility limits (g/L at ~25C) ---
@@ -97,35 +97,66 @@ const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
   "baking-soda": 96,
   "potassium-bicarbonate": 330,
   "magnesium-chloride": 560,
-  "gypsum": 2,
+  gypsum: 2,
   "potassium-chloride": 340,
-  "sodium-chloride": 360
+  "sodium-chloride": 360,
 };
 
 // --- Shared ion field list and labels ---
-const ION_FIELDS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride", "bicarbonate"];
-const ION_LABELS = { calcium: "Ca", magnesium: "Mg", potassium: "K", sodium: "Na", sulfate: "SO\u2084", chloride: "Cl", bicarbonate: "HCO\u2083" };
+const ION_FIELDS = [
+  "calcium",
+  "magnesium",
+  "potassium",
+  "sodium",
+  "sulfate",
+  "chloride",
+  "bicarbonate",
+];
+const ION_LABELS = {
+  calcium: "Ca",
+  magnesium: "Mg",
+  potassium: "K",
+  sodium: "Na",
+  sulfate: "SO\u2084",
+  chloride: "Cl",
+  bicarbonate: "HCO\u2083",
+};
 
 // --- Source water presets ---
 const SOURCE_PRESETS = {
   distilled: {
     label: "Distilled / RO",
-    calcium: 0, magnesium: 0, potassium: 0, sodium: 0,
-    sulfate: 0, chloride: 0, bicarbonate: 0
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
   },
   "soft-tap": {
     label: "Soft Tap Water",
-    calcium: 15, magnesium: 3, potassium: 1, sodium: 10,
-    sulfate: 5, chloride: 12, bicarbonate: 30
+    calcium: 15,
+    magnesium: 3,
+    potassium: 1,
+    sodium: 10,
+    sulfate: 5,
+    chloride: 12,
+    bicarbonate: 30,
   },
   "hard-tap": {
     label: "Hard Tap Water",
-    calcium: 60, magnesium: 15, potassium: 2, sodium: 20,
-    sulfate: 25, chloride: 30, bicarbonate: 120
+    calcium: 60,
+    magnesium: 15,
+    potassium: 2,
+    sodium: 20,
+    sulfate: 25,
+    chloride: 30,
+    bicarbonate: 120,
   },
   custom: {
-    label: "+ Add Custom"
-  }
+    label: "+ Add Custom",
+  },
 };
 
 // --- Target water presets (Ca/Mg/Alk targets for coffee water) ---
@@ -135,7 +166,7 @@ const TARGET_PRESETS = {
     calcium: 51,
     magnesium: 17,
     alkalinity: 40,
-    description: "SCA recommended range for brewing water. Balanced body and clarity."
+    description: "SCA recommended range for brewing water. Balanced body and clarity.",
   },
   "lotus-light-bright": {
     label: "Light and Bright",
@@ -147,7 +178,7 @@ const TARGET_PRESETS = {
     sulfate: 0,
     chloride: 40.395,
     bicarbonate: 29.56,
-    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees."
+    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
   },
   "lotus-simple-sweet": {
     label: "Simple and Sweet",
@@ -159,7 +190,7 @@ const TARGET_PRESETS = {
     sulfate: 0,
     chloride: 63.389,
     bicarbonate: 49.35,
-    description: "Lotus balanced profile with added sweetness and approachable acidity."
+    description: "Lotus balanced profile with added sweetness and approachable acidity.",
   },
   "lotus-light-bright-espresso": {
     label: "Light and Bright (espresso)",
@@ -171,7 +202,7 @@ const TARGET_PRESETS = {
     sulfate: 0,
     chloride: 11.497,
     bicarbonate: 54.194,
-    description: "Lotus espresso profile for clarity-forward shots with restrained hardness."
+    description: "Lotus espresso profile for clarity-forward shots with restrained hardness.",
   },
   "lotus-simple-sweet-espresso": {
     label: "Simple and Sweet (espresso)",
@@ -183,7 +214,7 @@ const TARGET_PRESETS = {
     sulfate: 0,
     chloride: 11.497,
     bicarbonate: 69.167,
-    description: "Lotus espresso profile with higher buffer for sweeter, rounder shots."
+    description: "Lotus espresso profile with higher buffer for sweeter, rounder shots.",
   },
   "lotus-bright-juicy": {
     label: "Bright and Juicy",
@@ -195,23 +226,31 @@ const TARGET_PRESETS = {
     sulfate: 0,
     chloride: 46.077,
     bicarbonate: 19.734,
-    description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity."
+    description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity.",
   },
   rao: {
     label: "Rao's Recipe",
     calcium: 20.9,
     magnesium: 8.5,
     alkalinity: 40,
-    description: "Lotus-style Rao recipe target with balanced sweetness and structure."
-  }
+    description: "Lotus-style Rao recipe target with balanced sweetness and structure.",
+  },
 };
 
 const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 
 // --- Predefined library tags ---
 const LIBRARY_TAGS = [
-  "Full Body", "Balanced", "Bright", "Sweet", "Delicate",
-  "Juicy", "Low TDS", "High TDS", "Round", "Clarity"
+  "Full Body",
+  "Balanced",
+  "Bright",
+  "Sweet",
+  "Delicate",
+  "Juicy",
+  "Low TDS",
+  "High TDS",
+  "Round",
+  "Clarity",
 ];
 
 // --- Custom target profile helpers ---
@@ -232,13 +271,13 @@ function isReservedTargetKey(key) {
 const GALLONS_TO_LITERS = 3.78541;
 
 // --- Conversion constants (single source of truth for GH/KH/TDS) ---
-const CA_TO_CACO3 = 100.09 / 40.078;   // Ca ppm -> GH contribution (mg/L as CaCO3)
-const MG_TO_CACO3 = 100.09 / 24.305;   // Mg ppm -> GH contribution (mg/L as CaCO3)
+const CA_TO_CACO3 = 100.09 / 40.078; // Ca ppm -> GH contribution (mg/L as CaCO3)
+const MG_TO_CACO3 = 100.09 / 24.305; // Mg ppm -> GH contribution (mg/L as CaCO3)
 const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
 const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
-const MW_CACO3 = 100.09;               // Molecular weight of CaCO3
-const ALK_TO_BAKING_SODA = 2 * MINERAL_DB["baking-soda"].mw / MW_CACO3;
-const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_CACO3;
+const MW_CACO3 = 100.09; // Molecular weight of CaCO3
+const ALK_TO_BAKING_SODA = (2 * MINERAL_DB["baking-soda"].mw) / MW_CACO3;
+const ALK_TO_POTASSIUM_BICARB = (2 * MINERAL_DB["potassium-bicarbonate"].mw) / MW_CACO3;
 
 // --- Brand name concentrates (fixed strength, equivalent grams of mineral per mL) ---
 // Lotus Coffee Water Drops: concentrations derived from official round-tip dropper recipes
@@ -246,7 +285,7 @@ const ALK_TO_POTASSIUM_BICARB = 2 * MINERAL_DB["potassium-bicarbonate"].mw / MW_
 // the mapped MINERAL_DB salt per mL of concentrate (for dosing math).
 const LOTUS_DROPPER_ML = {
   round: 0.0716,
-  straight: 0.0386
+  straight: 0.0386,
 };
 const BRAND_CONCENTRATES = {
   "brand:lotus:calcium": {
@@ -254,29 +293,33 @@ const BRAND_CONCENTRATES = {
     mineralId: "calcium-chloride",
     formula: "CaCl\u2082\u00b72H\u2082O",
     gramsPerMl: 0.1671,
-    description: "~113.7 mg/mL hardness as CaCO\u2083 (\u2248 45.5 mg/mL Ca\u00B2\u207A). Calibrated so 69 round drops in 15L yields ~15 mg/L Ca and ~26.5 mg/L Cl."
+    description:
+      "~113.7 mg/mL hardness as CaCO\u2083 (\u2248 45.5 mg/mL Ca\u00B2\u207A). Calibrated so 69 round drops in 15L yields ~15 mg/L Ca and ~26.5 mg/L Cl.",
   },
   "brand:lotus:magnesium": {
     name: "Magnesium",
     mineralId: "magnesium-chloride",
     formula: "MgCl\u2082\u00b76H\u2082O",
     gramsPerMl: 0.2302,
-    description: "~113.4 mg/mL hardness as CaCO\u2083 (\u2248 27.5 mg/mL Mg\u00B2\u207A). Calibrated so 274 round drops in 15L yields ~36 mg/L Mg and ~105.0 mg/L Cl."
+    description:
+      "~113.4 mg/mL hardness as CaCO\u2083 (\u2248 27.5 mg/mL Mg\u00B2\u207A). Calibrated so 274 round drops in 15L yields ~36 mg/L Mg and ~105.0 mg/L Cl.",
   },
   "brand:lotus:sodium-bicarbonate": {
     name: "Sodium Bicarbonate",
     mineralId: "baking-soda",
     formula: "NaHCO\u2083",
-    gramsPerMl: 0.0950,
-    description: "~150.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.0 mg/mL Na\u207A; \u2248 69.0 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~69 mg/L Na and ~183.1 mg/L HCO\u2083."
+    gramsPerMl: 0.095,
+    description:
+      "~150.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.0 mg/mL Na\u207A; \u2248 69.0 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~69 mg/L Na and ~183.1 mg/L HCO\u2083.",
   },
   "brand:lotus:potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
     mineralId: "potassium-bicarbonate",
     formula: "KHCO\u2083",
     gramsPerMl: 0.1129,
-    description: "~149.8 mg/mL alkalinity as CaCO\u2083 (\u2248 44.1 mg/mL K\u207A; \u2248 68.8 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~117 mg/L K and ~182.6 mg/L HCO\u2083."
-  }
+    description:
+      "~149.8 mg/mL alkalinity as CaCO\u2083 (\u2248 44.1 mg/mL K\u207A; \u2248 68.8 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~117 mg/L K and ~182.6 mg/L HCO\u2083.",
+  },
 };
 
 /** All brand concentrate IDs (for iteration). */
@@ -322,7 +365,7 @@ if (typeof module !== "undefined" && module.exports) {
     BRAND_CONCENTRATE_IDS,
     LOTUS_CONCENTRATE_IDS,
     RANGE_SEVERITY_ORDER,
-    THEME_KEY
+    THEME_KEY,
   };
   Object.assign(globalThis, module.exports);
 }
