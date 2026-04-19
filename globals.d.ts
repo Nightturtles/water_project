@@ -76,7 +76,14 @@ declare global {
   const ALK_TO_BAKING_SODA: number;
   const ALK_TO_POTASSIUM_BICARB: number;
   const LOTUS_DROPPER_ML: Record<string, number>;
-  const BRAND_CONCENTRATES: Record<string, { label: string; [key: string]: unknown }>;
+  interface BrandConcentrate {
+    name: string;
+    mineralId: string;
+    formula: string;
+    gramsPerMl: number;
+    description?: string;
+  }
+  const BRAND_CONCENTRATES: Record<string, BrandConcentrate>;
   const BRAND_CONCENTRATE_IDS: readonly string[];
   const LOTUS_CONCENTRATE_IDS: readonly string[];
   const RANGE_SEVERITY_ORDER: { danger: number; warn: number; info: number };
