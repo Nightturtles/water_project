@@ -30,12 +30,29 @@
 - Change `#volume` to `2` and `#volume-unit` to a non-default option.
 - Assert the "Add to Your Water" recommendations (`<h2>Add to Your Water</h2>` section) re-renders without throwing.
 
-### 5. Theme init race
-- Verify no FOUC — the theme class is applied to `<html>` before the body renders. (Inspect the dataset/className on `document.documentElement` within the first 50ms of load via `preview_eval` or Playwright `page.evaluate`.)
+### 5. Theme init race (FOUC guard)
+A post-navigation `page.evaluate` can't detect FOUC — by the time Playwright is inspecting the DOM, `theme-init.js` has already run. Install a probe *before* navigation instead:
+
+```js
+await page.addInitScript(() => {
+  window.__themeAtFirstBody = null;
+  new MutationObserver((_mutations, obs) => {
+    if (document.body) {
+      window.__themeAtFirstBody = {
+        className: document.documentElement.className,
+        dataset: { ...document.documentElement.dataset },
+      };
+      obs.disconnect();
+    }
+  }).observe(document.documentElement, { childList: true, subtree: true });
+});
+```
+
+Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirstBody)` and assert the captured snapshot already carries a `light`/`dark`/`system` theme marker (on `className` or `dataset`). If the probe records a bare element, `theme-init.js` is landing too late — real FOUC.
 
 ### 6. Sentry is wired (production only)
 - Assert `window.Sentry && typeof window.Sentry.captureException === 'function'`.
-- Network: confirm **any** request whose URL starts with `https://js.sentry-cdn.com/` returned `200`. Match on host (not on the specific public-key filename) — the DSN may rotate.
+- Network: confirm **any** request whose URL starts with `https://js.sentry-cdn.com/` returned a success status (200 for a fresh fetch, 304 from cache on a repeat visit — any `status < 400` is fine). Match on host, not on the specific public-key filename — the DSN may rotate.
 
 ## Exit criteria
 
