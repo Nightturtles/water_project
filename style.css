@@ -1742,13 +1742,6 @@ footer {
   }
 }
 
-@media (max-width: 480px) {
-  .source-grid,
-  .input-row {
-    grid-template-columns: 1fr;
-  }
-}
-
 @media (max-width: 350px) {
   .section-header-actions .profile-edit-toggle {
     width: auto;
