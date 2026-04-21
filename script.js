@@ -3,8 +3,11 @@
 // ============================================
 
 // --- State ---
-let currentProfile = loadTargetPresetName();
+// Load brew method first so loadTargetPresetName() can pick the
+// mode-appropriate default (cafelytic-filter vs cafelytic-espresso) for new
+// users. Returning users' saved preset still wins regardless of mode.
 let activeBrewMethod = loadBrewMethod();
+let currentProfile = loadTargetPresetName(activeBrewMethod);
 
 // --- DOM elements ---
 const volumeInput = document.getElementById("volume");

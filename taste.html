@@ -432,7 +432,7 @@
         tastePresetsContainer.appendChild(btn);
       }
       const keys = Object.keys(allPresets);
-      const savedPreset = loadTargetPresetName();
+      const savedPreset = loadTargetPresetName(activeBrewMethod);
       const initialKey = (activePreset && keys.includes(activePreset))
         ? activePreset
         : (keys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
@@ -816,7 +816,7 @@
         });
       }
       const visible = getTargetPresetsForBrewMethod(activeBrewMethod);
-      const savedPreset = loadTargetPresetName();
+      const savedPreset = loadTargetPresetName(activeBrewMethod);
       const fallback = findFallbackPreset(visible);
       const nextPreset = visible[savedPreset] ? savedPreset : fallback;
       renderTastePresets(nextPreset);
