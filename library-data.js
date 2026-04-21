@@ -7,7 +7,12 @@
   "use strict";
 
   var publicRecipesCache = null;
-  var loadedCallbacks = [];
+  // Set (not Array) so re-registering the same function reference doesn't
+  // duplicate firings — defends against bfcache restore and other scenarios
+  // where the same classic-script evaluates twice against the same module
+  // instance. Callers that want to unregister receive a token from
+  // onLibraryDataLoaded(cb) and call it to remove their registration.
+  var loadedCallbacks = new Set();
 
   // Synchronous accessor for use by sync callers that need library data
   // without awaiting a fetch (e.g. storage.getAllTargetPresets, which is
@@ -31,8 +36,14 @@
   // Register a callback that fires after fetchPublicRecipes completes
   // successfully (used by taste/index pages to re-render the preset rail
   // once library rows are available). Callbacks receive the recipes array.
+  // Returns an unregister token — invoking it removes the callback. Callers
+  // that don't need to unregister can ignore the return value.
   function onLibraryDataLoaded(cb) {
-    if (typeof cb === "function") loadedCallbacks.push(cb);
+    if (typeof cb !== "function") return function () {};
+    loadedCallbacks.add(cb);
+    return function unregister() {
+      loadedCallbacks.delete(cb);
+    };
   }
 
   function fireLoadedCallbacks(recipes) {

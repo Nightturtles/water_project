@@ -14,7 +14,7 @@
 -- definitions to a tiny fallback shim for use before Supabase data loads.
 --
 -- Ion values are copied verbatim from constants.js TARGET_PRESETS. Taxonomy
--- (tray/roast/tags/method) matches recipe-catalog-decisions.csv.
+-- (tray/roast/tags/method) matches supabase/recipe-catalog-decisions.csv.
 -- =============================================================================
 
 
