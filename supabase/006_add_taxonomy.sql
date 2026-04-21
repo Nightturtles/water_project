@@ -48,22 +48,32 @@ ALTER TABLE target_profiles
     AND roast <@ '["all", "light", "medium", "dark"]'::jsonb
   );
 
--- Tags (flavor tags) — same shape, canonical 6-set.
--- Empty array is allowed (legacy rows + recipes without curated tags).
+-- Tags (flavor tags) — canonical 6-set for LIBRARY rows only.
 --
--- Added as NOT VALID so the constraint guards all *new* writes immediately,
--- but doesn't scan existing rows yet — the backfill UPDATEs below normalize
--- legacy pre-v2 tags (e.g. ["eaf", "direct-dosing"] from migration 002) onto
--- the canonical 6-set. The matching `VALIDATE CONSTRAINT` statement at the
--- bottom of this migration performs the existing-row scan only after the
--- backfill has run, so the migration can't fail on legacy data.
+-- The constraint is scoped to `user_id IS NULL` because the spec's
+-- "curated vocabulary" governance applies to published library content,
+-- not to user-owned recipes. Enforcing the 6-set on every row would
+-- require rewriting pre-v2 tags on user rows (e.g. "Low TDS" on the
+-- personal "Cafelytic Water" recipe) — which is the user's data to
+-- manage, not ours.
+--
+-- Added as NOT VALID so the constraint guards all new writes to library
+-- rows immediately without scanning existing rows; the backfill UPDATEs
+-- below normalize legacy pre-v2 tags on library rows (["Round"],
+-- ["Delicate"], ["eaf", "direct-dosing"], etc. from migrations 002/004)
+-- onto the canonical 6-set. The matching `VALIDATE CONSTRAINT` at the
+-- bottom then scans existing rows — library rows must satisfy the
+-- 6-set, user rows pass trivially via the short-circuit.
 ALTER TABLE target_profiles
   DROP CONSTRAINT IF EXISTS target_profiles_tags_check;
 ALTER TABLE target_profiles
   ADD CONSTRAINT target_profiles_tags_check
   CHECK (
-    jsonb_typeof(tags) = 'array'
-    AND tags <@ '["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"]'::jsonb
+    user_id IS NOT NULL
+    OR (
+      jsonb_typeof(tags) = 'array'
+      AND tags <@ '["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"]'::jsonb
+    )
   ) NOT VALID;
 
 -- Featured uniqueness: at most one row may have tray='featured' at a time.
