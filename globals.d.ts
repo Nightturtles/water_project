@@ -118,7 +118,10 @@ declare global {
     slug: string;
     userId?: string | null;
     tags?: string[];
-    tray?: string;
+    // `category` is the client-side name for the DB column `tray`. The
+    // recipe-browser spec uses `category`; the DB keeps `tray` for
+    // parallelism with `roast`. library-data.js renames at the boundary.
+    category?: string;
     roast?: string[];
     creatorDisplayName?: string;
   }

@@ -330,12 +330,19 @@ function saveTargetPresetName(name) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadTargetPresetName() {
-  // Default for new users is the featured Cafelytic Filter recipe (Piece C,
-  // 2026-04) — launched as the editorial spotlight when the taxonomy v2 rolled
-  // out. Returning users' saved preset takes precedence. On espresso brew mode,
-  // activateProfile()'s findFallbackPreset handles the mode mismatch.
-  return safeGetItem("cw_target_preset") || "cafelytic-filter";
+/**
+ * @param {string} [brewMethod] "filter" or "espresso" (defaults to filter)
+ */
+function loadTargetPresetName(brewMethod) {
+  // Saved preset (any brew mode) wins. For new users with no saved preset,
+  // pick the canonical Cafelytic default matching the caller's active brew
+  // mode: cafelytic-filter (filter) or cafelytic-espresso (espresso). This
+  // replaces the prior "always return cafelytic-filter then let
+  // findFallbackPreset correct it" pattern — the default is now explicit
+  // per mode instead of relying on a silent downstream correction.
+  const saved = safeGetItem("cw_target_preset");
+  if (saved) return saved;
+  return brewMethod === "espresso" ? "cafelytic-espresso" : "cafelytic-filter";
 }
 
 // --- Brew method preference ---

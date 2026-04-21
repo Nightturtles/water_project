@@ -99,9 +99,12 @@
         description: row.description || "",
         creatorDisplayName: row.creator_display_name || "",
         tags: Array.isArray(row.tags) ? row.tags : [],
-        // Taxonomy v2 (migration 006): tray + roast power the landing-page
-        // filter chips and the re-add-from-library UI.
-        tray: row.tray || "classic",
+        // Taxonomy v2 (migration 006): category (DB column: `tray`) + roast
+        // power the recipe-browser carousels, filter chips, and the
+        // re-add-from-library UI. The recipe-browser spec and mockups call
+        // this field `category`; the DB keeps `tray` for parallelism with
+        // `roast`, so the rename happens at the client boundary.
+        category: row.tray || "classic",
         roast: Array.isArray(row.roast) ? row.roast : ["all"],
         createdAt: row.created_at
       };
