@@ -57,15 +57,11 @@
 
     if (typeof window.supabaseClient === "undefined") return [];
 
-    // NOTE: tray/roast are introduced by migration 006 but intentionally NOT
-    // in this select list yet — migrations 006/007 are deferred to post-merge,
-    // so fetching columns that don't yet exist would 400 on every pageload in
-    // production during the window between code deploy and migration apply.
-    // Row-level normalization below defaults them (tray → "classic",
-    // roast → ["all"]); follow-up PR re-adds them here once migrations land.
     var result = await window.supabaseClient
       .from("target_profiles")
-      .select("id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, created_at")
+      .select(
+        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at"
+      )
       .eq("is_public", true)
       .order("created_at", { ascending: false });
 
