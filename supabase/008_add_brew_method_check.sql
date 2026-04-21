@@ -25,5 +25,10 @@ ALTER TABLE target_profiles
   ADD CONSTRAINT target_profiles_brew_method_check
   CHECK (
     user_id IS NOT NULL
-    OR brew_method IN ('filter', 'espresso', 'all')
+    OR (brew_method IS NOT NULL AND brew_method IN ('filter', 'espresso', 'all'))
   );
+
+-- The `brew_method IS NOT NULL` guard is deliberate. Without it, SQL
+-- three-valued logic lets a library row with brew_method=NULL slip through:
+-- `FALSE OR NULL` evaluates to NULL, and CHECK constraints only fail on
+-- explicit FALSE. So the IN-check alone wouldn't prevent NULLs.
