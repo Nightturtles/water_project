@@ -50,6 +50,7 @@ const library = require("./library-data.js");
 
 const {
   getAllTargetPresets,
+  getTargetProfileByKey,
   invalidateTargetPresetsCache,
   addDeletedTargetPreset,
   loadDeletedTargetPresets,
@@ -72,6 +73,11 @@ function resetState() {
   global.localStorage.clear();
   global.sessionStorage.clear();
   fakeLibraryRows = [];
+  // Clearing localStorage alone does NOT clear storage.js's in-memory
+  // customTargetProfilesCache — tests that called loadCustomTargetProfiles()
+  // would otherwise observe stale rows and make the suite order-dependent.
+  // saveCustomTargetProfiles sets customTargetProfilesCache = null internally.
+  saveCustomTargetProfiles({});
   invalidateTargetPresetsCache();
 }
 
@@ -196,6 +202,39 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     invalidateTargetPresetsCache();
     const second = getAllTargetPresets();
     expect(second["sca"]).toBeUndefined();
+  });
+
+  test("getTargetProfileByKey resolves library-only slugs via the merged map", () => {
+    // Regression guard for CodeRabbit finding: before the fix, this function
+    // only checked loadCustomTargetProfiles + TARGET_PRESETS shim, so a
+    // library-only slug (e.g. 'sey') returned null despite rendering in the
+    // rail — every caller downstream (script.js × 5, taste.html × 1) broke.
+    fakeLibraryRows = [
+      {
+        slug: "sey",
+        label: "Sey",
+        brewMethod: "filter",
+        calcium: 20,
+        magnesium: 15,
+        alkalinity: 15,
+        description: "Sey roaster's water.",
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const profile = getTargetProfileByKey("sey");
+    expect(profile).not.toBeNull();
+    expect(profile.label).toBe("Sey");
+    expect(profile.calcium).toBe(20);
+  });
+
+  test("getTargetProfileByKey returns null for 'custom' sentinel", () => {
+    expect(getTargetProfileByKey("custom")).toBeNull();
+  });
+
+  test("getTargetProfileByKey returns null for tombstoned slug", () => {
+    addDeletedTargetPreset("sca");
+    invalidateTargetPresetsCache();
+    expect(getTargetProfileByKey("sca")).toBeNull();
   });
 
   test("getExistingTargetProfileLabels includes library labels (duplicate-name guard)", () => {

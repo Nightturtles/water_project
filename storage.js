@@ -768,8 +768,12 @@ function getAllTargetPresets() {
  */
 function getTargetProfileByKey(key) {
   if (key === "custom") return null;
-  const custom = loadCustomTargetProfiles();
-  return custom[key] || TARGET_PRESETS[key] || null;
+  // Route through the merged rail so library-only slugs (sey, aviary-*, rasami-*,
+  // and all library-seeded built-ins) and library-overridden shim slugs resolve
+  // to the same object the rail renders. Using loadCustomTargetProfiles + the
+  // 5-entry shim directly would miss every library row and return null.
+  const merged = getAllTargetPresets();
+  return merged[key] || null;
 }
 
 /**
@@ -1000,6 +1004,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 if (typeof module !== "undefined" && module.exports) {
   const _umdExports = {
     getAllTargetPresets,
+    getTargetProfileByKey,
     invalidateTargetPresetsCache,
     loadDeletedTargetPresets,
     addDeletedTargetPreset,

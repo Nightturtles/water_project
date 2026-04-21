@@ -50,6 +50,13 @@ ALTER TABLE target_profiles
 
 -- Tags (flavor tags) — same shape, canonical 6-set.
 -- Empty array is allowed (legacy rows + recipes without curated tags).
+--
+-- Added as NOT VALID so the constraint guards all *new* writes immediately,
+-- but doesn't scan existing rows yet — the backfill UPDATEs below normalize
+-- legacy pre-v2 tags (e.g. ["eaf", "direct-dosing"] from migration 002) onto
+-- the canonical 6-set. The matching `VALIDATE CONSTRAINT` statement at the
+-- bottom of this migration performs the existing-row scan only after the
+-- backfill has run, so the migration can't fail on legacy data.
 ALTER TABLE target_profiles
   DROP CONSTRAINT IF EXISTS target_profiles_tags_check;
 ALTER TABLE target_profiles
@@ -57,7 +64,7 @@ ALTER TABLE target_profiles
   CHECK (
     jsonb_typeof(tags) = 'array'
     AND tags <@ '["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"]'::jsonb
-  );
+  ) NOT VALID;
 
 -- Featured uniqueness: at most one row may have tray='featured' at a time.
 -- Application logic is responsible for re-assigning a recipe's "natural" tray
@@ -75,55 +82,59 @@ CREATE UNIQUE INDEX idx_target_profiles_featured_unique
 -- ---------------------------------------------------------------------------
 
 -- Espresso Aficionados / community classics ----------------------------------
+-- Every UPDATE in this backfill block is gated on `user_id IS NULL` so a
+-- user-owned row that happens to share a canonical slug can't be silently
+-- rewritten (in practice the client's generateUniqueSlug prevents that
+-- collision, but migrations must be data-safe regardless).
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Bright", "Clarity"]',
   creator_display_name = 'Espresso Aficionados'
-WHERE slug = 'eaf-holy-water';
+WHERE slug = 'eaf-holy-water' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Balanced", "Bright"]',
   creator_display_name = 'Espresso Aficionados'
-WHERE slug = 'eaf-melbourne-water';
+WHERE slug = 'eaf-melbourne-water' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Bright", "Clarity"]',
   creator_display_name = 'Christopher Hendon'
-WHERE slug = 'eaf-hendon-water';
+WHERE slug = 'eaf-hendon-water' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Balanced", "Sweet"]',
   creator_display_name = 'Barista Hustle'
-WHERE slug = 'eaf-bh-water-4';
+WHERE slug = 'eaf-bh-water-4' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["medium", "dark"]',
   tags  = '["Full Body", "Sweet"]',
   creator_display_name = 'Third Wave Water'
-WHERE slug = 'eaf-tww-espresso-inspired';
+WHERE slug = 'eaf-tww-espresso-inspired' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["all"]',
   tags  = '["Clarity"]',
   creator_display_name = 'Robert Pavlis'
-WHERE slug = 'eaf-rpavlis';
+WHERE slug = 'eaf-rpavlis' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light"]',
   tags  = '["Sweet", "Balanced"]',
   creator_display_name = 'Espresso Aficionados (Fam)'
-WHERE slug = 'eaf-fam-29th-wave';
+WHERE slug = 'eaf-fam-29th-wave' AND user_id IS NULL;
 
 -- Fam's 69th Wave: also flip filter -> espresso (the 60/90 hardness/buffer
 -- framework matches the 29th Wave's espresso target; the 002 migration's
@@ -134,14 +145,14 @@ UPDATE target_profiles SET
   roast = '["light", "medium"]',
   tags  = '["Full Body", "Balanced"]',
   creator_display_name = 'Espresso Aficionados (Fam)'
-WHERE slug = 'eaf-fam-69th-wave';
+WHERE slug = 'eaf-fam-69th-wave' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["medium"]',
   tags  = '["Balanced"]',
   creator_display_name = 'Christopher Hendon'
-WHERE slug = 'hendon-espresso';
+WHERE slug = 'hendon-espresso' AND user_id IS NULL;
 
 
 -- Roaster recipes ------------------------------------------------------------
@@ -151,21 +162,21 @@ UPDATE target_profiles SET
   roast = '["light"]',
   tags  = '["Balanced", "Clarity"]',
   creator_display_name = 'Aviary'
-WHERE slug = 'aviary-filter';
+WHERE slug = 'aviary-filter' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'roaster',
   roast = '["light"]',
   tags  = '["Sweet", "Full Body"]',
   creator_display_name = 'Aviary'
-WHERE slug = 'aviary-espresso';
+WHERE slug = 'aviary-espresso' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'roaster',
   roast = '["light"]',
   tags  = '["Bright", "Clarity", "Juicy"]',
   creator_display_name = 'Sey Coffee'
-WHERE slug = 'sey';
+WHERE slug = 'sey' AND user_id IS NULL;
 
 
 -- Robert Asami Week 1 educational series (classic per user decision) ---------
@@ -175,49 +186,60 @@ UPDATE target_profiles SET
   roast = '["light"]',
   tags  = '["Bright", "Clarity"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d1';
+WHERE slug = 'rasami-w1d1' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light"]',
   tags  = '["Sweet", "Clarity"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d2';
+WHERE slug = 'rasami-w1d2' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Balanced"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d3';
+WHERE slug = 'rasami-w1d3' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Sweet", "Full Body"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d4';
+WHERE slug = 'rasami-w1d4' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light"]',
   tags  = '["Balanced", "Bright"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d5';
+WHERE slug = 'rasami-w1d5' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light", "medium"]',
   tags  = '["Balanced", "Full Body"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d6';
+WHERE slug = 'rasami-w1d6' AND user_id IS NULL;
 
 UPDATE target_profiles SET
   tray  = 'classic',
   roast = '["light"]',
   tags  = '["Clarity", "Juicy"]',
   creator_display_name = 'Robert Asami'
-WHERE slug = 'rasami-w1d7';
+WHERE slug = 'rasami-w1d7' AND user_id IS NULL;
+
+
+-- ---------------------------------------------------------------------------
+-- Now that every canonical row has been normalized onto the 6-tag canonical
+-- set, validate the CHECK against existing rows. Paired with the NOT VALID
+-- flag on the ADD CONSTRAINT above. If any row still violates the constraint
+-- at this point, the migration fails here — which is the behavior we want
+-- (a row with non-canonical tags after the backfill is an unknown-state bug
+-- worth stopping on).
+-- ---------------------------------------------------------------------------
+ALTER TABLE target_profiles VALIDATE CONSTRAINT target_profiles_tags_check;
 
 
 -- ---------------------------------------------------------------------------
