@@ -14,6 +14,38 @@
   // onLibraryDataLoaded(cb) and call it to remove their registration.
   var loadedCallbacks = new Set();
 
+  // Normalize a row into the canonical client shape. Accepts both DB shape
+  // (snake_case columns from Supabase) and already-normalized client shape
+  // (camelCase from a prior deploy's sessionStorage snapshot). This matters
+  // across the tray → category rename: a tab open during the Wave B deploy
+  // still has sessionStorage entries with the old `tray` field. Running
+  // every cache-read through this normalizer ensures callers always see
+  // `category` (and other canonical camelCase keys) regardless of when
+  // the cache was written.
+  function normalizePublicRecipeRow(row) {
+    return {
+      id: row.id,
+      userId: row.user_id != null ? row.user_id : row.userId,
+      slug: row.slug,
+      label: row.label,
+      brewMethod: row.brew_method || row.brewMethod || "filter",
+      calcium: row.calcium,
+      magnesium: row.magnesium,
+      alkalinity: row.alkalinity,
+      potassium: row.potassium,
+      sodium: row.sodium,
+      sulfate: row.sulfate,
+      chloride: row.chloride,
+      bicarbonate: row.bicarbonate,
+      description: row.description || "",
+      creatorDisplayName: row.creator_display_name || row.creatorDisplayName || "",
+      tags: Array.isArray(row.tags) ? row.tags : [],
+      category: row.category || row.tray || "classic",
+      roast: Array.isArray(row.roast) ? row.roast : ["all"],
+      createdAt: row.created_at || row.createdAt,
+    };
+  }
+
   // Synchronous accessor for use by sync callers that need library data
   // without awaiting a fetch (e.g. storage.getAllTargetPresets, which is
   // called from UI render paths that can't be made async without rippling
@@ -26,7 +58,8 @@
     try {
       var cached = sessionStorage.getItem("cw_library_public_recipes");
       if (cached) {
-        publicRecipesCache = JSON.parse(cached);
+        var parsed = JSON.parse(cached);
+        publicRecipesCache = Array.isArray(parsed) ? parsed.map(normalizePublicRecipeRow) : [];
         return publicRecipesCache;
       }
     } catch (e) { /* ignore */ }
@@ -60,7 +93,10 @@
       try {
         var cached = sessionStorage.getItem("cw_library_public_recipes");
         if (cached) {
-          publicRecipesCache = JSON.parse(cached);
+          var parsedCached = JSON.parse(cached);
+          publicRecipesCache = Array.isArray(parsedCached)
+            ? parsedCached.map(normalizePublicRecipeRow)
+            : [];
           return publicRecipesCache;
         }
       } catch (e) { /* ignore */ }
@@ -81,34 +117,14 @@
       return publicRecipesCache || [];
     }
 
-    var recipes = (result.data || []).map(function (row) {
-      return {
-        id: row.id,
-        userId: row.user_id,
-        slug: row.slug,
-        label: row.label,
-        brewMethod: row.brew_method || "filter",
-        calcium: row.calcium,
-        magnesium: row.magnesium,
-        alkalinity: row.alkalinity,
-        potassium: row.potassium,
-        sodium: row.sodium,
-        sulfate: row.sulfate,
-        chloride: row.chloride,
-        bicarbonate: row.bicarbonate,
-        description: row.description || "",
-        creatorDisplayName: row.creator_display_name || "",
-        tags: Array.isArray(row.tags) ? row.tags : [],
-        // Taxonomy v2 (migration 006): category (DB column: `tray`) + roast
-        // power the recipe-browser carousels, filter chips, and the
-        // re-add-from-library UI. The recipe-browser spec and mockups call
-        // this field `category`; the DB keeps `tray` for parallelism with
-        // `roast`, so the rename happens at the client boundary.
-        category: row.tray || "classic",
-        roast: Array.isArray(row.roast) ? row.roast : ["all"],
-        createdAt: row.created_at
-      };
-    });
+    // Taxonomy v2 (migration 006): category (DB column: `tray`) + roast
+    // power the recipe-browser carousels, filter chips, and the
+    // re-add-from-library UI. The recipe-browser spec and mockups call
+    // this field `category`; the DB keeps `tray` for parallelism with
+    // `roast`, so the rename happens at the client boundary via
+    // normalizePublicRecipeRow (which also accepts pre-Wave-B cached
+    // rows with `tray` and rewrites them to `category`).
+    var recipes = (result.data || []).map(normalizePublicRecipeRow);
 
     publicRecipesCache = recipes;
     try {
