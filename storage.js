@@ -812,6 +812,14 @@ function inferTargetProfileBrewMethod(key, profile) {
  */
 function targetProfileSupportsBrewMethod(key, profile, method) {
   const brewMethod = normalizeBrewMethod(method);
+  // Recipe-browser taxonomy v2 (migration 008): brew_method='all' means the
+  // recipe works across both modes (e.g. SCA target, some roaster waters),
+  // so it shows up in whichever mode the user is in. Normalization in
+  // library-data.js passes the value through verbatim, so checking the
+  // string is sufficient.
+  if (profile && profile.brewMethod === "all") {
+    return true;
+  }
   if (profile && Array.isArray(profile.brewMethods)) {
     const allowed = new Set(
       /** @type {unknown[]} */ (profile.brewMethods)
@@ -1012,6 +1020,8 @@ if (typeof module !== "undefined" && module.exports) {
   const _umdExports = {
     getAllTargetPresets,
     getTargetProfileByKey,
+    getTargetPresetsForBrewMethod,
+    targetProfileSupportsBrewMethod,
     invalidateTargetPresetsCache,
     loadDeletedTargetPresets,
     addDeletedTargetPreset,

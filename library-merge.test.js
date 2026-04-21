@@ -51,6 +51,8 @@ const library = require("./library-data.js");
 const {
   getAllTargetPresets,
   getTargetProfileByKey,
+  getTargetPresetsForBrewMethod,
+  targetProfileSupportsBrewMethod,
   invalidateTargetPresetsCache,
   addDeletedTargetPreset,
   loadDeletedTargetPresets,
@@ -375,5 +377,98 @@ describe("isRecipeInMyProfiles: canonical vs. user-published regimes", () => {
       userId: "some-user-uuid",
     };
     expect(isRecipeInMyProfiles(recipe)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 2.7 — brew_method='all' support (migration 008)
+// ---------------------------------------------------------------------------
+
+describe("brewMethod='all' cross-method support", () => {
+  test("targetProfileSupportsBrewMethod: 'all' profile matches filter mode", () => {
+    const profile = {
+      label: "Cross-method recipe",
+      brewMethod: "all",
+      calcium: 30,
+      magnesium: 15,
+      alkalinity: 30,
+    };
+    expect(targetProfileSupportsBrewMethod("cross", profile, "filter")).toBe(true);
+  });
+
+  test("targetProfileSupportsBrewMethod: 'all' profile matches espresso mode", () => {
+    const profile = {
+      label: "Cross-method recipe",
+      brewMethod: "all",
+      calcium: 30,
+      magnesium: 15,
+      alkalinity: 30,
+    };
+    expect(targetProfileSupportsBrewMethod("cross", profile, "espresso")).toBe(true);
+  });
+
+  test("targetProfileSupportsBrewMethod: single-method profile doesn't match the other mode", () => {
+    const filterOnly = { label: "Filter only", brewMethod: "filter" };
+    expect(targetProfileSupportsBrewMethod("f", filterOnly, "filter")).toBe(true);
+    expect(targetProfileSupportsBrewMethod("f", filterOnly, "espresso")).toBe(false);
+  });
+
+  test("getTargetPresetsForBrewMethod: 'all'-tagged library rows appear in both rails", () => {
+    fakeLibraryRows = [
+      {
+        slug: "cross-method",
+        label: "Cross Method Water",
+        brewMethod: "all",
+        calcium: 30,
+        magnesium: 15,
+        alkalinity: 30,
+      },
+      {
+        slug: "filter-only",
+        label: "Filter Only",
+        brewMethod: "filter",
+        calcium: 40,
+        magnesium: 20,
+        alkalinity: 25,
+      },
+      {
+        slug: "espresso-only",
+        label: "Espresso Only",
+        brewMethod: "espresso",
+        calcium: 80,
+        magnesium: 40,
+        alkalinity: 40,
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const filterRail = getTargetPresetsForBrewMethod("filter");
+    const espressoRail = getTargetPresetsForBrewMethod("espresso");
+    // cross-method shows up in both
+    expect(filterRail["cross-method"]).toBeDefined();
+    expect(espressoRail["cross-method"]).toBeDefined();
+    // single-method rows only show in their own rail
+    expect(filterRail["filter-only"]).toBeDefined();
+    expect(filterRail["espresso-only"]).toBeUndefined();
+    expect(espressoRail["filter-only"]).toBeUndefined();
+    expect(espressoRail["espresso-only"]).toBeDefined();
+  });
+
+  test("getTargetPresetsForBrewMethod: tombstone still hides 'all'-tagged rows", () => {
+    fakeLibraryRows = [
+      {
+        slug: "cross-method",
+        label: "Cross Method Water",
+        brewMethod: "all",
+        calcium: 30,
+        magnesium: 15,
+        alkalinity: 30,
+      },
+    ];
+    addDeletedTargetPreset("cross-method");
+    invalidateTargetPresetsCache();
+    const filterRail = getTargetPresetsForBrewMethod("filter");
+    const espressoRail = getTargetPresetsForBrewMethod("espresso");
+    expect(filterRail["cross-method"]).toBeUndefined();
+    expect(espressoRail["cross-method"]).toBeUndefined();
   });
 });
