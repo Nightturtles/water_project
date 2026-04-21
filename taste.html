@@ -318,6 +318,7 @@
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="library-data.js"></script>
   <script>
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
@@ -844,6 +845,21 @@
     }
     renderTastePresets();
     updateTasteModeUI();
+
+    // When the public-recipes fetch resolves, the preset-rail cache is
+    // invalidated by library-data.js. Re-render the taste preset rail so
+    // Supabase library rows appear without requiring a page navigation.
+    // Preserve the currently-active preset if it still exists in the merged
+    // rail; otherwise renderTastePresets(null) will pick a fallback.
+    if (typeof window.onLibraryDataLoaded === "function") {
+      window.onLibraryDataLoaded(function () {
+        const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+        const activeKey = activeBtn ? activeBtn.dataset.preset : null;
+        const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
+        const preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+        renderTastePresets(preserveKey, { resetSliders: false });
+      });
+    }
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

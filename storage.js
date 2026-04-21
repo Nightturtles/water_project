@@ -266,13 +266,42 @@ function addDeletedTargetPreset(key) {
   }
 }
 
+// Remove a tombstone so a previously-deleted library/built-in row reappears in
+// the preset rail. Used by the "re-add from library" flow (Piece D): when a
+// user clicks Add on a canonical library row whose slug is tombstoned, we
+// lift the tombstone rather than creating a suffixed custom-profile copy, so
+// the built-in returns at its canonical slug.
+/** @param {string} key */
+function removeDeletedTargetPreset(key) {
+  const deleted = loadDeletedTargetPresets();
+  const idx = deleted.indexOf(key);
+  if (idx === -1) return;
+  deleted.splice(idx, 1);
+  safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
+  invalidateTargetPresetsCache();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+}
+
 // --- Label helpers (for unique name enforcement) ---
+// After Piece B pruned TARGET_PRESETS from 7 to 5 entries, BUILTIN_TARGET_LABELS
+// alone no longer covers every library-canonical label. The Supabase library
+// is the source of truth for the full library-recipe label set, so merge it in
+// here (via the sync cache from library-data.js) to keep the duplicate-name
+// guard comprehensive — a user shouldn't be able to name a custom profile
+// "Simple and Sweet" and shadow the Supabase row of the same label.
 function getExistingTargetProfileLabels() {
   const custom = loadCustomTargetProfiles();
   const labels = new Set();
   for (const key of BUILTIN_TARGET_KEYS) {
     if (BUILTIN_TARGET_LABELS[key]) {
       labels.add(BUILTIN_TARGET_LABELS[key].trim().toLowerCase());
+    }
+  }
+  if (typeof getPublicRecipesSync === "function") {
+    for (const row of getPublicRecipesSync()) {
+      if (row && row.label) {
+        labels.add(row.label.trim().toLowerCase());
+      }
     }
   }
   for (const profile of Object.values(custom)) {
@@ -302,7 +331,11 @@ function saveTargetPresetName(name) {
 }
 
 function loadTargetPresetName() {
-  return safeGetItem("cw_target_preset") || "sca";
+  // Default for new users is the featured Cafelytic Filter recipe (Piece C,
+  // 2026-04) — launched as the editorial spotlight when the taxonomy v2 rolled
+  // out. Returning users' saved preset takes precedence. On espresso brew mode,
+  // activateProfile()'s findFallbackPreset handles the mode mismatch.
+  return safeGetItem("cw_target_preset") || "cafelytic-filter";
 }
 
 // --- Brew method preference ---
@@ -657,20 +690,73 @@ function invalidateTargetPresetsCache() {
   targetPresetsCache = null;
 }
 
-/** @returns {Record<string, TargetProfile>} */
+/**
+ * Build the taste-page preset rail by merging three sources in ascending
+ * priority, with tombstoned slugs dropped uniformly:
+ *
+ *   1. TARGET_PRESETS shim  — the 5-entry fallback in constants.js, used
+ *                              before Supabase library data arrives on a
+ *                              cold pageload.
+ *   2. Supabase library     — all is_public=true rows, fetched by
+ *                              library-data.js (sync cache via
+ *                              getPublicRecipesSync; [] before it resolves).
+ *   3. User custom profiles — user_id=auth.uid() rows from Supabase,
+ *                              mirrored in localStorage.
+ *
+ * Later sources override earlier ones at the same slug. Tombstones apply
+ * uniformly (if a slug is in cw_deleted_target_presets it is hidden
+ * regardless of source), so "remove from rail" works for library rows and
+ * custom rows alike. The "+ Add Custom" pseudo-entry is always appended.
+ *
+ * @returns {Record<string, TargetProfile>}
+ */
 function getAllTargetPresets() {
   if (targetPresetsCache) return targetPresetsCache;
   const custom = loadCustomTargetProfiles();
+  const tombstoned = new Set(loadDeletedTargetPresets());
+  const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
+
   /** @type {Record<string, TargetProfile>} */
   const result = {};
+
+  // 1. Shim — lowest priority. Kept so the rail has *something* on cold loads
+  //    before Supabase responds.
   for (const [key, value] of Object.entries(TARGET_PRESETS)) {
-    result[key] = custom[key] || value;
+    if (tombstoned.has(key)) continue;
+    result[key] = value;
   }
+
+  // 2. Supabase library — overrides shim at the same slug with canonical DB
+  //    values. Library rows only carry a slug + ion data + label/description,
+  //    so we normalize into the TargetProfile shape getTargetProfileByKey
+  //    expects.
+  for (const row of library) {
+    if (!row || !row.slug) continue;
+    if (tombstoned.has(row.slug)) continue;
+    result[row.slug] = {
+      label: row.label,
+      brewMethod: row.brewMethod,
+      calcium: row.calcium,
+      magnesium: row.magnesium,
+      alkalinity: row.alkalinity,
+      potassium: row.potassium,
+      sodium: row.sodium,
+      sulfate: row.sulfate,
+      chloride: row.chloride,
+      bicarbonate: row.bicarbonate,
+      description: row.description || "",
+      creatorDisplayName: row.creatorDisplayName || "",
+    };
+  }
+
+  // 3. User custom — highest priority. Wins over library and shim at any slug
+  //    (so a user who copied a library recipe and edited it sees their edits,
+  //    not the library row's values).
   for (const [ck, cv] of Object.entries(custom)) {
-    if (!TARGET_PRESETS[ck]) {
-      result[ck] = cv;
-    }
+    if (tombstoned.has(ck)) continue;
+    result[ck] = cv;
   }
+
   result["custom"] = { label: "+ Add Custom" };
   targetPresetsCache = result;
   return targetPresetsCache;
@@ -682,8 +768,12 @@ function getAllTargetPresets() {
  */
 function getTargetProfileByKey(key) {
   if (key === "custom") return null;
-  const custom = loadCustomTargetProfiles();
-  return custom[key] || TARGET_PRESETS[key] || null;
+  // Route through the merged rail so library-only slugs (sey, aviary-*, rasami-*,
+  // and all library-seeded built-ins) and library-overridden shim slugs resolve
+  // to the same object the rail renders. Using loadCustomTargetProfiles + the
+  // 5-entry shim directly would miss every library row and return null.
+  const merged = getAllTargetPresets();
+  return merged[key] || null;
 }
 
 /**
@@ -873,29 +963,58 @@ function saveCalculatorWelcomeDismissed() {
 }
 
 // --- Multi-tab cache invalidation (Inefficiency 4) ---
-window.addEventListener("storage", function (e) {
-  if (!e.key) return;
-  if (e.key === "cw_custom_profiles") {
-    customProfilesCache = null;
-    invalidateSourcePresetsCache();
-  }
-  if (e.key === "cw_custom_target_profiles") {
-    customTargetProfilesCache = null;
-    invalidateTargetPresetsCache();
-  }
-  if (e.key === "cw_selected_minerals") {
-    selectedMineralsCache = null;
-  }
-  if (e.key === "cw_selected_concentrates") {
-    selectedConcentratesCache = null;
-  }
-  if (e.key === "cw_diy_concentrate_specs") {
-    diyConcentrateSpecsCache = null;
-  }
-  if (e.key === "cw_deleted_presets") {
-    invalidateSourcePresetsCache();
-  }
-  if (e.key === "cw_deleted_target_presets") {
-    invalidateTargetPresetsCache();
-  }
-});
+// Guarded for Node / Vitest contexts (unit tests may stub window as a bare
+// object on globalThis, so check for the actual method before calling).
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", function (e) {
+    if (!e.key) return;
+    if (e.key === "cw_custom_profiles") {
+      customProfilesCache = null;
+      invalidateSourcePresetsCache();
+    }
+    if (e.key === "cw_custom_target_profiles") {
+      customTargetProfilesCache = null;
+      invalidateTargetPresetsCache();
+    }
+    if (e.key === "cw_selected_minerals") {
+      selectedMineralsCache = null;
+    }
+    if (e.key === "cw_selected_concentrates") {
+      selectedConcentratesCache = null;
+    }
+    if (e.key === "cw_diy_concentrate_specs") {
+      diyConcentrateSpecsCache = null;
+    }
+    if (e.key === "cw_deleted_presets") {
+      invalidateSourcePresetsCache();
+    }
+    if (e.key === "cw_deleted_target_presets") {
+      invalidateTargetPresetsCache();
+    }
+  });
+}
+
+// --- Node/Vitest UMD shim (harmless in browsers) ---
+// Tests require this file as a CJS module and need to call its functions; in
+// the browser we rely on classic-script globals across files. The shim uses
+// Object.assign(module.exports, …) rather than `module.exports = …` so tsc
+// doesn't classify this file as a CommonJS module — which would hide its
+// top-level function declarations from sibling @ts-checked files like sync.js
+// that reach them as script-scope globals.
+if (typeof module !== "undefined" && module.exports) {
+  const _umdExports = {
+    getAllTargetPresets,
+    getTargetProfileByKey,
+    invalidateTargetPresetsCache,
+    loadDeletedTargetPresets,
+    addDeletedTargetPreset,
+    removeDeletedTargetPreset,
+    loadCustomTargetProfiles,
+    saveCustomTargetProfiles,
+    getExistingTargetProfileLabels,
+    loadTargetPresetName,
+    slugify,
+  };
+  Object.assign(module.exports, _umdExports);
+  Object.assign(globalThis, _umdExports);
+}

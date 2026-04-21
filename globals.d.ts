@@ -108,6 +108,22 @@ declare global {
   // contexts where sync.js hasn't loaded (tests, pages that skip sync).
   var scheduleSyncToCloud: (() => void) | undefined;
 
+  // From library-data.js — feature-detected via `typeof getPublicRecipesSync === 'function'`
+  // in storage.js (getAllTargetPresets, getExistingTargetProfileLabels). Returns
+  // the cached public-recipes list, or [] before the Supabase fetch resolves.
+  // Loose row typing since library-data.js isn't @ts-checked yet; the fields
+  // storage.js reads (slug, label, ions, brewMethod, description,
+  // creatorDisplayName) are covered by TargetProfile & { slug: string }.
+  interface LibraryRecipeRow extends TargetProfile {
+    slug: string;
+    userId?: string | null;
+    tags?: string[];
+    tray?: string;
+    roast?: string[];
+    creatorDisplayName?: string;
+  }
+  var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
+
   // Supabase — loaded from CDN via <script src="https://cdn.jsdelivr.net/.../supabase.js">
   // then wrapped in supabase-client.js as window.supabaseClient.
   //
