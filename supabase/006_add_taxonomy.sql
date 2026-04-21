@@ -224,6 +224,13 @@ WHERE slug = 'rasami-w1d7';
 -- New in-house Cafelytic recipes
 -- ---------------------------------------------------------------------------
 
+-- Idempotent upsert: ON CONFLICT targets the partial unique index
+-- idx_target_profiles_system_slug (defined in 002_library_schema.sql) whose
+-- predicate is `WHERE user_id IS NULL` — so re-running this migration
+-- overwrites the existing canonical row's columns instead of failing. Apps
+-- that want to preserve local edits on these rows should copy-to-custom first
+-- (this is the pattern copyRecipeToMyProfiles implements in library-data.js).
+
 -- Cafelytic Filter — featured editorial spotlight at launch.
 -- Distinctive: only low-TDS filter in the catalog with zero sulfate.
 -- Mg-dominant + Cl-heavy + KHCO3 buffer = juicy/clean/sweet character
@@ -242,7 +249,20 @@ VALUES
    true, 'Cafelytic',
    '["Juicy", "Clarity", "Sweet"]',
    'featured',
-   '["light"]');
+   '["light"]')
+ON CONFLICT (slug) WHERE user_id IS NULL DO UPDATE SET
+  label = EXCLUDED.label,
+  brew_method = EXCLUDED.brew_method,
+  calcium = EXCLUDED.calcium, magnesium = EXCLUDED.magnesium,
+  alkalinity = EXCLUDED.alkalinity, potassium = EXCLUDED.potassium,
+  sodium = EXCLUDED.sodium, sulfate = EXCLUDED.sulfate,
+  chloride = EXCLUDED.chloride, bicarbonate = EXCLUDED.bicarbonate,
+  description = EXCLUDED.description,
+  is_public = EXCLUDED.is_public,
+  creator_display_name = EXCLUDED.creator_display_name,
+  tags = EXCLUDED.tags,
+  tray = EXCLUDED.tray,
+  roast = EXCLUDED.roast;
 
 -- Cafelytic Espresso — companion to Cafelytic Filter, same house chemistry
 -- scaled for espresso (higher Mg, low Ca, KHCO3 buffer at 32 ppm CaCO3).
@@ -259,7 +279,20 @@ VALUES
    true, 'Cafelytic',
    '["Sweet", "Juicy", "Full Body"]',
    'original',
-   '["light", "medium"]');
+   '["light", "medium"]')
+ON CONFLICT (slug) WHERE user_id IS NULL DO UPDATE SET
+  label = EXCLUDED.label,
+  brew_method = EXCLUDED.brew_method,
+  calcium = EXCLUDED.calcium, magnesium = EXCLUDED.magnesium,
+  alkalinity = EXCLUDED.alkalinity, potassium = EXCLUDED.potassium,
+  sodium = EXCLUDED.sodium, sulfate = EXCLUDED.sulfate,
+  chloride = EXCLUDED.chloride, bicarbonate = EXCLUDED.bicarbonate,
+  description = EXCLUDED.description,
+  is_public = EXCLUDED.is_public,
+  creator_display_name = EXCLUDED.creator_display_name,
+  tags = EXCLUDED.tags,
+  tray = EXCLUDED.tray,
+  roast = EXCLUDED.roast;
 
 
 -- ---------------------------------------------------------------------------

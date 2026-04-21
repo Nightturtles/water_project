@@ -959,29 +959,57 @@ function saveCalculatorWelcomeDismissed() {
 }
 
 // --- Multi-tab cache invalidation (Inefficiency 4) ---
-window.addEventListener("storage", function (e) {
-  if (!e.key) return;
-  if (e.key === "cw_custom_profiles") {
-    customProfilesCache = null;
-    invalidateSourcePresetsCache();
-  }
-  if (e.key === "cw_custom_target_profiles") {
-    customTargetProfilesCache = null;
-    invalidateTargetPresetsCache();
-  }
-  if (e.key === "cw_selected_minerals") {
-    selectedMineralsCache = null;
-  }
-  if (e.key === "cw_selected_concentrates") {
-    selectedConcentratesCache = null;
-  }
-  if (e.key === "cw_diy_concentrate_specs") {
-    diyConcentrateSpecsCache = null;
-  }
-  if (e.key === "cw_deleted_presets") {
-    invalidateSourcePresetsCache();
-  }
-  if (e.key === "cw_deleted_target_presets") {
-    invalidateTargetPresetsCache();
-  }
-});
+// Guarded for Node / Vitest contexts (unit tests may stub window as a bare
+// object on globalThis, so check for the actual method before calling).
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("storage", function (e) {
+    if (!e.key) return;
+    if (e.key === "cw_custom_profiles") {
+      customProfilesCache = null;
+      invalidateSourcePresetsCache();
+    }
+    if (e.key === "cw_custom_target_profiles") {
+      customTargetProfilesCache = null;
+      invalidateTargetPresetsCache();
+    }
+    if (e.key === "cw_selected_minerals") {
+      selectedMineralsCache = null;
+    }
+    if (e.key === "cw_selected_concentrates") {
+      selectedConcentratesCache = null;
+    }
+    if (e.key === "cw_diy_concentrate_specs") {
+      diyConcentrateSpecsCache = null;
+    }
+    if (e.key === "cw_deleted_presets") {
+      invalidateSourcePresetsCache();
+    }
+    if (e.key === "cw_deleted_target_presets") {
+      invalidateTargetPresetsCache();
+    }
+  });
+}
+
+// --- Node/Vitest UMD shim (harmless in browsers) ---
+// Tests require this file as a CJS module and need to call its functions; in
+// the browser we rely on classic-script globals across files. The shim uses
+// Object.assign(module.exports, …) rather than `module.exports = …` so tsc
+// doesn't classify this file as a CommonJS module — which would hide its
+// top-level function declarations from sibling @ts-checked files like sync.js
+// that reach them as script-scope globals.
+if (typeof module !== "undefined" && module.exports) {
+  const _umdExports = {
+    getAllTargetPresets,
+    invalidateTargetPresetsCache,
+    loadDeletedTargetPresets,
+    addDeletedTargetPreset,
+    removeDeletedTargetPreset,
+    loadCustomTargetProfiles,
+    saveCustomTargetProfiles,
+    getExistingTargetProfileLabels,
+    loadTargetPresetName,
+    slugify,
+  };
+  Object.assign(module.exports, _umdExports);
+  Object.assign(globalThis, _umdExports);
+}

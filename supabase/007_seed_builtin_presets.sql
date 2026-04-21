@@ -98,4 +98,22 @@ VALUES
    true, 'Lotus Coffee Water',
    '["Bright", "Juicy"]',
    'classic',
-   '["light"]');
+   '["light"]')
+-- Idempotent upsert: ON CONFLICT targets the partial unique index
+-- idx_target_profiles_system_slug (from 002_library_schema.sql) whose predicate
+-- is `WHERE user_id IS NULL`. Re-running this migration overwrites the existing
+-- canonical rows' columns instead of failing. All seven VALUES rows above share
+-- this clause since ON CONFLICT applies to the whole multi-row INSERT.
+ON CONFLICT (slug) WHERE user_id IS NULL DO UPDATE SET
+  label = EXCLUDED.label,
+  brew_method = EXCLUDED.brew_method,
+  calcium = EXCLUDED.calcium, magnesium = EXCLUDED.magnesium,
+  alkalinity = EXCLUDED.alkalinity, potassium = EXCLUDED.potassium,
+  sodium = EXCLUDED.sodium, sulfate = EXCLUDED.sulfate,
+  chloride = EXCLUDED.chloride, bicarbonate = EXCLUDED.bicarbonate,
+  description = EXCLUDED.description,
+  is_public = EXCLUDED.is_public,
+  creator_display_name = EXCLUDED.creator_display_name,
+  tags = EXCLUDED.tags,
+  tray = EXCLUDED.tray,
+  roast = EXCLUDED.roast;
