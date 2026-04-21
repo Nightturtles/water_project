@@ -160,6 +160,22 @@ const SOURCE_PRESETS = {
 };
 
 // --- Target water presets (Ca/Mg/Alk targets for coffee water) ---
+//
+// As of migration 007, the full library of target recipes lives in Supabase
+// (target_profiles where user_id IS NULL). This object is now a *fallback shim*
+// used only before Supabase data loads — it keeps the taste-page preset rail
+// populated on a cold pageload and gives `getAllTargetPresets()` a baseline
+// even when the user is offline.
+//
+// The five entries below were chosen for their representativeness:
+//   * sca, rao            — canonical industry filter references
+//   * lotus-light-bright  — most popular Lotus recipe (as the Lotus poster child)
+//   * cafelytic-filter    — featured Cafelytic in-house filter (editorial spot)
+//   * cafelytic-espresso  — Cafelytic in-house espresso companion
+//
+// Slugs and ion values here MUST stay byte-identical to the corresponding
+// Supabase rows in migrations 002/006/007 so the shim and the loaded library
+// don't disagree. If you change a value here, update the migration too.
 const TARGET_PRESETS = {
   sca: {
     label: "SCA Standard",
@@ -167,6 +183,13 @@ const TARGET_PRESETS = {
     magnesium: 17,
     alkalinity: 40,
     description: "SCA recommended range for brewing water. Balanced body and clarity.",
+  },
+  rao: {
+    label: "Rao's Recipe",
+    calcium: 20.9,
+    magnesium: 8.5,
+    alkalinity: 40,
+    description: "Lotus-style Rao recipe target with balanced sweetness and structure.",
   },
   "lotus-light-bright": {
     label: "Light and Bright",
@@ -180,78 +203,56 @@ const TARGET_PRESETS = {
     bicarbonate: 29.56,
     description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
   },
-  "lotus-simple-sweet": {
-    label: "Simple and Sweet",
-    calcium: 22.832,
-    magnesium: 7.882,
-    alkalinity: 40.476,
-    potassium: 12.628,
-    sodium: 11.169,
-    sulfate: 0,
-    chloride: 63.389,
-    bicarbonate: 49.35,
-    description: "Lotus balanced profile with added sweetness and approachable acidity.",
-  },
-  "lotus-light-bright-espresso": {
-    label: "Light and Bright (espresso)",
-    calcium: 0,
-    magnesium: 3.941,
-    alkalinity: 44.449,
-    potassium: 34.726,
+  "cafelytic-filter": {
+    label: "Cafelytic Filter",
+    brewMethod: "filter",
+    calcium: 2,
+    magnesium: 11,
+    alkalinity: 11,
+    potassium: 9,
     sodium: 0,
     sulfate: 0,
-    chloride: 11.497,
-    bicarbonate: 54.194,
-    description: "Lotus espresso profile for clarity-forward shots with restrained hardness.",
+    chloride: 36,
+    bicarbonate: 13.41,
+    description:
+      "Cafelytic in-house light-roast filter recipe. Direct dosing per liter: " +
+      "0.007g CaCl\u2082\u00b72H\u2082O + 0.092g MgCl\u2082\u00b76H\u2082O + 0.023g KHCO\u2083. " +
+      "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
   },
-  "lotus-simple-sweet-espresso": {
-    label: "Simple and Sweet (espresso)",
-    calcium: 0,
-    magnesium: 3.941,
-    alkalinity: 56.73,
-    potassium: 0,
-    sodium: 26.061,
+  "cafelytic-espresso": {
+    label: "Cafelytic Espresso",
+    brewMethod: "espresso",
+    calcium: 4,
+    magnesium: 16,
+    alkalinity: 32,
+    potassium: 25,
+    sodium: 0,
     sulfate: 0,
-    chloride: 11.497,
-    bicarbonate: 69.167,
-    description: "Lotus espresso profile with higher buffer for sweeter, rounder shots.",
-  },
-  "lotus-bright-juicy": {
-    label: "Bright and Juicy",
-    calcium: 13.047,
-    magnesium: 7.882,
-    alkalinity: 16.186,
-    potassium: 6.314,
-    sodium: 3.723,
-    sulfate: 0,
-    chloride: 46.077,
-    bicarbonate: 19.734,
-    description: "Lotus profile tuned for vivid acidity, fruit-forward cups, and high clarity.",
-  },
-  rao: {
-    label: "Rao's Recipe",
-    calcium: 20.9,
-    magnesium: 8.5,
-    alkalinity: 40,
-    description: "Lotus-style Rao recipe target with balanced sweetness and structure.",
+    chloride: 54,
+    bicarbonate: 39.02,
+    description:
+      "Cafelytic in-house espresso companion to Cafelytic Filter. Direct dosing per liter: " +
+      "0.015g CaCl\u2082\u00b72H\u2082O + 0.134g MgCl\u2082\u00b76H\u2082O + 0.064g KHCO\u2083. " +
+      "Preserves the Cafelytic house character (Cl-heavy, no SO\u2084, sodium-free, " +
+      "K-buffered) at espresso concentrations.",
   },
 };
 
+// Slugs whose Ca/Mg/Alk/etc. values are not editable in-place from the taste
+// page: typing into a target input while one of these is active forks to a
+// new "custom" profile instead of overwriting the library row.
+//
+// Currently scoped to sca/rao — broadening this to every library (user_id=NULL)
+// slug is a pending UX call tracked against Piece D.
 const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 
 // --- Predefined library tags ---
-const LIBRARY_TAGS = [
-  "Full Body",
-  "Balanced",
-  "Bright",
-  "Sweet",
-  "Delicate",
-  "Juicy",
-  "Low TDS",
-  "High TDS",
-  "Round",
-  "Clarity",
-];
+// Canonical flavor-tag vocabulary for the recipe library (v2 taxonomy, 2026-04).
+// Migration 006 re-tightened every library row to this 6-tag set and added a
+// CHECK constraint on target_profiles.tags enforcing the same. Removed in the
+// 2026-04 taxonomy overhaul: "Delicate" (→ Clarity), "Round" (→ Full Body),
+// "Low TDS" / "High TDS" (not flavor descriptors).
+const LIBRARY_TAGS = ["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"];
 
 // --- Custom target profile helpers ---
 const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);

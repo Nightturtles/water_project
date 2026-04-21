@@ -896,6 +896,23 @@ if (!allTargetPresets[currentProfile]) {
 }
 activateProfile(currentProfile);
 
+// When the public-recipes fetch resolves, the preset-rail cache is invalidated
+// by library-data.js. Re-render so the Supabase library rows appear without
+// requiring a page navigation. Also re-check currentProfile — a tombstoned
+// library slug that was previously absent from the shim could leave
+// currentProfile pointing at a preset that has disappeared.
+if (typeof window.onLibraryDataLoaded === "function") {
+  window.onLibraryDataLoaded(function () {
+    renderProfileButtons();
+    const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
+    if (!merged[currentProfile]) {
+      currentProfile = findFallbackPreset(merged);
+      saveTargetPresetName(currentProfile);
+      activateProfile(currentProfile);
+    }
+  });
+}
+
 // --- Welcome modal (one-time, Calculator page only) ---
 (function initWelcomeModal() {
   const overlay = document.getElementById("welcome-modal-overlay");
