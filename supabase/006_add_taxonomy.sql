@@ -17,7 +17,7 @@
 --   * Inserts two new in-house recipes: Cafelytic Filter (featured) and
 --     Cafelytic Espresso (original).
 --
--- See recipe-catalog-decisions.csv at the repo root for per-row reasoning.
+-- See supabase/recipe-catalog-decisions.csv for per-row reasoning.
 -- =============================================================================
 
 
@@ -80,6 +80,27 @@ ALTER TABLE target_profiles
 -- Application logic is responsible for re-assigning a recipe's "natural" tray
 -- (typically the one it would otherwise live in — e.g. 'original' for
 -- in-house Cafelytic recipes) when it leaves the featured slot.
+--
+-- ┌──────────────────────────────────────────────────────────────────────────┐
+-- │ EDITORIAL FEATURED-SWAP PATTERN                                          │
+-- │                                                                          │
+-- │ This is a partial UNIQUE INDEX, which cannot be DEFERRABLE in Postgres.  │
+-- │ A naive "promote the new, demote the old" two-statement swap fails       │
+-- │ because both rows are transiently tray='featured' before the demote      │
+-- │ commits. Future migrations that rotate the featured recipe MUST          │
+-- │ demote-before-promote inside a single transaction:                       │
+-- │                                                                          │
+-- │   BEGIN;                                                                 │
+-- │   UPDATE target_profiles SET tray = 'original'                           │
+-- │     WHERE slug = 'cafelytic-filter' AND user_id IS NULL;                 │
+-- │   UPDATE target_profiles SET tray = 'featured'                           │
+-- │     WHERE slug = 'cafelytic-seasonal-blend' AND user_id IS NULL;         │
+-- │   COMMIT;                                                                │
+-- │                                                                          │
+-- │ Pick the outgoing row's "natural tray" intentionally — usually           │
+-- │ 'original' for Cafelytic recipes or 'roaster'/'classic' otherwise —      │
+-- │ per the recipe's identity when it's not in the featured slot.            │
+-- └──────────────────────────────────────────────────────────────────────────┘
 DROP INDEX IF EXISTS idx_target_profiles_featured_unique;
 CREATE UNIQUE INDEX idx_target_profiles_featured_unique
   ON target_profiles ((tray)) WHERE tray = 'featured';
