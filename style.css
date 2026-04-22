@@ -1996,370 +1996,6 @@ footer {
   cursor: not-allowed;
 }
 
-
-/* ===== Recipe Library ===== */
-
-.library-auth-gate {
-  text-align: center;
-  padding: 3rem 1.5rem;
-}
-
-.library-auth-gate-inner {
-  max-width: 400px;
-  margin: 0 auto;
-}
-
-.library-auth-gate h2 {
-  margin-bottom: 0.5rem;
-  font-size: 1.15rem;
-}
-
-.library-auth-gate p {
-  color: var(--gray-500);
-  margin-bottom: 1.25rem;
-  font-size: 0.9rem;
-}
-
-.library-auth-gate .login-submit-btn {
-  display: inline-block;
-  text-decoration: none;
-  text-align: center;
-  max-width: 200px;
-}
-
-.library-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
-}
-
-.library-search {
-  flex: 1;
-  min-width: 200px;
-}
-
-.library-search input {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--gray-300);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--gray-900);
-  font-size: 0.9rem;
-  font-family: inherit;
-  transition: border-color 0.15s ease;
-}
-
-.library-search input:focus {
-  outline: none;
-  border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.library-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-top: 0.5rem;
-}
-
-.library-tags:empty {
-  display: none;
-}
-
-.library-tag-chip {
-  display: inline-block;
-  padding: 0.25rem 0.625rem;
-  border-radius: 999px;
-  font-size: 0.78rem;
-  font-family: inherit;
-  border: 1px solid var(--gray-300);
-  background: var(--surface);
-  color: var(--gray-700);
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.library-tag-chip:hover {
-  background: var(--gray-100);
-}
-
-.library-tag-chip.active {
-  background: var(--blue-50);
-  border-color: var(--blue-500);
-  color: var(--blue-600);
-}
-
-.library-tag-chip.small {
-  font-size: 0.72rem;
-  padding: 0.15rem 0.5rem;
-  cursor: default;
-}
-
-.library-count {
-  font-size: 0.82rem;
-  color: var(--gray-500);
-  margin-bottom: 0.5rem;
-}
-
-.library-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 0.75rem;
-}
-
-.library-card {
-  background: var(--surface);
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  padding: 1rem 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  transition: border-color 0.15s ease;
-}
-
-.library-card:hover {
-  border-color: var(--gray-300);
-}
-
-.library-card-header {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.library-card-title {
-  font-size: 0.95rem;
-  font-weight: 600;
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.library-brew-badge {
-  font-size: 0.72rem;
-  font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  border-radius: 999px;
-  background: var(--blue-50);
-  color: var(--blue-600);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.library-card-creator {
-  font-size: 0.8rem;
-  color: var(--gray-500);
-}
-
-.library-card-ions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-}
-
-.library-ion-tag {
-  font-size: 0.78rem;
-  font-weight: 500;
-  padding: 0.15rem 0.5rem;
-  border-radius: 6px;
-  background: var(--gray-100);
-  color: var(--gray-700);
-}
-
-.library-card-desc {
-  font-size: 0.82rem;
-  color: var(--gray-500);
-  line-height: 1.4;
-}
-
-.library-card-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-}
-
-.library-card-actions {
-  margin-top: auto;
-  padding-top: 0.25rem;
-}
-
-.library-add-btn {
-  font-size: 0.82rem;
-  padding: 0.375rem 0.75rem;
-}
-
-.library-add-btn.added {
-  opacity: 0.6;
-  cursor: default;
-}
-
-.library-unpublish-btn {
-  font-size: 0.82rem;
-  padding: 0.375rem 0.75rem;
-  color: var(--red-600);
-}
-
-.library-empty {
-  text-align: center;
-  padding: 2rem 1rem;
-  color: var(--gray-500);
-  font-size: 0.9rem;
-}
-
-@media (max-width: 640px) {
-  .library-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .library-controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-/* ===== Library edit modal ===== */
-
-.library-edit-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-  padding: 1rem;
-}
-
-.library-edit-dialog {
-  background: var(--surface);
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  max-width: 520px;
-  width: 100%;
-  max-height: 90vh;
-  overflow-y: auto;
-}
-
-.library-edit-dialog h3 {
-  margin-bottom: 1rem;
-  font-size: 1.05rem;
-}
-
-.library-edit-dialog .input-group {
-  margin-bottom: 0.75rem;
-}
-
-.library-edit-dialog .input-group label {
-  display: block;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--gray-500);
-  margin-bottom: 0.25rem;
-}
-
-.library-edit-dialog input[type="text"],
-.library-edit-dialog input[type="number"],
-.library-edit-dialog textarea {
-  width: 100%;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--gray-300);
-  border-radius: 8px;
-  background: var(--surface);
-  color: var(--gray-900);
-  font-size: 0.9rem;
-  font-family: inherit;
-}
-
-.library-edit-dialog input:focus,
-.library-edit-dialog textarea:focus {
-  outline: none;
-  border-color: var(--blue-500);
-  box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-.library-edit-dialog textarea {
-  resize: vertical;
-}
-
-.edit-section-label {
-  display: block;
-  font-size: 0.82rem;
-  font-weight: 500;
-  color: var(--gray-500);
-  margin-bottom: 0.375rem;
-  margin-top: 0.25rem;
-}
-
-.library-edit-dialog .brew-method-toggle {
-  margin-bottom: 0.75rem;
-}
-
-.library-edit-ions {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;
-  margin-bottom: 0.75rem;
-}
-
-.library-edit-ions .input-group {
-  margin-bottom: 0;
-}
-
-.library-edit-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.375rem;
-  margin-bottom: 0.75rem;
-  min-height: 1.5rem;
-}
-
-.library-edit-tag-toggle {
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
-}
-
-.library-edit-error {
-  color: var(--red-600);
-  font-size: 0.82rem;
-  min-height: 1.25rem;
-  margin-bottom: 0.25rem;
-}
-
-.library-edit-actions {
-  display: flex;
-  gap: 0.75rem;
-  justify-content: flex-end;
-}
-
-.library-edit-cancel {
-  background: transparent;
-  color: var(--gray-500);
-}
-
-.library-edit-cancel:hover {
-  color: var(--gray-700);
-  background: var(--gray-100);
-}
-
-.library-card-actions {
-  margin-top: auto;
-  padding-top: 0.25rem;
-  display: flex;
-  gap: 0.5rem;
-}
-
-@media (max-width: 480px) {
-  .library-edit-ions {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
 /* ===== Share to Library prompt ===== */
 
 .share-prompt-dialog p:first-child {
@@ -2472,21 +2108,6 @@ footer {
    Wave D scaffold — see recipe-browser.js. Consumes existing theme tokens
    so the new page adapts to light/dark via [data-theme="dark"].
    ======================== */
-
-.rx-preview-link {
-  display: inline-block;
-  margin-top: 0.5rem;
-  font-size: 0.85rem;
-  color: var(--blue-600);
-  text-decoration: none;
-  border-bottom: 1px dashed var(--blue-600);
-  padding-bottom: 1px;
-}
-
-.rx-preview-link:hover {
-  color: var(--blue-700);
-  border-bottom-color: var(--blue-700);
-}
 
 .rx-page {
   max-width: 1152px;
@@ -2672,6 +2293,53 @@ main#rx-root {
 
 .rx-content {
   min-height: 1px;
+}
+
+/* ---- Empty state (D5): shown when filters exclude every recipe ---- */
+
+.rx-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 2.5rem auto 1rem;
+  padding: 2.25rem 1.5rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--surface);
+  text-align: center;
+}
+
+.rx-empty-title {
+  font-size: 1rem;
+  color: var(--gray-900);
+  font-weight: 600;
+}
+
+.rx-empty-subtitle {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+}
+
+.rx-empty-clear {
+  margin-top: 0.75rem;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid var(--blue-500);
+  border-radius: 10px;
+  background: var(--blue-500);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.rx-empty-clear:hover {
+  background: var(--blue-600);
+  border-color: var(--blue-600);
 }
 
 /* ---- Featured hero (D4) ---- */

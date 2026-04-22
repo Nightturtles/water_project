@@ -1,11 +1,11 @@
 // =============================================================================
-// recipe-browser.js — Wave D recipe browser (mounted by library-v2.html).
+// recipe-browser.js — Wave D recipe browser (mounted by library.html).
 //
 // D2 shipped the interactive filter bar + URL state + applyFilters predicate.
-// D3 adds the recipe card component, D4 adds the featured hero and tray
-// carousels. Filters still drive only a counter in D3/D4 — wiring filters
-// into the rendered hero/carousels is D5's work. Cut-over to library.html
-// is also D5.
+// D3 added the recipe card component, D4 added the featured hero and tray
+// carousels. D5 wires filters into the rendered hero/carousels (so filter
+// toggles actually narrow what's shown, not just the counter), adds the
+// empty-state UI, and cuts over v2 → library.html.
 //
 // `applyFilters` is the load-bearing predicate and is exposed on `window` so
 // e2e can exercise it directly via page.evaluate without rebuilding the DOM.
@@ -518,21 +518,38 @@
     return out;
   }
 
-  function renderContent(root, recipes, handlers) {
+  function createEmptyState(onClear) {
+    var wrap = el("section", "rx-empty-state");
+    wrap.appendChild(el("p", "rx-empty-title", "No recipes match these filters."));
+    wrap.appendChild(el("p", "rx-empty-subtitle", "Try relaxing one of your constraints."));
+    var cta = el("button", "rx-empty-clear", "Clear all filters");
+    cta.type = "button";
+    cta.addEventListener("click", onClear);
+    wrap.appendChild(cta);
+    return wrap;
+  }
+
+  function renderContent(root, filtered, totalLoaded, handlers) {
     while (root.firstChild) root.removeChild(root.firstChild);
 
-    if (!Array.isArray(recipes) || recipes.length === 0) {
-      // Cold load before library fetch resolves. onLibraryDataLoaded will
-      // re-render once rows arrive.
+    // Library fetch hasn't resolved yet — stay silent until data lands.
+    if (totalLoaded === 0) return;
+
+    // Data loaded, but active filters excluded everything. Replace the
+    // content region with the empty-state CTA so the user has an easy out.
+    if (!Array.isArray(filtered) || filtered.length === 0) {
+      root.appendChild(createEmptyState(handlers.onClearFilters));
       return;
     }
 
-    var byCategory = partitionByCategory(recipes);
+    var byCategory = partitionByCategory(filtered);
 
     if (byCategory.featured.length > 0) {
       // Spec: "zero or one recipe at a time" in the featured tray. If data
       // ever drifts and includes multiple, we render the first and ignore
-      // the rest rather than failing.
+      // the rest rather than failing. If filters excluded the featured row
+      // entirely, byCategory.featured is empty and we skip the hero —
+      // carousels still render for any remaining matches.
       root.appendChild(createFeaturedHero(byCategory.featured[0], handlers));
     }
 
@@ -615,11 +632,7 @@
 
     page.appendChild(filterBar);
 
-    var summary = createFilterSummary(function () {
-      state = defaultFilters();
-      searchSection.input.value = "";
-      commit();
-    });
+    var summary = createFilterSummary(onClearFilters);
     page.appendChild(summary.summary);
 
     var contentRoot = el("div", "rx-content");
@@ -635,10 +648,10 @@
       },
       onToggleSave: function (recipe) {
         toggleBookmark(recipe);
-        // Full re-render of the content region so every surface (hero + any
-        // carousel card) reflects the new saved state. Cheap at 30 cards;
-        // revisit if the catalog grows past ~200.
-        renderContent(contentRoot, allRecipes, contentHandlers);
+        // Full re-render so every surface (hero + any carousel card) reflects
+        // the new saved state. Cheap at 30 cards; revisit if catalog grows
+        // past ~200.
+        render();
       },
       onUseRecipe: function (recipe) {
         var params = new URLSearchParams();
@@ -649,6 +662,7 @@
         var qs = params.toString();
         window.location.href = "taste.html" + (qs ? "?" + qs : "");
       },
+      onClearFilters: onClearFilters,
     };
 
     // --- State wiring --------------------------------------------------
@@ -664,6 +678,12 @@
       }, SEARCH_DEBOUNCE_MS);
     }
 
+    function onClearFilters() {
+      state = defaultFilters();
+      searchSection.input.value = "";
+      commit();
+    }
+
     function commit() {
       writeFiltersToUrl(state);
       render();
@@ -677,8 +697,9 @@
 
       var isSaved =
         typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
-      var matched = applyFilters(state, allRecipes, { isSaved: isSaved }).length;
-      summary.sync(matched, allRecipes.length, hasAnyActiveFilter(state));
+      var filtered = applyFilters(state, allRecipes, { isSaved: isSaved });
+      summary.sync(filtered.length, allRecipes.length, hasAnyActiveFilter(state));
+      renderContent(contentRoot, filtered, allRecipes.length, contentHandlers);
     }
 
     // Re-render when async library fetch completes. library-data.js auto-
@@ -687,7 +708,6 @@
       window.onLibraryDataLoaded(function (recipes) {
         allRecipes = Array.isArray(recipes) ? recipes : [];
         render();
-        renderContent(contentRoot, allRecipes, contentHandlers);
       });
     }
 
@@ -699,13 +719,12 @@
     });
 
     render();
-    renderContent(contentRoot, allRecipes, contentHandlers);
   }
 
   // --- Exports -----------------------------------------------------------
 
   window.mountRecipeBrowser = mountRecipeBrowser;
-  // Exposed for e2e coverage — see smoke-library-v2.spec.ts applyFilters cases.
+  // Exposed for e2e coverage — see smoke-library.spec.ts applyFilters cases.
   window.applyFilters = applyFilters;
   window.readFiltersFromUrl = readFiltersFromUrl;
   window.writeFiltersToUrl = writeFiltersToUrl;
