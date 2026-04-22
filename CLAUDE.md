@@ -20,7 +20,7 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 | Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html` |
 | Data | `storage.js` (localStorage + sync hooks), `sync.js` (Supabase push/pull), `supabase-client.js`, `library-data.js` |
 | Calc | `metrics.js`, `constants.js` |
-| UI | `script.js`, `ui-shared.js`, `source-water-ui.js`, `library-ui.js`, `theme-init.js` |
+| UI | `script.js`, `ui-shared.js`, `source-water-ui.js`, `recipe-browser.js`, `theme-init.js` |
 | Styles | `style.css` |
 | Tooling | `.coderabbit.yaml`, `sentry-init.js`, `SENTRY_SETUP.md`, `e2e/` |
 

@@ -1,9 +1,10 @@
 import { test, expect } from "@playwright/test";
 
-// Wave D2 smoke for library-v2.html. Covers the interactive filter bar:
-// segmented controls, chip toggles, search debounce, URL round-trip, and the
-// load-bearing `applyFilters` predicate (exercised in-page via evaluate).
-// D3+ will extend this file; PR D5 renames it to smoke-library.spec.ts.
+// Smoke suite for library.html (the Wave D recipe browser). Covers the
+// interactive filter bar (segmented controls, chip toggles, search debounce,
+// URL round-trip), the hero + tray carousels, bookmark toggle, filter-driven
+// render + empty state, and the load-bearing `applyFilters` predicate
+// exercised in-page via evaluate().
 
 type Filters = {
   method: "all" | "filter" | "espresso";
@@ -32,7 +33,7 @@ declare global {
   }
 }
 
-test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
+test.describe("library.html — Wave D recipe browser", () => {
   const consoleErrors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -44,7 +45,7 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
       consoleErrors.push(err.message);
     });
 
-    await page.goto("/library-v2.html");
+    await page.goto("/library.html");
   });
 
   // Every test (including the applyFilters group below) gets the same
@@ -55,7 +56,7 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
   });
 
   test("page loads with expected heading", async ({ page }) => {
-    await expect(page.locator("h1")).toContainText("Recipe Library (v2 preview)");
+    await expect(page.locator("h1")).toContainText("Recipe Library");
   });
 
   test("scaffold shell renders all filter controls", async ({ page }) => {
@@ -111,7 +112,7 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
     await clear.click();
     await expect(clear).toBeHidden();
     // All default filters omit their params from the URL.
-    await expect(page).toHaveURL(/\/library-v2\.html$/);
+    await expect(page).toHaveURL(/\/library\.html$/);
   });
 
   test("search input debounces and writes q param to URL", async ({ page }) => {
@@ -126,7 +127,7 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
   });
 
   test("URL state restores filters on page load", async ({ page }) => {
-    await page.goto("/library-v2.html?method=espresso&roast=light&tags=Bright&mine=1&q=sey");
+    await page.goto("/library.html?method=espresso&roast=light&tags=Bright&mine=1&q=sey");
 
     await expect(page.locator('.rx-segmented-button[data-value="espresso"]')).toHaveClass(
       /is-active/,
@@ -226,6 +227,51 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
     await page.goto("/taste.html?preset=sca&method=filter");
 
     await expect(page.locator('.taste-preset-btn[data-preset="sca"]')).toHaveClass(/active/);
+  });
+
+  // Filter-drives-render + empty state (D5) ----------------------------
+
+  test("toggling Method=espresso narrows rendered cards", async ({ page }) => {
+    const allCards = page.locator(".rx-recipe-card");
+    await expect(allCards.first()).toBeVisible();
+    const totalCount = await allCards.count();
+
+    await page.locator('.rx-segmented-button[data-value="espresso"]').first().click();
+
+    // Card count should drop (most recipes are filter-only). Require strictly
+    // fewer to catch a regression where filters fail to drive the render.
+    await expect.poll(async () => allCards.count(), { timeout: 2000 }).toBeLessThan(totalCount);
+  });
+
+  test("unmatched search query shows the empty state with a clear-filters CTA", async ({
+    page,
+  }) => {
+    const input = page.locator(".rx-search-input");
+    await input.fill("zzzxyyxzzqwerty");
+
+    const emptyState = page.locator(".rx-empty-state");
+    await expect(emptyState).toBeVisible({ timeout: 2000 });
+    await expect(emptyState.locator(".rx-empty-title")).toContainText("No recipes match");
+
+    // No hero, no carousels while empty state is up.
+    await expect(page.locator(".rx-featured-hero")).toHaveCount(0);
+    await expect(page.locator(".rx-carousel-section")).toHaveCount(0);
+
+    // Clear-filters CTA inside the empty state resets state + URL.
+    await emptyState.locator(".rx-empty-clear").click();
+    await expect(emptyState).toHaveCount(0);
+    await expect(page.locator(".rx-featured-hero")).toBeVisible();
+    await expect(input).toHaveValue("");
+  });
+
+  test("filter that excludes featured row hides the hero but keeps carousels", async ({ page }) => {
+    // The Cafelytic Filter hero is method=filter + roast=light + tags=[Juicy,
+    // Clarity, Sweet] per the seed catalog. method=espresso excludes it.
+    await page.locator('.rx-segmented-button[data-value="espresso"]').first().click();
+
+    await expect(page.locator(".rx-featured-hero")).toHaveCount(0);
+    // At least one carousel should still render (espresso recipes exist).
+    await expect(page.locator(".rx-carousel-section").first()).toBeVisible();
   });
 
   // applyFilters coverage ----------------------------------------------

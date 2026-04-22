@@ -2,10 +2,10 @@
 // ESLint flat config for Cafelytic.
 //
 // Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. The six untyped root .js files (script.js,
-// ui-shared.js, source-water-ui.js, library-ui.js, library-data.js,
-// supabase-client.js, theme-init.js) are deliberately excluded — linting
-// them is a separate cleanup, not part of this initial rollout.
+// test + config files. The five untyped root .js files (script.js,
+// ui-shared.js, source-water-ui.js, library-data.js, supabase-client.js,
+// theme-init.js) are deliberately excluded — linting them is a separate
+// cleanup, not part of this initial rollout.
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -28,7 +28,6 @@ module.exports = tseslint.config(
       "script.js",
       "ui-shared.js",
       "source-water-ui.js",
-      "library-ui.js",
       "library-data.js",
       "supabase-client.js",
       "theme-init.js",
@@ -64,7 +63,7 @@ module.exports = tseslint.config(
       // script tag before the Sentry CDN loader). Not under @ts-check yet,
       // but benefits from the same style rules.
       "sentry-init.js",
-      // Wave D recipe-browser — classic script loaded by library-v2.html,
+      // Wave D recipe-browser — classic script loaded by library.html,
       // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
       // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
       "recipe-browser.js",

@@ -22,118 +22,10 @@
 <body>
   <header>
     <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Recipe Library</h1>
-    <p class="subtitle">Browse community recipes and add them to your collection.</p>
-    <p><a class="rx-preview-link" href="library-v2.html">Try the v2 preview →</a></p>
+    <p class="subtitle">Browse recipes by method, roast, and flavor. Save favorites to your collection.</p>
   </header>
 
-  <main>
-    <!-- Auth gate: shown when not logged in -->
-    <section class="card library-auth-gate" id="library-auth-gate">
-      <div class="library-auth-gate-inner">
-        <h2>Sign in to browse recipes</h2>
-        <p>The Recipe Library requires an account so you can save recipes to your collection.</p>
-        <a href="login.html" class="login-submit-btn">Sign in</a>
-      </div>
-    </section>
-
-    <!-- Library content: shown when logged in -->
-    <div id="library-content" style="display:none;">
-
-      <!-- Search + Filters -->
-      <section class="card">
-        <div class="library-controls">
-          <div class="library-search">
-            <input type="text" id="library-search-input" placeholder="Search recipes..." autocomplete="off">
-          </div>
-          <div class="brew-method-toggle" id="library-brew-filter">
-            <button type="button" class="preset-btn brew-method-btn active" data-filter="all">All</button>
-            <button type="button" class="preset-btn brew-method-btn" data-filter="filter">Filter</button>
-            <button type="button" class="preset-btn brew-method-btn" data-filter="espresso">Espresso</button>
-          </div>
-        </div>
-        <div class="library-tags" id="library-tag-filters"></div>
-      </section>
-
-      <!-- Recipe grid -->
-      <section id="library-results-section">
-        <div class="library-count" id="library-count"></div>
-        <div class="library-grid" id="library-grid"></div>
-        <div class="library-empty" id="library-empty" style="display:none;">
-          <p>No recipes match your filters.</p>
-        </div>
-      </section>
-
-    </div>
-  </main>
-
-  <!-- Edit recipe modal -->
-  <div class="library-edit-overlay" id="edit-recipe-overlay" style="display:none;">
-    <div class="library-edit-dialog">
-      <h3>Edit Recipe</h3>
-
-      <div class="input-group">
-        <label for="edit-recipe-name">Recipe Name</label>
-        <input type="text" id="edit-recipe-name" maxlength="40">
-      </div>
-
-      <div class="input-group">
-        <label for="edit-recipe-desc">Description</label>
-        <textarea id="edit-recipe-desc" rows="2" maxlength="200"></textarea>
-      </div>
-
-      <label class="edit-section-label">Brew Method</label>
-      <div class="brew-method-toggle" id="edit-brew-method-toggle">
-        <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
-        <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
-      </div>
-
-      <label class="edit-section-label">Minerals (mg/L)</label>
-      <div class="library-edit-ions">
-        <div class="input-group">
-          <label for="edit-calcium">Calcium</label>
-          <input type="number" id="edit-calcium" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-magnesium">Magnesium</label>
-          <input type="number" id="edit-magnesium" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-alkalinity">Alkalinity (as CaCO₃)</label>
-          <input type="number" id="edit-alkalinity" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-potassium">Potassium</label>
-          <input type="number" id="edit-potassium" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-sodium">Sodium</label>
-          <input type="number" id="edit-sodium" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-sulfate">Sulfate</label>
-          <input type="number" id="edit-sulfate" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-chloride">Chloride</label>
-          <input type="number" id="edit-chloride" min="0" step="1">
-        </div>
-        <div class="input-group">
-          <label for="edit-bicarbonate">Bicarbonate</label>
-          <input type="number" id="edit-bicarbonate" min="0" step="1">
-        </div>
-      </div>
-
-      <label class="edit-section-label">Tags</label>
-      <div class="library-edit-tags" id="edit-tag-chips"></div>
-
-      <div class="library-edit-error" id="edit-recipe-error" role="alert"></div>
-
-      <div class="library-edit-actions">
-        <button type="button" class="preset-btn" id="edit-recipe-save">Save</button>
-        <button type="button" class="preset-btn library-edit-cancel" id="edit-recipe-cancel">Cancel</button>
-      </div>
-    </div>
-  </div>
+  <main id="rx-root"></main>
 
   <footer>
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
@@ -147,6 +39,13 @@
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
   <script src="library-data.js"></script>
-  <script src="library-ui.js"></script>
+  <script src="recipe-browser.js"></script>
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      if (typeof window.mountRecipeBrowser === "function") {
+        window.mountRecipeBrowser(document.getElementById("rx-root"));
+      }
+    });
+  </script>
 </body>
 </html>

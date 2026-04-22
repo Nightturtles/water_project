@@ -21,7 +21,6 @@ favicon.svg
 script.js
 ui-shared.js
 source-water-ui.js
-library-ui.js
 library-data.js
 supabase-client.js
 theme-init.js
