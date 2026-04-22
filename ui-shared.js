@@ -320,7 +320,17 @@ async function showSharePrompt(profileKey) {
           .eq("user_id", user.id)
           .eq("slug", profileKey)
           .then(function (result) {
-            if (result.error) console.warn("[share] direct update failed:", result.error);
+            if (result.error) {
+              console.warn("[share] direct update failed:", result.error);
+              return;
+            }
+            // Invalidate the library cache so the freshly-published recipe
+            // shows up in library.html without a full reload. Fallthrough
+            // from the Wave D cut-over — before this, library.html only
+            // saw new publishes after an invalidate-via-pageload.
+            if (typeof window.invalidatePublicRecipesCache === "function") {
+              window.invalidatePublicRecipesCache();
+            }
           });
       });
     }

@@ -2342,6 +2342,253 @@ main#rx-root {
   border-color: var(--blue-600);
 }
 
+/* ---- Owner actions on cards (restored post-D5) ---- */
+
+.rx-card-owner-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid var(--gray-200);
+}
+
+.rx-card-owner-btn {
+  flex: 1;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.75rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.rx-card-owner-btn:hover {
+  border-color: var(--gray-500);
+  color: var(--gray-900);
+}
+
+.rx-card-owner-btn-danger:hover {
+  border-color: var(--red-600);
+  color: var(--red-600);
+}
+
+/* ---- Edit recipe modal (restored post-D5) ---- */
+
+.rx-edit-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  overflow-y: auto;
+}
+
+.rx-edit-dialog {
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 520px;
+  width: 100%;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+
+.rx-edit-title {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 0.25rem;
+}
+
+.rx-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.rx-edit-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+  font-weight: 600;
+}
+
+.rx-edit-input {
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--gray-50);
+  color: var(--gray-900);
+  font-size: 0.95rem;
+  font-family: inherit;
+  width: 100%;
+}
+
+.rx-edit-input:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.rx-edit-textarea {
+  resize: vertical;
+  min-height: 2.5rem;
+  line-height: 1.4;
+}
+
+.rx-edit-method {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.rx-edit-method-btn {
+  flex: 1;
+  padding: 0.5rem 0.9rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.rx-edit-method-btn:hover {
+  border-color: var(--gray-500);
+}
+
+.rx-edit-method-btn.is-active {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-edit-ions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem;
+}
+
+.rx-edit-ion {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.rx-edit-ion-label {
+  font-size: 0.72rem;
+  color: var(--gray-500);
+}
+
+.rx-edit-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rx-edit-tag-chip {
+  padding: 0.3rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
+}
+
+.rx-edit-tag-chip:hover {
+  border-color: var(--gray-500);
+}
+
+.rx-edit-tag-chip.is-active {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-edit-error {
+  font-size: 0.85rem;
+  color: var(--red-600);
+  min-height: 1.2em;
+}
+
+.rx-edit-error:empty {
+  display: none;
+}
+
+.rx-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.rx-edit-save,
+.rx-edit-cancel {
+  padding: 0.55rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background-color 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.rx-edit-save {
+  border: 1px solid var(--blue-500);
+  background: var(--blue-500);
+  color: #fff;
+}
+
+.rx-edit-save:hover {
+  background: var(--blue-600);
+  border-color: var(--blue-600);
+}
+
+.rx-edit-save:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.rx-edit-cancel {
+  border: 1px solid var(--gray-300);
+  background: var(--surface);
+  color: var(--gray-900);
+}
+
+.rx-edit-cancel:hover {
+  border-color: var(--gray-500);
+}
+
 /* ---- Featured hero (D4) ---- */
 
 .rx-featured-hero {

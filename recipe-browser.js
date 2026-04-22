@@ -407,6 +407,29 @@
     footer.appendChild(el("span", "rx-card-meta", formatMethodRoast(recipe)));
     card.appendChild(footer);
 
+    // Owner-only action row: edit + unpublish. Handlers.isOwner is false
+    // until currentUserId resolves; cards re-render once it does.
+    if (handlers.isOwner && handlers.isOwner(recipe)) {
+      var ownerActions = el("div", "rx-card-owner-actions");
+      var editBtn = el("button", "rx-card-owner-btn", "Edit");
+      editBtn.type = "button";
+      editBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handlers.onEditRecipe(recipe);
+      });
+      var unpublishBtn = el("button", "rx-card-owner-btn rx-card-owner-btn-danger", "Unpublish");
+      unpublishBtn.type = "button";
+      unpublishBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handlers.onUnpublishRecipe(recipe);
+      });
+      ownerActions.appendChild(editBtn);
+      ownerActions.appendChild(unpublishBtn);
+      card.appendChild(ownerActions);
+    }
+
     return card;
   }
 
@@ -493,11 +516,17 @@
     section.appendChild(heading);
 
     recipes.forEach(function (recipe) {
+      // Forward the full handlers set — createRecipeCard needs isOwner +
+      // onEditRecipe + onUnpublishRecipe to render owner affordances. Earlier
+      // versions of this site lose-lose'd owner buttons by passing a narrow
+      // {saved, onToggleSave} here.
       scrollEl.appendChild(
-        createRecipeCard(recipe, {
-          saved: handlers.isSaved(recipe),
-          onToggleSave: handlers.onToggleSave,
-        }),
+        createRecipeCard(
+          recipe,
+          Object.assign({}, handlers, {
+            saved: handlers.isSaved(recipe),
+          }),
+        ),
       );
     });
     section.appendChild(scrollEl);
@@ -585,6 +614,11 @@
     // content region.
     var catalogLoaded = allRecipes.length > 0;
 
+    // currentUserId drives owner-only affordances (Edit / Unpublish).
+    // null until getUser() resolves; re-rendered when it does. Stays null
+    // for anonymous visitors so they see no owner buttons.
+    var currentUserId = null;
+
     var page = el("div", "rx-page");
 
     var searchSection = createSearchSection(function () {
@@ -655,6 +689,12 @@
       isSaved: function (recipe) {
         return typeof isRecipeInMyProfiles === "function" && isRecipeInMyProfiles(recipe);
       },
+      // Owner check — card passes recipe, we match against the fetched
+      // user. userId === null on canonical library rows (SCA, Cafelytic,
+      // etc.) so they're never rendered as owned.
+      isOwner: function (recipe) {
+        return !!(currentUserId && recipe && recipe.userId === currentUserId);
+      },
       onToggleSave: function (recipe) {
         toggleBookmark(recipe);
         // Full re-render so every surface (hero + any carousel card) reflects
@@ -671,8 +711,54 @@
         var qs = params.toString();
         window.location.href = "taste.html" + (qs ? "?" + qs : "");
       },
+      onEditRecipe: function (recipe) {
+        if (typeof window.openEditRecipeModal !== "function") return;
+        window.openEditRecipeModal(recipe, {
+          onSaved: function () {
+            refetchAndRender();
+          },
+        });
+      },
+      onUnpublishRecipe: function (recipe) {
+        if (typeof window.confirmUnpublish !== "function") return;
+        window.confirmUnpublish(recipe, {
+          onUnpublished: function () {
+            refetchAndRender();
+          },
+        });
+      },
       onClearFilters: onClearFilters,
     };
+
+    // Shared helper: re-fetch library rows after an owner-initiated mutation
+    // so edits/unpublishes surface without a full page reload. Falls back
+    // to the existing sync cache if the network fetch fails — never leaves
+    // the content region stuck without a re-render.
+    function refetchAndRender() {
+      if (typeof window.fetchPublicRecipes !== "function") {
+        render();
+        return;
+      }
+      window
+        .fetchPublicRecipes(true)
+        .then(function (recipes) {
+          allRecipes = Array.isArray(recipes) ? recipes : [];
+          catalogLoaded = true;
+          render();
+        })
+        .catch(function (err) {
+          console.warn("[recipe-browser] refetch failed; falling back to cache:", err);
+          if (typeof window.getPublicRecipesSync === "function") {
+            var fallback = window.getPublicRecipesSync();
+            if (Array.isArray(fallback)) allRecipes = fallback;
+          }
+          // Optimistic: mutation already landed in Supabase; the cache may
+          // be stale for a moment but the next library.html load will see
+          // the write.
+          catalogLoaded = true;
+          render();
+        });
+    }
 
     // --- State wiring --------------------------------------------------
 
@@ -727,6 +813,22 @@
       searchSection.input.value = state.q;
       render();
     });
+
+    // Resolve current user so owner-only card affordances can appear. Async
+    // — cards re-render once the user id is known. Anonymous visitors
+    // never get owner buttons (currentUserId stays null).
+    if (typeof getUser === "function") {
+      getUser()
+        .then(function (res) {
+          var user = res && res.data && res.data.user;
+          if (!user) return;
+          currentUserId = user.id;
+          render();
+        })
+        .catch(function () {
+          // Silent failure — owner affordances simply don't appear.
+        });
+    }
 
     render();
   }
