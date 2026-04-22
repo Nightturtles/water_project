@@ -223,7 +223,8 @@ test.describe("library.html — Wave D recipe browser", () => {
   test("taste.html ?preset=<slug> activates the matching preset", async ({ page }) => {
     // Smoke: navigate straight to taste.html with a known library slug and
     // confirm the matching preset button is marked active on load.
-    // 'sca' is the SCA Target, a canonical library row available on filter.
+    // 'sca' is the SCA Target — a canonical library row with brew_method='all'
+    // (migration 009), so passing method=filter surfaces it in the filter rail.
     await page.goto("/taste.html?preset=sca&method=filter");
 
     await expect(page.locator('.taste-preset-btn[data-preset="sca"]')).toHaveClass(/active/);
