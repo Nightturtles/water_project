@@ -64,6 +64,10 @@ module.exports = tseslint.config(
       // script tag before the Sentry CDN loader). Not under @ts-check yet,
       // but benefits from the same style rules.
       "sentry-init.js",
+      // Wave D recipe-browser — classic script loaded by library-v2.html,
+      // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
+      // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
+      "recipe-browser.js",
     ],
     languageOptions: {
       sourceType: "script",
