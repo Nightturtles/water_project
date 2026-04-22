@@ -355,6 +355,34 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(page.locator(".rx-edit-overlay")).toBeVisible();
     await expect(page.locator(".rx-edit-input").first()).toHaveValue("Fake Owned Recipe");
 
+    // Brew method row is multi-select. Fixture recipe has brewMethod='filter'
+    // (single string) so the Filter checkbox should be active and Espresso
+    // inactive.
+    const methodBtns = page.locator(".rx-edit-method .rx-edit-check-btn");
+    await expect(methodBtns).toHaveCount(2);
+    await expect(methodBtns.filter({ hasText: "Filter" })).toHaveClass(/is-active/);
+    await expect(methodBtns.filter({ hasText: "Espresso" })).not.toHaveClass(/is-active/);
+
+    // Roast row is multi-select. Fixture roast=['light'] → only Light active.
+    const roastBtns = page.locator(".rx-edit-roast .rx-edit-check-btn");
+    await expect(roastBtns).toHaveCount(3);
+    await expect(roastBtns.filter({ hasText: "Light" })).toHaveClass(/is-active/);
+    await expect(roastBtns.filter({ hasText: "Medium" })).not.toHaveClass(/is-active/);
+    await expect(roastBtns.filter({ hasText: "Dark" })).not.toHaveClass(/is-active/);
+
+    // Toggling Espresso on flips its active state (visual confirmation of
+    // the multi-select wiring). Supabase write isn't exercised here — we
+    // don't have a signed-in session, just a stubbed user id.
+    await methodBtns.filter({ hasText: "Espresso" }).click();
+    await expect(methodBtns.filter({ hasText: "Espresso" })).toHaveClass(/is-active/);
+    await expect(methodBtns.filter({ hasText: "Filter" })).toHaveClass(/is-active/);
+
+    // Un-checking everything on the brew method row surfaces the validator.
+    await methodBtns.filter({ hasText: "Filter" }).click();
+    await methodBtns.filter({ hasText: "Espresso" }).click();
+    await page.locator(".rx-edit-save").click();
+    await expect(page.locator(".rx-edit-error")).toContainText("Select at least one brew method");
+
     await ctx.close();
   });
 
