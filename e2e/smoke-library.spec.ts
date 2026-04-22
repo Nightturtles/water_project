@@ -274,6 +274,22 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(page.locator(".rx-carousel-section").first()).toBeVisible();
   });
 
+  test("owner Edit/Unpublish buttons not rendered for anonymous visitors", async ({ page }) => {
+    // Signed-out run — no card should have owner affordances. But the
+    // my-recipes-ui module IS loaded, ready to activate once a session
+    // resolves via the deferred currentUserId fetch.
+    await expect(page.locator(".rx-recipe-card").first()).toBeVisible();
+    await expect(page.locator(".rx-card-owner-actions")).toHaveCount(0);
+    await expect(page.locator(".rx-card-owner-btn")).toHaveCount(0);
+
+    const fns = await page.evaluate(() => ({
+      edit: typeof (window as unknown as { openEditRecipeModal?: unknown }).openEditRecipeModal,
+      unpublish: typeof (window as unknown as { confirmUnpublish?: unknown }).confirmUnpublish,
+    }));
+    expect(fns.edit).toBe("function");
+    expect(fns.unpublish).toBe("function");
+  });
+
   // applyFilters coverage ----------------------------------------------
   // The predicate is the load-bearing pure function — D5 will reuse it to
   // drive hero + carousel rendering. Exercising it here (instead of through

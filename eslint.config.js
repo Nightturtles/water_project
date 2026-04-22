@@ -67,6 +67,10 @@ module.exports = tseslint.config(
       // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
       // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
       "recipe-browser.js",
+      // my-recipes-ui: owner edit/unpublish modal. Depends on globals from
+      // storage.js (loadCustomTargetProfiles, RESERVED_TARGET_KEYS, slugify),
+      // constants.js (LIBRARY_TAGS), supabase-client.js, library-data.js.
+      "my-recipes-ui.js",
     ],
     languageOptions: {
       sourceType: "script",
