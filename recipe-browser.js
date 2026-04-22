@@ -529,14 +529,18 @@
     return wrap;
   }
 
-  function renderContent(root, filtered, totalLoaded, handlers) {
+  function renderContent(root, filtered, catalogLoaded, handlers) {
     while (root.firstChild) root.removeChild(root.firstChild);
 
     // Library fetch hasn't resolved yet — stay silent until data lands.
-    if (totalLoaded === 0) return;
+    // Using an explicit "loaded" boolean (not a zero count) so a successful
+    // fetch that returns zero rows correctly falls through to the empty
+    // state rather than masquerading as still-loading.
+    if (!catalogLoaded) return;
 
-    // Data loaded, but active filters excluded everything. Replace the
-    // content region with the empty-state CTA so the user has an easy out.
+    // Catalog loaded, but either filters excluded everything or the catalog
+    // itself is empty. Either way, surface the clear-filters CTA — it's an
+    // idempotent no-op when no filters are active.
     if (!Array.isArray(filtered) || filtered.length === 0) {
       root.appendChild(createEmptyState(handlers.onClearFilters));
       return;
@@ -575,6 +579,11 @@
     var state = readFiltersFromUrl();
     var allRecipes =
       typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
+    // A non-empty sync cache means library-data.js has already fetched or
+    // rehydrated from sessionStorage — safe to render. Otherwise we wait
+    // for onLibraryDataLoaded to flip this true before unblocking the
+    // content region.
+    var catalogLoaded = allRecipes.length > 0;
 
     var page = el("div", "rx-page");
 
@@ -699,7 +708,7 @@
         typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
       var filtered = applyFilters(state, allRecipes, { isSaved: isSaved });
       summary.sync(filtered.length, allRecipes.length, hasAnyActiveFilter(state));
-      renderContent(contentRoot, filtered, allRecipes.length, contentHandlers);
+      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers);
     }
 
     // Re-render when async library fetch completes. library-data.js auto-
@@ -707,6 +716,7 @@
     if (typeof window.onLibraryDataLoaded === "function") {
       window.onLibraryDataLoaded(function (recipes) {
         allRecipes = Array.isArray(recipes) ? recipes : [];
+        catalogLoaded = true;
         render();
       });
     }
