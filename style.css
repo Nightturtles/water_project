@@ -2559,16 +2559,25 @@ main#rx-root {
 .rx-segmented-button {
   flex: 1 1 0;
   min-width: 0;
-  padding: 0.55rem 0.9rem;
+  /* Tight padding + slightly smaller font on mobile so the 4-option Roast
+     row (All/Light/Medium/Dark) fits narrow viewports without "Medium"
+     overflowing its button. Desktop restores the comfortable sizing below. */
+  padding: 0.5rem 0.25rem;
   border: 1px solid var(--gray-300);
   border-radius: 8px;
   background: var(--surface);
   color: var(--gray-700);
-  font-size: 0.9rem;
+  font-size: 0.82rem;
   font-weight: 500;
   font-family: inherit;
   cursor: pointer;
-  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background-color 0.12s ease;
 }
 
 .rx-segmented-button:hover {
@@ -2997,6 +3006,13 @@ main#rx-root {
     flex-direction: row;
     align-items: center;
     gap: 1rem;
+  }
+
+  /* Restore comfortable button sizing when there's room (mobile tightens
+     padding + font so the 4-option Roast row fits narrow viewports). */
+  .rx-segmented-button {
+    padding: 0.55rem 0.9rem;
+    font-size: 0.9rem;
   }
 
   .rx-filter-row-divided {
