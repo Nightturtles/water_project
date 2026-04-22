@@ -212,9 +212,11 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
 
     await hero.locator(".rx-hero-use").click();
 
-    // taste.html opens and the URL contains preset=<slug>. Method param may
-    // or may not be present depending on the featured recipe's brewMethod.
-    await expect(page).toHaveURL(new RegExp(`/taste\\.html\\?.*preset=${slug}`));
+    // Predicate form avoids constructing a RegExp from a DB-derived slug.
+    // Slugs are [a-z0-9-] in practice but the predicate is simpler anyway.
+    await expect(page).toHaveURL(
+      (url) => url.pathname.endsWith("/taste.html") && url.searchParams.get("preset") === slug,
+    );
   });
 
   test("taste.html ?preset=<slug> activates the matching preset", async ({ page }) => {

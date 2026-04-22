@@ -2992,6 +2992,32 @@ main#rx-root {
 }
 
 @media (min-width: 768px) {
+  /* Filter bar (D2): labels in a fixed left column, segmented rows fill the rest. */
+  .rx-filter-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .rx-filter-row-divided {
+    align-items: flex-start;
+  }
+
+  .rx-filter-row-divided .rx-filter-row-label {
+    padding-top: 0.5rem;
+  }
+
+  .rx-filter-row-label {
+    width: 64px;
+    flex-shrink: 0;
+  }
+
+  .rx-segmented,
+  .rx-chip-group {
+    flex: 1;
+  }
+
+  /* Featured hero (D4): two-column on desktop. */
   .rx-featured-hero {
     padding: 2rem 2.25rem;
   }
@@ -3015,33 +3041,8 @@ main#rx-root {
     min-width: 180px;
   }
 
+  /* Carousels (D4): chevrons visible on desktop. */
   .rx-carousel-chevrons {
     display: flex;
-  }
-}
-
-@media (min-width: 768px) {
-  .rx-filter-row {
-    flex-direction: row;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .rx-filter-row-divided {
-    align-items: flex-start;
-  }
-
-  .rx-filter-row-divided .rx-filter-row-label {
-    padding-top: 0.5rem;
-  }
-
-  .rx-filter-row-label {
-    width: 64px;
-    flex-shrink: 0;
-  }
-
-  .rx-segmented,
-  .rx-chip-group {
-    flex: 1;
   }
 }
