@@ -93,7 +93,9 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
     await expect(page).not.toHaveURL(/tags=Bright/);
   });
 
-  test("clear filters button hidden at rest, appears after toggle, resets state", async ({ page }) => {
+  test("clear filters button hidden at rest, appears after toggle, resets state", async ({
+    page,
+  }) => {
     const clear = page.locator(".rx-clear-filters");
     await expect(clear).toBeHidden();
 
@@ -121,7 +123,9 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
   test("URL state restores filters on page load", async ({ page }) => {
     await page.goto("/library-v2.html?method=espresso&roast=light&tags=Bright&mine=1&q=sey");
 
-    await expect(page.locator('.rx-segmented-button[data-value="espresso"]')).toHaveClass(/is-active/);
+    await expect(page.locator('.rx-segmented-button[data-value="espresso"]')).toHaveClass(
+      /is-active/,
+    );
     await expect(page.locator('.rx-segmented-button[data-value="light"]')).toHaveClass(/is-active/);
     await expect(page.locator('.rx-chip[data-tag="Bright"]')).toHaveClass(/is-active/);
     await expect(page.locator(".rx-chip-my-recipes")).toHaveClass(/is-active/);
@@ -224,11 +228,9 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
         ({ recipes }) => {
           const savedLabels = new Set(["Sey", "Nightcap"]);
           return window
-            .applyFilters(
-              { mine: true },
-              recipes,
-              { isSaved: (r: Recipe) => savedLabels.has(r.label || "") },
-            )
+            .applyFilters({ mine: true }, recipes, {
+              isSaved: (r: Recipe) => savedLabels.has(r.label || ""),
+            })
             .map((r) => r.label);
         },
         { recipes },

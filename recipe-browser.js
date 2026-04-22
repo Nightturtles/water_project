@@ -54,11 +54,17 @@
     if (method === "filter" || method === "espresso" || method === "all") f.method = method;
 
     var roast = params.get("roast");
-    if (roast === "light" || roast === "medium" || roast === "dark" || roast === "all") f.roast = roast;
+    if (roast === "light" || roast === "medium" || roast === "dark" || roast === "all")
+      f.roast = roast;
 
     var tags = params.get("tags");
     if (tags) {
-      f.tags = tags.split(",").map(function (t) { return t.trim(); }).filter(Boolean);
+      f.tags = tags
+        .split(",")
+        .map(function (t) {
+          return t.trim();
+        })
+        .filter(Boolean);
     }
 
     f.mine = params.get("mine") === "1";
@@ -131,11 +137,9 @@
     // substring).
     if (filters.q) {
       var needle = String(filters.q).toLowerCase();
-      var haystack = [
-        recipe.label || "",
-        recipe.description || "",
-        recipe.creatorDisplayName || "",
-      ].join(" ").toLowerCase();
+      var haystack = [recipe.label || "", recipe.description || "", recipe.creatorDisplayName || ""]
+        .join(" ")
+        .toLowerCase();
       if (haystack.indexOf(needle) === -1) return false;
     }
 
@@ -145,7 +149,9 @@
   function applyFilters(filters, recipes, options) {
     if (!Array.isArray(recipes)) return [];
     var merged = Object.assign({}, defaultFilters(), filters || {});
-    return recipes.filter(function (r) { return recipeMatches(r, merged, options); });
+    return recipes.filter(function (r) {
+      return recipeMatches(r, merged, options);
+    });
   }
 
   // --- DOM helpers -------------------------------------------------------
@@ -166,7 +172,9 @@
       var btn = el("button", "rx-segmented-button", opt.label);
       btn.type = "button";
       btn.dataset.value = opt.value;
-      btn.addEventListener("click", function () { onChange(opt.value); });
+      btn.addEventListener("click", function () {
+        onChange(opt.value);
+      });
       group.appendChild(btn);
       buttons.push(btn);
     });
@@ -192,15 +200,16 @@
     myChip.addEventListener("click", onToggleMine);
     group.appendChild(myChip);
 
-    var tagList = (typeof LIBRARY_TAGS !== "undefined" && Array.isArray(LIBRARY_TAGS))
-      ? LIBRARY_TAGS
-      : [];
+    var tagList =
+      typeof LIBRARY_TAGS !== "undefined" && Array.isArray(LIBRARY_TAGS) ? LIBRARY_TAGS : [];
     var tagChips = [];
     tagList.forEach(function (tag) {
       var chip = el("button", "rx-chip", tag);
       chip.type = "button";
       chip.dataset.tag = tag;
-      chip.addEventListener("click", function () { onToggleTag(tag); });
+      chip.addEventListener("click", function () {
+        onToggleTag(tag);
+      });
       group.appendChild(chip);
       tagChips.push(chip);
     });
@@ -225,7 +234,9 @@
     input.placeholder = "Search recipes…";
     input.autocomplete = "off";
     input.value = getQ();
-    input.addEventListener("input", function () { onInput(input.value); });
+    input.addEventListener("input", function () {
+      onInput(input.value);
+    });
     section.appendChild(input);
 
     function sync() {
@@ -262,45 +273,60 @@
     while (root.firstChild) root.removeChild(root.firstChild);
 
     var state = readFiltersFromUrl();
-    var allRecipes = (typeof window.getPublicRecipesSync === "function")
-      ? window.getPublicRecipesSync()
-      : [];
+    var allRecipes =
+      typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
 
     var page = el("div", "rx-page");
 
-    var searchSection = createSearchSection(
-      function () { return state.q; },
-      handleSearchInput
-    );
+    var searchSection = createSearchSection(function () {
+      return state.q;
+    }, handleSearchInput);
     page.appendChild(searchSection.section);
 
     var filterBar = el("section", "rx-filter-bar");
     var methodRow = createSegmentedRow(
       "Method",
       METHOD_OPTIONS,
-      function () { return state.method; },
-      function (v) { state.method = v; commit(); }
+      function () {
+        return state.method;
+      },
+      function (v) {
+        state.method = v;
+        commit();
+      },
     );
     filterBar.appendChild(methodRow.row);
 
     var roastRow = createSegmentedRow(
       "Roast",
       ROAST_OPTIONS,
-      function () { return state.roast; },
-      function (v) { state.roast = v; commit(); }
+      function () {
+        return state.roast;
+      },
+      function (v) {
+        state.roast = v;
+        commit();
+      },
     );
     filterBar.appendChild(roastRow.row);
 
     var flavorRow = createFlavorRow(
-      function () { return state.tags; },
-      function () { return state.mine; },
+      function () {
+        return state.tags;
+      },
+      function () {
+        return state.mine;
+      },
       function (tag) {
         var idx = state.tags.indexOf(tag);
         if (idx === -1) state.tags = state.tags.concat([tag]);
         else state.tags = state.tags.slice(0, idx).concat(state.tags.slice(idx + 1));
         commit();
       },
-      function () { state.mine = !state.mine; commit(); }
+      function () {
+        state.mine = !state.mine;
+        commit();
+      },
     );
     filterBar.appendChild(flavorRow.row);
 
@@ -341,9 +367,8 @@
       flavorRow.sync();
       searchSection.sync();
 
-      var isSaved = typeof window.isRecipeInMyProfiles === "function"
-        ? window.isRecipeInMyProfiles
-        : null;
+      var isSaved =
+        typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
       var matched = applyFilters(state, allRecipes, { isSaved: isSaved }).length;
       summary.sync(matched, allRecipes.length, hasAnyActiveFilter(state));
     }
