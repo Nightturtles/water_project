@@ -20,6 +20,29 @@
     return node;
   }
 
+  // Button-styled checkbox used by the multi-select rows (brew method,
+  // roast level). The visual "checkbox" is a span inside the button so
+  // the hit target is the full button. onToggle receives the new active
+  // state after the click.
+  function createCheckButton(label, value, initialActive, onToggle) {
+    var btn = el("button", "rx-edit-check-btn");
+    btn.type = "button";
+    btn.dataset.value = value;
+    btn.setAttribute("aria-pressed", initialActive ? "true" : "false");
+    var box = el("span", "rx-edit-check-box");
+    var text = el("span", "rx-edit-check-label", label);
+    btn.appendChild(box);
+    btn.appendChild(text);
+    if (initialActive) btn.classList.add("is-active");
+    btn.addEventListener("click", function () {
+      var nowActive = !btn.classList.contains("is-active");
+      btn.classList.toggle("is-active", nowActive);
+      btn.setAttribute("aria-pressed", nowActive ? "true" : "false");
+      onToggle(nowActive);
+    });
+    return btn;
+  }
+
   var ION_FIELDS_LOCAL = [
     { field: "calcium", label: "Calcium" },
     { field: "magnesium", label: "Magnesium" },
@@ -35,6 +58,49 @@
     { value: "filter", label: "Filter" },
     { value: "espresso", label: "Espresso" },
   ];
+
+  var ROAST_LEVELS = [
+    { value: "light", label: "Light" },
+    { value: "medium", label: "Medium" },
+    { value: "dark", label: "Dark" },
+  ];
+
+  // Decode the stored brewMethod string into a pair of checkbox states.
+  // 'all' means both methods; 'filter' / 'espresso' are single-select;
+  // anything else (including undefined) defaults to filter-only so the
+  // modal opens with at least one method selected.
+  function decodeBrewMethods(brewMethod) {
+    if (brewMethod === "all") return ["filter", "espresso"];
+    if (brewMethod === "espresso") return ["espresso"];
+    return ["filter"];
+  }
+
+  // Decode the stored roast array into checkbox states. The sentinel
+  // ['all'] (seeded by migration 006 for legacy rows) expands to all
+  // three levels so the user sees them pre-checked rather than none.
+  // Canonical order + dedup so duplicate input (e.g. ['light','light'])
+  // can't desync the UI toggle state from the saved payload.
+  function decodeRoastLevels(roast) {
+    if (!Array.isArray(roast) || roast.length === 0) return ["light", "medium", "dark"];
+    if (roast.indexOf("all") !== -1) return ["light", "medium", "dark"];
+    var seen = {};
+    var out = [];
+    ["light", "medium", "dark"].forEach(function (level) {
+      if (roast.indexOf(level) !== -1 && !seen[level]) {
+        seen[level] = true;
+        out.push(level);
+      }
+    });
+    return out;
+  }
+
+  // Encode the user's method selection back to the single-string form the
+  // schema uses. Both checked → 'all'; one checked → that one. Zero
+  // checked is blocked by the save-time validator.
+  function encodeBrewMethod(selected) {
+    if (selected.length >= 2) return "all";
+    return selected[0] || "filter";
+  }
 
   // --- Edit modal -------------------------------------------------------
 
@@ -80,28 +146,56 @@
     descField.appendChild(descInput);
     dialog.appendChild(descField);
 
-    // --- Brew method ---
+    // --- Brew method (multi-select) ---
+    // Both 'filter' and 'espresso' can be checked simultaneously; two
+    // checked encodes to brew_method='all' on save. At least one must be
+    // selected (validated at save time).
+    var activeMethods = decodeBrewMethods(recipe.brewMethod).slice();
     var methodField = el("div", "rx-edit-field");
     methodField.appendChild(el("label", "rx-edit-label", "Brew method"));
     var methodGroup = el("div", "rx-edit-method");
-    var currentMethod = recipe.brewMethod === "espresso" ? "espresso" : "filter";
-    var methodButtons = [];
     BREW_METHODS.forEach(function (opt) {
-      var btn = el("button", "rx-edit-method-btn", opt.label);
-      btn.type = "button";
-      btn.dataset.value = opt.value;
-      if (opt.value === currentMethod) btn.classList.add("is-active");
-      btn.addEventListener("click", function () {
-        currentMethod = opt.value;
-        methodButtons.forEach(function (b) {
-          b.classList.toggle("is-active", b.dataset.value === currentMethod);
-        });
-      });
-      methodGroup.appendChild(btn);
-      methodButtons.push(btn);
+      methodGroup.appendChild(
+        createCheckButton(
+          opt.label,
+          opt.value,
+          activeMethods.indexOf(opt.value) !== -1,
+          function (isActive) {
+            var idx = activeMethods.indexOf(opt.value);
+            if (isActive && idx === -1) activeMethods.push(opt.value);
+            if (!isActive && idx !== -1) activeMethods.splice(idx, 1);
+          },
+        ),
+      );
     });
     methodField.appendChild(methodGroup);
     dialog.appendChild(methodField);
+
+    // --- Roast level (multi-select) ---
+    // Same checkbox pattern. Saves as a plain array (['light'], ['light',
+    // 'medium'], etc.) — the 'all' sentinel is preserved for canonical
+    // library rows via migration 006 and intentionally isn't produced
+    // from UI edits, so what-you-see-is-what-you-save.
+    var activeRoasts = decodeRoastLevels(recipe.roast).slice();
+    var roastField = el("div", "rx-edit-field");
+    roastField.appendChild(el("label", "rx-edit-label", "Roast level"));
+    var roastGroup = el("div", "rx-edit-roast");
+    ROAST_LEVELS.forEach(function (opt) {
+      roastGroup.appendChild(
+        createCheckButton(
+          opt.label,
+          opt.value,
+          activeRoasts.indexOf(opt.value) !== -1,
+          function (isActive) {
+            var idx = activeRoasts.indexOf(opt.value);
+            if (isActive && idx === -1) activeRoasts.push(opt.value);
+            if (!isActive && idx !== -1) activeRoasts.splice(idx, 1);
+          },
+        ),
+      );
+    });
+    roastField.appendChild(roastGroup);
+    dialog.appendChild(roastField);
 
     // --- Minerals grid ---
     dialog.appendChild(el("label", "rx-edit-label", "Minerals (mg/L)"));
@@ -174,7 +268,8 @@
       save(recipe, {
         name: nameInput.value,
         description: descInput.value,
-        brewMethod: currentMethod,
+        methods: activeMethods,
+        roasts: activeRoasts,
         ionInputs: ionInputs,
         tags: activeTags,
         errorEl: errorEl,
@@ -221,6 +316,19 @@
       }
     }
 
+    // Multi-select validation. Both fields must have at least one option
+    // checked — otherwise the row's filtering behavior would be ambiguous
+    // (empty method = matches nothing, empty roast = matches everything
+    // in a confusing way).
+    if (!Array.isArray(ctx.methods) || ctx.methods.length === 0) {
+      ctx.errorEl.textContent = "Select at least one brew method.";
+      return;
+    }
+    if (!Array.isArray(ctx.roasts) || ctx.roasts.length === 0) {
+      ctx.errorEl.textContent = "Select at least one roast level.";
+      return;
+    }
+
     ctx.errorEl.textContent = "";
     ctx.saveBtn.disabled = true;
     ctx.saveBtn.textContent = "Saving…";
@@ -237,7 +345,8 @@
     var updated = {
       label: name,
       description: (ctx.description || "").trim(),
-      brewMethod: ctx.brewMethod,
+      brewMethod: encodeBrewMethod(ctx.methods),
+      roast: ctx.roasts.slice(),
       calcium: nonNeg(ctx.ionInputs.calcium),
       magnesium: nonNeg(ctx.ionInputs.magnesium),
       alkalinity: nonNeg(ctx.ionInputs.alkalinity),
@@ -274,6 +383,7 @@
       slug: newSlug,
       label: updated.label,
       brew_method: updated.brewMethod,
+      roast: updated.roast,
       calcium: updated.calcium,
       magnesium: updated.magnesium,
       alkalinity: updated.alkalinity,
