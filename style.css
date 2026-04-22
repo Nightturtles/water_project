@@ -2662,11 +2662,337 @@ main#rx-root {
 }
 
 .rx-content {
-  /* Populated by D3+. Empty in D1. */
   min-height: 1px;
 }
 
+/* ---- Featured hero (D4) ---- */
+
+.rx-featured-hero {
+  margin-top: 1.5rem;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent 60%),
+    var(--surface);
+}
+
+.rx-hero-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--blue-600);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.rx-hero-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.rx-hero-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  min-width: 0;
+}
+
+.rx-hero-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  line-height: 1.2;
+}
+
+.rx-hero-source {
+  font-size: 0.85rem;
+  color: var(--gray-500);
+}
+
+.rx-hero-desc {
+  font-size: 0.95rem;
+  color: var(--gray-700);
+  line-height: 1.5;
+}
+
+.rx-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.rx-hero-ctas {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.rx-hero-use,
+.rx-hero-save {
+  padding: 0.65rem 1.1rem;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.rx-hero-use {
+  border: 1px solid var(--blue-500);
+  background: var(--blue-500);
+  color: #fff;
+}
+
+.rx-hero-use:hover {
+  background: var(--blue-600);
+  border-color: var(--blue-600);
+}
+
+.rx-hero-save {
+  border: 1px solid var(--gray-300);
+  background: var(--surface);
+  color: var(--gray-900);
+}
+
+.rx-hero-save:hover {
+  border-color: var(--gray-500);
+}
+
+.rx-hero-save.is-active {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+/* ---- Mineral triplet (shared by card + hero) ---- */
+
+.rx-mineral-triplet {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.9rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  color: var(--gray-500);
+}
+
+.rx-mineral-triplet-hero {
+  font-size: 0.95rem;
+  gap: 1.25rem;
+}
+
+.rx-mineral-item {
+  display: inline-flex;
+  gap: 0.35rem;
+  align-items: baseline;
+}
+
+.rx-mineral-label {
+  color: var(--gray-500);
+}
+
+.rx-mineral-value {
+  color: var(--gray-900);
+  font-weight: 600;
+}
+
+/* ---- Recipe card (D3) ---- */
+
+.rx-recipe-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 260px;
+  flex-shrink: 0;
+  padding: 1rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--surface);
+  scroll-snap-align: start;
+  transition: border-color 0.12s ease;
+}
+
+.rx-recipe-card:hover {
+  border-color: var(--gray-300);
+}
+
+.rx-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.rx-card-title-col {
+  min-width: 0;
+  flex: 1;
+}
+
+.rx-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rx-card-source {
+  font-size: 0.72rem;
+  color: var(--gray-500);
+  margin-top: 0.15rem;
+}
+
+.rx-card-bookmark {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--gray-500);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  font-family: inherit;
+  transition: color 0.12s ease, background-color 0.12s ease;
+}
+
+.rx-card-bookmark:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-card-bookmark.is-active {
+  color: var(--blue-600);
+}
+
+.rx-card-desc {
+  font-size: 0.8rem;
+  color: var(--gray-700);
+  line-height: 1.45;
+  /* 2-line clamp per spec. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 2.3em;
+}
+
+.rx-card-footer {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.15rem;
+}
+
+.rx-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.rx-card-tag {
+  font-size: 0.65rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  color: var(--gray-700);
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.rx-card-tag-accent {
+  border-color: rgba(59, 130, 246, 0.35);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-card-meta {
+  font-size: 0.65rem;
+  color: var(--gray-500);
+  text-transform: lowercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ---- Tray carousel (D4) ---- */
+
+.rx-carousel-section {
+  margin-top: 1.75rem;
+}
+
+.rx-carousel-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1rem;
+  margin-bottom: 0.85rem;
+}
+
+.rx-carousel-heading-text {
+  min-width: 0;
+}
+
+.rx-carousel-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.rx-carousel-subtitle {
+  font-size: 0.8rem;
+  color: var(--gray-500);
+  margin-top: 0.1rem;
+}
+
+.rx-carousel-chevrons {
+  display: none;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.rx-chevron {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  font-family: inherit;
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.rx-chevron:hover {
+  border-color: var(--gray-500);
+  color: var(--gray-900);
+}
+
+.rx-carousel {
+  display: flex;
+  gap: 0.75rem;
+  overflow-x: auto;
+  padding: 0.25rem 0.25rem 0.75rem;
+  margin: 0 -0.25rem;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.rx-carousel::-webkit-scrollbar {
+  display: none;
+}
+
 @media (min-width: 768px) {
+  /* Filter bar (D2): labels in a fixed left column, segmented rows fill the rest. */
   .rx-filter-row {
     flex-direction: row;
     align-items: center;
@@ -2689,5 +3015,34 @@ main#rx-root {
   .rx-segmented,
   .rx-chip-group {
     flex: 1;
+  }
+
+  /* Featured hero (D4): two-column on desktop. */
+  .rx-featured-hero {
+    padding: 2rem 2.25rem;
+  }
+
+  .rx-hero-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  .rx-hero-content {
+    flex: 1;
+  }
+
+  .rx-hero-title {
+    font-size: 1.85rem;
+  }
+
+  .rx-hero-ctas {
+    flex-shrink: 0;
+    min-width: 180px;
+  }
+
+  /* Carousels (D4): chevrons visible on desktop. */
+  .rx-carousel-chevrons {
+    display: flex;
   }
 }

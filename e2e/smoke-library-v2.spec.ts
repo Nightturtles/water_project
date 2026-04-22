@@ -137,6 +137,97 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
     await expect(page.locator(".rx-search-input")).toHaveValue("sey");
   });
 
+  // Content region: hero + carousels (D3/D4) ---------------------------
+
+  test("featured hero renders with title, Use button, Save button", async ({ page }) => {
+    // Hero might be painted synchronously from the session cache OR after the
+    // async library fetch resolves; let toBeVisible's retry cover both.
+    const hero = page.locator(".rx-featured-hero");
+    await expect(hero).toBeVisible();
+    await expect(hero.locator(".rx-hero-title")).not.toBeEmpty();
+    await expect(hero.locator(".rx-hero-use")).toContainText("Use this recipe");
+    await expect(hero.locator(".rx-hero-save")).toBeVisible();
+  });
+
+  test("tray carousels render from production categories", async ({ page }) => {
+    // Catalog currently has at least one recipe in each of the three trays
+    // (per supabase/recipe-catalog-decisions.csv). Hidden trays would be a
+    // content-drift signal worth investigating.
+    await expect(page.locator('.rx-carousel-section[data-tray="original"]')).toBeVisible();
+    await expect(page.locator('.rx-carousel-section[data-tray="roaster"]')).toBeVisible();
+    await expect(page.locator('.rx-carousel-section[data-tray="classic"]')).toBeVisible();
+
+    // Each visible tray has at least one card.
+    const carousels = page.locator(".rx-carousel-section .rx-carousel");
+    const count = await carousels.count();
+    for (let i = 0; i < count; i++) {
+      await expect(carousels.nth(i).locator(".rx-recipe-card").first()).toBeVisible();
+    }
+  });
+
+  test("clicking bookmark on a card toggles saved state round-trip", async ({ page }) => {
+    // Scrub any prior bookmark state from the run so the test is hermetic.
+    // Only clears localStorage (sessionStorage library cache is untouched).
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("cw_"))
+        .forEach((k) => localStorage.removeItem(k));
+    });
+    await page.reload();
+
+    const firstCard = page.locator(".rx-recipe-card").first();
+    await expect(firstCard).toBeVisible();
+    const slug = await firstCard.getAttribute("data-slug");
+    expect(slug).toBeTruthy();
+
+    // Don't assume initial saved state — canonical library rows (userId null,
+    // e.g. 'cafelytic-espresso') default to saved because they're only
+    // removed via tombstone. User-published rows default to unsaved.
+    // Either way, two clicks should round-trip the state.
+    const bookmark = () =>
+      page.locator(`.rx-recipe-card[data-slug="${slug}"]`).first().locator(".rx-card-bookmark");
+
+    const initiallyActive = (await bookmark().getAttribute("class"))?.includes("is-active");
+
+    await bookmark().click();
+    if (initiallyActive) {
+      await expect(bookmark()).not.toHaveClass(/is-active/);
+    } else {
+      await expect(bookmark()).toHaveClass(/is-active/);
+    }
+
+    await bookmark().click();
+    if (initiallyActive) {
+      await expect(bookmark()).toHaveClass(/is-active/);
+    } else {
+      await expect(bookmark()).not.toHaveClass(/is-active/);
+    }
+  });
+
+  test("hero 'Use this recipe' navigates to taste.html with preset param", async ({ page }) => {
+    const hero = page.locator(".rx-featured-hero");
+    await expect(hero).toBeVisible();
+    const slug = await hero.getAttribute("data-slug");
+    expect(slug).toBeTruthy();
+
+    await hero.locator(".rx-hero-use").click();
+
+    // Predicate form avoids constructing a RegExp from a DB-derived slug.
+    // Slugs are [a-z0-9-] in practice but the predicate is simpler anyway.
+    await expect(page).toHaveURL(
+      (url) => url.pathname.endsWith("/taste.html") && url.searchParams.get("preset") === slug,
+    );
+  });
+
+  test("taste.html ?preset=<slug> activates the matching preset", async ({ page }) => {
+    // Smoke: navigate straight to taste.html with a known library slug and
+    // confirm the matching preset button is marked active on load.
+    // 'sca' is the SCA Target, a canonical library row available on filter.
+    await page.goto("/taste.html?preset=sca&method=filter");
+
+    await expect(page.locator('.taste-preset-btn[data-preset="sca"]')).toHaveClass(/active/);
+  });
+
   // applyFilters coverage ----------------------------------------------
   // The predicate is the load-bearing pure function — D5 will reuse it to
   // drive hero + carousel rendering. Exercising it here (instead of through
