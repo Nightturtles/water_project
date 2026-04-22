@@ -2466,3 +2466,228 @@ footer {
   color: #fff;
   background: rgba(255, 255, 255, 0.15);
 }
+
+/* ========================
+   Recipe browser (rx-)
+   Wave D scaffold — see recipe-browser.js. Consumes existing theme tokens
+   so the new page adapts to light/dark via [data-theme="dark"].
+   ======================== */
+
+.rx-preview-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--blue-600);
+  text-decoration: none;
+  border-bottom: 1px dashed var(--blue-600);
+  padding-bottom: 1px;
+}
+
+.rx-preview-link:hover {
+  color: var(--blue-700);
+  border-bottom-color: var(--blue-700);
+}
+
+.rx-page {
+  max-width: 1152px;
+  margin: 0 auto;
+  padding: 0 1rem 2rem;
+}
+
+/* Override the 640px <main> cap for the v2 page so the browser can breathe
+   on desktop. Scoped to #rx-root to avoid leaking into other pages. */
+main#rx-root {
+  max-width: 1152px;
+}
+
+.rx-search {
+  margin-bottom: 0.75rem;
+}
+
+.rx-search-input {
+  width: 100%;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 10px;
+  font-size: 0.95rem;
+  background: var(--surface);
+  color: var(--gray-900);
+}
+
+.rx-search-input:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.rx-filter-bar {
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.rx-filter-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.rx-filter-row-divided {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--gray-200);
+}
+
+.rx-filter-row-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+  font-weight: 600;
+}
+
+.rx-segmented {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.rx-segmented-button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+
+.rx-segmented-button:hover {
+  border-color: var(--gray-500);
+  color: var(--gray-900);
+}
+
+.rx-segmented-button:focus-visible {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.rx-segmented-button.is-active {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.rx-chip {
+  padding: 0.35rem 0.8rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background-color 0.12s ease;
+}
+
+.rx-chip:hover {
+  border-color: var(--gray-500);
+  color: var(--gray-900);
+}
+
+.rx-chip:focus-visible {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.rx-chip.is-active {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.rx-chip-my-recipes {
+  color: var(--gray-500);
+}
+
+.rx-chip-my-recipes.is-active {
+  color: var(--blue-600);
+}
+
+.rx-filter-summary {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 0.25rem;
+  margin-bottom: 1rem;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.rx-clear-filters {
+  background: none;
+  border: none;
+  color: var(--blue-600);
+  font-size: 0.8rem;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rx-clear-filters:hover {
+  color: var(--blue-700);
+  text-decoration: underline;
+}
+
+.rx-clear-filters[hidden] {
+  display: none;
+}
+
+.rx-content {
+  /* Populated by D3+. Empty in D1. */
+  min-height: 1px;
+}
+
+@media (min-width: 768px) {
+  .rx-filter-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+  }
+
+  .rx-filter-row-divided {
+    align-items: flex-start;
+  }
+
+  .rx-filter-row-divided .rx-filter-row-label {
+    padding-top: 0.5rem;
+  }
+
+  .rx-filter-row-label {
+    width: 64px;
+    flex-shrink: 0;
+  }
+
+  .rx-segmented,
+  .rx-chip-group {
+    flex: 1;
+  }
+}
