@@ -290,6 +290,74 @@ test.describe("library.html — Wave D recipe browser", () => {
     expect(fns.unpublish).toBe("function");
   });
 
+  test("owner affordances propagate through carousel cards when a session is present", async ({
+    browser,
+  }) => {
+    // Stub getUser BEFORE any script runs so recipe-browser.js picks up a
+    // fake signed-in session on mount. Exercising the carousel → card
+    // handler-propagation path — the original D5 restore shipped a bug
+    // where createTrayCarousel narrowed handlers and owner buttons never
+    // rendered for anyone. This regression catches that class of mistake.
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    await page.addInitScript(() => {
+      // Freeze the stub so supabase-client.js's later `window.getUser = ...`
+      // assignment silently no-ops (non-strict) instead of clobbering the
+      // fixture. Without this, the real impl wins and the stub never fires.
+      Object.defineProperty(window, "getUser", {
+        value: () => Promise.resolve({ data: { user: { id: "stub-user-for-e2e" } } }),
+        writable: false,
+        configurable: false,
+      });
+    });
+
+    // We also need at least one recipe in the cached library whose userId
+    // matches our stub. Seed sessionStorage with a fake owned recipe before
+    // navigation so the browser picks it up synchronously on load.
+    await page.addInitScript(() => {
+      const fake = [
+        {
+          id: "fake-owned-id",
+          user_id: "stub-user-for-e2e",
+          slug: "fake-owned",
+          label: "Fake Owned Recipe",
+          brew_method: "filter",
+          calcium: 20,
+          magnesium: 10,
+          alkalinity: 30,
+          potassium: 5,
+          sodium: 8,
+          sulfate: 12,
+          chloride: 14,
+          bicarbonate: 20,
+          description: "Seeded for the owner-path e2e.",
+          creator_display_name: "Stub User",
+          tags: ["Bright"],
+          category: "classic",
+          roast: ["light"],
+          created_at: new Date().toISOString(),
+        },
+      ];
+      sessionStorage.setItem("cw_library_public_recipes", JSON.stringify(fake));
+    });
+
+    await page.goto("/library.html");
+
+    const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+    await expect(ownedCard).toBeVisible();
+    await expect(ownedCard.locator(".rx-card-owner-actions")).toBeVisible();
+    await expect(ownedCard.locator(".rx-card-owner-btn")).toHaveCount(2);
+    await expect(ownedCard.locator(".rx-card-owner-btn").nth(0)).toContainText("Edit");
+    await expect(ownedCard.locator(".rx-card-owner-btn").nth(1)).toContainText("Unpublish");
+
+    // Clicking Edit opens the modal (wired through handlers.onEditRecipe).
+    await ownedCard.locator(".rx-card-owner-btn").nth(0).click();
+    await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+    await expect(page.locator(".rx-edit-input").first()).toHaveValue("Fake Owned Recipe");
+
+    await ctx.close();
+  });
+
   // applyFilters coverage ----------------------------------------------
   // The predicate is the load-bearing pure function — D5 will reuse it to
   // drive hero + carousel rendering. Exercising it here (instead of through

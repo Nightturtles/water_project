@@ -225,28 +225,42 @@
     ctx.saveBtn.disabled = true;
     ctx.saveBtn.textContent = "Saving…";
 
+    // Ion inputs are type="number" min="0" but users can still paste a
+    // negative value through the DOM. Clamp on the way out so a malformed
+    // entry never reaches Supabase.
+    function nonNeg(input) {
+      var v = parseFloat(input.value);
+      if (isNaN(v)) return 0;
+      return Math.max(0, v);
+    }
+
     var updated = {
       label: name,
       description: (ctx.description || "").trim(),
       brewMethod: ctx.brewMethod,
-      calcium: parseFloat(ctx.ionInputs.calcium.value) || 0,
-      magnesium: parseFloat(ctx.ionInputs.magnesium.value) || 0,
-      alkalinity: parseFloat(ctx.ionInputs.alkalinity.value) || 0,
-      potassium: parseFloat(ctx.ionInputs.potassium.value) || 0,
-      sodium: parseFloat(ctx.ionInputs.sodium.value) || 0,
-      sulfate: parseFloat(ctx.ionInputs.sulfate.value) || 0,
-      chloride: parseFloat(ctx.ionInputs.chloride.value) || 0,
-      bicarbonate: parseFloat(ctx.ionInputs.bicarbonate.value) || 0,
+      calcium: nonNeg(ctx.ionInputs.calcium),
+      magnesium: nonNeg(ctx.ionInputs.magnesium),
+      alkalinity: nonNeg(ctx.ionInputs.alkalinity),
+      potassium: nonNeg(ctx.ionInputs.potassium),
+      sodium: nonNeg(ctx.ionInputs.sodium),
+      sulfate: nonNeg(ctx.ionInputs.sulfate),
+      chloride: nonNeg(ctx.ionInputs.chloride),
+      bicarbonate: nonNeg(ctx.ionInputs.bicarbonate),
       tags: ctx.tags.slice(),
       isPublic: true,
     };
 
-    // Local-storage mirror so the preset rail stays in sync without a round
-    // trip. Matches the old library-ui.js semantics.
-    if (
-      typeof loadCustomTargetProfiles === "function" &&
-      typeof saveCustomTargetProfiles === "function"
-    ) {
+    // Mirror into the preset rail's local cache. Deliberately runs AFTER
+    // the remote write lands (see applyLocalMirror below) so a Supabase
+    // failure doesn't leave localStorage claiming a save that didn't
+    // actually happen.
+    function applyLocalMirror() {
+      if (
+        typeof loadCustomTargetProfiles !== "function" ||
+        typeof saveCustomTargetProfiles !== "function"
+      ) {
+        return;
+      }
       var localProfiles = loadCustomTargetProfiles();
       var existing = localProfiles[recipe.slug] || {};
       if (newSlug !== recipe.slug) delete localProfiles[recipe.slug];
@@ -275,7 +289,9 @@
     };
 
     if (typeof window.supabaseClient === "undefined") {
-      // Offline / no client — local save already happened; treat as success.
+      // Offline / no client — localStorage is the only source of truth.
+      // Apply the mirror and treat as success.
+      applyLocalMirror();
       finish();
       return;
     }
@@ -292,7 +308,15 @@
           ctx.saveBtn.textContent = "Save";
           return;
         }
+        // Remote write landed — now sync the local mirror.
+        applyLocalMirror();
         finish();
+      })
+      .catch(function (err) {
+        console.warn("[my-recipes] edit update threw:", err);
+        ctx.errorEl.textContent = "Failed to save changes. Please try again.";
+        ctx.saveBtn.disabled = false;
+        ctx.saveBtn.textContent = "Save";
       });
 
     function finish() {
@@ -318,12 +342,17 @@
     var ok = confirmFn('Unpublish "' + (recipe.label || "") + '" from the Recipe Library?');
     if (!ok) return;
 
-    // localStorage mirror — keep the preset rail in sync.
-    if (
-      typeof loadCustomTargetProfiles === "function" &&
-      typeof saveCustomTargetProfiles === "function" &&
-      recipe.slug
-    ) {
+    // Mirror into localStorage only after the remote update lands. Earlier
+    // versions flipped local first, which desynced the preset rail from
+    // Supabase whenever the write failed.
+    function applyLocalMirror() {
+      if (
+        typeof loadCustomTargetProfiles !== "function" ||
+        typeof saveCustomTargetProfiles !== "function" ||
+        !recipe.slug
+      ) {
+        return;
+      }
       var profiles = loadCustomTargetProfiles();
       if (profiles[recipe.slug]) {
         profiles[recipe.slug].isPublic = false;
@@ -332,6 +361,7 @@
     }
 
     if (typeof window.supabaseClient === "undefined") {
+      applyLocalMirror();
       finish();
       return;
     }
@@ -345,7 +375,11 @@
           console.warn("[my-recipes] unpublish failed:", result.error);
           return;
         }
+        applyLocalMirror();
         finish();
+      })
+      .catch(function (err) {
+        console.warn("[my-recipes] unpublish threw:", err);
       });
 
     function finish() {

@@ -516,11 +516,17 @@
     section.appendChild(heading);
 
     recipes.forEach(function (recipe) {
+      // Forward the full handlers set — createRecipeCard needs isOwner +
+      // onEditRecipe + onUnpublishRecipe to render owner affordances. Earlier
+      // versions of this site lose-lose'd owner buttons by passing a narrow
+      // {saved, onToggleSave} here.
       scrollEl.appendChild(
-        createRecipeCard(recipe, {
-          saved: handlers.isSaved(recipe),
-          onToggleSave: handlers.onToggleSave,
-        }),
+        createRecipeCard(
+          recipe,
+          Object.assign({}, handlers, {
+            saved: handlers.isSaved(recipe),
+          }),
+        ),
       );
     });
     section.appendChild(scrollEl);
@@ -726,17 +732,32 @@
 
     // Shared helper: re-fetch library rows after an owner-initiated mutation
     // so edits/unpublishes surface without a full page reload. Falls back
-    // to the sync cache if the network fetch fails.
+    // to the existing sync cache if the network fetch fails — never leaves
+    // the content region stuck without a re-render.
     function refetchAndRender() {
       if (typeof window.fetchPublicRecipes !== "function") {
         render();
         return;
       }
-      window.fetchPublicRecipes(true).then(function (recipes) {
-        allRecipes = Array.isArray(recipes) ? recipes : [];
-        catalogLoaded = true;
-        render();
-      });
+      window
+        .fetchPublicRecipes(true)
+        .then(function (recipes) {
+          allRecipes = Array.isArray(recipes) ? recipes : [];
+          catalogLoaded = true;
+          render();
+        })
+        .catch(function (err) {
+          console.warn("[recipe-browser] refetch failed; falling back to cache:", err);
+          if (typeof window.getPublicRecipesSync === "function") {
+            var fallback = window.getPublicRecipesSync();
+            if (Array.isArray(fallback)) allRecipes = fallback;
+          }
+          // Optimistic: mutation already landed in Supabase; the cache may
+          // be stale for a moment but the next library.html load will see
+          // the write.
+          catalogLoaded = true;
+          render();
+        });
     }
 
     // --- State wiring --------------------------------------------------
