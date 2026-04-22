@@ -1,13 +1,11 @@
 // =============================================================================
 // recipe-browser.js — Wave D recipe browser (mounted by library-v2.html).
 //
-// D2 scope: interactive filter bar. Method / Roast segmented controls, Flavor
-// chip toggles, My Recipes toggle, debounced search. Filter state mirrors to
-// the URL (replaceState) and drives a match counter over the cached library.
-//
-// No recipe rendering yet — the counter is the only output surface. Recipe
-// card + carousel + hero land in D3/D4; filter wiring into the rendered view
-// lands in D5.
+// D2 shipped the interactive filter bar + URL state + applyFilters predicate.
+// D3 adds the recipe card component, D4 adds the featured hero and tray
+// carousels. Filters still drive only a counter in D3/D4 — wiring filters
+// into the rendered hero/carousels is D5's work. Cut-over to library.html
+// is also D5.
 //
 // `applyFilters` is the load-bearing predicate and is exposed on `window` so
 // e2e can exercise it directly via page.evaluate without rebuilding the DOM.
@@ -29,6 +27,27 @@
     { value: "light", label: "Light" },
     { value: "medium", label: "Medium" },
     { value: "dark", label: "Dark" },
+  ];
+
+  // Trays rendered as carousels under the hero (in this order). 'featured'
+  // drives the hero, not a carousel. Unknown categories fall through to
+  // 'classic' per partitionByCategory.
+  var CAROUSEL_TRAYS = [
+    {
+      key: "original",
+      title: "Cafelytic Originals",
+      subtitle: "House recipes from the Cafelytic team",
+    },
+    {
+      key: "roaster",
+      title: "Roaster Recipes",
+      subtitle: "Published water from specialty roasters",
+    },
+    {
+      key: "classic",
+      title: "Classic Formulas",
+      subtitle: "Canonical references every coffee nerd knows",
+    },
   ];
 
   function defaultFilters() {
@@ -154,6 +173,49 @@
     });
   }
 
+  // --- Bookmark round-trip ----------------------------------------------
+
+  // Toggle the "in my profiles" state for a recipe. Works for both canonical
+  // library rows (recipe.userId == null, toggled via tombstone) and user-
+  // published rows (toggled via custom-profile add/delete by label match).
+  // No-ops when storage.js helpers are unavailable. Returns the new saved
+  // state.
+  function toggleBookmark(recipe) {
+    if (!recipe) return false;
+    var wasSaved = typeof isRecipeInMyProfiles === "function" && isRecipeInMyProfiles(recipe);
+
+    if (!wasSaved) {
+      if (typeof copyRecipeToMyProfiles === "function") copyRecipeToMyProfiles(recipe);
+      return true;
+    }
+
+    // Unsave path.
+    if (recipe.userId == null && recipe.slug) {
+      // Canonical library row (userId null per the 002/006/007 migrations).
+      // Re-tombstone at the canonical slug so the re-add flow can later lift
+      // it — matches the round-trip semantics in copyRecipeToMyProfiles.
+      if (typeof addDeletedTargetPreset === "function") addDeletedTargetPreset(recipe.slug);
+    } else if (
+      typeof loadCustomTargetProfiles === "function" &&
+      typeof deleteCustomTargetProfile === "function"
+    ) {
+      // User-published row — remove the custom profile that matches by label.
+      // Same identity heuristic used by isRecipeInMyProfiles.
+      var profiles = loadCustomTargetProfiles();
+      var target = String(recipe.label || "").toLowerCase();
+      for (var key in profiles) {
+        if (
+          Object.prototype.hasOwnProperty.call(profiles, key) &&
+          String(profiles[key].label || "").toLowerCase() === target
+        ) {
+          deleteCustomTargetProfile(key);
+          break;
+        }
+      }
+    }
+    return false;
+  }
+
   // --- DOM helpers -------------------------------------------------------
 
   function el(tag, className, text) {
@@ -161,6 +223,41 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  }
+
+  function formatMethodRoast(recipe) {
+    var method = recipe.brewMethod || "filter";
+    var methodLabel = method === "all" ? "filter · espresso" : method;
+
+    var roasts = Array.isArray(recipe.roast) ? recipe.roast : [];
+    var roastLabel;
+    if (roasts.length === 0 || roasts.indexOf("all") !== -1) {
+      roastLabel = "any roast";
+    } else {
+      roastLabel = roasts.join(", ");
+    }
+    return methodLabel + " · " + roastLabel;
+  }
+
+  function createMineralTriplet(recipe, extraClass) {
+    var wrap = el("div", "rx-mineral-triplet" + (extraClass ? " " + extraClass : ""));
+    [
+      { field: "calcium", label: "Ca" },
+      { field: "magnesium", label: "Mg" },
+      { field: "alkalinity", label: "Alk" },
+    ].forEach(function (pair) {
+      var item = el("span", "rx-mineral-item");
+      item.appendChild(el("span", "rx-mineral-label", pair.label));
+      item.appendChild(
+        el(
+          "span",
+          "rx-mineral-value",
+          recipe[pair.field] != null ? String(recipe[pair.field]) : "—",
+        ),
+      );
+      wrap.appendChild(item);
+    });
+    return wrap;
   }
 
   function createSegmentedRow(labelText, options, getValue, onChange) {
@@ -240,8 +337,6 @@
     section.appendChild(input);
 
     function sync() {
-      // Only rewrite input value if it drifted from state (e.g. programmatic
-      // clear). Avoids bouncing focus/caret during live typing.
       if (input.value !== getQ()) input.value = getQ();
     }
 
@@ -263,6 +358,194 @@
     }
 
     return { summary: summary, sync: sync };
+  }
+
+  // --- Recipe card / hero / carousel (D3 + D4) --------------------------
+
+  function createRecipeCard(recipe, handlers) {
+    var card = el("article", "rx-recipe-card");
+    card.dataset.slug = recipe.slug || "";
+
+    // Header: title + source + bookmark
+    var header = el("div", "rx-card-header");
+    var titleCol = el("div", "rx-card-title-col");
+    titleCol.appendChild(el("h3", "rx-card-title", recipe.label || ""));
+    if (recipe.creatorDisplayName) {
+      titleCol.appendChild(el("p", "rx-card-source", "by " + recipe.creatorDisplayName));
+    }
+    header.appendChild(titleCol);
+
+    var bookmark = el("button", "rx-card-bookmark");
+    bookmark.type = "button";
+    bookmark.setAttribute("aria-label", handlers.saved ? "Unsave recipe" : "Save recipe");
+    bookmark.setAttribute("aria-pressed", handlers.saved ? "true" : "false");
+    bookmark.textContent = handlers.saved ? "★" : "☆";
+    if (handlers.saved) bookmark.classList.add("is-active");
+    bookmark.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handlers.onToggleSave(recipe);
+    });
+    header.appendChild(bookmark);
+    card.appendChild(header);
+
+    // Mineral triplet
+    card.appendChild(createMineralTriplet(recipe));
+
+    // Description (2-line clamp via CSS -webkit-line-clamp)
+    if (recipe.description) {
+      card.appendChild(el("p", "rx-card-desc", recipe.description));
+    }
+
+    // Footer: tag chips (left) + method/roast meta (right)
+    var footer = el("div", "rx-card-footer");
+    var tagList = el("div", "rx-card-tags");
+    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
+      tagList.appendChild(el("span", "rx-card-tag", tag));
+    });
+    footer.appendChild(tagList);
+    footer.appendChild(el("span", "rx-card-meta", formatMethodRoast(recipe)));
+    card.appendChild(footer);
+
+    return card;
+  }
+
+  function createFeaturedHero(recipe, handlers) {
+    var section = el("section", "rx-featured-hero");
+    section.dataset.slug = recipe.slug || "";
+
+    section.appendChild(el("div", "rx-hero-eyebrow", "Featured · Editor's pick"));
+
+    var row = el("div", "rx-hero-row");
+
+    var content = el("div", "rx-hero-content");
+    content.appendChild(el("h2", "rx-hero-title", recipe.label || ""));
+    if (recipe.creatorDisplayName) {
+      content.appendChild(el("p", "rx-hero-source", "by " + recipe.creatorDisplayName));
+    }
+    content.appendChild(createMineralTriplet(recipe, "rx-mineral-triplet-hero"));
+    if (recipe.description) {
+      content.appendChild(el("p", "rx-hero-desc", recipe.description));
+    }
+
+    var tagList = el("div", "rx-hero-tags");
+    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
+      tagList.appendChild(el("span", "rx-card-tag rx-card-tag-accent", tag));
+    });
+    if (tagList.firstChild) content.appendChild(tagList);
+
+    row.appendChild(content);
+
+    var ctas = el("div", "rx-hero-ctas");
+
+    var useBtn = el("button", "rx-hero-use", "Use this recipe");
+    useBtn.type = "button";
+    useBtn.addEventListener("click", function () {
+      handlers.onUseRecipe(recipe);
+    });
+    ctas.appendChild(useBtn);
+
+    var saveBtn = el("button", "rx-hero-save", handlers.saved ? "Saved" : "Save");
+    saveBtn.type = "button";
+    saveBtn.setAttribute("aria-pressed", handlers.saved ? "true" : "false");
+    if (handlers.saved) saveBtn.classList.add("is-active");
+    saveBtn.addEventListener("click", function () {
+      handlers.onToggleSave(recipe);
+    });
+    ctas.appendChild(saveBtn);
+
+    row.appendChild(ctas);
+    section.appendChild(row);
+
+    return section;
+  }
+
+  function createTrayCarousel(title, subtitle, recipes, handlers) {
+    if (!recipes || recipes.length === 0) return null;
+
+    var section = el("section", "rx-carousel-section");
+    section.dataset.tray = handlers.trayKey || "";
+
+    var heading = el("div", "rx-carousel-heading");
+    var titleCol = el("div", "rx-carousel-heading-text");
+    titleCol.appendChild(el("h2", "rx-carousel-title", title));
+    if (subtitle) titleCol.appendChild(el("p", "rx-carousel-subtitle", subtitle));
+    heading.appendChild(titleCol);
+
+    // Chevrons — visible only on desktop via CSS. Scroll the carousel
+    // container by one card-width on click.
+    var chevrons = el("div", "rx-carousel-chevrons");
+    var scrollEl = el("div", "rx-carousel");
+
+    function makeChevron(direction, label, symbol) {
+      var btn = el("button", "rx-chevron rx-chevron-" + direction, symbol);
+      btn.type = "button";
+      btn.setAttribute("aria-label", label);
+      btn.addEventListener("click", function () {
+        scrollEl.scrollBy({ left: direction === "prev" ? -320 : 320, behavior: "smooth" });
+      });
+      return btn;
+    }
+    chevrons.appendChild(makeChevron("prev", "Scroll " + title + " left", "‹"));
+    chevrons.appendChild(makeChevron("next", "Scroll " + title + " right", "›"));
+    heading.appendChild(chevrons);
+
+    section.appendChild(heading);
+
+    recipes.forEach(function (recipe) {
+      scrollEl.appendChild(
+        createRecipeCard(recipe, {
+          saved: handlers.isSaved(recipe),
+          onToggleSave: handlers.onToggleSave,
+        }),
+      );
+    });
+    section.appendChild(scrollEl);
+
+    return section;
+  }
+
+  // --- Content layout ----------------------------------------------------
+
+  function partitionByCategory(recipes) {
+    var out = { featured: [], original: [], roaster: [], classic: [] };
+    if (!Array.isArray(recipes)) return out;
+    recipes.forEach(function (r) {
+      var cat = r && r.category ? r.category : "classic";
+      if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
+      out[cat].push(r);
+    });
+    return out;
+  }
+
+  function renderContent(root, recipes, handlers) {
+    while (root.firstChild) root.removeChild(root.firstChild);
+
+    if (!Array.isArray(recipes) || recipes.length === 0) {
+      // Cold load before library fetch resolves. onLibraryDataLoaded will
+      // re-render once rows arrive.
+      return;
+    }
+
+    var byCategory = partitionByCategory(recipes);
+
+    if (byCategory.featured.length > 0) {
+      // Spec: "zero or one recipe at a time" in the featured tray. If data
+      // ever drifts and includes multiple, we render the first and ignore
+      // the rest rather than failing.
+      root.appendChild(createFeaturedHero(byCategory.featured[0], handlers));
+    }
+
+    CAROUSEL_TRAYS.forEach(function (tray) {
+      var carouselHandlers = Object.assign({}, handlers, { trayKey: tray.key });
+      var carousel = createTrayCarousel(
+        tray.title,
+        tray.subtitle,
+        byCategory[tray.key],
+        carouselHandlers,
+      );
+      if (carousel) root.appendChild(carousel);
+    });
   }
 
   // --- Mount -------------------------------------------------------------
@@ -339,9 +622,34 @@
     });
     page.appendChild(summary.summary);
 
-    page.appendChild(el("div", "rx-content"));
+    var contentRoot = el("div", "rx-content");
+    page.appendChild(contentRoot);
 
     root.appendChild(page);
+
+    // --- Content handlers ---------------------------------------------
+
+    var contentHandlers = {
+      isSaved: function (recipe) {
+        return typeof isRecipeInMyProfiles === "function" && isRecipeInMyProfiles(recipe);
+      },
+      onToggleSave: function (recipe) {
+        toggleBookmark(recipe);
+        // Full re-render of the content region so every surface (hero + any
+        // carousel card) reflects the new saved state. Cheap at 30 cards;
+        // revisit if the catalog grows past ~200.
+        renderContent(contentRoot, allRecipes, contentHandlers);
+      },
+      onUseRecipe: function (recipe) {
+        var params = new URLSearchParams();
+        if (recipe.slug) params.set("preset", recipe.slug);
+        if (recipe.brewMethod === "filter" || recipe.brewMethod === "espresso") {
+          params.set("method", recipe.brewMethod);
+        }
+        var qs = params.toString();
+        window.location.href = "taste.html" + (qs ? "?" + qs : "");
+      },
+    };
 
     // --- State wiring --------------------------------------------------
 
@@ -379,6 +687,7 @@
       window.onLibraryDataLoaded(function (recipes) {
         allRecipes = Array.isArray(recipes) ? recipes : [];
         render();
+        renderContent(contentRoot, allRecipes, contentHandlers);
       });
     }
 
@@ -390,6 +699,7 @@
     });
 
     render();
+    renderContent(contentRoot, allRecipes, contentHandlers);
   }
 
   // --- Exports -----------------------------------------------------------

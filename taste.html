@@ -843,7 +843,23 @@
         updateTasteModeUI();
       });
     }
-    renderTastePresets();
+    // Optional deep-link from recipe-browser hero ("Use this recipe"): preset
+    // names the slug to activate, method pre-switches the brew toggle when the
+    // target recipe is method-specific (espresso-only recipes wouldn't render
+    // under a filter-mode rail).
+    const qs = new URLSearchParams(window.location.search);
+    const presetFromUrl = qs.get("preset");
+    const methodFromUrl = qs.get("method");
+    if (methodFromUrl === "filter" || methodFromUrl === "espresso") {
+      activeBrewMethod = methodFromUrl;
+      saveBrewMethod(activeBrewMethod);
+      if (brewMethodToggle) {
+        brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
+        });
+      }
+    }
+    renderTastePresets(presetFromUrl);
     updateTasteModeUI();
 
     // When the public-recipes fetch resolves, the preset-rail cache is
