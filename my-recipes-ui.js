@@ -78,12 +78,20 @@
   // Decode the stored roast array into checkbox states. The sentinel
   // ['all'] (seeded by migration 006 for legacy rows) expands to all
   // three levels so the user sees them pre-checked rather than none.
+  // Canonical order + dedup so duplicate input (e.g. ['light','light'])
+  // can't desync the UI toggle state from the saved payload.
   function decodeRoastLevels(roast) {
     if (!Array.isArray(roast) || roast.length === 0) return ["light", "medium", "dark"];
     if (roast.indexOf("all") !== -1) return ["light", "medium", "dark"];
-    return roast.filter(function (r) {
-      return r === "light" || r === "medium" || r === "dark";
+    var seen = {};
+    var out = [];
+    ["light", "medium", "dark"].forEach(function (level) {
+      if (roast.indexOf(level) !== -1 && !seen[level]) {
+        seen[level] = true;
+        out.push(level);
+      }
     });
+    return out;
   }
 
   // Encode the user's method selection back to the single-string form the

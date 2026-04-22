@@ -300,6 +300,17 @@ test.describe("library.html — Wave D recipe browser", () => {
     // rendered for anyone. This regression catches that class of mistake.
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
+
+    // Mirror the suite-wide console-error capture onto this custom page.
+    // Without this, runtime errors in the stubbed-session flow pass
+    // silently through afterEach and a regression could ride green CI.
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    page.on("pageerror", (err) => {
+      consoleErrors.push(err.message);
+    });
+
     await page.addInitScript(() => {
       // Freeze the stub so supabase-client.js's later `window.getUser = ...`
       // assignment silently no-ops (non-strict) instead of clobbering the
