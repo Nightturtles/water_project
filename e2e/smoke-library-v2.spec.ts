@@ -47,9 +47,15 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
     await page.goto("/library-v2.html");
   });
 
-  test("page loads with expected heading and no console errors", async ({ page }) => {
-    await expect(page.locator("h1")).toContainText("Recipe Library (v2 preview)");
+  // Every test (including the applyFilters group below) gets the same
+  // zero-console-errors contract — a regression in any interaction path
+  // should fail its own test, not silently pass.
+  test.afterEach(() => {
     expect(consoleErrors).toEqual([]);
+  });
+
+  test("page loads with expected heading", async ({ page }) => {
+    await expect(page.locator("h1")).toContainText("Recipe Library (v2 preview)");
   });
 
   test("scaffold shell renders all filter controls", async ({ page }) => {
@@ -111,13 +117,12 @@ test.describe("library-v2.html — Wave D2 interactive filter bar", () => {
   test("search input debounces and writes q param to URL", async ({ page }) => {
     const input = page.locator(".rx-search-input");
     await input.fill("sey");
-    // Debounce is 150ms. Wait a bit longer to avoid timing flake.
-    await page.waitForTimeout(250);
-    await expect(page).toHaveURL(/q=sey/);
+    // toHaveURL polls until the condition holds — covers the 150ms debounce
+    // without a fixed sleep.
+    await expect(page).toHaveURL(/q=sey/, { timeout: 2000 });
 
     await input.fill("");
-    await page.waitForTimeout(250);
-    await expect(page).not.toHaveURL(/q=/);
+    await expect(page).not.toHaveURL(/(?:\?|&)q=/, { timeout: 2000 });
   });
 
   test("URL state restores filters on page load", async ({ page }) => {
