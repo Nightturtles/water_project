@@ -29,14 +29,33 @@
     { value: "dark", label: "Dark" },
   ];
 
-  // Trays rendered as carousels under the hero (in this order). 'featured'
-  // drives the hero, not a carousel. Unknown categories fall through to
-  // 'classic' per partitionByCategory.
+  // Featured recipe is picked client-side by brew-method filter. When the
+  // method filter excludes the primary pick, the espresso branch keeps the
+  // Featured tray populated instead of letting it disappear. Slugs must match
+  // canonical library rows (user_id IS NULL); if the slug isn't in the
+  // filtered set (e.g. roast filter also excludes it), the Featured tray
+  // is omitted rather than rendering an empty section.
+  var FEATURED_PICKS = {
+    espresso: "cafelytic-espresso",
+    filter: "cafelytic-filter",
+    all: "cafelytic-filter",
+  };
+
+  // Trays rendered as carousels (in this order). Featured renders at the top
+  // via pickFeaturedFromFiltered — it's not a tray column value, so no
+  // 'featured' entry here. Unknown tray values fall through to 'classic' per
+  // partitionByCategory.
   var CAROUSEL_TRAYS = [
     {
       key: "original",
       title: "Cafelytic Originals",
       subtitle: "House recipes from the Cafelytic team",
+    },
+    {
+      key: "intro-water",
+      title: "Intro to Water",
+      subtitle:
+        "RAsami's Week 1 recipes. Make one recipe each day to learn how different mineral balances affect the taste of your coffee.",
     },
     {
       key: "roaster",
@@ -433,56 +452,6 @@
     return card;
   }
 
-  function createFeaturedHero(recipe, handlers) {
-    var section = el("section", "rx-featured-hero");
-    section.dataset.slug = recipe.slug || "";
-
-    section.appendChild(el("div", "rx-hero-eyebrow", "Featured · Editor's pick"));
-
-    var row = el("div", "rx-hero-row");
-
-    var content = el("div", "rx-hero-content");
-    content.appendChild(el("h2", "rx-hero-title", recipe.label || ""));
-    if (recipe.creatorDisplayName) {
-      content.appendChild(el("p", "rx-hero-source", "by " + recipe.creatorDisplayName));
-    }
-    content.appendChild(createMineralTriplet(recipe, "rx-mineral-triplet-hero"));
-    if (recipe.description) {
-      content.appendChild(el("p", "rx-hero-desc", recipe.description));
-    }
-
-    var tagList = el("div", "rx-hero-tags");
-    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
-      tagList.appendChild(el("span", "rx-card-tag rx-card-tag-accent", tag));
-    });
-    if (tagList.firstChild) content.appendChild(tagList);
-
-    row.appendChild(content);
-
-    var ctas = el("div", "rx-hero-ctas");
-
-    var useBtn = el("button", "rx-hero-use", "Use this recipe");
-    useBtn.type = "button";
-    useBtn.addEventListener("click", function () {
-      handlers.onUseRecipe(recipe);
-    });
-    ctas.appendChild(useBtn);
-
-    var saveBtn = el("button", "rx-hero-save", handlers.saved ? "Saved" : "Save");
-    saveBtn.type = "button";
-    saveBtn.setAttribute("aria-pressed", handlers.saved ? "true" : "false");
-    if (handlers.saved) saveBtn.classList.add("is-active");
-    saveBtn.addEventListener("click", function () {
-      handlers.onToggleSave(recipe);
-    });
-    ctas.appendChild(saveBtn);
-
-    row.appendChild(ctas);
-    section.appendChild(row);
-
-    return section;
-  }
-
   function createTrayCarousel(title, subtitle, recipes, handlers) {
     if (!recipes || recipes.length === 0) return null;
 
@@ -537,14 +506,37 @@
   // --- Content layout ----------------------------------------------------
 
   function partitionByCategory(recipes) {
-    var out = { featured: [], original: [], roaster: [], classic: [] };
+    var out = { original: [], "intro-water": [], roaster: [], classic: [] };
     if (!Array.isArray(recipes)) return out;
     recipes.forEach(function (r) {
       var cat = r && r.category ? r.category : "classic";
       if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
       out[cat].push(r);
     });
+    // Intro to Water is a learn-by-doing series — order by slug so
+    // rasami-w1d1 → rasami-w1d7 render in day order left-to-right. Other
+    // trays keep whatever order the caller passed in (created_at DESC from
+    // library-data.js).
+    out["intro-water"].sort(function (a, b) {
+      var sa = a && a.slug ? a.slug : "";
+      var sb = b && b.slug ? b.slug : "";
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
+    });
     return out;
+  }
+
+  // Pick the featured recipe for the current method filter from the already-
+  // filtered set. Primary slug comes from FEATURED_PICKS[method]; if that
+  // slug isn't in `filtered` (e.g. a roast filter also excluded it), return
+  // null so the Featured section renders nothing rather than an empty shell.
+  function pickFeaturedFromFiltered(filtered, method) {
+    if (!Array.isArray(filtered) || filtered.length === 0) return null;
+    var slug = FEATURED_PICKS[method] || FEATURED_PICKS.all;
+    if (!slug) return null;
+    for (var i = 0; i < filtered.length; i++) {
+      if (filtered[i] && filtered[i].slug === slug) return filtered[i];
+    }
+    return null;
   }
 
   function createEmptyState(onClear) {
@@ -558,7 +550,18 @@
     return wrap;
   }
 
-  function renderContent(root, filtered, catalogLoaded, handlers) {
+  function renderContent(root, filtered, catalogLoaded, handlers, method) {
+    // Capture horizontal scroll position of each existing carousel so a
+    // re-render (triggered e.g. by star-toggle) doesn't reset users back to
+    // the leftmost card of every tray. Keyed by tray slug in data-tray.
+    var scrollByTray = {};
+    var existingSections = root.querySelectorAll(".rx-carousel-section[data-tray]");
+    for (var i = 0; i < existingSections.length; i++) {
+      var key = existingSections[i].dataset.tray;
+      var scrollEl = existingSections[i].querySelector(".rx-carousel");
+      if (key && scrollEl) scrollByTray[key] = scrollEl.scrollLeft;
+    }
+
     while (root.firstChild) root.removeChild(root.firstChild);
 
     // Library fetch hasn't resolved yet — stay silent until data lands.
@@ -577,13 +580,20 @@
 
     var byCategory = partitionByCategory(filtered);
 
-    if (byCategory.featured.length > 0) {
-      // Spec: "zero or one recipe at a time" in the featured tray. If data
-      // ever drifts and includes multiple, we render the first and ignore
-      // the rest rather than failing. If filters excluded the featured row
-      // entirely, byCategory.featured is empty and we skip the hero —
-      // carousels still render for any remaining matches.
-      root.appendChild(createFeaturedHero(byCategory.featured[0], handlers));
+    // Featured tray: one card picked by brew-method filter (espresso falls
+    // back to cafelytic-espresso so the tray stays populated). Rendered as a
+    // single-card carousel so the card shares styling + star UX with every
+    // other library card.
+    var featured = pickFeaturedFromFiltered(filtered, method);
+    if (featured) {
+      root.appendChild(
+        createTrayCarousel(
+          "Featured",
+          "Editor's pick",
+          [featured],
+          Object.assign({}, handlers, { trayKey: "featured" }),
+        ),
+      );
     }
 
     CAROUSEL_TRAYS.forEach(function (tray) {
@@ -596,6 +606,16 @@
       );
       if (carousel) root.appendChild(carousel);
     });
+
+    // Restore captured scroll positions on the fresh DOM. Layout has
+    // resolved by now because the sections are already appended. Missing
+    // keys (tray just appeared) stay at scrollLeft=0 naturally.
+    var newSections = root.querySelectorAll(".rx-carousel-section[data-tray]");
+    for (var j = 0; j < newSections.length; j++) {
+      var k = newSections[j].dataset.tray;
+      var s = newSections[j].querySelector(".rx-carousel");
+      if (k && s && scrollByTray[k] != null) s.scrollLeft = scrollByTray[k];
+    }
   }
 
   // --- Mount -------------------------------------------------------------
@@ -727,7 +747,9 @@
             // drop the row from local state before refetching. If the
             // refetch fails, the user still sees the expected result
             // rather than the row reappearing or the carousel going blank.
-            allRecipes = allRecipes.filter(function (r) { return r.id !== recipe.id; });
+            allRecipes = allRecipes.filter(function (r) {
+              return r.id !== recipe.id;
+            });
             refetchAndRender();
           },
         });
@@ -805,7 +827,7 @@
         typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
       var filtered = applyFilters(state, allRecipes, { isSaved: isSaved });
       summary.sync(filtered.length, allRecipes.length, hasAnyActiveFilter(state));
-      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers);
+      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers, state.method);
     }
 
     // Re-render when async library fetch completes. library-data.js auto-
