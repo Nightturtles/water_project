@@ -7,6 +7,13 @@
   "use strict";
 
   var publicRecipesCache = null;
+  // sessionStorage key for the cached catalog. Bump the suffix whenever a
+  // schema/migration change would make the prior cache misleading — users
+  // whose tab was open across the deploy rehydrate from sessionStorage
+  // BEFORE the live fetch, so a stale snapshot hides the new data forever
+  // (the fetch short-circuits on cache hit). v2 forces everyone onto a
+  // fresh fetch after the migration-010 library refresh.
+  var CACHE_KEY = "cw_library_public_recipes_v2";
   // Set (not Array) so re-registering the same function reference doesn't
   // duplicate firings — defends against bfcache restore and other scenarios
   // where the same classic-script evaluates twice against the same module
@@ -56,7 +63,7 @@
   function getPublicRecipesSync() {
     if (publicRecipesCache) return publicRecipesCache;
     try {
-      var cached = sessionStorage.getItem("cw_library_public_recipes");
+      var cached = sessionStorage.getItem(CACHE_KEY);
       if (cached) {
         var parsed = JSON.parse(cached);
         publicRecipesCache = Array.isArray(parsed) ? parsed.map(normalizePublicRecipeRow) : [];
@@ -91,7 +98,7 @@
 
     if (!forceRefresh) {
       try {
-        var cached = sessionStorage.getItem("cw_library_public_recipes");
+        var cached = sessionStorage.getItem(CACHE_KEY);
         if (cached) {
           var parsedCached = JSON.parse(cached);
           publicRecipesCache = Array.isArray(parsedCached)
@@ -128,7 +135,7 @@
 
     publicRecipesCache = recipes;
     try {
-      sessionStorage.setItem("cw_library_public_recipes", JSON.stringify(recipes));
+      sessionStorage.setItem(CACHE_KEY, JSON.stringify(recipes));
     } catch (e) { /* sessionStorage full or unavailable */ }
 
     // Preset rail consumers (taste.html, index.html) cache the merged rail
@@ -144,7 +151,7 @@
 
   function invalidatePublicRecipesCache() {
     publicRecipesCache = null;
-    try { sessionStorage.removeItem("cw_library_public_recipes"); } catch (e) { /* ignore */ }
+    try { sessionStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
     if (typeof invalidateTargetPresetsCache === "function") {
       invalidateTargetPresetsCache();
     }
