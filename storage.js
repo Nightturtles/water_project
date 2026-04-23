@@ -289,10 +289,23 @@ function removeDeletedTargetPreset(key) {
 // into their rail via library.html. Symmetric with the tombstone list —
 // tombstones subtract from the default rail, added adds to it — and synced
 // to Supabase via the same user_selections round-trip (sync.js).
+//
+// Every read here triggers ensureStarterBackfill() first (defined below near
+// getAllTargetPresets, since it depends on getPublicRecipesSync). That way a
+// user landing on library.html before the rail ever renders still gets their
+// pre-011 catalog preserved — library-data.js reads this list directly for
+// save-state and copy logic.
+
 /** @returns {string[]} */
-function loadAddedTargetPresets() {
+function loadAddedTargetPresetsRaw() {
   const parsed = safeParse(safeGetItem("cw_added_target_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
+}
+
+/** @returns {string[]} */
+function loadAddedTargetPresets() {
+  if (typeof ensureStarterBackfill === "function") ensureStarterBackfill();
+  return loadAddedTargetPresetsRaw();
 }
 
 /** @param {string} key */
@@ -744,16 +757,24 @@ function invalidateTargetPresetsCache() {
 // Only tombstones + custom profiles count as "curated" signals. cw_target_preset
 // doesn't — script.js writes a default on every page mount before the rail
 // renders, so checking it would trigger backfill for every fresh user too.
+//
+// ensureStarterBackfill is idempotent (early-returns once the flag is set)
+// and called from every entry point that reads the added list — both
+// getAllTargetPresets and loadAddedTargetPresets — so library-first flows
+// (user lands on library.html before taste.html renders the rail) don't
+// skip the migration.
 const STARTER_MIGRATION_KEY = "cw_starter_migration_applied";
-/** @param {LibraryRecipeRow[]} library */
-function runStarterBackfillIfNeeded(library) {
+function ensureStarterBackfill() {
   if (safeGetItem(STARTER_MIGRATION_KEY) === "1") return;
+  const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
   if (!Array.isArray(library) || library.length === 0) return; // rerun when library arrives
   const hasPriorTombstones = loadDeletedTargetPresets().length > 0;
   const hasPriorCustom = Object.keys(loadCustomTargetProfiles()).length > 0;
   const existingUser = hasPriorTombstones || hasPriorCustom;
   if (existingUser) {
-    const seed = loadAddedTargetPresets();
+    // Use the raw read so a future refactor that re-enters loadAddedTargetPresets
+    // from inside the backfill doesn't recurse.
+    const seed = loadAddedTargetPresetsRaw();
     const seedSet = new Set(seed);
     for (const row of library) {
       if (!row || !row.slug) continue;
@@ -797,8 +818,8 @@ function getAllTargetPresets() {
   const tombstoned = new Set(loadDeletedTargetPresets());
   const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
 
-  runStarterBackfillIfNeeded(library);
-  const added = new Set(loadAddedTargetPresets());
+  ensureStarterBackfill();
+  const added = new Set(loadAddedTargetPresetsRaw());
 
   /** @type {Record<string, TargetProfile>} */
   const result = {};

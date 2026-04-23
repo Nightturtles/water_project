@@ -11,9 +11,12 @@
   // schema/migration change would make the prior cache misleading — users
   // whose tab was open across the deploy rehydrate from sessionStorage
   // BEFORE the live fetch, so a stale snapshot hides the new data forever
-  // (the fetch short-circuits on cache hit). v2 forces everyone onto a
-  // fresh fetch after the migration-010 library refresh.
-  var CACHE_KEY = "cw_library_public_recipes_v2";
+  // (the fetch short-circuits on cache hit).
+  //   v2 — forced re-fetch after migration-010 tray/slug changes.
+  //   v3 — forced re-fetch after migration-011 added is_starter. Without
+  //        this bump, pre-011 _v2 snapshots normalize to isStarter:false
+  //        for every canonical row and break the starter rail silently.
+  var CACHE_KEY = "cw_library_public_recipes_v3";
   // Set (not Array) so re-registering the same function reference doesn't
   // duplicate firings — defends against bfcache restore and other scenarios
   // where the same classic-script evaluates twice against the same module
@@ -200,26 +203,27 @@
   // like sca, cafelytic-filter, rasami-*) stay at their canonical slug — we
   // never fork them to custom profiles — so "remove, then re-add from library"
   // is a true round-trip rather than leaving a "sca-2" dangling in custom.
-  // Two paths for canonical rows after migration 011:
-  //   * is_starter=true  — lift any tombstone and return the canonical slug.
-  //                         Starters are visible by default; tombstoning is
-  //                         the only way they leave the rail.
-  //   * is_starter=false — append the slug to the user's added list. The rail
-  //                         filter picks it up on next render.
+  // Both paths for canonical rows after migration 011 lift any existing
+  // tombstone first because the rail filter is `(is_starter OR added) AND
+  // NOT tombstoned`. A pre-011 user could have a tombstone on a now-non-
+  // starter slug (e.g. tombstoned "rao" before migration) — without the
+  // lift, saving "rao" would add to the added list but the rail would still
+  // hide it, and the user would see ★ on the card but no change in the rail.
+  //   * is_starter=true  — lift tombstone (starters are visible by default).
+  //   * is_starter=false — lift tombstone AND add slug to the added list.
   //
   // User-published rows (userId != null) always fork to a new custom profile
   // with a unique slug — we don't mutate someone else's publish.
   function copyRecipeToMyProfiles(recipe) {
     if (recipe && recipe.userId == null && recipe.slug) {
-      if (recipe.isStarter) {
-        if (typeof loadDeletedTargetPresets === "function") {
-          var tombstoned = loadDeletedTargetPresets();
-          if (tombstoned.indexOf(recipe.slug) !== -1 &&
-              typeof removeDeletedTargetPreset === "function") {
-            removeDeletedTargetPreset(recipe.slug);
-          }
+      if (typeof loadDeletedTargetPresets === "function" &&
+          typeof removeDeletedTargetPreset === "function") {
+        var tombstoned = loadDeletedTargetPresets();
+        if (tombstoned.indexOf(recipe.slug) !== -1) {
+          removeDeletedTargetPreset(recipe.slug);
         }
-      } else if (typeof addAddedTargetPreset === "function") {
+      }
+      if (!recipe.isStarter && typeof addAddedTargetPreset === "function") {
         addAddedTargetPreset(recipe.slug);
       }
       return recipe.slug;
@@ -274,10 +278,15 @@
   // row that makes this branch fire for their content.
   function isRecipeInMyProfiles(recipe) {
     if (recipe && recipe.userId == null && recipe.slug) {
-      if (recipe.isStarter) {
-        if (typeof loadDeletedTargetPresets !== "function") return true;
-        return loadDeletedTargetPresets().indexOf(recipe.slug) === -1;
-      }
+      // Tombstones trump both starter and added: a tombstoned slug is hidden
+      // from the rail regardless of is_starter or added-list state, so the
+      // library star should reflect that. Matches the filter in
+      // storage.getAllTargetPresets exactly so the UI and the rail agree.
+      var tombstoned = typeof loadDeletedTargetPresets === "function"
+        ? loadDeletedTargetPresets()
+        : [];
+      if (tombstoned.indexOf(recipe.slug) !== -1) return false;
+      if (recipe.isStarter) return true;
       if (typeof loadAddedTargetPresets !== "function") return false;
       return loadAddedTargetPresets().indexOf(recipe.slug) !== -1;
     }

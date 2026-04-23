@@ -20,9 +20,15 @@
 --    user has explicitly added from library.html. Symmetric with tombstones:
 --    tombstones subtract from the default rail, added adds to it.
 --
--- Scoped updates hit user_id IS NULL only. Row-count assert = 8 so a
--- missing or duplicated starter slug fails the migration loudly instead of
--- silently leaving the rail under- or over-populated.
+-- Scoped updates hit user_id IS NULL only. The DO block resets every
+-- canonical row to is_starter=false first, then flags the 8 starter slugs.
+-- Two asserts guard the final state:
+--   (a) the UPDATE flagged exactly 8 rows (catches a missing starter slug)
+--   (b) the catalog now has exactly 8 is_starter=true canonical rows
+--       (catches drift: a stray is_starter=true row on some other canonical
+--       slug that wasn't caught by the UPDATE because we matched by slug).
+-- Without (b), ROW_COUNT could pass while the rail ends up with more than
+-- eight starters. The reset step makes the migration safe to re-run.
 -- =============================================================================
 
 
@@ -34,7 +40,15 @@ ALTER TABLE target_profiles
 DO $$
 DECLARE
   v_rows_updated integer;
+  v_total_starters integer;
 BEGIN
+  -- Reset canonicals first so the final set is exactly what the UPDATE
+  -- below flags, regardless of prior state on this column.
+  UPDATE target_profiles
+  SET is_starter = false
+  WHERE user_id IS NULL
+    AND is_starter = true;
+
   UPDATE target_profiles
   SET is_starter = true
   WHERE user_id IS NULL
@@ -54,6 +68,16 @@ BEGIN
     RAISE EXCEPTION
       'migration 011 expected to flag 8 starter rows, got %',
       v_rows_updated;
+  END IF;
+
+  SELECT COUNT(*) INTO v_total_starters
+  FROM target_profiles
+  WHERE user_id IS NULL AND is_starter = true;
+
+  IF v_total_starters <> 8 THEN
+    RAISE EXCEPTION
+      'migration 011 expected catalog to have 8 is_starter canonical rows after update, got %',
+      v_total_starters;
   END IF;
 END $$;
 
