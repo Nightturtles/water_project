@@ -307,8 +307,20 @@ const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 const LIBRARY_TAGS = ["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"];
 
 // --- Custom target profile helpers ---
+
+// Library slugs that exist in Supabase (user_id IS NULL) but are NOT in the
+// TARGET_PRESETS fallback shim. They still need to be reserved so a user
+// can't create a custom profile that collides with the canonical library
+// row. `rao` lives here because the shim was trimmed to the 8-entry starter
+// set but Rao's recipe remains in the library.
+const LEGACY_RESERVED_TARGET_KEYS = ["rao"];
+
 const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
-const RESERVED_TARGET_KEYS = new Set([...BUILTIN_TARGET_KEYS, "custom"]);
+const RESERVED_TARGET_KEYS = new Set([
+  ...BUILTIN_TARGET_KEYS,
+  ...LEGACY_RESERVED_TARGET_KEYS,
+  "custom",
+]);
 /** @type {Record<string, string>} */
 const BUILTIN_TARGET_LABELS = {};
 for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
