@@ -38,6 +38,7 @@
 
 DELETE FROM target_profiles
 WHERE is_public = true
+  AND user_id IS NULL
   AND label IN ('SmokeWaterCreated', 'SmokeTest', '666 test 3', 'Cafelytic Water');
 
 

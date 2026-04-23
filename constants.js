@@ -179,8 +179,9 @@ const SOURCE_PRESETS = {
 //   * lotus-simple-sweet-espresso     — rounded-sweetness espresso
 //
 // Slugs and ion values here MUST stay byte-identical to the corresponding
-// Supabase rows in migrations 002/006/007 so the shim and the loaded library
-// don't disagree. If you change a value here, update the migration too.
+// Supabase rows in migrations 002/006/007/010 so the shim and the loaded
+// library don't disagree. If you change a value here, update the migration
+// too.
 const TARGET_PRESETS = {
   sca: {
     label: "SCA Standard",
