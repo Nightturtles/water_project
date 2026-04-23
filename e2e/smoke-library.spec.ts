@@ -140,21 +140,25 @@ test.describe("library.html — Wave D recipe browser", () => {
 
   // Content region: hero + carousels (D3/D4) ---------------------------
 
-  test("featured hero renders with title, Use button, Save button", async ({ page }) => {
-    // Hero might be painted synchronously from the session cache OR after the
-    // async library fetch resolves; let toBeVisible's retry cover both.
-    const hero = page.locator(".rx-featured-hero");
-    await expect(hero).toBeVisible();
-    await expect(hero.locator(".rx-hero-title")).not.toBeEmpty();
-    await expect(hero.locator(".rx-hero-use")).toContainText("Use this recipe");
-    await expect(hero.locator(".rx-hero-save")).toBeVisible();
+  test("featured tray renders as a single-card carousel with the library card UX", async ({
+    page,
+  }) => {
+    // Featured is now a one-card carousel with the same card component as
+    // every other tray — star bookmark in the header, no Use/Save buttons.
+    // May paint from the session cache OR after async fetch; toBeVisible retries.
+    const featured = page.locator('.rx-carousel-section[data-tray="featured"]');
+    await expect(featured).toBeVisible();
+    await expect(featured.locator(".rx-recipe-card")).toHaveCount(1);
+    await expect(featured.locator(".rx-card-title")).not.toBeEmpty();
+    await expect(featured.locator(".rx-card-bookmark")).toBeVisible();
   });
 
   test("tray carousels render from production categories", async ({ page }) => {
-    // Catalog currently has at least one recipe in each of the three trays
-    // (per supabase/recipe-catalog-decisions.csv). Hidden trays would be a
-    // content-drift signal worth investigating.
+    // Catalog currently has at least one recipe in each of these trays
+    // (per supabase/recipe-catalog-decisions.csv + migration 010). Hidden
+    // trays would be a content-drift signal worth investigating.
     await expect(page.locator('.rx-carousel-section[data-tray="original"]')).toBeVisible();
+    await expect(page.locator('.rx-carousel-section[data-tray="intro-water"]')).toBeVisible();
     await expect(page.locator('.rx-carousel-section[data-tray="roaster"]')).toBeVisible();
     await expect(page.locator('.rx-carousel-section[data-tray="classic"]')).toBeVisible();
 
@@ -205,19 +209,20 @@ test.describe("library.html — Wave D recipe browser", () => {
     }
   });
 
-  test("hero 'Use this recipe' navigates to taste.html with preset param", async ({ page }) => {
-    const hero = page.locator(".rx-featured-hero");
-    await expect(hero).toBeVisible();
-    const slug = await hero.getAttribute("data-slug");
-    expect(slug).toBeTruthy();
+  test("cafelytic-filter appears in Featured AND Cafelytic Originals (default filters)", async ({
+    page,
+  }) => {
+    // After migration 010, Cafelytic Filter's DB row lives in the Originals
+    // tray. The client also renders it as Featured based on the brew method
+    // filter (default method=all → cafelytic-filter). Both surfaces should
+    // show the same card.
+    const featured = page.locator('.rx-carousel-section[data-tray="featured"] .rx-recipe-card');
+    await expect(featured).toHaveCount(1);
+    await expect(featured).toHaveAttribute("data-slug", "cafelytic-filter");
 
-    await hero.locator(".rx-hero-use").click();
-
-    // Predicate form avoids constructing a RegExp from a DB-derived slug.
-    // Slugs are [a-z0-9-] in practice but the predicate is simpler anyway.
-    await expect(page).toHaveURL(
-      (url) => url.pathname.endsWith("/taste.html") && url.searchParams.get("preset") === slug,
-    );
+    const original = page
+      .locator('.rx-carousel-section[data-tray="original"] .rx-recipe-card[data-slug="cafelytic-filter"]');
+    await expect(original).toHaveCount(1);
   });
 
   test("taste.html ?preset=<slug> activates the matching preset", async ({ page }) => {
@@ -254,25 +259,28 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(emptyState).toBeVisible({ timeout: 2000 });
     await expect(emptyState.locator(".rx-empty-title")).toContainText("No recipes match");
 
-    // No hero, no carousels while empty state is up.
-    await expect(page.locator(".rx-featured-hero")).toHaveCount(0);
+    // No featured, no carousels while empty state is up.
+    await expect(page.locator('.rx-carousel-section[data-tray="featured"]')).toHaveCount(0);
     await expect(page.locator(".rx-carousel-section")).toHaveCount(0);
 
     // Clear-filters CTA inside the empty state resets state + URL.
     await emptyState.locator(".rx-empty-clear").click();
     await expect(emptyState).toHaveCount(0);
-    await expect(page.locator(".rx-featured-hero")).toBeVisible();
+    await expect(page.locator('.rx-carousel-section[data-tray="featured"]')).toBeVisible();
     await expect(input).toHaveValue("");
   });
 
-  test("filter that excludes featured row hides the hero but keeps carousels", async ({ page }) => {
-    // The Cafelytic Filter hero is method=filter + roast=light + tags=[Juicy,
-    // Clarity, Sweet] per the seed catalog. method=espresso excludes it.
+  test("method=espresso swaps Featured to Cafelytic Espresso", async ({ page }) => {
+    // Client-side FEATURED_PICKS maps espresso→cafelytic-espresso so the
+    // Featured tray stays populated when the method filter would exclude
+    // the default (Cafelytic Filter).
     await page.locator('.rx-segmented-button[data-value="espresso"]').first().click();
 
-    await expect(page.locator(".rx-featured-hero")).toHaveCount(0);
-    // At least one carousel should still render (espresso recipes exist).
-    await expect(page.locator(".rx-carousel-section").first()).toBeVisible();
+    const featured = page.locator(
+      '.rx-carousel-section[data-tray="featured"] .rx-recipe-card',
+    );
+    await expect(featured).toHaveCount(1);
+    await expect(featured).toHaveAttribute("data-slug", "cafelytic-espresso");
   });
 
   test("owner Edit/Unpublish buttons not rendered for anonymous visitors", async ({ page }) => {

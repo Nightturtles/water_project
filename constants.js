@@ -167,11 +167,16 @@ const SOURCE_PRESETS = {
 // populated on a cold pageload and gives `getAllTargetPresets()` a baseline
 // even when the user is offline.
 //
-// The five entries below were chosen for their representativeness:
-//   * sca, rao            — canonical industry filter references
-//   * lotus-light-bright  — most popular Lotus recipe (as the Lotus poster child)
-//   * cafelytic-filter    — featured Cafelytic in-house filter (editorial spot)
-//   * cafelytic-espresso  — Cafelytic in-house espresso companion
+// The eight entries below are the default starter set every user sees on a
+// cold load:
+//   * sca                             — canonical industry filter reference
+//   * eaf-rpavlis                     — buffer-only no-scale water
+//   * cafelytic-filter                — Cafelytic in-house filter (featured pick)
+//   * cafelytic-espresso              — Cafelytic in-house espresso (espresso featured)
+//   * lotus-light-bright              — clarity-forward filter
+//   * lotus-simple-sweet              — rounded-sweetness filter
+//   * lotus-light-bright-espresso     — clarity-forward espresso
+//   * lotus-simple-sweet-espresso     — rounded-sweetness espresso
 //
 // Slugs and ion values here MUST stay byte-identical to the corresponding
 // Supabase rows in migrations 002/006/007 so the shim and the loaded library
@@ -184,24 +189,18 @@ const TARGET_PRESETS = {
     alkalinity: 40,
     description: "SCA recommended range for brewing water. Balanced body and clarity.",
   },
-  rao: {
-    label: "Rao's Recipe",
-    calcium: 20.9,
-    magnesium: 8.5,
-    alkalinity: 40,
-    description: "Lotus-style Rao recipe target with balanced sweetness and structure.",
-  },
-  "lotus-light-bright": {
-    label: "Light and Bright",
-    calcium: 22.832,
+  "eaf-rpavlis": {
+    label: "RPavlis",
+    brewMethod: "filter",
+    calcium: 0,
     magnesium: 0,
-    alkalinity: 24.245,
-    potassium: 18.941,
+    alkalinity: 50,
+    potassium: 39,
     sodium: 0,
     sulfate: 0,
-    chloride: 40.395,
-    bicarbonate: 29.56,
-    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
+    chloride: 0,
+    bicarbonate: 60.9,
+    description: "Espresso Aficionados direct dosing: 1.000g KHCO3 per 10L.",
   },
   "cafelytic-filter": {
     label: "Cafelytic Filter",
@@ -235,6 +234,58 @@ const TARGET_PRESETS = {
       "0.015g CaCl\u2082\u00b72H\u2082O + 0.134g MgCl\u2082\u00b76H\u2082O + 0.064g KHCO\u2083. " +
       "Preserves the Cafelytic house character (Cl-heavy, no SO\u2084, sodium-free, " +
       "K-buffered) at espresso concentrations.",
+  },
+  "lotus-light-bright": {
+    label: "Light and Bright",
+    brewMethod: "filter",
+    calcium: 22.832,
+    magnesium: 0,
+    alkalinity: 24.245,
+    potassium: 18.941,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 40.395,
+    bicarbonate: 29.56,
+    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
+  },
+  "lotus-simple-sweet": {
+    label: "Simple and Sweet",
+    brewMethod: "filter",
+    calcium: 22.832,
+    magnesium: 7.882,
+    alkalinity: 40.476,
+    potassium: 12.628,
+    sodium: 11.169,
+    sulfate: 0,
+    chloride: 63.389,
+    bicarbonate: 49.35,
+    description: "Lotus balanced profile with added sweetness and approachable acidity.",
+  },
+  "lotus-light-bright-espresso": {
+    label: "Light and Bright (espresso)",
+    brewMethod: "espresso",
+    calcium: 0,
+    magnesium: 3.941,
+    alkalinity: 44.449,
+    potassium: 34.726,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 11.497,
+    bicarbonate: 54.194,
+    description: "Lotus espresso profile for clarity-forward shots with restrained hardness.",
+  },
+  "lotus-simple-sweet-espresso": {
+    label: "Simple and Sweet (espresso)",
+    brewMethod: "espresso",
+    calcium: 0,
+    magnesium: 3.941,
+    alkalinity: 56.73,
+    potassium: 0,
+    sodium: 26.061,
+    sulfate: 0,
+    chloride: 11.497,
+    bicarbonate: 69.167,
+    description: "Lotus espresso profile with higher buffer for sweeter, rounder shots.",
   },
 };
 
