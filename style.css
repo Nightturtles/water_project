@@ -2636,111 +2636,7 @@ main#rx-root {
   border-color: var(--gray-500);
 }
 
-/* ---- Featured hero (D4) ---- */
-
-.rx-featured-hero {
-  margin-top: 1.5rem;
-  margin-bottom: 2rem;
-  padding: 1.5rem;
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  background:
-    linear-gradient(135deg, rgba(59, 130, 246, 0.08), transparent 60%),
-    var(--surface);
-}
-
-.rx-hero-eyebrow {
-  font-size: 0.7rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--blue-600);
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
-
-.rx-hero-row {
-  display: flex;
-  flex-direction: column;
-  gap: 1.25rem;
-}
-
-.rx-hero-content {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-  min-width: 0;
-}
-
-.rx-hero-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: var(--gray-900);
-  line-height: 1.2;
-}
-
-.rx-hero-source {
-  font-size: 0.85rem;
-  color: var(--gray-500);
-}
-
-.rx-hero-desc {
-  font-size: 0.95rem;
-  color: var(--gray-700);
-  line-height: 1.5;
-}
-
-.rx-hero-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
-  margin-top: 0.25rem;
-}
-
-.rx-hero-ctas {
-  display: flex;
-  flex-direction: column;
-  gap: 0.6rem;
-}
-
-.rx-hero-use,
-.rx-hero-save {
-  padding: 0.65rem 1.1rem;
-  border-radius: 10px;
-  font-size: 0.95rem;
-  font-weight: 600;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background-color 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-
-.rx-hero-use {
-  border: 1px solid var(--blue-500);
-  background: var(--blue-500);
-  color: #fff;
-}
-
-.rx-hero-use:hover {
-  background: var(--blue-600);
-  border-color: var(--blue-600);
-}
-
-.rx-hero-save {
-  border: 1px solid var(--gray-300);
-  background: var(--surface);
-  color: var(--gray-900);
-}
-
-.rx-hero-save:hover {
-  border-color: var(--gray-500);
-}
-
-.rx-hero-save.is-active {
-  border-color: var(--blue-500);
-  color: var(--blue-600);
-  background: var(--blue-50);
-}
-
-/* ---- Mineral triplet (shared by card + hero) ---- */
+/* ---- Mineral triplet (shared by all library cards) ---- */
 
 .rx-mineral-triplet {
   display: flex;
@@ -2749,11 +2645,6 @@ main#rx-root {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 0.78rem;
   color: var(--gray-500);
-}
-
-.rx-mineral-triplet-hero {
-  font-size: 0.95rem;
-  gap: 1.25rem;
 }
 
 .rx-mineral-item {
@@ -2993,30 +2884,6 @@ main#rx-root {
   .rx-segmented,
   .rx-chip-group {
     flex: 1;
-  }
-
-  /* Featured hero (D4): two-column on desktop. */
-  .rx-featured-hero {
-    padding: 2rem 2.25rem;
-  }
-
-  .rx-hero-row {
-    flex-direction: row;
-    align-items: center;
-    gap: 2rem;
-  }
-
-  .rx-hero-content {
-    flex: 1;
-  }
-
-  .rx-hero-title {
-    font-size: 1.85rem;
-  }
-
-  .rx-hero-ctas {
-    flex-shrink: 0;
-    min-width: 180px;
   }
 
   /* Carousels (D4): chevrons visible on desktop. */
