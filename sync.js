@@ -319,7 +319,7 @@
             creatorDisplayName: row.creator_display_name || "",
             creatorUserId: row.creator_user_id || null,
             tags: Array.isArray(row.tags) ? row.tags : [],
-            roast: Array.isArray(row.roast) ? row.roast : ["all"],
+            roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
           };
         },
       );
