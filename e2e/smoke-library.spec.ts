@@ -220,8 +220,9 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(featured).toHaveCount(1);
     await expect(featured).toHaveAttribute("data-slug", "cafelytic-filter");
 
-    const original = page
-      .locator('.rx-carousel-section[data-tray="original"] .rx-recipe-card[data-slug="cafelytic-filter"]');
+    const original = page.locator(
+      '.rx-carousel-section[data-tray="original"] .rx-recipe-card[data-slug="cafelytic-filter"]',
+    );
     await expect(original).toHaveCount(1);
   });
 
@@ -276,9 +277,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     // the default (Cafelytic Filter).
     await page.locator('.rx-segmented-button[data-value="espresso"]').first().click();
 
-    const featured = page.locator(
-      '.rx-carousel-section[data-tray="featured"] .rx-recipe-card',
-    );
+    const featured = page.locator('.rx-carousel-section[data-tray="featured"] .rx-recipe-card');
     await expect(featured).toHaveCount(1);
     await expect(featured).toHaveAttribute("data-slug", "cafelytic-espresso");
   });
