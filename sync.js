@@ -90,6 +90,7 @@
       target_preset: loadTargetPresetName(),
       deleted_source_presets: loadDeletedPresets(),
       deleted_target_presets: loadDeletedTargetPresets(),
+      added_target_presets: loadAddedTargetPresets(),
       updated_at: now,
     };
 
@@ -266,6 +267,8 @@
         safeSetItem("cw_deleted_presets", JSON.stringify(selections.deleted_source_presets));
       if (selections.deleted_target_presets)
         safeSetItem("cw_deleted_target_presets", JSON.stringify(selections.deleted_target_presets));
+      if (selections.added_target_presets)
+        safeSetItem("cw_added_target_presets", JSON.stringify(selections.added_target_presets));
     }
 
     // Apply source profiles, skipping any that are tombstoned locally.

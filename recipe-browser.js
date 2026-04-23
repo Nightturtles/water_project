@@ -210,10 +210,16 @@
 
     // Unsave path.
     if (recipe.userId == null && recipe.slug) {
-      // Canonical library row (userId null per the 002/006/007 migrations).
-      // Re-tombstone at the canonical slug so the re-add flow can later lift
-      // it — matches the round-trip semantics in copyRecipeToMyProfiles.
-      if (typeof addDeletedTargetPreset === "function") addDeletedTargetPreset(recipe.slug);
+      // Canonical library row. Migration 011 splits the round-trip on
+      // is_starter: starters go visible-by-default, so we tombstone them to
+      // remove; non-starters go hidden-by-default, so unsave means removing
+      // from the explicit added list (leaving no tombstone — they'd be
+      // filtered out by the default rail merge anyway).
+      if (recipe.isStarter) {
+        if (typeof addDeletedTargetPreset === "function") addDeletedTargetPreset(recipe.slug);
+      } else {
+        if (typeof removeAddedTargetPreset === "function") removeAddedTargetPreset(recipe.slug);
+      }
     } else if (
       typeof loadCustomTargetProfiles === "function" &&
       typeof deleteCustomTargetProfile === "function"

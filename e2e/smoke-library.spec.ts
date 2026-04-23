@@ -357,7 +357,7 @@ test.describe("library.html — Wave D recipe browser", () => {
           created_at: new Date().toISOString(),
         },
       ];
-      sessionStorage.setItem("cw_library_public_recipes_v2", JSON.stringify(fake));
+      sessionStorage.setItem("cw_library_public_recipes_v3", JSON.stringify(fake));
     });
 
     await page.goto("/library.html");
