@@ -124,6 +124,10 @@ declare global {
     category?: string;
     roast?: string[];
     creatorDisplayName?: string;
+    // Migration 011: `is_starter` canonical-row flag, normalized to
+    // `isStarter` in library-data.js. Only set on canonical rows
+    // (userId == null); undefined on user-published rows.
+    isStarter?: boolean;
   }
   var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
 

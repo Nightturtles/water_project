@@ -50,6 +50,11 @@
       category: row.category || row.tray || "classic",
       roast: Array.isArray(row.roast) ? row.roast : ["all"],
       createdAt: row.created_at || row.createdAt,
+      // Canonical library rows flagged is_starter=true (migration 011) are
+      // the 8 recipes the preset rail shows by default. Non-starter canonical
+      // rows are only in the rail if the user has explicitly added them from
+      // library.html. The actual filter lives in storage.getAllTargetPresets.
+      isStarter: row.isStarter != null ? !!row.isStarter : !!row.is_starter,
     };
   }
 
@@ -114,7 +119,7 @@
     var result = await window.supabaseClient
       .from("target_profiles")
       .select(
-        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at"
+        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter"
       )
       .eq("is_public", true)
       .order("created_at", { ascending: false });
@@ -188,26 +193,36 @@
     return baseSlug + "-" + Date.now();
   }
 
-  // Copy a library recipe into the user's custom target profiles.
-  // Returns the slug under which the recipe is now available, or null on failure.
+  // Save a library recipe to the user's preset rail. Returns the slug under
+  // which the recipe is now visible, or null on failure.
   //
-  // Special case (Piece D, re-add flow): if the library row's slug is currently
-  // tombstoned — meaning the user previously clicked × on this slug in the
-  // preset rail — lift the tombstone instead of creating a suffixed custom
-  // copy. The merge in storage.getAllTargetPresets will then surface the
-  // library row at its canonical slug on the next render. This preserves
-  // identity for canonical built-ins (sca, rao, lotus-*, cafelytic-*) so that
-  // "remove, then re-add from library" is a true round-trip rather than
-  // leaving a "sca-2" dangling in custom profiles.
+  // Canonical library rows (userId == null, the 002/006/007-seeded built-ins
+  // like sca, cafelytic-filter, rasami-*) stay at their canonical slug — we
+  // never fork them to custom profiles — so "remove, then re-add from library"
+  // is a true round-trip rather than leaving a "sca-2" dangling in custom.
+  // Two paths for canonical rows after migration 011:
+  //   * is_starter=true  — lift any tombstone and return the canonical slug.
+  //                         Starters are visible by default; tombstoning is
+  //                         the only way they leave the rail.
+  //   * is_starter=false — append the slug to the user's added list. The rail
+  //                         filter picks it up on next render.
+  //
+  // User-published rows (userId != null) always fork to a new custom profile
+  // with a unique slug — we don't mutate someone else's publish.
   function copyRecipeToMyProfiles(recipe) {
-    if (recipe && recipe.slug && typeof loadDeletedTargetPresets === "function") {
-      var tombstoned = loadDeletedTargetPresets();
-      if (tombstoned.indexOf(recipe.slug) !== -1) {
-        if (typeof removeDeletedTargetPreset === "function") {
-          removeDeletedTargetPreset(recipe.slug);
+    if (recipe && recipe.userId == null && recipe.slug) {
+      if (recipe.isStarter) {
+        if (typeof loadDeletedTargetPresets === "function") {
+          var tombstoned = loadDeletedTargetPresets();
+          if (tombstoned.indexOf(recipe.slug) !== -1 &&
+              typeof removeDeletedTargetPreset === "function") {
+            removeDeletedTargetPreset(recipe.slug);
+          }
         }
-        return recipe.slug;
+      } else if (typeof addAddedTargetPreset === "function") {
+        addAddedTargetPreset(recipe.slug);
       }
+      return recipe.slug;
     }
 
     var slug = generateUniqueSlug(recipe.label);
@@ -241,28 +256,30 @@
   // rail (i.e., the Add button should show "Added" rather than offering the
   // action again).
   //
-  // Two regimes:
-  //   1. Canonical library rows (userId == null — the 007-seeded built-ins like
-  //      SCA, Rao, Lotus, Cafelytic) live in the rail at their canonical slug
-  //      via storage.getAllTargetPresets's merge, unless tombstoned. So for
-  //      these, "in my profiles" = "not tombstoned". Fixes the Piece D subtle
-  //      bug where a tombstoned built-in showed "Added" (via label match
-  //      through residual state) even though the user couldn't see it.
-  //   2. User-published rows (userId != null) are added via copy-to-custom,
-  //      which creates a new custom profile with a suffixed slug. These are
-  //      detected by label match against the user's custom profiles.
+  // Canonical library rows (userId == null — the 002/006/007-seeded built-ins)
+  // split on is_starter after migration 011:
+  //   * is_starter=true  — visible by default; "in rail" = NOT tombstoned.
+  //   * is_starter=false — invisible by default; "in rail" = slug is in the
+  //                         user's added_target_presets list.
+  // User-published rows (userId != null) are added via copy-to-custom (which
+  // creates a new custom profile with a suffixed slug) and detected here by
+  // label match against the user's custom profiles.
   //
   // Trust boundary note: `recipe.userId == null` distinguishes canonical rows
   // from user-published rows by RLS guarantee, not by convention. The
   // target_profiles INSERT policy in supabase/001_schema.sql enforces
   // `auth.uid() = user_id`, which rejects any client-originated row with
-  // user_id NULL. Only migrations running as service role (002, 006, 007)
-  // can create canonical rows, so a malicious user cannot forge a row that
-  // makes this branch fire for their content.
+  // user_id NULL. Only migrations running as service role (002, 006, 007,
+  // 010, 011) can create canonical rows, so a malicious user cannot forge a
+  // row that makes this branch fire for their content.
   function isRecipeInMyProfiles(recipe) {
-    if (recipe && recipe.userId == null && recipe.slug && typeof loadDeletedTargetPresets === "function") {
-      var tombstoned = loadDeletedTargetPresets();
-      return tombstoned.indexOf(recipe.slug) === -1;
+    if (recipe && recipe.userId == null && recipe.slug) {
+      if (recipe.isStarter) {
+        if (typeof loadDeletedTargetPresets !== "function") return true;
+        return loadDeletedTargetPresets().indexOf(recipe.slug) === -1;
+      }
+      if (typeof loadAddedTargetPresets !== "function") return false;
+      return loadAddedTargetPresets().indexOf(recipe.slug) !== -1;
     }
 
     var profiles = loadCustomTargetProfiles();

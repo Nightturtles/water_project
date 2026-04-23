@@ -282,6 +282,41 @@ function removeDeletedTargetPreset(key) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
+// --- Added target preset tracking (mirror of tombstones for non-starter slugs) ---
+// Migration 011 split canonical library rows into starter (8 rows, visible by
+// default) and non-starter (the rest, hidden by default). The added list
+// records which non-starter canonical slugs the user has explicitly brought
+// into their rail via library.html. Symmetric with the tombstone list —
+// tombstones subtract from the default rail, added adds to it — and synced
+// to Supabase via the same user_selections round-trip (sync.js).
+/** @returns {string[]} */
+function loadAddedTargetPresets() {
+  const parsed = safeParse(safeGetItem("cw_added_target_presets"), []);
+  return Array.isArray(parsed) ? parsed : [];
+}
+
+/** @param {string} key */
+function addAddedTargetPreset(key) {
+  const added = loadAddedTargetPresets();
+  if (!added.includes(key)) {
+    added.push(key);
+    safeSetItem("cw_added_target_presets", JSON.stringify(added));
+    invalidateTargetPresetsCache();
+    if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+  }
+}
+
+/** @param {string} key */
+function removeAddedTargetPreset(key) {
+  const added = loadAddedTargetPresets();
+  const idx = added.indexOf(key);
+  if (idx === -1) return;
+  added.splice(idx, 1);
+  safeSetItem("cw_added_target_presets", JSON.stringify(added));
+  invalidateTargetPresetsCache();
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+}
+
 // --- Label helpers (for unique name enforcement) ---
 // After Piece B pruned TARGET_PRESETS from 7 to 5 entries, BUILTIN_TARGET_LABELS
 // alone no longer covers every library-canonical label. The Supabase library
@@ -697,23 +732,62 @@ function invalidateTargetPresetsCache() {
   targetPresetsCache = null;
 }
 
+// Starter-migration backfill flag. Migration 011 narrowed the default rail
+// from every canonical row (~28) to is_starter=true rows (8). Users who
+// explicitly curated their rail pre-011 (tombstoning some recipes or
+// creating custom profiles) should keep their current rail shape post-011;
+// auto-populate the added list with every non-starter canonical slug to
+// preserve it. Users who never customized get the new 8-recipe starter
+// rail — they had no investment in the extras, and re-adding is one click
+// in library.html.
+//
+// Only tombstones + custom profiles count as "curated" signals. cw_target_preset
+// doesn't — script.js writes a default on every page mount before the rail
+// renders, so checking it would trigger backfill for every fresh user too.
+const STARTER_MIGRATION_KEY = "cw_starter_migration_applied";
+/** @param {LibraryRecipeRow[]} library */
+function runStarterBackfillIfNeeded(library) {
+  if (safeGetItem(STARTER_MIGRATION_KEY) === "1") return;
+  if (!Array.isArray(library) || library.length === 0) return; // rerun when library arrives
+  const hasPriorTombstones = loadDeletedTargetPresets().length > 0;
+  const hasPriorCustom = Object.keys(loadCustomTargetProfiles()).length > 0;
+  const existingUser = hasPriorTombstones || hasPriorCustom;
+  if (existingUser) {
+    const seed = loadAddedTargetPresets();
+    const seedSet = new Set(seed);
+    for (const row of library) {
+      if (!row || !row.slug) continue;
+      if (row.userId != null) continue;
+      if (row.isStarter) continue;
+      if (seedSet.has(row.slug)) continue;
+      seed.push(row.slug);
+      seedSet.add(row.slug);
+    }
+    safeSetItem("cw_added_target_presets", JSON.stringify(seed));
+    if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+  }
+  safeSetItem(STARTER_MIGRATION_KEY, "1");
+}
+
 /**
  * Build the taste-page preset rail by merging three sources in ascending
- * priority, with tombstoned slugs dropped uniformly:
+ * priority, with tombstoned slugs dropped and non-starter canonical rows
+ * filtered to the user's explicit added list:
  *
- *   1. TARGET_PRESETS shim  — the 5-entry fallback in constants.js, used
+ *   1. TARGET_PRESETS shim  — the 8-entry fallback in constants.js, used
  *                              before Supabase library data arrives on a
  *                              cold pageload.
  *   2. Supabase library     — all is_public=true rows, fetched by
- *                              library-data.js (sync cache via
- *                              getPublicRecipesSync; [] before it resolves).
+ *                              library-data.js. Canonical rows
+ *                              (userId == null) are gated on is_starter +
+ *                              added_target_presets; user-published rows
+ *                              (userId != null) do not pass through the rail
+ *                              merge (they arrive via copy-to-custom).
  *   3. User custom profiles — user_id=auth.uid() rows from Supabase,
  *                              mirrored in localStorage.
  *
  * Later sources override earlier ones at the same slug. Tombstones apply
- * uniformly (if a slug is in cw_deleted_target_presets it is hidden
- * regardless of source), so "remove from rail" works for library rows and
- * custom rows alike. The "+ Add Custom" pseudo-entry is always appended.
+ * uniformly. The "+ Add Custom" pseudo-entry is always appended.
  *
  * @returns {Record<string, TargetProfile>}
  */
@@ -723,23 +797,29 @@ function getAllTargetPresets() {
   const tombstoned = new Set(loadDeletedTargetPresets());
   const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
 
+  runStarterBackfillIfNeeded(library);
+  const added = new Set(loadAddedTargetPresets());
+
   /** @type {Record<string, TargetProfile>} */
   const result = {};
 
   // 1. Shim — lowest priority. Kept so the rail has *something* on cold loads
-  //    before Supabase responds.
+  //    before Supabase responds. The shim is the 8 starter slugs exactly, so
+  //    no per-entry starter filter is needed here.
   for (const [key, value] of Object.entries(TARGET_PRESETS)) {
     if (tombstoned.has(key)) continue;
     result[key] = value;
   }
 
   // 2. Supabase library — overrides shim at the same slug with canonical DB
-  //    values. Library rows only carry a slug + ion data + label/description,
-  //    so we normalize into the TargetProfile shape getTargetProfileByKey
-  //    expects.
+  //    values. Canonical rows (userId == null) pass only if is_starter OR the
+  //    user explicitly added the slug via library.html. User-published rows
+  //    (userId != null) bypass the starter filter and flow through as before
+  //    — the starter/added gating is canonical-row-only.
   for (const row of library) {
     if (!row || !row.slug) continue;
     if (tombstoned.has(row.slug)) continue;
+    if (row.userId == null && !row.isStarter && !added.has(row.slug)) continue;
     result[row.slug] = {
       label: row.label,
       brewMethod: row.brewMethod,
@@ -1006,6 +1086,9 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (e.key === "cw_deleted_target_presets") {
       invalidateTargetPresetsCache();
     }
+    if (e.key === "cw_added_target_presets") {
+      invalidateTargetPresetsCache();
+    }
   });
 }
 
@@ -1026,6 +1109,9 @@ if (typeof module !== "undefined" && module.exports) {
     loadDeletedTargetPresets,
     addDeletedTargetPreset,
     removeDeletedTargetPreset,
+    loadAddedTargetPresets,
+    addAddedTargetPreset,
+    removeAddedTargetPreset,
     loadCustomTargetProfiles,
     saveCustomTargetProfiles,
     getExistingTargetProfileLabels,

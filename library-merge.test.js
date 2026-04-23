@@ -56,6 +56,8 @@ const {
   invalidateTargetPresetsCache,
   addDeletedTargetPreset,
   loadDeletedTargetPresets,
+  loadAddedTargetPresets,
+  addAddedTargetPreset,
   saveCustomTargetProfiles,
   loadCustomTargetProfiles,
   getExistingTargetProfileLabels,
@@ -112,6 +114,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
         magnesium: 17,
         alkalinity: 40,
         description: "from library",
+        userId: null,
+        isStarter: true,
       },
     ];
     invalidateTargetPresetsCache();
@@ -130,6 +134,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
         magnesium: 17,
         alkalinity: 40,
         description: "from library",
+        userId: null,
+        isStarter: true,
       },
     ];
     saveCustomTargetProfiles({
@@ -146,7 +152,7 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     expect(result["sca"].calcium).toBe(42);
   });
 
-  test("library-only slug appears in rail (not in shim, not in custom)", () => {
+  test("starter library-only slug appears in rail (not in shim, not in custom)", () => {
     fakeLibraryRows = [
       {
         slug: "sey",
@@ -155,12 +161,35 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
         calcium: 20,
         magnesium: 15,
         alkalinity: 15,
+        userId: null,
+        isStarter: true,
       },
     ];
     invalidateTargetPresetsCache();
     const result = getAllTargetPresets();
     expect(result["sey"]).toBeDefined();
     expect(result["sey"].label).toBe("Sey");
+  });
+
+  test("non-starter library slug is hidden by default but appears when explicitly added (migration 011)", () => {
+    fakeLibraryRows = [
+      {
+        slug: "rasami-w1d3",
+        label: "RAsami W1D3",
+        brewMethod: "filter",
+        calcium: 10,
+        magnesium: 5,
+        alkalinity: 10,
+        userId: null,
+        isStarter: false,
+      },
+    ];
+    invalidateTargetPresetsCache();
+    expect(getAllTargetPresets()["rasami-w1d3"]).toBeUndefined();
+
+    addAddedTargetPreset("rasami-w1d3");
+    invalidateTargetPresetsCache();
+    expect(getAllTargetPresets()["rasami-w1d3"]).toBeDefined();
   });
 
   test("tombstone hides a shim slug", () => {
@@ -179,6 +208,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
         calcium: 20,
         magnesium: 15,
         alkalinity: 15,
+        userId: null,
+        isStarter: true,
       },
     ];
     addDeletedTargetPreset("sey");
@@ -220,6 +251,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
         magnesium: 15,
         alkalinity: 15,
         description: "Sey roaster's water.",
+        userId: null,
+        isStarter: true,
       },
     ];
     invalidateTargetPresetsCache();
@@ -259,30 +292,30 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
 // 1.5 — copyRecipeToMyProfiles tombstone-lift vs. suffixed-copy
 // ---------------------------------------------------------------------------
 
-describe("copyRecipeToMyProfiles: tombstone-lift vs. suffixed-copy", () => {
-  test("non-tombstoned canonical row: creates suffixed custom copy", () => {
-    // Canonical rows (user_id IS NULL) already live in the rail. Adding one
-    // when it's *not* tombstoned means the user wants their own editable
-    // version — copy-to-custom with a suffixed slug.
+describe("copyRecipeToMyProfiles: canonical-identity preservation + starter-vs-added branching", () => {
+  test("non-tombstoned canonical starter row: returns canonical slug, no suffixed copy", () => {
+    // Post-migration-011 invariant: canonical rows always stay at their
+    // canonical slug — we never fork them into custom profiles, even when
+    // the user hits "Save" on an already-visible row. For a starter that
+    // isn't tombstoned, this is a no-op that returns the canonical slug.
     const recipe = {
       slug: "sca",
       label: "SCA Standard",
       brewMethod: "filter",
       userId: null,
+      isStarter: true,
       calcium: 51,
       magnesium: 17,
       alkalinity: 40,
     };
     const returned = copyRecipeToMyProfiles(recipe);
-    // Slug is derived from the label via slugify, not from the canonical slug.
-    expect(returned).not.toBe("sca");
-    expect(returned).toBe("sca-standard");
+    expect(returned).toBe("sca");
     const custom = loadCustomTargetProfiles();
-    expect(custom[returned]).toBeDefined();
-    expect(custom[returned].label).toBe("SCA Standard");
+    expect(custom["sca"]).toBeUndefined();
+    expect(custom["sca-standard"]).toBeUndefined();
   });
 
-  test("tombstoned canonical row: lifts tombstone, returns canonical slug (NO sca-2)", () => {
+  test("tombstoned canonical starter row: lifts tombstone, returns canonical slug (NO sca-2)", () => {
     // The invariant under test: × remove → Add round-trips to the canonical
     // slug. This prevents a "sca-2"-style dangling custom row after
     // remove-then-re-add.
@@ -293,6 +326,7 @@ describe("copyRecipeToMyProfiles: tombstone-lift vs. suffixed-copy", () => {
       label: "SCA Standard",
       brewMethod: "filter",
       userId: null,
+      isStarter: true,
       calcium: 51,
       magnesium: 17,
       alkalinity: 40,
@@ -309,6 +343,29 @@ describe("copyRecipeToMyProfiles: tombstone-lift vs. suffixed-copy", () => {
     invalidateTargetPresetsCache();
     const rail = getAllTargetPresets();
     expect(rail["sca"]).toBeDefined();
+  });
+
+  test("non-starter canonical row: adds to added list, returns canonical slug", () => {
+    // Migration 011: non-starter canonical rows are hidden by default.
+    // copyRecipeToMyProfiles records an explicit add in the added list so
+    // getAllTargetPresets's filter picks the row up on next render — no
+    // tombstone touch, no suffixed copy.
+    const recipe = {
+      slug: "rasami-w1d3",
+      label: "RAsami W1D3",
+      brewMethod: "filter",
+      userId: null,
+      isStarter: false,
+      calcium: 10,
+      magnesium: 5,
+      alkalinity: 10,
+    };
+    const returned = copyRecipeToMyProfiles(recipe);
+    expect(returned).toBe("rasami-w1d3");
+    expect(loadAddedTargetPresets()).toContain("rasami-w1d3");
+    expect(loadDeletedTargetPresets()).not.toContain("rasami-w1d3");
+    const custom = loadCustomTargetProfiles();
+    expect(custom["rasami-w1d3"]).toBeUndefined();
   });
 
   test("user-published row with a non-tombstoned slug: copies to custom with new slug", () => {
@@ -334,23 +391,46 @@ describe("copyRecipeToMyProfiles: tombstone-lift vs. suffixed-copy", () => {
 });
 
 describe("isRecipeInMyProfiles: canonical vs. user-published regimes", () => {
-  test("canonical row (userId == null), not tombstoned → reports 'in profiles'", () => {
+  test("canonical starter row, not tombstoned → reports 'in profiles'", () => {
     const recipe = {
       slug: "sca",
       label: "SCA Standard",
       userId: null,
+      isStarter: true,
     };
     expect(isRecipeInMyProfiles(recipe)).toBe(true);
   });
 
-  test("canonical row, tombstoned → reports 'not in profiles'", () => {
+  test("canonical starter row, tombstoned → reports 'not in profiles'", () => {
     addDeletedTargetPreset("sca");
     const recipe = {
       slug: "sca",
       label: "SCA Standard",
       userId: null,
+      isStarter: true,
     };
     expect(isRecipeInMyProfiles(recipe)).toBe(false);
+  });
+
+  test("canonical non-starter row, NOT in added list → reports 'not in profiles'", () => {
+    const recipe = {
+      slug: "rasami-w1d3",
+      label: "RAsami W1D3",
+      userId: null,
+      isStarter: false,
+    };
+    expect(isRecipeInMyProfiles(recipe)).toBe(false);
+  });
+
+  test("canonical non-starter row, in added list → reports 'in profiles'", () => {
+    addAddedTargetPreset("rasami-w1d3");
+    const recipe = {
+      slug: "rasami-w1d3",
+      label: "RAsami W1D3",
+      userId: null,
+      isStarter: false,
+    };
+    expect(isRecipeInMyProfiles(recipe)).toBe(true);
   });
 
   test("user-published row, matching label in customs → reports 'in profiles'", () => {
@@ -422,6 +502,8 @@ describe("brewMethod='all' cross-method support", () => {
         calcium: 30,
         magnesium: 15,
         alkalinity: 30,
+        userId: null,
+        isStarter: true,
       },
       {
         slug: "filter-only",
@@ -430,6 +512,8 @@ describe("brewMethod='all' cross-method support", () => {
         calcium: 40,
         magnesium: 20,
         alkalinity: 25,
+        userId: null,
+        isStarter: true,
       },
       {
         slug: "espresso-only",
@@ -438,6 +522,8 @@ describe("brewMethod='all' cross-method support", () => {
         calcium: 80,
         magnesium: 40,
         alkalinity: 40,
+        userId: null,
+        isStarter: true,
       },
     ];
     invalidateTargetPresetsCache();
@@ -462,6 +548,8 @@ describe("brewMethod='all' cross-method support", () => {
         calcium: 30,
         magnesium: 15,
         alkalinity: 30,
+        userId: null,
+        isStarter: true,
       },
     ];
     addDeletedTargetPreset("cross-method");
