@@ -203,6 +203,7 @@
           // explicitly set creatorUserId to the original author.
           creator_user_id: p.creatorUserId !== undefined ? p.creatorUserId : userId,
           tags: Array.isArray(p.tags) ? p.tags : [],
+          roast: Array.isArray(p.roast) && p.roast.length > 0 ? p.roast : ["all"],
           updated_at: now,
         };
       });
@@ -318,6 +319,7 @@
             creatorDisplayName: row.creator_display_name || "",
             creatorUserId: row.creator_user_id || null,
             tags: Array.isArray(row.tags) ? row.tags : [],
+            roast: Array.isArray(row.roast) ? row.roast : ["all"],
           };
         },
       );

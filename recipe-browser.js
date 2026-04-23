@@ -723,6 +723,11 @@
         if (typeof window.confirmUnpublish !== "function") return;
         window.confirmUnpublish(recipe, {
           onUnpublished: function () {
+            // Optimistic removal: the Supabase update already landed, so
+            // drop the row from local state before refetching. If the
+            // refetch fails, the user still sees the expected result
+            // rather than the row reappearing or the carousel going blank.
+            allRecipes = allRecipes.filter(function (r) { return r.id !== recipe.id; });
             refetchAndRender();
           },
         });
@@ -750,7 +755,13 @@
           console.warn("[recipe-browser] refetch failed; falling back to cache:", err);
           if (typeof window.getPublicRecipesSync === "function") {
             var fallback = window.getPublicRecipesSync();
-            if (Array.isArray(fallback)) allRecipes = fallback;
+            // Only adopt the cache when it actually has data. The unpublish
+            // and edit flows invalidate the public-recipes cache before
+            // refetching, so a network failure here would otherwise replace
+            // allRecipes with [] and blank the carousel. Preserving the
+            // current state (which includes optimistic mutations) keeps
+            // the UI consistent with what the user just did.
+            if (Array.isArray(fallback) && fallback.length > 0) allRecipes = fallback;
           }
           // Optimistic: mutation already landed in Supabase; the cache may
           // be stale for a moment but the next library.html load will see

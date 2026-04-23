@@ -220,7 +220,8 @@
       // on every device.  creatorUserId is the authoritative creator check;
       // creatorDisplayName is kept for display.
       creatorUserId: recipe.userId || null,
-      creatorDisplayName: recipe.creatorDisplayName || ""
+      creatorDisplayName: recipe.creatorDisplayName || "",
+      roast: Array.isArray(recipe.roast) ? recipe.roast.slice() : ["all"]
     };
 
     var profiles = loadCustomTargetProfiles();
