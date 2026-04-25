@@ -35,6 +35,12 @@ window.signUpWithEmail = async function(email, password) {
   return supabaseClient.auth.signUp({ email, password });
 };
 
+window.resetPasswordForEmail = async function(email) {
+  return supabaseClient.auth.resetPasswordForEmail(email, {
+    redirectTo: 'https://cafelytic.com/reset-password.html'
+  });
+};
+
 window.signInWithGoogle = async function() {
   return supabaseClient.auth.signInWithOAuth({
     provider: 'google',
