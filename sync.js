@@ -141,10 +141,8 @@
     // is still tombstoned here, the local dict entry is stale (e.g. from
     // a missed pullFromCloud after a cross-device delete) and the
     // tombstone is the authoritative record of intent.
-    var tombstonedSourceSet = {};
-    for (var i = 0; i < deletedSources.length; i++) tombstonedSourceSet[deletedSources[i]] = true;
-    var tombstonedTargetSet = {};
-    for (var j = 0; j < deletedTargets.length; j++) tombstonedTargetSet[deletedTargets[j]] = true;
+    var tombstonedSourceSet = new Set(deletedSources);
+    var tombstonedTargetSet = new Set(deletedTargets);
 
     // Delete cloud rows for tombstoned slugs.  This replaces the previous
     // SELECT+diff pattern, which could delete rows created on other devices
@@ -179,7 +177,7 @@
     // Upsert local source profiles, skipping any tombstoned slugs so a
     // local dict that still holds a deleted entry can't resurrect it.
     var sourceEntries = Object.entries(localSource).filter(function (entry) {
-      return !tombstonedSourceSet[entry[0]];
+      return !tombstonedSourceSet.has(entry[0]);
     });
     if (sourceEntries.length > 0) {
       var sourceRows = sourceEntries.map(function (entry) {
@@ -207,7 +205,7 @@
 
     // Upsert local target profiles, skipping any tombstoned slugs.
     var targetEntries = Object.entries(localTarget).filter(function (entry) {
-      return !tombstonedTargetSet[entry[0]];
+      return !tombstonedTargetSet.has(entry[0]);
     });
     if (targetEntries.length > 0) {
       var targetRows = targetEntries.map(function (entry) {

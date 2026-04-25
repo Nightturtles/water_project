@@ -208,6 +208,13 @@ function saveCustomProfiles(profiles) {
 // any matching tombstones. Inlines the tombstone-array mutation rather than
 // calling addDeletedTargetPreset/removeDeletedTargetPreset so source and
 // target sides share one code path.
+/**
+ * @param {Record<string, unknown>} newProfiles
+ * @param {Record<string, unknown> | null} oldCache
+ * @param {() => string[]} loadFn
+ * @param {string} storageKey
+ * @param {() => void} invalidateFn
+ */
 function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storageKey, invalidateFn) {
   const tombstones = loadFn();
   if (tombstones.length === 0) return;
@@ -216,7 +223,7 @@ function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storage
     return !Object.prototype.hasOwnProperty.call(oldProfiles, slug);
   });
   if (newSlugs.length === 0) return;
-  const filtered = tombstones.filter(function (slug) {
+  const filtered = tombstones.filter(function (/** @type {string} */ slug) {
     return newSlugs.indexOf(slug) === -1;
   });
   if (filtered.length !== tombstones.length) {
