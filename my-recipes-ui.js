@@ -249,7 +249,15 @@
     actions.appendChild(saveBtn);
     dialog.appendChild(actions);
 
+    // Tracked so cross-device Realtime listeners can skip re-rendering
+    // the underlying rail/library while the user is mid-edit on this slug.
+    // The modal itself is in its own DOM subtree and would survive a
+    // re-render anyway; this just keeps the experience from feeling like
+    // things are shifting beneath the user. Cleared on close().
+    window._cwEditModalOpenSlug = recipe && recipe.slug ? recipe.slug : null;
+
     function close() {
+      window._cwEditModalOpenSlug = null;
       document.removeEventListener("keydown", keyHandler);
       overlay.removeEventListener("click", overlayClickHandler);
       overlay.remove();

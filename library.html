@@ -47,6 +47,11 @@
         window.mountRecipeBrowser(document.getElementById("rx-root"));
       }
     });
+    // Refresh on bfcache restore so the Realtime channel (torn down on
+    // pagehide) re-subscribes via the next initSync().
+    window.addEventListener("pageshow", function (e) {
+      if (e.persisted) location.reload();
+    });
   </script>
 </body>
 </html>

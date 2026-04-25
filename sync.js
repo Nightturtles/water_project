@@ -15,6 +15,18 @@
   var syncTimer = undefined;
   var SYNC_DEBOUNCE_MS = 500;
 
+  // Realtime channel state. One channel per logged-in user; null when
+  // signed out or before initSync has run. The pull debounce coalesces
+  // bursts (e.g. user_selections + target_profiles edits arriving in the
+  // same logical change) into one pullFromCloud call.
+  /** @type {any} */
+  var realtimeChannel = null;
+  /** @type {string | null} */
+  var realtimeUserId = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  var pullDebounceTimer = undefined;
+  var PULL_DEBOUNCE_MS = 250;
+
   // --- Debounced sync trigger (called from storage.js save functions) ---
   function scheduleSyncToCloud() {
     clearTimeout(syncTimer);
@@ -121,6 +133,17 @@
     var deletedSources = loadDeletedPresets();
     var deletedTargets = loadDeletedTargetPresets();
 
+    // Tombstone sets used to filter upserts below: a slug present in BOTH
+    // the local custom-profile dict and the tombstone list must NOT be
+    // upserted — that's the resurrection bug. The save path
+    // (saveCustomProfiles / saveCustomTargetProfiles) is responsible for
+    // lifting tombstones when the user explicitly re-saves; if the slug
+    // is still tombstoned here, the local dict entry is stale (e.g. from
+    // a missed pullFromCloud after a cross-device delete) and the
+    // tombstone is the authoritative record of intent.
+    var tombstonedSourceSet = new Set(deletedSources);
+    var tombstonedTargetSet = new Set(deletedTargets);
+
     // Delete cloud rows for tombstoned slugs.  This replaces the previous
     // SELECT+diff pattern, which could delete rows created on other devices
     // whenever local state was stale (e.g. a debounced push that ran without
@@ -151,8 +174,11 @@
       });
     }
 
-    // Upsert local source profiles
-    var sourceEntries = Object.entries(localSource);
+    // Upsert local source profiles, skipping any tombstoned slugs so a
+    // local dict that still holds a deleted entry can't resurrect it.
+    var sourceEntries = Object.entries(localSource).filter(function (entry) {
+      return !tombstonedSourceSet.has(entry[0]);
+    });
     if (sourceEntries.length > 0) {
       var sourceRows = sourceEntries.map(function (entry) {
         var slug = entry[0],
@@ -177,8 +203,10 @@
       if (srcResult.error) console.warn("[sync] source_profiles upsert failed:", srcResult.error);
     }
 
-    // Upsert local target profiles
-    var targetEntries = Object.entries(localTarget);
+    // Upsert local target profiles, skipping any tombstoned slugs.
+    var targetEntries = Object.entries(localTarget).filter(function (entry) {
+      return !tombstonedTargetSet.has(entry[0]);
+    });
     if (targetEntries.length > 0) {
       var targetRows = targetEntries.map(function (entry) {
         var slug = entry[0],
@@ -274,7 +302,14 @@
     // Apply source profiles, skipping any that are tombstoned locally.
     // (Cloud deletion and tombstone push aren't atomic, so a slug can still
     // be present in source_profiles briefly after deletion.)
-    if (sourceRows && sourceRows.length > 0) {
+    //
+    // An empty array is authoritative: if the cloud query succeeded with
+    // no rows, the user has no source profiles, and any stale local entries
+    // must be cleared. Otherwise a recipe deleted on another device stays
+    // in our localStorage forever, and the next push resurrects it on the
+    // cloud (the cleanup in syncCustomProfiles incorrectly classifies the
+    // local-and-tombstone overlap as "user re-saved").
+    if (Array.isArray(sourceRows)) {
       var tombstonedSources = loadDeletedPresets();
       /** @type {Record<string, SourceProfile>} */
       var srcProfiles = {};
@@ -298,8 +333,9 @@
 
     // Apply target profiles, skipping any that are tombstoned locally
     // (cloud deletion and tombstone push aren't atomic, so a slug may still
-    // be in cloud target_profiles briefly after deletion).
-    if (targetRows && targetRows.length > 0) {
+    // be in cloud target_profiles briefly after deletion). Same empty-array-
+    // is-authoritative reasoning as the source-profiles branch above.
+    if (Array.isArray(targetRows)) {
       var tombstonedTargets = loadDeletedTargetPresets();
       /** @type {Record<string, TargetProfile>} */
       var tgtProfiles = {};
@@ -476,6 +512,85 @@
     safeSetItem("cw_synced_user_id", userId);
   }
 
+  // --- Realtime: subscribe to per-user table changes ---
+  // Subscribes to postgres_changes on target_profiles, source_profiles, and
+  // user_selections, filtered to the current user's rows. Any event triggers
+  // a debounced pullFromCloud + a CustomEvent so UI listeners re-render.
+  //
+  // We always pull rather than apply the payload directly because the pull
+  // path already handles tombstone filtering (see pullFromCloud above) and
+  // cache invalidation. Bursts of events (e.g. a recipe edit that touches
+  // both target_profiles and user_selections) coalesce into one pull.
+  //
+  // RLS on these tables (001_schema.sql) restricts SELECT to user_id =
+  // auth.uid(), and Realtime applies the same policies to postgres_changes,
+  // so subscriptions remain per-user safe.
+  /** @param {string} userId */
+  function subscribeToCloudChanges(userId) {
+    if (!window.supabaseClient || typeof window.supabaseClient.channel !== "function") return;
+    if (realtimeChannel && realtimeUserId === userId) return;
+    if (realtimeChannel) unsubscribeFromCloudChanges();
+
+    var filter = "user_id=eq." + userId;
+    var channel = window.supabaseClient.channel("user-data:" + userId);
+
+    var tables = ["target_profiles", "source_profiles", "user_selections"];
+    tables.forEach(function (table) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: table, filter: filter },
+        scheduleRealtimePull,
+      );
+    });
+
+    channel.subscribe(function (status) {
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn("[sync] realtime channel status:", status);
+      }
+    });
+
+    realtimeChannel = channel;
+    realtimeUserId = userId;
+  }
+
+  function unsubscribeFromCloudChanges() {
+    if (!realtimeChannel) return;
+    try {
+      if (window.supabaseClient && typeof window.supabaseClient.removeChannel === "function") {
+        window.supabaseClient.removeChannel(realtimeChannel);
+      }
+    } catch (err) {
+      console.warn("[sync] removeChannel threw:", err);
+    }
+    realtimeChannel = null;
+    realtimeUserId = null;
+  }
+
+  // Realtime → pull bridge. Debounce so a burst of events (one per affected
+  // table) folds into a single pull. Push any pending local write first so
+  // the pull reads cloud state that already includes our own write —
+  // otherwise we'd briefly overwrite local with stale cloud (same rationale
+  // as initSync's push-then-pull ordering).
+  function scheduleRealtimePull() {
+    clearTimeout(pullDebounceTimer);
+    pullDebounceTimer = setTimeout(function () {
+      pullDebounceTimer = undefined;
+      var pendingPush = syncTimer ? syncNow() : Promise.resolve();
+      Promise.resolve(pendingPush)
+        .then(function () {
+          return pullFromCloud();
+        })
+        .then(function () {
+          if (typeof window.dispatchEvent === "function") {
+            window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+          }
+        })
+        .catch(function (err) {
+          console.warn("[sync] realtime pull failed:", err);
+        });
+    }, PULL_DEBOUNCE_MS);
+  }
+
   // --- Background sync on page load (if already logged in) ---
   // Push first so any unsynced local writes (e.g. a save made immediately
   // before navigating to this page) are propagated to the cloud before
@@ -496,6 +611,7 @@
       await pullFromCloud().catch(function (err) {
         console.warn("[sync] pull on page load failed:", err);
       });
+      subscribeToCloudChanges(result.data.session.user.id);
     } catch (err) {
       console.warn("[sync] initSync failed:", err);
     }
@@ -516,10 +632,30 @@
     if (document.visibilityState === "hidden") flushPendingSync();
   });
 
-  window.addEventListener("beforeunload", flushPendingSync);
+  function teardownOnLeave() {
+    unsubscribeFromCloudChanges();
+    flushPendingSync();
+  }
+
+  window.addEventListener("beforeunload", teardownOnLeave);
   // pagehide fires reliably on mobile (iOS) and on bfcache evictions, where
   // beforeunload is often skipped.
-  window.addEventListener("pagehide", flushPendingSync);
+  window.addEventListener("pagehide", teardownOnLeave);
+
+  // Re-bind Realtime when the auth session changes within a single page
+  // (sign-in from a logged-out tab, or sign-out without a reload).
+  // SIGNED_OUT tears the channel down; SIGNED_IN subscribes for the new
+  // user. TOKEN_REFRESHED is a no-op — supabase-js v2 keeps the existing
+  // channel alive across token refreshes.
+  if (window.supabaseClient && window.supabaseClient.auth) {
+    window.supabaseClient.auth.onAuthStateChange(function (event, session) {
+      if (event === "SIGNED_OUT") {
+        unsubscribeFromCloudChanges();
+      } else if (event === "SIGNED_IN" && session && session.user) {
+        subscribeToCloudChanges(session.user.id);
+      }
+    });
+  }
 
   // Expose public API
   window.scheduleSyncToCloud = scheduleSyncToCloud;

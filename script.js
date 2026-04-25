@@ -904,17 +904,20 @@ activateProfile(currentProfile);
 // requiring a page navigation. Also re-check currentProfile — a tombstoned
 // library slug that was previously absent from the shim could leave
 // currentProfile pointing at a preset that has disappeared.
-if (typeof window.onLibraryDataLoaded === "function") {
-  window.onLibraryDataLoaded(function () {
-    renderProfileButtons();
-    const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
-    if (!merged[currentProfile]) {
-      currentProfile = findFallbackPreset(merged);
-      saveTargetPresetName(currentProfile);
-      activateProfile(currentProfile);
-    }
-  });
+function refreshPresetRail() {
+  renderProfileButtons();
+  const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
+  if (!merged[currentProfile]) {
+    currentProfile = findFallbackPreset(merged);
+    saveTargetPresetName(currentProfile);
+    activateProfile(currentProfile);
+  }
 }
+if (typeof window.onLibraryDataLoaded === "function") {
+  window.onLibraryDataLoaded(refreshPresetRail);
+}
+// Cross-device sync: re-render when sync.js Realtime pull writes new data.
+window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 
 // --- Welcome modal (one-time, Calculator page only) ---
 (function initWelcomeModal() {
