@@ -43,7 +43,16 @@
         <div class="login-error" id="login-error" role="alert" aria-live="polite"></div>
         <div class="login-success" id="login-success" role="status" aria-live="polite" style="display:none;"></div>
         <button type="submit" class="login-submit-btn" id="login-submit">Sign in</button>
+        <button type="button" class="login-text-link" id="forgot-link"
+                style="background:none;border:none;color:var(--blue-600);cursor:pointer;font-size:0.85rem;margin-top:0.5rem;padding:0;">
+          Forgot password?
+        </button>
       </form>
+
+      <button type="button" class="login-text-link" id="back-to-signin"
+              style="display:none;background:none;border:none;color:var(--blue-600);cursor:pointer;font-size:0.85rem;margin-top:0.5rem;padding:0;">
+        Back to sign in
+      </button>
 
       <div class="login-divider">or</div>
 
@@ -75,21 +84,45 @@
     const submitBtn = document.getElementById('login-submit');
     const emailInput = document.getElementById('login-email');
     const passwordInput = document.getElementById('login-password');
+    const passwordGroup = passwordInput.closest('.input-group');
     const errorEl = document.getElementById('login-error');
     const successEl = document.getElementById('login-success');
     const googleBtn = document.getElementById('google-btn');
+    const forgotLink = document.getElementById('forgot-link');
+    const backToSigninLink = document.getElementById('back-to-signin');
+    const modeToggle = document.querySelector('.login-mode-toggle');
+    const divider = document.querySelector('.login-divider');
 
     let mode = 'signin';
 
     function setMode(newMode) {
       mode = newMode;
+      const isForgot = mode === 'forgot';
       const isSignin = mode === 'signin';
-      signinTab.classList.toggle('active', isSignin);
-      signinTab.setAttribute('aria-pressed', String(isSignin));
-      signupTab.classList.toggle('active', !isSignin);
-      signupTab.setAttribute('aria-pressed', String(!isSignin));
-      submitBtn.textContent = isSignin ? 'Sign in' : 'Create account';
-      passwordInput.autocomplete = isSignin ? 'current-password' : 'new-password';
+
+      if (isForgot) {
+        passwordGroup.style.display = 'none';
+        modeToggle.style.display = 'none';
+        divider.style.display = 'none';
+        googleBtn.style.display = 'none';
+        forgotLink.style.display = 'none';
+        backToSigninLink.style.display = '';
+        submitBtn.textContent = 'Send reset link';
+        passwordInput.value = '';
+      } else {
+        passwordGroup.style.display = '';
+        modeToggle.style.display = '';
+        divider.style.display = '';
+        googleBtn.style.display = '';
+        forgotLink.style.display = '';
+        backToSigninLink.style.display = 'none';
+        signinTab.classList.toggle('active', isSignin);
+        signinTab.setAttribute('aria-pressed', String(isSignin));
+        signupTab.classList.toggle('active', !isSignin);
+        signupTab.setAttribute('aria-pressed', String(!isSignin));
+        submitBtn.textContent = isSignin ? 'Sign in' : 'Create account';
+        passwordInput.autocomplete = isSignin ? 'current-password' : 'new-password';
+      }
       clearMessages();
     }
 
@@ -112,6 +145,8 @@
 
     signinTab.addEventListener('click', () => setMode('signin'));
     signupTab.addEventListener('click', () => setMode('signup'));
+    forgotLink.addEventListener('click', () => setMode('forgot'));
+    backToSigninLink.addEventListener('click', () => setMode('signin'));
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -121,8 +156,8 @@
       console.log('supabaseClient available:', typeof window.supabaseClient);
       const email = emailInput.value.trim();
       const password = passwordInput.value;
-      if (!email || !password) {
-        showError('Please enter your email and password.');
+      if (!email || (mode !== 'forgot' && !password)) {
+        showError(mode === 'forgot' ? 'Please enter your email.' : 'Please enter your email and password.');
         return;
       }
       submitBtn.disabled = true;
@@ -135,13 +170,17 @@
           if (error) { showError(error.message); return; }
           if (typeof handleFirstLoginMerge === 'function') await handleFirstLoginMerge();
           window.location.href = 'index.html';
-        } else {
+        } else if (mode === 'signup') {
           console.log('Calling signUpWithEmail...');
           const { data, error } = await window.signUpWithEmail(email, password);
           console.log('signUp response:', data, error);
           if (error) { showError(error.message); return; }
           setMode('signin');
           showSuccess('Check your email to confirm your account, then sign in.');
+        } else {
+          const { error } = await window.resetPasswordForEmail(email);
+          if (error) console.warn('reset request error (suppressed from UI):', error);
+          showSuccess("If an account exists for that email, we've sent a reset link.");
         }
       } catch (e) {
         console.error('Submit handler error:', e);
