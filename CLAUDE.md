@@ -58,3 +58,4 @@ Every change that touches `sync.js`, `storage.js`, or row-level-security migrati
 - [SENTRY_SETUP.md](SENTRY_SETUP.md) — error telemetry setup, DSN, runbook.
 - [e2e/README.md](e2e/README.md) — smoke runbooks and when to use them.
 - [SUPABASE_PLAN.md](SUPABASE_PLAN.md) — backend design notes.
+- [SUPABASE_SMTP.md](SUPABASE_SMTP.md) — Resend custom SMTP setup so auth emails don't land in spam.
