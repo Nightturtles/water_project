@@ -846,6 +846,17 @@
       });
     }
 
+    // Cross-device sync: when sync.js receives a Realtime change for this
+    // user, re-fetch the library. refetchAndRender invalidates the public-
+    // recipes cache and rerenders, so a recipe edited / unpublished /
+    // published on another device surfaces here within ~1 s. If the user
+    // is mid-edit, defer — refetch will fire again on modal close, since
+    // any save also dispatches cw:cloud-data-changed via storage writes.
+    window.addEventListener("cw:cloud-data-changed", function () {
+      if (window._cwEditModalOpenSlug) return;
+      refetchAndRender();
+    });
+
     // Handle browser back/forward restoring previous query strings.
     window.addEventListener("popstate", function () {
       state = readFiltersFromUrl();

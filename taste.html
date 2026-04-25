@@ -867,15 +867,18 @@
     // Supabase library rows appear without requiring a page navigation.
     // Preserve the currently-active preset if it still exists in the merged
     // rail; otherwise renderTastePresets(null) will pick a fallback.
-    if (typeof window.onLibraryDataLoaded === "function") {
-      window.onLibraryDataLoaded(function () {
-        const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
-        const activeKey = activeBtn ? activeBtn.dataset.preset : null;
-        const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
-        const preserveKey = activeKey && merged[activeKey] ? activeKey : null;
-        renderTastePresets(preserveKey, { resetSliders: false });
-      });
+    function refreshTasteRail() {
+      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeKey = activeBtn ? activeBtn.dataset.preset : null;
+      const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
+      const preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      renderTastePresets(preserveKey, { resetSliders: false });
     }
+    if (typeof window.onLibraryDataLoaded === "function") {
+      window.onLibraryDataLoaded(refreshTasteRail);
+    }
+    // Cross-device sync: re-render when sync.js Realtime pull writes new data.
+    window.addEventListener("cw:cloud-data-changed", refreshTasteRail);
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

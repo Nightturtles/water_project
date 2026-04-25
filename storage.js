@@ -185,11 +185,44 @@ function loadCustomProfiles() {
 
 /** @param {Record<string, SourceProfile>} profiles */
 function saveCustomProfiles(profiles) {
+  // If a slug is being added that was previously tombstoned, lift the
+  // tombstone — the user's explicit save is unambiguous intent. This must
+  // happen at save time, not in sync, so we don't conflate "user re-saved"
+  // with "stale local state from a missed pull" (the latter would otherwise
+  // resurrect cross-device deletions).
+  liftTombstonesForNewlyAddedSlugs(
+    profiles,
+    customProfilesCache,
+    loadDeletedPresets,
+    "cw_deleted_presets",
+    invalidateSourcePresetsCache,
+  );
   const ok = safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
+}
+
+// Shared helper: when the new dict has slugs not in the previous dict, lift
+// any matching tombstones. Inlines the tombstone-array mutation rather than
+// calling addDeletedTargetPreset/removeDeletedTargetPreset so source and
+// target sides share one code path.
+function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storageKey, invalidateFn) {
+  const tombstones = loadFn();
+  if (tombstones.length === 0) return;
+  const oldProfiles = oldCache || {};
+  const newSlugs = Object.keys(newProfiles).filter(function (slug) {
+    return !Object.prototype.hasOwnProperty.call(oldProfiles, slug);
+  });
+  if (newSlugs.length === 0) return;
+  const filtered = tombstones.filter(function (slug) {
+    return newSlugs.indexOf(slug) === -1;
+  });
+  if (filtered.length !== tombstones.length) {
+    safeSetItem(storageKey, JSON.stringify(filtered));
+    if (typeof invalidateFn === "function") invalidateFn();
+  }
 }
 
 /** @param {string} key */
@@ -233,6 +266,13 @@ function loadCustomTargetProfiles() {
 
 /** @param {Record<string, TargetProfile>} profiles */
 function saveCustomTargetProfiles(profiles) {
+  liftTombstonesForNewlyAddedSlugs(
+    profiles,
+    customTargetProfilesCache,
+    loadDeletedTargetPresets,
+    "cw_deleted_target_presets",
+    invalidateTargetPresetsCache,
+  );
   const ok = safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
@@ -1084,13 +1124,16 @@ function saveCalculatorWelcomeDismissed() {
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
   window.addEventListener("storage", function (e) {
     if (!e.key) return;
+    var recipeAffected = false;
     if (e.key === "cw_custom_profiles") {
       customProfilesCache = null;
       invalidateSourcePresetsCache();
+      recipeAffected = true;
     }
     if (e.key === "cw_custom_target_profiles") {
       customTargetProfilesCache = null;
       invalidateTargetPresetsCache();
+      recipeAffected = true;
     }
     if (e.key === "cw_selected_minerals") {
       selectedMineralsCache = null;
@@ -1103,12 +1146,22 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     }
     if (e.key === "cw_deleted_presets") {
       invalidateSourcePresetsCache();
+      recipeAffected = true;
     }
     if (e.key === "cw_deleted_target_presets") {
       invalidateTargetPresetsCache();
+      recipeAffected = true;
     }
     if (e.key === "cw_added_target_presets") {
       invalidateTargetPresetsCache();
+      recipeAffected = true;
+    }
+    // When another tab on this device receives a Realtime update and
+    // writes the merged state to localStorage, fan the event out so this
+    // tab's UI listeners also re-render. (CustomEvent doesn't cross tabs;
+    // the storage event does.)
+    if (recipeAffected && typeof window.dispatchEvent === "function") {
+      window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
     }
   });
 }
