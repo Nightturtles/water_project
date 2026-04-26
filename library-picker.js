@@ -72,8 +72,8 @@
     var action = document.createElement("button");
     action.type = "button";
     action.className = "preset-btn library-picker-card-action";
-    var alreadyAdded = typeof window.isRecipeInMyProfiles === "function"
-      && window.isRecipeInMyProfiles(recipe);
+    var alreadyAdded =
+      typeof window.isRecipeInMyProfiles === "function" && window.isRecipeInMyProfiles(recipe);
     if (alreadyAdded) {
       action.textContent = "Added";
       action.disabled = true;
@@ -92,7 +92,10 @@
       return (r.brewMethod || "filter") === brewMethod;
     });
     if (filtered.length === 0) {
-      renderEmpty(listEl, "No " + brewMethodLabel(brewMethod).toLowerCase() + " recipes in the library yet.");
+      renderEmpty(
+        listEl,
+        "No " + brewMethodLabel(brewMethod).toLowerCase() + " recipes in the library yet.",
+      );
       return;
     }
     listEl.innerHTML = "";
@@ -135,9 +138,8 @@
 
     // Cached snapshot first for instant render; the live fetch below updates
     // the list once it resolves (no flicker if cache is already warm).
-    var initial = typeof window.getPublicRecipesSync === "function"
-      ? window.getPublicRecipesSync()
-      : [];
+    var initial =
+      typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
     if (initial && initial.length) {
       renderList(listEl, initial, brewMethod);
     } else {
@@ -148,12 +150,15 @@
     closeBtn.focus();
 
     if (typeof window.fetchPublicRecipes === "function") {
-      window.fetchPublicRecipes(false).then(function (recipes) {
-        if (overlay.style.display === "none") return;
-        renderList(listEl, recipes || [], brewMethod);
-      }).catch(function (e) {
-        console.warn("[library-picker] fetch failed:", e);
-      });
+      window
+        .fetchPublicRecipes(false)
+        .then(function (recipes) {
+          if (overlay.style.display === "none") return;
+          renderList(listEl, recipes || [], brewMethod);
+        })
+        .catch(function (e) {
+          console.warn("[library-picker] fetch failed:", e);
+        });
     }
 
     function close() {
@@ -170,11 +175,15 @@
       var actionBtn = e.target.closest("[data-add-recipe-id]");
       if (!actionBtn) return;
       var id = actionBtn.dataset.addRecipeId;
-      var recipes = (typeof window.getPublicRecipesSync === "function"
-        ? window.getPublicRecipesSync() : []) || [];
+      var recipes =
+        (typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : []) ||
+        [];
       var recipe = null;
       for (var i = 0; i < recipes.length; i++) {
-        if (String(recipes[i].id) === String(id)) { recipe = recipes[i]; break; }
+        if (String(recipes[i].id) === String(id)) {
+          recipe = recipes[i];
+          break;
+        }
       }
       if (!recipe) return;
       if (typeof window.copyRecipeToMyProfiles !== "function") return;
@@ -189,12 +198,15 @@
     }
 
     function keyHandler(e) {
-      if (e.key === "Escape") { close(); return; }
+      if (e.key === "Escape") {
+        close();
+        return;
+      }
       if (e.key !== "Tab") return;
       // Focus trap: cycle within the dialog. Build the list fresh so newly
       // rendered cards from the async fetch are included.
       var focusables = dialog.querySelectorAll(
-        "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])"
+        "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
       );
       if (focusables.length === 0) return;
       var first = focusables[0];
