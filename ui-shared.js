@@ -420,7 +420,14 @@ function setDeltaText(el, delta, options = {}) {
 function renderRangeGuidance(el, findings) {
   if (!el) return;
   el.innerHTML = "";
-  if (!Array.isArray(findings) || findings.length === 0) return;
+  if (!Array.isArray(findings)) return;
+  if (findings.length === 0) {
+    const row = document.createElement("div");
+    row.className = "range-guidance-line ok";
+    row.textContent = "Profile sits within typical ranges.";
+    el.appendChild(row);
+    return;
+  }
   const fragment = document.createDocumentFragment();
   findings.forEach((f) => {
     const row = document.createElement("div");

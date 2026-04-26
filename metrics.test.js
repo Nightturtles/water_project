@@ -95,6 +95,70 @@ describe("toStableBicarbonateFromAlkalinity", () => {
   });
 });
 
+describe("evaluateWaterProfileRanges — preset calibration", () => {
+  // These cases pin the calibration: the canonical SCA reference must produce
+  // zero findings, and famous extreme recipes (RPavlis, Cafelytic) must fire
+  // warn-tier findings that explain why the water is unusual — never danger.
+  // No band finding may emit `info` (info tier was removed for credibility).
+  const noSources = { alkalinitySources: [], calciumSource: null, magnesiumSource: null };
+
+  test("SCA Standard (Ca=51, Mg=17, alk≈40) produces zero findings", () => {
+    const ions = { calcium: 51, magnesium: 17, bicarbonate: 48.77 };
+    const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
+    expect(findings).toEqual([]);
+  });
+
+  test("RPavlis (no Ca/Mg/SO4, K=39) fires three warns and zero dangers", () => {
+    const ions = { potassium: 39, bicarbonate: 60.9 };
+    const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
+    const warns = findings.filter((f) => f.severity === "warn");
+    expect(warns.map((f) => f.message)).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^GH is too low/),
+        expect.stringMatching(/^Calcium is too low/),
+        expect.stringMatching(/^Magnesium is too low/),
+      ]),
+    );
+    expect(warns).toHaveLength(3);
+    expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
+  });
+
+  test("Cafelytic Filter (Ca=2, Mg=11, KH≈11) fires one warn (low Ca) — KH=11 stays silent", () => {
+    const ions = { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 };
+    const { findings } = metrics.evaluateWaterProfileRanges(ions, {
+      alkalinitySources: ["potassium-bicarbonate"],
+      calciumSource: "calcium-chloride",
+      magnesiumSource: "magnesium-chloride",
+    });
+    expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
+    const warns = findings.filter((f) => f.severity === "warn");
+    expect(warns).toHaveLength(1);
+    expect(warns[0].message).toMatch(/^Calcium is too low/);
+  });
+
+  test("no preset emits an info-tier band finding (info tier removed)", () => {
+    const samples = [
+      { calcium: 51, magnesium: 17, bicarbonate: 48.77 }, // SCA
+      { potassium: 39, bicarbonate: 60.9 }, // RPavlis
+      { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 }, // Cafelytic Filter
+    ];
+    for (const ions of samples) {
+      const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
+      expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+    }
+  });
+
+  test("dangerous extremes still trigger danger (regression guard)", () => {
+    // Very high TDS and potassium should still fire danger so the credibility
+    // recalibration doesn't accidentally silence genuine over-mineralization.
+    const ions = { calcium: 200, magnesium: 100, sodium: 100, potassium: 200, bicarbonate: 300 };
+    const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
+    const dangers = findings.filter((f) => f.severity === "danger").map((f) => f.message);
+    expect(dangers.some((m) => /^TDS/.test(m))).toBe(true);
+    expect(dangers.some((m) => /^Potassium/.test(m))).toBe(true);
+  });
+});
+
 describe("MINERAL_DB integrity (constants.js sanity)", () => {
   test("every mineral has positive MW and at least one ion fraction in (0, 1]", () => {
     // Regression guard: if someone adds a mineral with mw=0, ion fractions become

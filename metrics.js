@@ -291,24 +291,18 @@ function evaluateWaterProfileRanges(ions, options = {}) {
         "warn",
         `${label} is too ${direction} at ${valueText} (recommended ${preferredBand}).`,
       );
-      return;
-    }
-    if (
-      (preferredMin != null && value < preferredMin) ||
-      (preferredMax != null && value > preferredMax)
-    ) {
-      addFinding(
-        "info",
-        `${label} is slightly ${direction} at ${valueText} (recommended ${preferredBand}).`,
-      );
     }
   }
 
-  addBandFinding("TDS", metrics.tds, "mg/L", 75, 250, 50, 300, 25, 400);
-  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 40, 70, 20, 120, 10, 180);
-  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 50, 175, 25, 220, 10, 280);
-  addBandFinding("Calcium", normalized.calcium, "mg/L", 17, 85, 10, 110, 5, 150);
-  addBandFinding("Magnesium", normalized.magnesium, "mg/L", 5, 30, 2, 45, 1, 70);
+  // Bands sized so SCA Standard and other mainstream filter recipes sit inside
+  // the silent zone (preferred). Lower-danger thresholds for GH/Ca/Mg are null
+  // by design: zero-hardness recipes (e.g. RPavlis) should surface as warn,
+  // never as a "dangerous water" alert on a published recipe.
+  addBandFinding("TDS", metrics.tds, "mg/L", 50, 300, 30, 400, 20, 500);
+  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 30, 90, 10, 130, 5, 200);
+  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 40, 200, 20, 250, null, 300);
+  addBandFinding("Calcium", normalized.calcium, "mg/L", 8, 90, 4, 120, null, 160);
+  addBandFinding("Magnesium", normalized.magnesium, "mg/L", 2, 40, 1, 55, null, 75);
 
   const useBakingSodaSodiumLimits =
     Array.isArray(alkalinitySources) && alkalinitySources.includes("baking-soda");
@@ -345,26 +339,16 @@ function evaluateWaterProfileRanges(ions, options = {}) {
       chlorideDangerMax,
     );
 
-    if (normalized.sulfate < 5 || normalized.sulfate > 75) {
-      const sulfateDirection = normalized.sulfate < 5 ? "low" : "high";
+    if (normalized.sulfate > 150) {
       addFinding(
-        "info",
-        `Sulfate is ${sulfateDirection} at ${Math.round(normalized.sulfate * 10) / 10} mg/L (heuristic 5-75 mg/L).`,
+        "warn",
+        `Sulfate is too high at ${Math.round(normalized.sulfate * 10) / 10} mg/L (recommended <=150 mg/L).`,
       );
     }
-    if (normalized.potassium > 20) {
+    if (normalized.potassium > 100) {
       addFinding(
-        "info",
-        `Potassium is high at ${Math.round(normalized.potassium * 10) / 10} mg/L (heuristic <=20 mg/L).`,
-      );
-    }
-    if (ratio == null) {
-      addFinding("info", "SO4:Cl ratio unavailable (chloride is 0).");
-    } else if (ratio < 0.5 || ratio > 2.0) {
-      const ratioDirection = ratio < 0.5 ? "low" : "high";
-      addFinding(
-        "info",
-        `SO4:Cl ratio is ${ratioDirection} at ${ratio.toFixed(2)} (heuristic 0.50-2.00).`,
+        "danger",
+        `Potassium is too high at ${Math.round(normalized.potassium * 10) / 10} mg/L (recommended <=100 mg/L).`,
       );
     }
   }
