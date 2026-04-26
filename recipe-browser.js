@@ -63,6 +63,11 @@
       subtitle: "Published water from specialty roasters",
     },
     {
+      key: "brand",
+      title: "Coffee Water Brands",
+      subtitle: "Mineral kits and concentrates from coffee water companies",
+    },
+    {
       key: "classic",
       title: "Classic Formulas",
       subtitle: "Canonical references every coffee nerd knows",
@@ -512,7 +517,7 @@
   // --- Content layout ----------------------------------------------------
 
   function partitionByCategory(recipes) {
-    var out = { original: [], "intro-water": [], roaster: [], classic: [] };
+    var out = { original: [], "intro-water": [], roaster: [], brand: [], classic: [] };
     if (!Array.isArray(recipes)) return out;
     recipes.forEach(function (r) {
       var cat = r && r.category ? r.category : "classic";
