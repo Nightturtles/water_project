@@ -439,6 +439,19 @@ if (targetEditModeBtn) {
   });
 }
 
+const targetAddFromLibraryBtn = document.getElementById("target-add-from-library-btn");
+if (targetAddFromLibraryBtn && typeof window.showLibraryPicker === "function") {
+  targetAddFromLibraryBtn.addEventListener("click", () => {
+    window.showLibraryPicker({
+      brewMethod: activeBrewMethod,
+      onAdd: (slug) => {
+        renderProfileButtons();
+        activateProfile(slug);
+      }
+    });
+  });
+}
+
 // --- Save changes to existing target profile (Bug 1: alkalinity drift fix) ---
 targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {

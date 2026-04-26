@@ -31,7 +31,10 @@
     <section class="card">
       <div class="section-header-actions">
         <h2>Current Water Profile</h2>
-        <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+        <div class="section-header-buttons">
+          <button type="button" id="taste-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
+          <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+        </div>
       </div>
       <p class="hint">Enter the water recipe you're currently using, or start from a preset.</p>
       <div class="brew-method-toggle" id="brew-method-toggle">
@@ -306,6 +309,14 @@
     </div>
   </div>
 
+  <div class="library-picker-overlay" id="library-picker-overlay" style="display:none;">
+    <div class="library-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="library-picker-title">
+      <button type="button" class="library-picker-close" aria-label="Close">×</button>
+      <h2 id="library-picker-title" class="library-picker-title">Add From Library</h2>
+      <div class="library-picker-list" id="library-picker-list"></div>
+    </div>
+  </div>
+
   <footer>
     <p>Adjust sliders, taste, repeat. Small changes make a big difference.</p>
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
@@ -319,6 +330,7 @@
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
   <script src="library-data.js"></script>
+  <script src="library-picker.js"></script>
   <script>
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
@@ -841,6 +853,17 @@
         const activeKey = activeBtn ? activeBtn.dataset.preset : null;
         renderTastePresets(activeKey, { resetSliders: false });
         updateTasteModeUI();
+      });
+    }
+    const tasteAddFromLibraryBtn = document.getElementById("taste-add-from-library-btn");
+    if (tasteAddFromLibraryBtn && typeof window.showLibraryPicker === "function") {
+      tasteAddFromLibraryBtn.addEventListener("click", () => {
+        window.showLibraryPicker({
+          brewMethod: activeBrewMethod,
+          onAdd: (slug) => {
+            renderTastePresets(slug, { resetSliders: false });
+          }
+        });
       });
     }
     // Optional deep-link from recipe-browser hero ("Use this recipe"): preset

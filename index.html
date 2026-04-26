@@ -128,7 +128,10 @@
     <section class="card">
       <div class="section-header-actions">
         <h2>Target Water Profile</h2>
-        <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+        <div class="section-header-buttons">
+          <button type="button" id="target-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
+          <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
+        </div>
       </div>
       <div class="brew-method-toggle" id="brew-method-toggle">
         <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
@@ -324,6 +327,14 @@
     </div>
   </div>
 
+  <div class="library-picker-overlay" id="library-picker-overlay" style="display:none;">
+    <div class="library-picker-dialog" role="dialog" aria-modal="true" aria-labelledby="library-picker-title">
+      <button type="button" class="library-picker-close" aria-label="Close">×</button>
+      <h2 id="library-picker-title" class="library-picker-title">Add From Library</h2>
+      <div class="library-picker-list" id="library-picker-list"></div>
+    </div>
+  </div>
+
   <div class="welcome-overlay" id="welcome-modal-overlay" style="display:none;">
     <div class="welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-modal-title" aria-describedby="welcome-modal-desc">
       <button type="button" class="welcome-modal-close" aria-label="Close" id="welcome-modal-close">×</button>
@@ -355,6 +366,7 @@
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
   <script src="library-data.js"></script>
+  <script src="library-picker.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="script.js"></script>
 </body>
