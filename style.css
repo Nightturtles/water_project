@@ -243,7 +243,7 @@ header h1 {
    Layout
    ======================== */
 main {
-  max-width: 640px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 0 1rem 0.5rem;
 }
@@ -2248,15 +2248,9 @@ footer {
    ======================== */
 
 .rx-page {
-  max-width: 1152px;
+  max-width: 800px;
   margin: 0 auto;
   padding: 0 1rem 2rem;
-}
-
-/* Override the 640px <main> cap for the v2 page so the browser can breathe
-   on desktop. Scoped to #rx-root to avoid leaking into other pages. */
-main#rx-root {
-  max-width: 1152px;
 }
 
 .rx-search {
