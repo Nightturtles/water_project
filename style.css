@@ -761,9 +761,10 @@ select:focus {
   background: var(--orange-bg);
 }
 
-.range-guidance-line.info {
-  color: var(--yellow-600);
-  background: var(--yellow-bg);
+.range-guidance-line.ok {
+  color: var(--green-600);
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* ========================
