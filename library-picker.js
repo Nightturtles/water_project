@@ -129,11 +129,12 @@
     var titleEl = overlay.querySelector(".library-picker-title");
     var listEl = overlay.querySelector(".library-picker-list");
     var closeBtn = overlay.querySelector(".library-picker-close");
+    if (!dialog || !titleEl || !listEl || !closeBtn) {
+      console.warn("[library-picker] dialog markup incomplete on this page");
+      return;
+    }
     var previousFocus = document.activeElement;
 
-    dialog.setAttribute("role", "dialog");
-    dialog.setAttribute("aria-modal", "true");
-    dialog.setAttribute("aria-labelledby", "library-picker-title");
     titleEl.textContent = title;
 
     // Cached snapshot first for instant render; the live fetch below updates
@@ -153,10 +154,14 @@
       window
         .fetchPublicRecipes(false)
         .then(function (recipes) {
-          if (overlay.style.display === "none") return;
+          // Stale resolution: picker was closed (or reopened, which closes
+          // the prior session first via pickerCleanup()) before the fetch
+          // settled — don't overwrite the new session's render.
+          if (pickerCleanup !== close) return;
           renderList(listEl, recipes || [], brewMethod);
         })
         .catch(function (e) {
+          if (pickerCleanup !== close) return;
           console.warn("[library-picker] fetch failed:", e);
         });
     }
