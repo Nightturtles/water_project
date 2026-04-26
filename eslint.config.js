@@ -29,6 +29,7 @@ module.exports = tseslint.config(
       "ui-shared.js",
       "source-water-ui.js",
       "library-data.js",
+      "library-picker.js",
       "supabase-client.js",
       "theme-init.js",
     ],
