@@ -27,6 +27,7 @@
   --focus-ring: rgba(59, 130, 246, 0.3);
   --surface: #ffffff;
   --radius: 12px;
+  --content-max-width: 800px;
 
   /* Brand colors (Light · Reversed) */
   --brand-cafe: #4B8FE0;
@@ -243,7 +244,7 @@ header h1 {
    Layout
    ======================== */
 main {
-  max-width: 800px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
   padding: 0 1rem 0.5rem;
 }
@@ -2248,7 +2249,7 @@ footer {
    ======================== */
 
 .rx-page {
-  max-width: 800px;
+  max-width: var(--content-max-width);
   margin: 0 auto;
   padding: 0 1rem 2rem;
 }
