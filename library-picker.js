@@ -66,7 +66,11 @@
     var info = el("div", "library-picker-card-info");
     info.appendChild(el("div", "library-picker-card-title", recipe.label));
     info.appendChild(
-      el("div", "library-picker-card-meta", creatorLine(recipe) + " · " + brewMethodLabel(recipe.brewMethod)),
+      el(
+        "div",
+        "library-picker-card-meta",
+        creatorLine(recipe) + " · " + brewMethodLabel(recipe.brewMethod),
+      ),
     );
     info.appendChild(el("div", "library-picker-card-ions", ionsSummary(recipe)));
     card.appendChild(info);
@@ -165,9 +169,8 @@
     var searchDebounce = null;
     var searchInputEl = null;
 
-    var tagList = (typeof LIBRARY_TAGS !== "undefined" && Array.isArray(LIBRARY_TAGS))
-      ? LIBRARY_TAGS
-      : [];
+    var tagList =
+      typeof LIBRARY_TAGS !== "undefined" && Array.isArray(LIBRARY_TAGS) ? LIBRARY_TAGS : [];
 
     // ---- Render scaffold (one-time per open) -------------------------------
 
@@ -221,17 +224,19 @@
         return;
       }
 
-      var filtered = typeof window.applyFilters === "function"
-        ? window.applyFilters(state, allRecipes)
-        : allRecipes;
+      var filtered =
+        typeof window.applyFilters === "function"
+          ? window.applyFilters(state, allRecipes)
+          : allRecipes;
 
       // Empty state — surface "Clear filters" only when something is filtered.
       if (!filtered || filtered.length === 0) {
         var emptyWrap = el("div", "library-picker-empty-wrap");
         emptyWrap.appendChild(el("p", "library-picker-empty", "No recipes match."));
-        var anyActive = typeof window.hasAnyActiveFilter === "function"
-          ? window.hasAnyActiveFilter(state)
-          : false;
+        var anyActive =
+          typeof window.hasAnyActiveFilter === "function"
+            ? window.hasAnyActiveFilter(state)
+            : false;
         if (anyActive) {
           var clearBtn = el("button", "library-picker-clear-filters", "Clear filters");
           clearBtn.type = "button";
@@ -244,9 +249,10 @@
 
       // Featured: pinned at top (non-collapsible). Use the doubly-filtered
       // set so the pinned card respects the active search/filter state.
-      var featured = typeof window.pickFeaturedFromFiltered === "function"
-        ? window.pickFeaturedFromFiltered(filtered, state.method)
-        : null;
+      var featured =
+        typeof window.pickFeaturedFromFiltered === "function"
+          ? window.pickFeaturedFromFiltered(filtered, state.method)
+          : null;
       if (featured) {
         resultsWrap.appendChild(buildCard(featured, "library-picker-card--featured"));
       }
@@ -254,9 +260,10 @@
       // Sections: iterate LIBRARY_TRAYS so order is canonical. Sections with
       // 0 recipes are skipped entirely (no empty headers).
       var trays = Array.isArray(window.LIBRARY_TRAYS) ? window.LIBRARY_TRAYS : [];
-      var byCategory = typeof window.partitionByCategory === "function"
-        ? window.partitionByCategory(filtered)
-        : {};
+      var byCategory =
+        typeof window.partitionByCategory === "function"
+          ? window.partitionByCategory(filtered)
+          : {};
 
       var searchActive = state.q !== "";
 
@@ -279,7 +286,9 @@
 
         var titleSpan = el("span", "card-collapsible-title");
         titleSpan.appendChild(document.createTextNode(tray.title + " "));
-        titleSpan.appendChild(el("span", "library-picker-section-count", "(" + bucket.length + ")"));
+        titleSpan.appendChild(
+          el("span", "library-picker-section-count", "(" + bucket.length + ")"),
+        );
         summary.appendChild(titleSpan);
 
         var content = el("div", "card-collapsible-content library-picker-section-content");
@@ -403,8 +412,9 @@
       if (actionBtn) {
         var id = actionBtn.dataset.addRecipeId;
         var recipes =
-          (typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : []) ||
-          [];
+          (typeof window.getPublicRecipesSync === "function"
+            ? window.getPublicRecipesSync()
+            : []) || [];
         var recipe = null;
         for (var i = 0; i < recipes.length; i++) {
           if (String(recipes[i].id) === String(id)) {
