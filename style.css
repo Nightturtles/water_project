@@ -1310,6 +1310,126 @@ body.welcome-modal-open {
   cursor: default;
 }
 
+/* Search + filters + collapsible sections inside the picker */
+.library-picker-search {
+  margin-bottom: 0.6rem;
+}
+
+.library-picker-search-input {
+  /* inherits .rx-search-input — modal density tweak */
+  padding: 0.5rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+.library-picker-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.85rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid var(--gray-200);
+}
+
+.library-picker-filter-row {
+  /* tighter than .rx-filter-row defaults — modal has less room */
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.library-picker-filter-row .rx-filter-row-label {
+  flex: 0 0 auto;
+  min-width: 4rem;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.library-picker-filter-row .rx-segmented {
+  flex: 1 1 auto;
+}
+
+.library-picker-filter-row .rx-segmented-button {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.55rem;
+}
+
+.library-picker-filter-row .rx-chip-group {
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.library-picker-filter-row .rx-chip {
+  font-size: 0.8rem;
+  padding: 0.25rem 0.55rem;
+}
+
+.library-picker-results {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.library-picker-card--featured {
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 1px var(--blue-500);
+}
+
+.library-picker-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.library-picker-section-summary.card-collapsible-summary {
+  /* modal-scoped override of .card-collapsible-summary defaults */
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  padding: 0.25rem 1.75rem 0.25rem 0;
+}
+
+.library-picker-section-count {
+  margin-left: 0.25rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  font-size: 0.85rem;
+}
+
+.library-picker-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-top: 0;
+  margin-bottom: 0.6rem;
+}
+
+.library-picker-empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+
+.library-picker-clear-filters {
+  background: none;
+  border: none;
+  color: var(--blue-600);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius);
+}
+
+.library-picker-clear-filters:hover,
+.library-picker-clear-filters:focus-visible {
+  background: var(--gray-100);
+  outline: none;
+}
+
 /* Save status toast */
 .save-status {
   text-align: center;

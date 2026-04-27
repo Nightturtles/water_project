@@ -300,6 +300,152 @@
     return false;
   }
 
+  // ---------------------------------------------------------------------------
+  // Section taxonomy + filter predicates — shared across the library page
+  // (recipe-browser.js carousels) and the Add From Library modal
+  // (library-picker.js). Kept in library-data.js because it's the only file
+  // loaded on every page that displays library rows; moving these here means
+  // adding a section to LIBRARY_TRAYS automatically picks up in both surfaces.
+  // ---------------------------------------------------------------------------
+
+  // Method-conditional hero. The library carousels and the modal both pull
+  // a single "featured" card to the top via pickFeaturedFromFiltered.
+  var FEATURED_PICKS = {
+    espresso: "cafelytic-espresso",
+    filter: "cafelytic-filter",
+    all: "cafelytic-filter",
+  };
+
+  // Trays rendered in this order. Featured isn't a tray — it's pulled from
+  // FEATURED_PICKS and rendered above the trays. Unknown category values fall
+  // through to 'classic' per partitionByCategory.
+  var LIBRARY_TRAYS = [
+    {
+      key: "original",
+      title: "Cafelytic Originals",
+      subtitle: "House recipes from the Cafelytic team",
+    },
+    {
+      key: "intro-water",
+      title: "Intro to Water",
+      subtitle:
+        "RAsami's Week 1 recipes. Make one recipe each day to learn how different mineral balances affect the taste of your coffee.",
+    },
+    {
+      key: "roaster",
+      title: "Roaster Recipes",
+      subtitle: "Published water from specialty roasters",
+    },
+    {
+      key: "brand",
+      title: "Coffee Water Brands",
+      subtitle: "Mineral kits and concentrates from coffee water companies",
+    },
+    {
+      key: "classic",
+      title: "Classic Formulas",
+      subtitle: "Canonical references every coffee nerd knows",
+    },
+  ];
+
+  function defaultFilters() {
+    return { method: "all", roast: "all", tags: [], mine: false, q: "" };
+  }
+
+  function hasAnyActiveFilter(f) {
+    return f.method !== "all" || f.roast !== "all" || f.tags.length > 0 || f.mine || f.q !== "";
+  }
+
+  // Pure predicate — kept here so the same function powers the library page
+  // filter bar and the modal picker. options.isSaved is a predicate the caller
+  // supplies for the `mine` filter (the modal doesn't use it).
+  function recipeMatches(recipe, filters, options) {
+    if (!recipe) return false;
+
+    // Method (hard filter). Recipe with brewMethod 'all' is accepted for any
+    // non-default method filter.
+    if (filters.method !== "all") {
+      var rm = recipe.brewMethod || "filter";
+      if (rm !== filters.method && rm !== "all") return false;
+    }
+
+    // Roast (hard filter). Recipe matches if the filter value is in its array
+    // OR the array contains 'all'.
+    if (filters.roast !== "all") {
+      var roasts = Array.isArray(recipe.roast) ? recipe.roast : [];
+      if (roasts.indexOf(filters.roast) === -1 && roasts.indexOf("all") === -1) return false;
+    }
+
+    // Flavor tags (soft filter, AND combination).
+    if (filters.tags && filters.tags.length) {
+      var recipeTags = Array.isArray(recipe.tags) ? recipe.tags : [];
+      for (var i = 0; i < filters.tags.length; i++) {
+        if (recipeTags.indexOf(filters.tags[i]) === -1) return false;
+      }
+    }
+
+    // My Recipes.
+    if (filters.mine) {
+      var isSaved = options && typeof options.isSaved === "function" ? options.isSaved : null;
+      if (!isSaved || !isSaved(recipe)) return false;
+    }
+
+    // Search (label / description / creatorDisplayName, case-insensitive
+    // substring).
+    if (filters.q) {
+      var needle = String(filters.q).toLowerCase();
+      var haystack = [recipe.label || "", recipe.description || "", recipe.creatorDisplayName || ""]
+        .join(" ")
+        .toLowerCase();
+      if (haystack.indexOf(needle) === -1) return false;
+    }
+
+    return true;
+  }
+
+  function applyFilters(filters, recipes, options) {
+    if (!Array.isArray(recipes)) return [];
+    var merged = Object.assign({}, defaultFilters(), filters || {});
+    return recipes.filter(function (r) {
+      return recipeMatches(r, merged, options);
+    });
+  }
+
+  // Group filtered recipes by their category key, in the order LIBRARY_TRAYS
+  // declares them. Unknown categories fall through to "classic".
+  function partitionByCategory(recipes) {
+    var out = { original: [], "intro-water": [], roaster: [], brand: [], classic: [] };
+    if (!Array.isArray(recipes)) return out;
+    recipes.forEach(function (r) {
+      var cat = r && r.category ? r.category : "classic";
+      if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
+      out[cat].push(r);
+    });
+    // Intro to Water is a learn-by-doing series — order by slug so
+    // rasami-w1d1 → rasami-w1d7 render in day order. Other trays keep
+    // whatever order the caller passed in (created_at DESC).
+    out["intro-water"].sort(function (a, b) {
+      var sa = a && a.slug ? a.slug : "";
+      var sb = b && b.slug ? b.slug : "";
+      return sa < sb ? -1 : sa > sb ? 1 : 0;
+    });
+    return out;
+  }
+
+  // Pick the featured recipe for the current method filter from an already-
+  // filtered set. Important: pass the doubly-filtered set (method + search +
+  // tags + roast) so the featured card respects the active search query —
+  // otherwise the pinned card may not contain the user's search needle.
+  function pickFeaturedFromFiltered(filtered, method) {
+    if (!Array.isArray(filtered) || filtered.length === 0) return null;
+    var slug = FEATURED_PICKS[method] || FEATURED_PICKS.all;
+    if (!slug) return null;
+    for (var i = 0; i < filtered.length; i++) {
+      if (filtered[i] && filtered[i].slug === slug) return filtered[i];
+    }
+    return null;
+  }
+
   // Expose on window
   window.fetchPublicRecipes = fetchPublicRecipes;
   window.invalidatePublicRecipesCache = invalidatePublicRecipesCache;
@@ -307,6 +453,14 @@
   window.isRecipeInMyProfiles = isRecipeInMyProfiles;
   window.getPublicRecipesSync = getPublicRecipesSync;
   window.onLibraryDataLoaded = onLibraryDataLoaded;
+  window.LIBRARY_TRAYS = LIBRARY_TRAYS;
+  window.FEATURED_PICKS = FEATURED_PICKS;
+  window.defaultFilters = defaultFilters;
+  window.hasAnyActiveFilter = hasAnyActiveFilter;
+  window.recipeMatches = recipeMatches;
+  window.applyFilters = applyFilters;
+  window.partitionByCategory = partitionByCategory;
+  window.pickFeaturedFromFiltered = pickFeaturedFromFiltered;
 
   // Node/Vitest UMD shim (harmless in browsers). Matches constants.js /
   // storage.js pattern so tests can `require("./library-data.js")` and
@@ -319,6 +473,14 @@
       isRecipeInMyProfiles: isRecipeInMyProfiles,
       getPublicRecipesSync: getPublicRecipesSync,
       onLibraryDataLoaded: onLibraryDataLoaded,
+      LIBRARY_TRAYS: LIBRARY_TRAYS,
+      FEATURED_PICKS: FEATURED_PICKS,
+      defaultFilters: defaultFilters,
+      hasAnyActiveFilter: hasAnyActiveFilter,
+      recipeMatches: recipeMatches,
+      applyFilters: applyFilters,
+      partitionByCategory: partitionByCategory,
+      pickFeaturedFromFiltered: pickFeaturedFromFiltered,
     };
   }
 
