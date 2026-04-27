@@ -181,6 +181,7 @@
     searchInput.type = "search";
     searchInput.placeholder = "Search recipes…";
     searchInput.autocomplete = "off";
+    searchInput.setAttribute("aria-label", "Search recipes");
     searchSection.appendChild(searchInput);
     searchInputEl = searchInput;
     listEl.appendChild(searchSection);
