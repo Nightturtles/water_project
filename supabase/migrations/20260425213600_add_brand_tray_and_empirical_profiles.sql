@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 013: brand tray + Empirical profiles
+-- Cafelytic — brand tray + Empirical profiles
 --
 -- 1) Adds 'brand' to the tray CHECK constraint, alongside the existing
 --    {featured, original, roaster, classic, intro-water}. The new tray
@@ -10,7 +10,7 @@
 --
 -- 2) Moves 6 existing rows from tray='classic' to tray='brand':
 --      - lotus-light-bright, lotus-simple-sweet, lotus-bright-juicy
---        (Lotus filter; bright-juicy seeded in migration 007)
+--        (Lotus filter; bright-juicy seeded in the seed-presets migration)
 --      - lotus-light-bright-espresso, lotus-simple-sweet-espresso (Lotus
 --        espresso)
 --      - eaf-tww-espresso-inspired (Third Wave Water profile)
@@ -26,12 +26,12 @@
 --    copy. tray='brand'.
 --
 -- 4) Refreshes aviary-filter ion values to Empirical's published
---    commercial-concentrate spec. The row in migration 004 was
---    reverse-computed from a direct-dosing recipe approximation; same
+--    commercial-concentrate spec. The row in the website-recipes migration
+--    was reverse-computed from a direct-dosing recipe approximation; same
 --    58 GH / 27 KH target but Ca/Mg/Cl/SO4 differ by 11-15%. Empirical's
 --    commercial product (the actual concentrate Aviary roastery uses) is
 --    the source-of-truth. Slug, brew_method, tray='roaster', roast,
---    tags, creator_display_name preserved (set in migration 006).
+--    tags, creator_display_name preserved (set in the taxonomy migration).
 --    Aviary Espresso is a separate recipe (no Empirical equivalent),
 --    not modified.
 -- =============================================================================
@@ -74,7 +74,7 @@ END $$;
 
 
 -- 3. New rows: Empirical Glacial + Empirical Spring -------------------------
--- Upsert pattern (per migration 006) for re-runnability.
+-- Upsert pattern (per the taxonomy migration) for re-runnability.
 
 INSERT INTO target_profiles
   (user_id, slug, label, brew_method,

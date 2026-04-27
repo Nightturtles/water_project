@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 011: starter kit data model
+-- Cafelytic — starter kit data model
 --
 -- Pairs with the client-side rail filter that limits the taste-page preset
 -- rail to 8 starter recipes by default. The full catalog still lives in

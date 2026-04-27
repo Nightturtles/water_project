@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 006: New recipe taxonomy
+-- Cafelytic — New recipe taxonomy
 --
 -- Adds the new categorization model:
 --   * tray   — exactly one of: featured | original | roaster | classic
@@ -12,8 +12,8 @@
 --     (the previous catch-all creator_display_name='Cafelytic' was misleading
 --     once the 'original' tray got real meaning).
 --   * Flips Fam's 69th Wave from filter to espresso (matches the 60/90
---     hardness/buffer framework — same oversight migration 004 fixed for
---     the 29th Wave).
+--     hardness/buffer framework — same oversight the website-recipes
+--     migration fixed for the 29th Wave).
 --   * Inserts two new in-house recipes: Cafelytic Filter (featured) and
 --     Cafelytic Espresso (original).
 --
@@ -168,8 +168,9 @@ UPDATE target_profiles SET
 WHERE slug = 'eaf-fam-29th-wave' AND user_id IS NULL;
 
 -- Fam's 69th Wave: also flip filter -> espresso (the 60/90 hardness/buffer
--- framework matches the 29th Wave's espresso target; the 002 migration's
--- 'filter' assignment was the same oversight 004 corrected for the 29th).
+-- framework matches the 29th Wave's espresso target; the library-schema
+-- migration's 'filter' assignment was the same oversight the website-recipes
+-- migration corrected for the 29th).
 UPDATE target_profiles SET
   brew_method = 'espresso',
   tray  = 'classic',
@@ -278,8 +279,8 @@ ALTER TABLE target_profiles VALIDATE CONSTRAINT target_profiles_tags_check;
 -- ---------------------------------------------------------------------------
 
 -- Idempotent upsert: ON CONFLICT targets the partial unique index
--- idx_target_profiles_system_slug (defined in 002_library_schema.sql) whose
--- predicate is `WHERE user_id IS NULL` — so re-running this migration
+-- idx_target_profiles_system_slug (defined in the library-schema migration)
+-- whose predicate is `WHERE user_id IS NULL` — so re-running this migration
 -- overwrites the existing canonical row's columns instead of failing. Apps
 -- that want to preserve local edits on these rows should copy-to-custom first
 -- (this is the pattern copyRecipeToMyProfiles implements in library-data.js).

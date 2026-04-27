@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 007: Seed built-in TARGET_PRESETS
+-- Cafelytic — Seed built-in TARGET_PRESETS
 --
 -- Moves the seven built-in target presets out of constants.js and into the
 -- target_profiles library table, so that:
@@ -100,8 +100,8 @@ VALUES
    'classic',
    '["light"]')
 -- Idempotent upsert: ON CONFLICT targets the partial unique index
--- idx_target_profiles_system_slug (from 002_library_schema.sql) whose predicate
--- is `WHERE user_id IS NULL`. Re-running this migration overwrites the existing
+-- idx_target_profiles_system_slug (from the library-schema migration) whose
+-- predicate is `WHERE user_id IS NULL`. Re-running this migration overwrites the existing
 -- canonical rows' columns instead of failing. All seven VALUES rows above share
 -- this clause since ON CONFLICT applies to the whole multi-row INSERT.
 ON CONFLICT (slug) WHERE user_id IS NULL DO UPDATE SET

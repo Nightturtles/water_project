@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 008: brew_method canonical values
+-- Cafelytic — brew_method canonical values
 --
 -- Introduces a CHECK constraint that restricts `brew_method` on library rows
 -- (user_id IS NULL) to the canonical vocabulary: 'filter' | 'espresso' | 'all'.
@@ -10,8 +10,9 @@
 --
 -- Scoped to user_id IS NULL so user-owned recipes aren't constrained — users
 -- can continue to store whatever brew_method values they had pre-v2. This
--- mirrors the same scoping pattern 006 applied to the tags CHECK after we
--- discovered 'Low TDS' on a user row would otherwise block migration apply.
+-- mirrors the same scoping pattern the taxonomy migration applied to the
+-- tags CHECK after we discovered 'Low TDS' on a user row would otherwise
+-- block migration apply.
 --
 -- No data changes. Re-tagging specific library rows to 'all' (SCA, Rao
 -- candidates) is deferred to a separate editorial PR.
