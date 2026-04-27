@@ -53,6 +53,17 @@ Every change that touches `sync.js`, `storage.js`, or row-level-security migrati
 2. Re-read the affected `supabase/migrations/` file end-to-end — do not trust diffs alone.
 3. Prefer one extra PR round over a production rollback.
 
+### Migrations
+
+Project is linked to Supabase ref `srlwgayrxzamxlodpsrq` via the CLI; config in `supabase/config.toml`, files in `supabase/migrations/<YYYYMMDDHHMMSS>_<name>.sql`. Migrations 001–013 were applied to prod manually before the CLI was adopted; they're marked applied in `supabase_migrations.schema_migrations` via `migration repair` and should never be re-run.
+
+When adding a migration:
+
+1. **Claude:** `supabase migration new <name>`, then edit the generated SQL.
+2. **Claude:** `supabase start` (if local stack isn't up), then `supabase db reset` — replays every migration against local Postgres from scratch. Catches name collisions, ordering bugs, broken SQL.
+3. **User:** runs `supabase db push` against prod. **Claude does not push.** Production schema changes have cost users recipes before; the human gate is intentional.
+4. **Claude:** `supabase migration list` to confirm the new version appears on both Local and Remote, then run `e2e/smoke-sync.md` against the live site (local DB doesn't catch prod-only issues like extension availability or RLS edge cases).
+
 ## Related docs
 
 - [SENTRY_SETUP.md](SENTRY_SETUP.md) — error telemetry setup, DSN, runbook.

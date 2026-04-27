@@ -5,3 +5,5 @@ coverage/
 test-results/
 playwright-report/
 .playwright-mcp/
+supabase/.temp/
+supabase/.branches/

@@ -522,9 +522,9 @@
   // cache invalidation. Bursts of events (e.g. a recipe edit that touches
   // both target_profiles and user_selections) coalesce into one pull.
   //
-  // RLS on these tables (001_schema.sql) restricts SELECT to user_id =
-  // auth.uid(), and Realtime applies the same policies to postgres_changes,
-  // so subscriptions remain per-user safe.
+  // RLS on these tables restricts SELECT to user_id = auth.uid(), and
+  // Realtime applies the same policies to postgres_changes, so subscriptions
+  // remain per-user safe.
   /** @param {string} userId */
   function subscribeToCloudChanges(userId) {
     if (!window.supabaseClient || typeof window.supabaseClient.channel !== "function") return;

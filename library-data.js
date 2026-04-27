@@ -271,10 +271,9 @@
   //
   // Trust boundary note: `recipe.userId == null` distinguishes canonical rows
   // from user-published rows by RLS guarantee, not by convention. The
-  // target_profiles INSERT policy in supabase/001_schema.sql enforces
-  // `auth.uid() = user_id`, which rejects any client-originated row with
-  // user_id NULL. Only migrations running as service role (002, 006, 007,
-  // 010, 011) can create canonical rows, so a malicious user cannot forge a
+  // target_profiles INSERT policy enforces `auth.uid() = user_id`, which
+  // rejects any client-originated row with user_id NULL. Only service-role
+  // migrations can create canonical rows, so a malicious user cannot forge a
   // row that makes this branch fire for their content.
   function isRecipeInMyProfiles(recipe) {
     if (recipe && recipe.userId == null && recipe.slug) {
