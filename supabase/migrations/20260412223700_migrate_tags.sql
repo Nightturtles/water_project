@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 003: Migrate to predefined tags
+-- Cafelytic — Migrate to predefined tags
 -- Clears old free-text tags that don't match the new predefined set.
 -- =============================================================================
 

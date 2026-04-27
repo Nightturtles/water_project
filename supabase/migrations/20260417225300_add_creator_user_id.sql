@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 005: creator_user_id
+-- Cafelytic — creator_user_id
 -- Tracks the ORIGINAL creator of a recipe, distinct from user_id (the owner
 -- of this particular row).  When a user copies a library recipe into their
 -- own profiles, the copy's user_id is the copier, but creator_user_id stays

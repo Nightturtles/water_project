@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 002: Recipe Library
+-- Cafelytic — Recipe Library
 -- Adds full ion columns, public/library fields, and seed data.
 -- =============================================================================
 

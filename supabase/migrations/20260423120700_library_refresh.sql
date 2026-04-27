@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 010: library refresh
+-- Cafelytic — library refresh
 --
 -- Seven library-page updates bundled into one migration because they all
 -- touch the canonical target_profiles catalog and share the same scoping

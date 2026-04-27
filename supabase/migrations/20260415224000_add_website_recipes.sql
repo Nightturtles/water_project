@@ -1,5 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 004: Add recipes from robertasami.com
+-- Cafelytic — Add recipes from robertasami.com
 -- Adds Aviary (filter & espresso) and RAsami Week 1 series.
 -- Updates Fam's 29th Wave brew_method to espresso.
 -- =============================================================================

@@ -1,6 +1,5 @@
 -- =============================================================================
--- Cafelytic — Supabase schema migration 001
--- Paste into the Supabase SQL editor and run.
+-- Cafelytic — initial schema
 -- =============================================================================
 
 
