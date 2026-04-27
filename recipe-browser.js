@@ -7,8 +7,10 @@
 // toggles actually narrow what's shown, not just the counter), adds the
 // empty-state UI, and cuts over v2 → library.html.
 //
-// `applyFilters` is the load-bearing predicate and is exposed on `window` so
-// e2e can exercise it directly via page.evaluate without rebuilding the DOM.
+// The filter predicate (`applyFilters`), section taxonomy (`LIBRARY_TRAYS`),
+// and partition/featured helpers were moved to library-data.js so the Add
+// From Library modal can share them. They're still exposed on `window` (by
+// library-data.js) so e2e tests reach them via page.evaluate unchanged.
 // =============================================================================
 
 (function () {
@@ -35,52 +37,14 @@
   // canonical library rows (user_id IS NULL); if the slug isn't in the
   // filtered set (e.g. roast filter also excludes it), the Featured tray
   // is omitted rather than rendering an empty section.
-  var FEATURED_PICKS = {
-    espresso: "cafelytic-espresso",
-    filter: "cafelytic-filter",
-    all: "cafelytic-filter",
-  };
-
-  // Trays rendered as carousels (in this order). Featured renders at the top
-  // via pickFeaturedFromFiltered — it's not a tray column value, so no
-  // 'featured' entry here. Unknown tray values fall through to 'classic' per
-  // partitionByCategory.
-  var CAROUSEL_TRAYS = [
-    {
-      key: "original",
-      title: "Cafelytic Originals",
-      subtitle: "House recipes from the Cafelytic team",
-    },
-    {
-      key: "intro-water",
-      title: "Intro to Water",
-      subtitle:
-        "RAsami's Week 1 recipes. Make one recipe each day to learn how different mineral balances affect the taste of your coffee.",
-    },
-    {
-      key: "roaster",
-      title: "Roaster Recipes",
-      subtitle: "Published water from specialty roasters",
-    },
-    {
-      key: "brand",
-      title: "Coffee Water Brands",
-      subtitle: "Mineral kits and concentrates from coffee water companies",
-    },
-    {
-      key: "classic",
-      title: "Classic Formulas",
-      subtitle: "Canonical references every coffee nerd knows",
-    },
-  ];
-
-  function defaultFilters() {
-    return { method: "all", roast: "all", tags: [], mine: false, q: "" };
-  }
-
-  function hasAnyActiveFilter(f) {
-    return f.method !== "all" || f.roast !== "all" || f.tags.length > 0 || f.mine || f.q !== "";
-  }
+  // Section taxonomy + filter predicates moved to library-data.js so the
+  // Add From Library modal (library-picker.js) can share the same source of
+  // truth — adding a tray to LIBRARY_TRAYS over there flows through to both
+  // the carousels here and the modal automatically.
+  var FEATURED_PICKS = window.FEATURED_PICKS;
+  var CAROUSEL_TRAYS = window.LIBRARY_TRAYS;
+  var defaultFilters = window.defaultFilters;
+  var hasAnyActiveFilter = window.hasAnyActiveFilter;
 
   // --- URL state ---------------------------------------------------------
 
@@ -136,66 +100,9 @@
     }
   }
 
-  // --- Pure predicate ----------------------------------------------------
-
-  // Determine whether `recipe` passes the current `filters`. Kept pure so the
-  // same function powers the D2 counter and the D5 render filter. `options.isSaved`
-  // is a predicate invoked for the `mine` filter so callers can inject their
-  // own saved-set (tests, future "saved view" features) without depending on
-  // storage.js being loaded.
-  function recipeMatches(recipe, filters, options) {
-    if (!recipe) return false;
-
-    // Method (hard filter). Recipe with brewMethod 'all' is accepted for any
-    // non-default method filter — matches targetProfileSupportsBrewMethod
-    // semantics shipped in Wave C.
-    if (filters.method !== "all") {
-      var rm = recipe.brewMethod || "filter";
-      if (rm !== filters.method && rm !== "all") return false;
-    }
-
-    // Roast (hard filter). recipe.roast is an array (per library-data
-    // normalizePublicRecipeRow). Recipe matches if the filter value is in
-    // its array OR the array contains 'all'.
-    if (filters.roast !== "all") {
-      var roasts = Array.isArray(recipe.roast) ? recipe.roast : [];
-      if (roasts.indexOf(filters.roast) === -1 && roasts.indexOf("all") === -1) return false;
-    }
-
-    // Flavor tags (soft filter, AND combination).
-    if (filters.tags && filters.tags.length) {
-      var recipeTags = Array.isArray(recipe.tags) ? recipe.tags : [];
-      for (var i = 0; i < filters.tags.length; i++) {
-        if (recipeTags.indexOf(filters.tags[i]) === -1) return false;
-      }
-    }
-
-    // My Recipes.
-    if (filters.mine) {
-      var isSaved = options && typeof options.isSaved === "function" ? options.isSaved : null;
-      if (!isSaved || !isSaved(recipe)) return false;
-    }
-
-    // Search (label / description / creatorDisplayName, case-insensitive
-    // substring).
-    if (filters.q) {
-      var needle = String(filters.q).toLowerCase();
-      var haystack = [recipe.label || "", recipe.description || "", recipe.creatorDisplayName || ""]
-        .join(" ")
-        .toLowerCase();
-      if (haystack.indexOf(needle) === -1) return false;
-    }
-
-    return true;
-  }
-
-  function applyFilters(filters, recipes, options) {
-    if (!Array.isArray(recipes)) return [];
-    var merged = Object.assign({}, defaultFilters(), filters || {});
-    return recipes.filter(function (r) {
-      return recipeMatches(r, merged, options);
-    });
-  }
+  // recipeMatches + applyFilters live in library-data.js (shared with the
+  // Add From Library modal). Use the window.applyFilters reference below.
+  var applyFilters = window.applyFilters;
 
   // --- Bookmark round-trip ----------------------------------------------
 
@@ -516,39 +423,9 @@
 
   // --- Content layout ----------------------------------------------------
 
-  function partitionByCategory(recipes) {
-    var out = { original: [], "intro-water": [], roaster: [], brand: [], classic: [] };
-    if (!Array.isArray(recipes)) return out;
-    recipes.forEach(function (r) {
-      var cat = r && r.category ? r.category : "classic";
-      if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
-      out[cat].push(r);
-    });
-    // Intro to Water is a learn-by-doing series — order by slug so
-    // rasami-w1d1 → rasami-w1d7 render in day order left-to-right. Other
-    // trays keep whatever order the caller passed in (created_at DESC from
-    // library-data.js).
-    out["intro-water"].sort(function (a, b) {
-      var sa = a && a.slug ? a.slug : "";
-      var sb = b && b.slug ? b.slug : "";
-      return sa < sb ? -1 : sa > sb ? 1 : 0;
-    });
-    return out;
-  }
-
-  // Pick the featured recipe for the current method filter from the already-
-  // filtered set. Primary slug comes from FEATURED_PICKS[method]; if that
-  // slug isn't in `filtered` (e.g. a roast filter also excluded it), return
-  // null so the Featured section renders nothing rather than an empty shell.
-  function pickFeaturedFromFiltered(filtered, method) {
-    if (!Array.isArray(filtered) || filtered.length === 0) return null;
-    var slug = FEATURED_PICKS[method] || FEATURED_PICKS.all;
-    if (!slug) return null;
-    for (var i = 0; i < filtered.length; i++) {
-      if (filtered[i] && filtered[i].slug === slug) return filtered[i];
-    }
-    return null;
-  }
+  // partitionByCategory + pickFeaturedFromFiltered live in library-data.js.
+  var partitionByCategory = window.partitionByCategory;
+  var pickFeaturedFromFiltered = window.pickFeaturedFromFiltered;
 
   function createEmptyState(onClear) {
     var wrap = el("section", "rx-empty-state");
@@ -891,8 +768,8 @@
   // --- Exports -----------------------------------------------------------
 
   window.mountRecipeBrowser = mountRecipeBrowser;
-  // Exposed for e2e coverage — see smoke-library.spec.ts applyFilters cases.
-  window.applyFilters = applyFilters;
+  // window.applyFilters is exposed by library-data.js (shared with the modal).
+  // E2E coverage: e2e/smoke-library.spec.ts applyFilters cases.
   window.readFiltersFromUrl = readFiltersFromUrl;
   window.writeFiltersToUrl = writeFiltersToUrl;
 })();
