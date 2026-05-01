@@ -33,10 +33,10 @@
 
   // Featured recipe is picked client-side by brew-method filter. When the
   // method filter excludes the primary pick, the espresso branch keeps the
-  // Featured tray populated instead of letting it disappear. Slugs must match
-  // canonical library rows (user_id IS NULL); if the slug isn't in the
-  // filtered set (e.g. roast filter also excludes it), the Featured tray
-  // is omitted rather than rendering an empty section.
+  // Featured slot populated instead of letting it disappear. Slugs must
+  // match canonical library rows (user_id IS NULL); if the slug isn't in
+  // the filtered set (e.g. roast filter also excludes it), the Featured
+  // hero is omitted rather than rendering an empty section.
   // Section taxonomy + filter predicates moved to library-data.js so the
   // Add From Library modal (library-picker.js) can share the same source of
   // truth — adding a tray to LIBRARY_TRAYS over there flows through to both
@@ -421,6 +421,97 @@
     return section;
   }
 
+  // --- Featured hero -----------------------------------------------------
+
+  // Wide, full-width hero card for the Featured slot. Replaces the earlier
+  // single-card carousel (which shared styling with every other tray and
+  // therefore didn't read as featured). Reuses createMineralTriplet and the
+  // existing handlers contract — bookmark star is still the only selection
+  // affordance, matching the regular library cards. data-tray="featured" is
+  // preserved so existing scroll-restoration / e2e selectors keep working.
+  function createFeaturedHero(recipe, handlers) {
+    if (!recipe) return null;
+
+    var section = el("section", "rx-featured-hero");
+    section.dataset.tray = "featured";
+    if (recipe.slug) section.dataset.slug = recipe.slug;
+
+    var eyebrow = el("p", "rx-featured-eyebrow");
+    eyebrow.appendChild(el("span", "rx-featured-star", "\u2605"));
+    eyebrow.appendChild(document.createTextNode(" Featured \u00b7 Editor's pick"));
+    section.appendChild(eyebrow);
+
+    var grid = el("div", "rx-featured-grid");
+
+    var main = el("div", "rx-featured-main");
+
+    var header = el("header", "rx-featured-header");
+    var titleCol = el("div", "rx-featured-title-col");
+    titleCol.appendChild(el("h2", "rx-featured-title", recipe.label || ""));
+    if (recipe.creatorDisplayName) {
+      titleCol.appendChild(el("p", "rx-featured-source", "by " + recipe.creatorDisplayName));
+    }
+    header.appendChild(titleCol);
+
+    var saved = handlers.isSaved && handlers.isSaved(recipe);
+    var bookmark = el("button", "rx-featured-bookmark");
+    bookmark.type = "button";
+    bookmark.setAttribute("aria-label", saved ? "Unsave recipe" : "Save recipe");
+    bookmark.setAttribute("aria-pressed", saved ? "true" : "false");
+    bookmark.textContent = saved ? "\u2605" : "\u2606";
+    if (saved) bookmark.classList.add("is-active");
+    bookmark.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      handlers.onToggleSave(recipe);
+    });
+    header.appendChild(bookmark);
+    main.appendChild(header);
+
+    if (recipe.description) {
+      main.appendChild(el("p", "rx-featured-desc", recipe.description));
+    }
+
+    var tagList = el("div", "rx-featured-tags");
+    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
+      tagList.appendChild(el("span", "rx-card-tag", tag));
+    });
+    if (tagList.childNodes.length > 0) main.appendChild(tagList);
+
+    main.appendChild(el("p", "rx-featured-meta", formatMethodRoast(recipe)));
+
+    grid.appendChild(main);
+
+    var aside = el("aside", "rx-featured-aside");
+    aside.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));
+
+    if (handlers.isOwner && handlers.isOwner(recipe)) {
+      var ownerActions = el("div", "rx-featured-owner-actions");
+      var editBtn = el("button", "rx-card-owner-btn", "Edit");
+      editBtn.type = "button";
+      editBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handlers.onEditRecipe(recipe);
+      });
+      var unpublishBtn = el("button", "rx-card-owner-btn rx-card-owner-btn-danger", "Unpublish");
+      unpublishBtn.type = "button";
+      unpublishBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        handlers.onUnpublishRecipe(recipe);
+      });
+      ownerActions.appendChild(editBtn);
+      ownerActions.appendChild(unpublishBtn);
+      aside.appendChild(ownerActions);
+    }
+
+    grid.appendChild(aside);
+    section.appendChild(grid);
+
+    return section;
+  }
+
   // --- Content layout ----------------------------------------------------
 
   // partitionByCategory + pickFeaturedFromFiltered live in library-data.js.
@@ -468,20 +559,15 @@
 
     var byCategory = partitionByCategory(filtered);
 
-    // Featured tray: one card picked by brew-method filter (espresso falls
-    // back to cafelytic-espresso so the tray stays populated). Rendered as a
-    // single-card carousel so the card shares styling + star UX with every
-    // other library card.
+    // Featured slot: one card picked by brew-method filter (espresso falls
+    // back to cafelytic-espresso so the slot stays populated). Rendered as
+    // a wide hero (createFeaturedHero) instead of a single-card carousel so
+    // it reads as featured rather than another tray. Bookmark star is still
+    // the only selection affordance, matching the regular library cards.
     var featured = pickFeaturedFromFiltered(filtered, method);
     if (featured) {
-      root.appendChild(
-        createTrayCarousel(
-          "Featured",
-          "Editor's pick",
-          [featured],
-          Object.assign({}, handlers, { trayKey: "featured" }),
-        ),
-      );
+      var hero = createFeaturedHero(featured, handlers);
+      if (hero) root.appendChild(hero);
     }
 
     CAROUSEL_TRAYS.forEach(function (tray) {

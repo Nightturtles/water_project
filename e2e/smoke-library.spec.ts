@@ -140,17 +140,15 @@ test.describe("library.html — Wave D recipe browser", () => {
 
   // Content region: hero + carousels (D3/D4) ---------------------------
 
-  test("featured tray renders as a single-card carousel with the library card UX", async ({
-    page,
-  }) => {
-    // Featured is now a one-card carousel with the same card component as
-    // every other tray — star bookmark in the header, no Use/Save buttons.
-    // May paint from the session cache OR after async fetch; toBeVisible retries.
-    const featured = page.locator('.rx-carousel-section[data-tray="featured"]');
+  test("featured slot renders as a hero card with the bookmark star UX", async ({ page }) => {
+    // Featured is rendered as a wide hero (createFeaturedHero), distinct
+    // from the regular tray carousels but still using the bookmark star
+    // as the only selection affordance. May paint from the session cache
+    // OR after async fetch; toBeVisible retries.
+    const featured = page.locator('.rx-featured-hero[data-tray="featured"]');
     await expect(featured).toBeVisible();
-    await expect(featured.locator(".rx-recipe-card")).toHaveCount(1);
-    await expect(featured.locator(".rx-card-title")).not.toBeEmpty();
-    await expect(featured.locator(".rx-card-bookmark")).toBeVisible();
+    await expect(featured.locator(".rx-featured-title")).not.toBeEmpty();
+    await expect(featured.locator(".rx-featured-bookmark")).toBeVisible();
   });
 
   test("tray carousels render from production categories", async ({ page }) => {
@@ -216,7 +214,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     // tray. The client also renders it as Featured based on the brew method
     // filter (default method=all → cafelytic-filter). Both surfaces should
     // show the same card.
-    const featured = page.locator('.rx-carousel-section[data-tray="featured"] .rx-recipe-card');
+    const featured = page.locator('.rx-featured-hero[data-tray="featured"]');
     await expect(featured).toHaveCount(1);
     await expect(featured).toHaveAttribute("data-slug", "cafelytic-filter");
 
@@ -261,23 +259,23 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(emptyState.locator(".rx-empty-title")).toContainText("No recipes match");
 
     // No featured, no carousels while empty state is up.
-    await expect(page.locator('.rx-carousel-section[data-tray="featured"]')).toHaveCount(0);
+    await expect(page.locator('.rx-featured-hero[data-tray="featured"]')).toHaveCount(0);
     await expect(page.locator(".rx-carousel-section")).toHaveCount(0);
 
     // Clear-filters CTA inside the empty state resets state + URL.
     await emptyState.locator(".rx-empty-clear").click();
     await expect(emptyState).toHaveCount(0);
-    await expect(page.locator('.rx-carousel-section[data-tray="featured"]')).toBeVisible();
+    await expect(page.locator('.rx-featured-hero[data-tray="featured"]')).toBeVisible();
     await expect(input).toHaveValue("");
   });
 
   test("method=espresso swaps Featured to Cafelytic Espresso", async ({ page }) => {
     // Client-side FEATURED_PICKS maps espresso→cafelytic-espresso so the
-    // Featured tray stays populated when the method filter would exclude
+    // Featured slot stays populated when the method filter would exclude
     // the default (Cafelytic Filter).
     await page.locator('.rx-segmented-button[data-value="espresso"]').first().click();
 
-    const featured = page.locator('.rx-carousel-section[data-tray="featured"] .rx-recipe-card');
+    const featured = page.locator('.rx-featured-hero[data-tray="featured"]');
     await expect(featured).toHaveCount(1);
     await expect(featured).toHaveAttribute("data-slug", "cafelytic-espresso");
   });
