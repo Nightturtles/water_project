@@ -3198,11 +3198,14 @@ footer {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
-  /* The page-level `header { text-align: center }` rule also matches this
-     inner <header> element since it's a bare type selector. Reset on the
-     child too — inheriting `text-align: left` from the .rx-featured-hero
-     parent isn't enough because the type selector applies directly here. */
+  /* The page-level `header { ... }` rule (text-align + padding) is a bare
+     type selector, so it matches this inner <header> element too. Reset
+     both — inheriting `text-align: left` from the .rx-featured-hero
+     parent isn't enough because the type selector applies directly here,
+     and the global `padding: 1.5rem 1rem 1rem` adds unwanted spacing
+     inside the hero header row. */
   text-align: left;
+  padding: 0;
 }
 
 .rx-featured-title-col {
