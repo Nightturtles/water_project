@@ -3168,10 +3168,16 @@ footer {
 }
 
 .rx-featured-eyebrow {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.4rem;
   margin: 0;
+  /* The absolutely-positioned bookmark star (top: 1rem; right: 1rem; ~32px
+     wide) overlaps the eyebrow's vertical band. Reserve star real estate on
+     the eyebrow's right so a longer eyebrow string can never crowd the
+     star. The header / title row sits below the star vertically so no
+     padding is needed there. */
+  padding-right: 2.5rem;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.12em;
