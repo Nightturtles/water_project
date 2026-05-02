@@ -3232,7 +3232,13 @@ footer {
 }
 
 .rx-featured-bookmark {
-  flex-shrink: 0;
+  /* Pinned to the hero's top-right corner so it reads as the primary
+     selection affordance even though the eyebrow + title push it out of
+     the normal flex flow. .rx-featured-hero sets position: relative so
+     this coord system is the hero box. */
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
   background: none;
   border: none;
   font-size: 1.6rem;
