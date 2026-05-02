@@ -429,6 +429,12 @@
   // existing handlers contract — bookmark star is still the only selection
   // affordance, matching the regular library cards. data-tray="featured" is
   // preserved so existing scroll-restoration / e2e selectors keep working.
+  //
+  // The DOM mirrors createRecipeCard's order (header → minerals → desc →
+  // footer{tags + meta} → owner actions) so the hero reads as a souped-up
+  // version of a regular card rather than a bespoke layout. The visual
+  // emphasis (gradient, accent border, larger title, eyebrow, top-right
+  // pinned bookmark) lives in CSS.
   function createFeaturedHero(recipe, handlers) {
     if (!recipe) return null;
 
@@ -441,10 +447,6 @@
     eyebrow.appendChild(document.createTextNode(" Featured \u00b7 Editor's pick"));
     section.appendChild(eyebrow);
 
-    var grid = el("div", "rx-featured-grid");
-
-    var main = el("div", "rx-featured-main");
-
     var header = el("header", "rx-featured-header");
     var titleCol = el("div", "rx-featured-title-col");
     titleCol.appendChild(el("h2", "rx-featured-title", recipe.label || ""));
@@ -452,7 +454,12 @@
       titleCol.appendChild(el("p", "rx-featured-source", "by " + recipe.creatorDisplayName));
     }
     header.appendChild(titleCol);
+    section.appendChild(header);
 
+    // Bookmark is pinned to the hero's top-right corner via CSS (position:
+    // absolute), so DOM placement only matters for tab order — keep it
+    // adjacent to the title in flow so screen readers announce title →
+    // save in a sensible sequence.
     var saved = handlers.isSaved && handlers.isSaved(recipe);
     var bookmark = el("button", "rx-featured-bookmark");
     bookmark.type = "button";
@@ -465,25 +472,22 @@
       e.stopPropagation();
       handlers.onToggleSave(recipe);
     });
-    header.appendChild(bookmark);
-    main.appendChild(header);
+    section.appendChild(bookmark);
+
+    section.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));
 
     if (recipe.description) {
-      main.appendChild(el("p", "rx-featured-desc", recipe.description));
+      section.appendChild(el("p", "rx-featured-desc", recipe.description));
     }
 
+    var footer = el("div", "rx-featured-footer");
     var tagList = el("div", "rx-featured-tags");
     (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
       tagList.appendChild(el("span", "rx-card-tag", tag));
     });
-    if (tagList.childNodes.length > 0) main.appendChild(tagList);
-
-    main.appendChild(el("p", "rx-featured-meta", formatMethodRoast(recipe)));
-
-    grid.appendChild(main);
-
-    var aside = el("aside", "rx-featured-aside");
-    aside.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));
+    footer.appendChild(tagList);
+    footer.appendChild(el("span", "rx-featured-meta", formatMethodRoast(recipe)));
+    section.appendChild(footer);
 
     if (handlers.isOwner && handlers.isOwner(recipe)) {
       var ownerActions = el("div", "rx-featured-owner-actions");
@@ -503,11 +507,8 @@
       });
       ownerActions.appendChild(editBtn);
       ownerActions.appendChild(unpublishBtn);
-      aside.appendChild(ownerActions);
+      section.appendChild(ownerActions);
     }
-
-    grid.appendChild(aside);
-    section.appendChild(grid);
 
     return section;
   }
