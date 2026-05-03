@@ -3472,8 +3472,8 @@ footer {
 
 .start-banner-close {
   flex-shrink: 0;
-  width: 1.75rem;
-  height: 1.75rem;
+  min-width: 44px;
+  min-height: 44px;
   border: none;
   background: transparent;
   color: var(--gray-500);

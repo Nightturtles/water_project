@@ -487,6 +487,7 @@ function injectNav() {
 
   const nav = document.createElement("nav");
   nav.className = "site-nav";
+  nav.setAttribute("aria-label", "Site navigation");
 
   // Brand logo + wordmark
   const brand = document.createElement("a");
