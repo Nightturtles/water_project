@@ -3321,3 +3321,169 @@ footer {
   padding-top: 0.55rem;
   border-top: 1px solid var(--gray-200);
 }
+
+/* ========================
+   Start / Beginner page
+   ======================== */
+.start-toc {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  padding: 0.25rem 0 0.75rem;
+}
+
+.start-toc a {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--gray-700);
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.start-toc a:hover {
+  border-color: var(--blue-500);
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+/* Offset anchor scrolling for the sticky top nav. */
+.card[id] {
+  scroll-margin-top: 4.5rem;
+}
+
+.start-key {
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.start-mineral-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.5rem 0 0;
+}
+
+.start-mineral-list > div {
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--blue-500);
+  background: var(--gray-50);
+  border-radius: 0 8px 8px 0;
+  font-size: 0.95rem;
+}
+
+.start-mineral-name {
+  display: block;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin-bottom: 0.2rem;
+}
+
+.start-principles,
+.start-bullets {
+  padding-left: 1.25rem;
+  margin: 0.25rem 0 0;
+}
+
+.start-principles li,
+.start-bullets li {
+  margin-bottom: 0.5rem;
+}
+
+.start-principles li:last-child,
+.start-bullets li:last-child {
+  margin-bottom: 0;
+}
+
+.start-recipe-card {
+  padding: 0.85rem 1rem;
+  background: var(--blue-50);
+  border: 1px solid var(--blue-100);
+  border-radius: 8px;
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.95rem;
+  line-height: 1.7;
+  color: var(--gray-900);
+}
+
+.start-cta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.start-cta {
+  flex: 1 1 auto;
+  min-width: 180px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--blue-500);
+  border-radius: 8px;
+  background: var(--blue-50);
+  color: var(--blue-700);
+  font-weight: 600;
+  text-decoration: none;
+  transition: all 0.15s ease;
+}
+
+.start-cta:hover {
+  background: var(--blue-500);
+  color: #ffffff;
+}
+
+/* ========================
+   Start banner (Calculator)
+   ======================== */
+.start-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--blue-500);
+  border-radius: var(--radius);
+  background: var(--blue-50);
+}
+
+.start-banner-text {
+  flex: 1 1 auto;
+  font-size: 0.9rem;
+  color: var(--gray-700);
+  line-height: 1.45;
+}
+
+.start-banner-link {
+  color: var(--blue-700);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.start-banner-link:hover {
+  text-decoration: underline;
+}
+
+.start-banner-close {
+  flex-shrink: 0;
+  min-width: 44px;
+  min-height: 44px;
+  border: none;
+  background: transparent;
+  color: var(--gray-500);
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.start-banner-close:hover {
+  background: var(--blue-100);
+  color: var(--gray-700);
+}

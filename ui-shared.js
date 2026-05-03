@@ -481,11 +481,13 @@ function injectNav() {
     { href: "recipe.html",   label: "Recipe Builder" },
     { href: "taste.html",    label: "Taste Tuner" },
     { href: "library.html",  label: "Library" },
+    { href: "start.html",    label: "Start Here" },
     { href: "minerals.html", label: "Settings" }
   ];
 
   const nav = document.createElement("nav");
   nav.className = "site-nav";
+  nav.setAttribute("aria-label", "Site navigation");
 
   // Brand logo + wordmark
   const brand = document.createElement("a");

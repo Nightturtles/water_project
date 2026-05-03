@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Start Here - Cafelytic Coffee Water Calculator</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-BGJWVRGJJC"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-BGJWVRGJJC');
+  </script>
+  <script src="theme-init.js"></script>
+  <!-- Sentry (Browser JavaScript Loader) — see SENTRY_SETUP.md -->
+  <script src="sentry-init.js"></script>
+  <script src="https://js.sentry-cdn.com/c99c13e5b1291bc31a11c864a400daca.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <header>
+    <h1>Start Here</h1>
+    <p class="subtitle">A short introduction to coffee water, minerals, and how to taste the difference.</p>
+  </header>
+
+  <main>
+    <nav class="start-toc" aria-label="On this page">
+      <a href="#why-water">Why water</a>
+      <a href="#minerals">Minerals</a>
+      <a href="#principles">Principles</a>
+      <a href="#rasami">RAsami Week 1</a>
+      <a href="#pourover">Pour-over</a>
+      <a href="#espresso">Espresso</a>
+      <a href="#next">Next steps</a>
+    </nav>
+
+    <section class="card" id="why-water">
+      <h2>Why water matters</h2>
+      <p>Brewed coffee is about 98% water. The minerals in that water decide how much flavor gets pulled out of the beans, which notes come through loud, and which stay quiet.</p>
+      <p>You don't need to memorize chemistry. Try a few recipes, taste what changes, and the rest builds up naturally.</p>
+    </section>
+
+    <section class="card" id="minerals">
+      <h2>What each mineral does</h2>
+      <p class="hint">Two shorthand terms you'll see across the site: <span class="start-key">GH</span> (general hardness — calcium plus magnesium combined) and <span class="start-key">KH</span> (alkalinity — how strongly the water buffers acids). Most recipes are mostly about adjusting these two numbers.</p>
+
+      <div class="start-mineral-list">
+        <div>
+          <span class="start-mineral-name">Calcium</span>
+          Adds body and weight. Coffees brewed with high-calcium water taste heavier and more coating. Low-calcium water feels lighter and more tea-like.
+        </div>
+        <div>
+          <span class="start-mineral-name">Magnesium</span>
+          Pulls out brightness, fruit, and clarity. If a coffee tastes flat, a little more magnesium often wakes it up.
+        </div>
+        <div>
+          <span class="start-mineral-name">Bicarbonate (alkalinity / KH)</span>
+          Buffers the acids in coffee. Too much and everything collapses into a muddy, dull cup. Too little and bright coffees can taste sharp or sour. Most filter recipes land between 30 and 80 mg/L.
+        </div>
+        <div>
+          <span class="start-mineral-name">Sodium</span>
+          In small amounts, enhances sweetness and rounds out the cup. Overdo it and things start tasting salty or savory.
+        </div>
+        <div>
+          <span class="start-mineral-name">Sulfate and chloride</span>
+          These come along for the ride with whichever calcium and magnesium salts you pick. Sulfate leans crisp and clean; chloride leans round and full. You don't dose them directly — you choose between them when you pick salts (e.g. gypsum vs calcium chloride).
+        </div>
+      </div>
+    </section>
+
+    <section class="card" id="principles">
+      <h2>Basic principles</h2>
+      <ol class="start-principles">
+        <li><strong>Start with distilled or RO water.</strong> It's a blank canvas. You can't subtract minerals from tap water, only add to it, so beginning from zero is the only way to really control what's in the cup.</li>
+        <li><strong>Use a 0.01g scale.</strong> Mineral doses are small — usually fractions of a gram per liter. A kitchen scale that only reads whole grams won't get you there.</li>
+        <li><strong>Typical filter targets:</strong> GH 50–150 mg/L, KH 30–80 mg/L (both measured as CaCO₃, which is the unit used across this calculator).</li>
+        <li><strong>Espresso usually runs lower alkalinity</strong> to keep brightness in the cup. Espresso is already concentrated; heavy buffering can dull the acidity that makes it interesting.</li>
+        <li><strong>Change one thing at a time.</strong> If you swap water and also change the beans, the grind, and the dose, you won't know what made the difference. Keep everything else steady while you dial in water.</li>
+      </ol>
+    </section>
+
+    <section class="card" id="rasami">
+      <h2>Try it: RAsami Week 1</h2>
+      <p>Robert Asami (a.k.a. RAsami) put together a 7-day filter series designed exactly for this — one recipe per day, each varying the balance of minerals against a fixed baseline. By day seven you'll have a feel for how calcium and magnesium trade off, and how alkalinity shifts the picture.</p>
+
+      <p><strong>The exercise:</strong></p>
+      <ul class="start-bullets">
+        <li>Use the same beans and the same brew ratio every day.</li>
+        <li>Brew one RAsami recipe per day.</li>
+        <li>Keep a one-line note: what was different? More body? More brightness? Flatter? Sharper?</li>
+      </ul>
+
+      <p>All seven recipes are already in the library.</p>
+      <div class="start-cta-row">
+        <a class="start-cta" href="library.html?q=RAsami">Open the RAsami Week 1 series →</a>
+      </div>
+    </section>
+
+    <section class="card" id="pourover">
+      <h2>Brewing a pour-over</h2>
+      <p>If you're new to pour-over, here's a reliable starting point for a V60 or similar cone dripper:</p>
+
+      <div class="start-recipe-card">
+        <strong>Starter recipe</strong><br>
+        15g coffee : 250g water (1:16.6 ratio)<br>
+        Medium-fine grind (about the texture of table salt)<br>
+        93°C water (just off boil)<br>
+        Bloom: 45g of water, wait 30 seconds<br>
+        Then pour in 2–3 steady streams to finish by about 2:30 total
+      </div>
+
+      <ul class="start-bullets">
+        <li><strong>Ratio</strong> controls strength. More water per gram of coffee = weaker; less water = stronger.</li>
+        <li><strong>Grind</strong> controls how fast water flows through. Finer runs slower and extracts more, which lands as sweet or bitter depending on how far you push it.</li>
+        <li><strong>Temperature</strong> affects extraction speed. Hotter extracts faster; 93°C is a safe default across most roasts.</li>
+        <li><strong>The bloom</strong> lets CO₂ escape so water can actually contact the coffee evenly on the main pours.</li>
+      </ul>
+
+      <p class="hint">Want a walkthrough? <a href="https://www.youtube.com/watch?v=AI4ynXzkSQo" target="_blank" rel="noopener noreferrer">James Hoffmann's V60 technique</a> is the most-shared starting point.</p>
+    </section>
+
+    <section class="card" id="espresso">
+      <h2>Brewing an espresso</h2>
+      <p>Espresso has more moving parts than pour-over, but a starting recipe is straightforward:</p>
+
+      <div class="start-recipe-card">
+        <strong>Starter recipe</strong><br>
+        18g coffee in → 36g espresso out (1:2, a "normale" shot)<br>
+        25–30 seconds total pull<br>
+        ~93°C group temperature<br>
+        Fine grind — usually finer than you expect, adjusted until flow hits the target time<br>
+        Fresh beans, ideally 7–21 days off roast
+      </div>
+
+      <ul class="start-bullets">
+        <li><strong>Ratio.</strong> 1:2 is a balanced default. Shorter (1:1.5, "ristretto") concentrates everything; longer (1:3, "lungo") stretches the shot and can over-extract.</li>
+        <li><strong>Grind is the main lever.</strong> Shot running too fast and gushing? Grind finer. Dripping out way too slowly? Grind coarser.</li>
+        <li><strong>Freshness matters more than you'd think.</strong> Coffee past ~30 days off roast loses crema and drama, even when it still tastes fine on paper.</li>
+      </ul>
+
+      <p class="hint">Want a walkthrough? <a href="https://www.youtube.com/watch?v=I1bjYQ6_WUA" target="_blank" rel="noopener noreferrer">James Hoffmann's dialing-in guide</a> is a good first watch.</p>
+    </section>
+
+    <section class="card" id="next">
+      <h2>Next steps</h2>
+      <p>You're ready to try it. Three places to go from here:</p>
+      <div class="start-cta-row">
+        <a class="start-cta" href="minerals.html">Pick your minerals →</a>
+        <a class="start-cta" href="index.html">Try the calculator →</a>
+        <a class="start-cta" href="library.html">Browse the library →</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>
+    <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-client.js"></script>
+  <script src="constants.js"></script>
+  <script src="storage.js"></script>
+  <script src="sync.js"></script>
+  <script src="metrics.js"></script>
+  <script src="ui-shared.js"></script>
+</body>
+</html>

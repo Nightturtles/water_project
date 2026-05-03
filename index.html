@@ -27,6 +27,13 @@
   </header>
 
   <main>
+    <section class="start-banner" id="start-banner" style="display:none;" role="region" aria-label="Beginner guide">
+      <div class="start-banner-text">
+        New to coffee water? <a class="start-banner-link" href="start.html">Read the beginner guide →</a>
+      </div>
+      <button type="button" class="start-banner-close" id="start-banner-close" aria-label="Dismiss beginner banner">×</button>
+    </section>
+
     <!-- Starting water (profile = main, volume = secondary) -->
     <section class="card">
       <div class="section-header-actions">
@@ -343,6 +350,7 @@
         <span class="welcome-modal-title-row welcome-modal-title-row--brand"><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Coffee Water Calculator</span>
       </h2>
       <div id="welcome-modal-desc" class="welcome-modal-body">
+        <p>New to coffee water? <a href="start.html">Read the beginner guide →</a></p>
         <p>Select the minerals you'll be using from the Settings page, then you'll be ready to get started!</p>
         <p></p>
         <p>Send questions to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
@@ -369,5 +377,20 @@
   <script src="library-picker.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="script.js"></script>
+  <script>
+    (function () {
+      var banner = document.getElementById("start-banner");
+      var closeBtn = document.getElementById("start-banner-close");
+      if (!banner || !closeBtn) return;
+      var KEY = "cw_start_banner_dismissed";
+      var dismissed = false;
+      try { dismissed = localStorage.getItem(KEY) === "1"; } catch (e) {}
+      if (!dismissed) banner.style.display = "";
+      closeBtn.addEventListener("click", function () {
+        banner.style.display = "none";
+        try { localStorage.setItem(KEY, "1"); } catch (e) {}
+      });
+    })();
+  </script>
 </body>
 </html>
