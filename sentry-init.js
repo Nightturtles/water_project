@@ -7,6 +7,12 @@ window.sentryOnLoad = function () {
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
+    ignoreErrors: [
+      // Telegram / in-app WebView bridge noise — not our code.
+      /Error invoking postEvent: Method not found/,
+      // Cross-origin "Script error." — browser strips details; not actionable.
+      /Script error\.?/,
+    ],
     beforeSend: function (event) {
       if (event.request && event.request.cookies) delete event.request.cookies;
       return event;
