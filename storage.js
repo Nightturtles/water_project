@@ -8,6 +8,7 @@
 /**
  * @typedef {Object} SourceProfile
  * @property {string} [label]
+ * @property {string} [category] - Picker grouping bucket (e.g. "pure", "generic", "bottled", "saved"). Set on built-ins in constants.js; user-saved profiles omit it and fall under "saved" in the picker.
  * @property {number} [calcium]
  * @property {number} [magnesium]
  * @property {number} [potassium]
