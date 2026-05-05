@@ -622,6 +622,28 @@ select:focus {
   font-weight: 500;
 }
 
+/* Category headings that group source-water preset buttons. .source-presets
+   is flex-wrap on desktop and switches to a 2-col grid on narrow viewports
+   (see the @media block lower down) so the heading needs both sets of
+   span-the-row rules: flex 0 0 100% for desktop, grid-column 1/-1 for the
+   grid layout. */
+.preset-category-label {
+  flex: 0 0 100%;
+  width: 100%;
+  min-width: 100%;
+  grid-column: 1 / -1;
+  margin: 0.5rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.source-presets > .preset-category-label:first-child {
+  margin-top: 0;
+}
+
 .profile-description {
   font-size: 0.85rem;
   color: var(--gray-500);
