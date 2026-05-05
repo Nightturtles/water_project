@@ -282,6 +282,7 @@
           btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
         });
       }
+      recalculate();
     }
     if (recipeBrewMethodToggle) {
       recipeBrewMethodToggle.addEventListener("click", (e) => {
@@ -667,7 +668,8 @@
           includeAdvanced: isAdvancedMineralDisplayMode(),
           alkalinitySources: getEffectiveAlkalinitySources(),
           calciumSource: getEffectiveCalciumSource(),
-          magnesiumSource: getEffectiveMagnesiumSource()
+          magnesiumSource: getEffectiveMagnesiumSource(),
+          brewMethod: activeBrewMethod
         });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
       }

@@ -86,6 +86,32 @@ declare global {
   const BRAND_CONCENTRATES: Record<string, BrandConcentrate>;
   const BRAND_CONCENTRATE_IDS: readonly string[];
   const LOTUS_CONCENTRATE_IDS: readonly string[];
+  interface MethodRangeBand {
+    preferredMin?: number | null;
+    preferredMax?: number | null;
+    warnMin?: number | null;
+    warnMax?: number | null;
+    dangerMin?: number | null;
+    dangerMax?: number | null;
+  }
+  interface BrewMethodRangeBands {
+    tds: MethodRangeBand;
+    kh: MethodRangeBand;
+    gh: MethodRangeBand;
+    calcium: MethodRangeBand;
+    magnesium: MethodRangeBand;
+    sodium: {
+      default: { preferredMax: number; warnMax: number; dangerMax: number };
+      bakingSoda: { preferredMax: number; warnMax: number; dangerMax: number };
+    };
+    chloride: {
+      default: { preferredMax: number; warnMax: number; dangerMax: number };
+      chlorideHeavy: { preferredMax: number; warnMax: number; dangerMax: number };
+    };
+    sulfate: { warnMax: number };
+    potassium: { dangerMax: number };
+  }
+  const WATER_PROFILE_RANGE_BANDS: Record<"filter" | "espresso", BrewMethodRangeBands>;
   const RANGE_SEVERITY_ORDER: { danger: number; warn: number; info: number };
   const THEME_KEY: string;
 

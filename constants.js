@@ -393,6 +393,117 @@ const BRAND_CONCENTRATE_IDS = Object.keys(BRAND_CONCENTRATES);
 /** Lotus Coffee Water Drops subset (for settings subsection). */
 const LOTUS_CONCENTRATE_IDS = BRAND_CONCENTRATE_IDS.filter((id) => id.startsWith("brand:lotus:"));
 
+// --- Water-profile range bands by brew method ---
+// These bands drive evaluateWaterProfileRanges() in metrics.js.
+// Filter values preserve current behavior; espresso values allow lower
+// hardness/calcium profiles that are common in espresso-focused recipes.
+const WATER_PROFILE_RANGE_BANDS = {
+  filter: {
+    tds: {
+      preferredMin: 50,
+      preferredMax: 300,
+      warnMin: 30,
+      warnMax: 400,
+      dangerMin: 20,
+      dangerMax: 500,
+    },
+    kh: {
+      preferredMin: 30,
+      preferredMax: 90,
+      warnMin: 10,
+      warnMax: 130,
+      dangerMin: 5,
+      dangerMax: 200,
+    },
+    gh: {
+      preferredMin: 40,
+      preferredMax: 200,
+      warnMin: 20,
+      warnMax: 250,
+      dangerMin: null,
+      dangerMax: 300,
+    },
+    calcium: {
+      preferredMin: 8,
+      preferredMax: 90,
+      warnMin: 4,
+      warnMax: 120,
+      dangerMin: null,
+      dangerMax: 160,
+    },
+    magnesium: {
+      preferredMin: 2,
+      preferredMax: 40,
+      warnMin: 1,
+      warnMax: 55,
+      dangerMin: null,
+      dangerMax: 75,
+    },
+    sodium: {
+      default: { preferredMax: 10, warnMax: 30, dangerMax: 45 },
+      bakingSoda: { preferredMax: 25, warnMax: 40, dangerMax: 60 },
+    },
+    chloride: {
+      default: { preferredMax: 30, warnMax: 50, dangerMax: 100 },
+      chlorideHeavy: { preferredMax: 90, warnMax: 130, dangerMax: 180 },
+    },
+    sulfate: { warnMax: 150 },
+    potassium: { dangerMax: 100 },
+  },
+  espresso: {
+    tds: {
+      preferredMin: 60,
+      preferredMax: 260,
+      warnMin: 35,
+      warnMax: 350,
+      dangerMin: 20,
+      dangerMax: 450,
+    },
+    kh: {
+      preferredMin: 20,
+      preferredMax: 90,
+      warnMin: 10,
+      warnMax: 130,
+      dangerMin: 5,
+      dangerMax: 200,
+    },
+    gh: {
+      preferredMin: 15,
+      preferredMax: 180,
+      warnMin: 8,
+      warnMax: 240,
+      dangerMin: null,
+      dangerMax: 300,
+    },
+    calcium: {
+      preferredMin: 0,
+      preferredMax: 70,
+      warnMin: null,
+      warnMax: 110,
+      dangerMin: null,
+      dangerMax: 150,
+    },
+    magnesium: {
+      preferredMin: 2,
+      preferredMax: 45,
+      warnMin: 1,
+      warnMax: 60,
+      dangerMin: null,
+      dangerMax: 80,
+    },
+    sodium: {
+      default: { preferredMax: 20, warnMax: 35, dangerMax: 50 },
+      bakingSoda: { preferredMax: 30, warnMax: 45, dangerMax: 65 },
+    },
+    chloride: {
+      default: { preferredMax: 50, warnMax: 75, dangerMax: 130 },
+      chlorideHeavy: { preferredMax: 110, warnMax: 150, dangerMax: 210 },
+    },
+    sulfate: { warnMax: 170 },
+    potassium: { dangerMax: 120 },
+  },
+};
+
 // --- Range severity ordering ---
 const RANGE_SEVERITY_ORDER = { danger: 0, warn: 1, info: 2 };
 
@@ -429,6 +540,7 @@ if (typeof module !== "undefined" && module.exports) {
     BRAND_CONCENTRATES,
     BRAND_CONCENTRATE_IDS,
     LOTUS_CONCENTRATE_IDS,
+    WATER_PROFILE_RANGE_BANDS,
     RANGE_SEVERITY_ORDER,
     THEME_KEY,
   };
