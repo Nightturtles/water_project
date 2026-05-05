@@ -732,7 +732,8 @@ function calculate() {
     advancedMode,
     alkalinitySources: alkalinitySourcesForRange,
     calciumSource: caSource,
-    magnesiumSource: mgSource
+    magnesiumSource: mgSource,
+    brewMethod: activeBrewMethod
   });
 }
 
@@ -746,6 +747,7 @@ function updateSummaryMetrics(payload) {
   const so4ToCl = payload.so4ToCl;
   const baselineRatio = payload.baselineRatio;
   const advancedMode = !!payload.advancedMode;
+  const brewMethod = payload.brewMethod === "espresso" ? "espresso" : "filter";
 
   document.getElementById("calc-gh").textContent = Number.isFinite(gh) ? Math.round(gh) : 0;
   document.getElementById("calc-kh").textContent = Number.isFinite(kh) ? Math.round(kh) : 0;
@@ -797,7 +799,8 @@ function updateSummaryMetrics(payload) {
         includeAdvanced: advancedMode,
         alkalinitySources,
         calciumSource,
-        magnesiumSource
+        magnesiumSource,
+        brewMethod
       });
       renderRangeGuidance(rangeWarningsEl, evaluation.findings);
     } else {

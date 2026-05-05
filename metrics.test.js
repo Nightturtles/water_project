@@ -159,6 +159,41 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
   });
 });
 
+describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
+  const sourceAwareOptions = {
+    alkalinitySources: ["potassium-bicarbonate"],
+    calciumSource: "calcium-chloride",
+    magnesiumSource: "magnesium-chloride",
+  };
+
+  test("same ions can warn in filter mode but stay silent in espresso mode", () => {
+    const ions = { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 };
+    const filterEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...sourceAwareOptions,
+      brewMethod: "filter",
+    });
+    const espressoEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...sourceAwareOptions,
+      brewMethod: "espresso",
+    });
+    expect(filterEval.findings.some((f) => /^Calcium is too low/.test(f.message))).toBe(true);
+    expect(espressoEval.findings.some((f) => /^Calcium is too low/.test(f.message))).toBe(false);
+  });
+
+  test("missing/invalid brew method falls back to filter bands", () => {
+    const ions = { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 };
+    const filterEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...sourceAwareOptions,
+      brewMethod: "filter",
+    });
+    const invalidEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...sourceAwareOptions,
+      brewMethod: "not-a-mode",
+    });
+    expect(invalidEval.findings).toEqual(filterEval.findings);
+  });
+});
+
 describe("MINERAL_DB integrity (constants.js sanity)", () => {
   test("every mineral has positive MW and at least one ion fraction in (0, 1]", () => {
     // Regression guard: if someone adds a mineral with mw=0, ion fractions become

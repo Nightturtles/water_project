@@ -667,7 +667,8 @@
           includeAdvanced: isAdvancedMineralDisplayMode(),
           alkalinitySources: getEffectiveAlkalinitySources(),
           calciumSource: getEffectiveCalciumSource(),
-          magnesiumSource: getEffectiveMagnesiumSource()
+          magnesiumSource: getEffectiveMagnesiumSource(),
+          brewMethod: activeBrewMethod
         });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
       }

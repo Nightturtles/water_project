@@ -195,6 +195,7 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
  *   alkalinitySources?: string[],
  *   calciumSource?: string | null,
  *   magnesiumSource?: string | null,
+ *   brewMethod?: string | null,
  * }} [options]
  */
 function evaluateWaterProfileRanges(ions, options = {}) {
@@ -226,6 +227,8 @@ function evaluateWaterProfileRanges(ions, options = {}) {
     options.calciumSource !== undefined ? options.calciumSource : getEffectiveCalciumSource();
   const magnesiumSource =
     options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
+  const brewMethod = options.brewMethod === "espresso" ? "espresso" : "filter";
+  const methodBands = WATER_PROFILE_RANGE_BANDS[brewMethod] || WATER_PROFILE_RANGE_BANDS.filter;
   /** @typedef {"danger" | "warn" | "info"} Severity */
   /** @type {{ severity: Severity, message: string }[]} */
   const findings = [];
@@ -294,61 +297,93 @@ function evaluateWaterProfileRanges(ions, options = {}) {
     }
   }
 
-  // Bands sized so SCA Standard and other mainstream filter recipes sit inside
-  // the silent zone (preferred). Lower-danger thresholds for GH/Ca/Mg are null
-  // by design: zero-hardness recipes (e.g. RPavlis) should surface as warn,
-  // never as a "dangerous water" alert on a published recipe.
-  addBandFinding("TDS", metrics.tds, "mg/L", 50, 300, 30, 400, 20, 500);
-  addBandFinding("KH", metrics.kh, "mg/L as CaCO3", 30, 90, 10, 130, 5, 200);
-  addBandFinding("GH", metrics.gh, "mg/L as CaCO3", 40, 200, 20, 250, null, 300);
-  addBandFinding("Calcium", normalized.calcium, "mg/L", 8, 90, 4, 120, null, 160);
-  addBandFinding("Magnesium", normalized.magnesium, "mg/L", 2, 40, 1, 55, null, 75);
+  /**
+   * @param {string} label
+   * @param {number} value
+   * @param {string} unit
+   * @param {{
+   *   preferredMin?: number | null,
+   *   preferredMax?: number | null,
+   *   warnMin?: number | null,
+   *   warnMax?: number | null,
+   *   dangerMin?: number | null,
+   *   dangerMax?: number | null,
+   * }} band
+   */
+  function addBandFindingFromConfig(label, value, unit, band) {
+    if (!band) return;
+    addBandFinding(
+      label,
+      value,
+      unit,
+      band.preferredMin ?? null,
+      band.preferredMax ?? null,
+      band.warnMin ?? null,
+      band.warnMax ?? null,
+      band.dangerMin ?? null,
+      band.dangerMax ?? null,
+    );
+  }
+
+  addBandFindingFromConfig("TDS", metrics.tds, "mg/L", methodBands.tds);
+  addBandFindingFromConfig("KH", metrics.kh, "mg/L as CaCO3", methodBands.kh);
+  addBandFindingFromConfig("GH", metrics.gh, "mg/L as CaCO3", methodBands.gh);
+  addBandFindingFromConfig("Calcium", normalized.calcium, "mg/L", methodBands.calcium);
+  addBandFindingFromConfig("Magnesium", normalized.magnesium, "mg/L", methodBands.magnesium);
 
   const useBakingSodaSodiumLimits =
     Array.isArray(alkalinitySources) && alkalinitySources.includes("baking-soda");
-  const sodiumPreferredMax = useBakingSodaSodiumLimits ? 25 : 10;
-  const sodiumWarnMax = useBakingSodaSodiumLimits ? 40 : 30;
-  const sodiumDangerMax = useBakingSodaSodiumLimits ? 60 : 45;
+  const sodiumBands = useBakingSodaSodiumLimits
+    ? methodBands.sodium.bakingSoda
+    : methodBands.sodium.default;
   addBandFinding(
     "Sodium",
     normalized.sodium,
     "mg/L",
     null,
-    sodiumPreferredMax,
+    sodiumBands.preferredMax ?? null,
     null,
-    sodiumWarnMax,
+    sodiumBands.warnMax ?? null,
     null,
-    sodiumDangerMax,
+    sodiumBands.dangerMax ?? null,
   );
 
   if (includeAdvanced) {
     const chlorideHeavySource =
       calciumSource === "calcium-chloride" || magnesiumSource === "magnesium-chloride";
-    const chloridePreferredMax = chlorideHeavySource ? 90 : 30;
-    const chlorideWarnMax = chlorideHeavySource ? 130 : 50;
-    const chlorideDangerMax = chlorideHeavySource ? 180 : 100;
+    const chlorideBands = chlorideHeavySource
+      ? methodBands.chloride.chlorideHeavy
+      : methodBands.chloride.default;
     addBandFinding(
       "Chloride",
       normalized.chloride,
       "mg/L",
       null,
-      chloridePreferredMax,
+      chlorideBands.preferredMax ?? null,
       null,
-      chlorideWarnMax,
+      chlorideBands.warnMax ?? null,
       null,
-      chlorideDangerMax,
+      chlorideBands.dangerMax ?? null,
     );
 
-    if (normalized.sulfate > 150) {
+    const sulfateWarnMax =
+      methodBands.sulfate && Number.isFinite(methodBands.sulfate.warnMax)
+        ? methodBands.sulfate.warnMax
+        : 150;
+    if (normalized.sulfate > sulfateWarnMax) {
       addFinding(
         "warn",
-        `Sulfate is too high at ${Math.round(normalized.sulfate * 10) / 10} mg/L (recommended <=150 mg/L).`,
+        `Sulfate is too high at ${Math.round(normalized.sulfate * 10) / 10} mg/L (recommended <=${sulfateWarnMax} mg/L).`,
       );
     }
-    if (normalized.potassium > 100) {
+    const potassiumDangerMax =
+      methodBands.potassium && Number.isFinite(methodBands.potassium.dangerMax)
+        ? methodBands.potassium.dangerMax
+        : 100;
+    if (normalized.potassium > potassiumDangerMax) {
       addFinding(
         "danger",
-        `Potassium is too high at ${Math.round(normalized.potassium * 10) / 10} mg/L (recommended <=100 mg/L).`,
+        `Potassium is too high at ${Math.round(normalized.potassium * 10) / 10} mg/L (recommended <=${potassiumDangerMax} mg/L).`,
       );
     }
   }
