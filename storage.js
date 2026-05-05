@@ -583,7 +583,18 @@ function getAllPresets() {
       continue;
     }
     if (deleted.includes(key)) continue;
-    result[key] = custom[key] || /** @type {SourceProfile} */ (value);
+    const override = custom[key];
+    if (override) {
+      // Save Changes (source-water-ui.js) writes the edited profile into
+      // customProfiles[<builtin-key>] without copying the built-in's category.
+      // Inherit it here so the picker still groups the override under its
+      // original heading (e.g. an edited "evian" still renders as Bottled).
+      result[key] = override.category
+        ? override
+        : Object.assign({}, override, { category: value && value.category });
+    } else {
+      result[key] = /** @type {SourceProfile} */ (value);
+    }
   }
   sourcePresetsCache = result;
   return sourcePresetsCache;

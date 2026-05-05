@@ -119,7 +119,37 @@ function initSourceWaterSection(options) {
   function renderSourcePresetButtons() {
     sourcePresetsContainer.innerHTML = "";
     const allPresets = getAllPresets();
+
+    // Bucket presets by category. Entries without a category that aren't the
+    // literal "+ Add Custom" button fall under "saved" (user-created profiles
+    // saved via the Save button). The "custom" key is appended last with no
+    // heading.
+    const categoryOrder = (typeof SOURCE_CATEGORY_ORDER !== "undefined" && Array.isArray(SOURCE_CATEGORY_ORDER))
+      ? SOURCE_CATEGORY_ORDER
+      : ["pure", "generic", "bottled", "saved"];
+    const categoryLabels = (typeof SOURCE_CATEGORY_LABELS !== "undefined" && SOURCE_CATEGORY_LABELS)
+      ? SOURCE_CATEGORY_LABELS
+      : {};
+    /** @type {Record<string, Array<[string, any]>>} */
+    const buckets = {};
+    /** @type {Array<[string, any]>} */
+    const customEntries = [];
     for (const [key, preset] of Object.entries(allPresets)) {
+      if (key === "custom") {
+        customEntries.push([key, preset]);
+        continue;
+      }
+      const cat = (preset && preset.category) || "saved";
+      if (!buckets[cat]) buckets[cat] = [];
+      buckets[cat].push([key, preset]);
+    }
+    // Render any unknown category at the end (forward compatibility \u2014 e.g. if
+    // a future "municipal" group ships before this code is updated).
+    const renderOrder = categoryOrder.concat(
+      Object.keys(buckets).filter(function(k) { return categoryOrder.indexOf(k) === -1; })
+    );
+
+    function appendButton(key, preset) {
       const btn = document.createElement("button");
       btn.className = "preset-btn";
       btn.dataset.preset = key;
@@ -133,6 +163,19 @@ function initSourceWaterSection(options) {
       }
       sourcePresetsContainer.appendChild(btn);
     }
+
+    for (const cat of renderOrder) {
+      const entries = buckets[cat];
+      if (!entries || entries.length === 0) continue;
+      const labelText = categoryLabels[cat] || cat;
+      const heading = document.createElement("span");
+      heading.className = "preset-category-label";
+      heading.textContent = labelText;
+      sourcePresetsContainer.appendChild(heading);
+      for (const [key, preset] of entries) appendButton(key, preset);
+    }
+    for (const [key, preset] of customEntries) appendButton(key, preset);
+
     highlightSourcePreset(activeSourcePreset);
   }
 

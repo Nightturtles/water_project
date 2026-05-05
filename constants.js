@@ -123,9 +123,28 @@ const ION_LABELS = {
 };
 
 // --- Source water presets ---
+// --- Source water preset categories ---
+// Drives the grouping in source-water-ui.js renderSourcePresetButtons. The
+// "saved" bucket is for user-created custom profiles that don't carry a
+// category field. The literal "+ Add Custom" entry is always last and has no
+// category so it's not grouped under any heading.
+const SOURCE_CATEGORY_ORDER = ["pure", "generic", "bottled", "saved"];
+const SOURCE_CATEGORY_LABELS = {
+  pure: "Distilled / RO",
+  generic: "Generic Tap",
+  bottled: "Bottled Water",
+  saved: "Saved Profiles",
+};
+
+// Bottled water values are taken from each brand's published label / technical
+// data sheet. These are international brands with stable, widely cited
+// mineralogies; values are mg/L. If a user's local bottling differs (some
+// brands source from multiple springs by region) they can override via
+// "Edit Starting Water" → Save Changes.
 const SOURCE_PRESETS = {
   distilled: {
     label: "Distilled / RO",
+    category: "pure",
     calcium: 0,
     magnesium: 0,
     potassium: 0,
@@ -136,6 +155,7 @@ const SOURCE_PRESETS = {
   },
   "soft-tap": {
     label: "Soft Tap Water",
+    category: "generic",
     calcium: 15,
     magnesium: 3,
     potassium: 1,
@@ -146,6 +166,7 @@ const SOURCE_PRESETS = {
   },
   "hard-tap": {
     label: "Hard Tap Water",
+    category: "generic",
     calcium: 60,
     magnesium: 15,
     potassium: 2,
@@ -153,6 +174,73 @@ const SOURCE_PRESETS = {
     sulfate: 25,
     chloride: 30,
     bicarbonate: 120,
+  },
+  // --- Bottled water profiles (mg/L from official label values) ---
+  evian: {
+    label: "Evian",
+    category: "bottled",
+    calcium: 80,
+    magnesium: 26,
+    potassium: 1,
+    sodium: 6.5,
+    sulfate: 12.6,
+    chloride: 6.8,
+    bicarbonate: 360,
+  },
+  volvic: {
+    label: "Volvic",
+    category: "bottled",
+    calcium: 12,
+    magnesium: 8,
+    potassium: 6.2,
+    sodium: 12,
+    sulfate: 8.1,
+    chloride: 15,
+    bicarbonate: 71,
+  },
+  fiji: {
+    label: "Fiji",
+    category: "bottled",
+    calcium: 18,
+    magnesium: 15,
+    potassium: 5,
+    sodium: 18,
+    sulfate: 1,
+    chloride: 9,
+    bicarbonate: 153,
+  },
+  "san-pellegrino": {
+    label: "San Pellegrino",
+    category: "bottled",
+    calcium: 175,
+    magnesium: 55.9,
+    potassium: 2.7,
+    sodium: 33.6,
+    sulfate: 445,
+    chloride: 50,
+    bicarbonate: 219,
+  },
+  voss: {
+    label: "Voss Still",
+    category: "bottled",
+    calcium: 5,
+    magnesium: 1,
+    potassium: 0.4,
+    sodium: 6,
+    sulfate: 4,
+    chloride: 7,
+    bicarbonate: 30,
+  },
+  gerolsteiner: {
+    label: "Gerolsteiner",
+    category: "bottled",
+    calcium: 348,
+    magnesium: 108,
+    potassium: 11,
+    sodium: 118,
+    sulfate: 36,
+    chloride: 40,
+    bicarbonate: 1816,
   },
   custom: {
     label: "+ Add Custom",
@@ -522,6 +610,8 @@ if (typeof module !== "undefined" && module.exports) {
     ION_FIELDS,
     ION_LABELS,
     SOURCE_PRESETS,
+    SOURCE_CATEGORY_ORDER,
+    SOURCE_CATEGORY_LABELS,
     TARGET_PRESETS,
     NON_EDITABLE_TARGET_KEYS,
     LIBRARY_TAGS,
