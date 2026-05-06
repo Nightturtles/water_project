@@ -143,6 +143,22 @@ module.exports = tseslint.config(
     },
   },
 
+  // One-shot Node helper scripts (e.g. compute-coffee-ad-astra-ions.cjs).
+  // CommonJS, Node-only, may use console.log freely as their whole job is
+  // emitting to stdout. require() of source files via the same UMD-shim
+  // pattern unit tests use.
+  {
+    files: ["scripts/**/*.cjs"],
+    languageOptions: {
+      sourceType: "commonjs",
+      globals: globals.node,
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "no-unused-vars": ["error", { args: "none", caughtErrorsIgnorePattern: "^_" }],
+    },
+  },
+
   // Prettier compatibility — MUST be last so its rule overrides win. This
   // only disables ESLint rules that conflict with Prettier's formatting
   // (quotes, indentation, semicolons, etc.). It does NOT run Prettier;

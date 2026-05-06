@@ -1,0 +1,35 @@
+-- =============================================================================
+-- Cafelytic — add stock_formula column to target_profiles
+--
+-- Each library recipe with a stock_formula encodes the multi-mineral DIY
+-- concentrate it was derived from: bottle volume, dispensing dose, and the
+-- gram amounts of each mineral salt that go into the bottle. Existing rows
+-- keep stock_formula NULL (no behavior change). New rows added in the
+-- companion migration carry the formula so the library page can display the
+-- recipe as published, and a future Phase B PR can use it as a dispensing
+-- entity.
+--
+-- Shape (jsonb):
+--   {
+--     "bottleMl": 200,
+--     "doseGramsPerL": 4,
+--     "minerals": [
+--       { "mineralId": "epsom-salt",          "grams": 5.0 },
+--       { "mineralId": "magnesium-chloride",  "grams": 2.0 },
+--       ...
+--     ],
+--     "source":  "Scott Rao",
+--     "via":     "Coffee ad Astra (Jonathan Gagné, Dec 2018)"
+--   }
+--
+-- mineralId values are the keys of MINERAL_DB in constants.js. The dose
+-- convention (16 g of stock per 4 L brew water, equivalently 4 g/L) follows
+-- the source recipes verbatim.
+--
+-- The companion migration (20260506231900_add_coffee_ad_astra_recipes.sql)
+-- INSERTs the 12 article recipes; this migration only adds the column so the
+-- INSERT can target it.
+-- =============================================================================
+
+ALTER TABLE target_profiles
+  ADD COLUMN IF NOT EXISTS stock_formula jsonb;

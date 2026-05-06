@@ -176,6 +176,44 @@
     return methodLabel + " · " + roastLabel;
   }
 
+  // Compact label for a MINERAL_DB id used in stock-formula chips. Falls back
+  // to the formula notation when shorter than the full name (KHCO₃ vs.
+  // "Potassium Bicarbonate"); falls back to the raw id for unknown salts so
+  // future additions still render.
+  var STOCK_MINERAL_SHORT = {
+    "epsom-salt": "epsom",
+    "magnesium-chloride": "MgCl₂·6H₂O",
+    "calcium-chloride": "CaCl₂·2H₂O",
+    "baking-soda": "NaHCO₃",
+    "potassium-bicarbonate": "KHCO₃",
+    gypsum: "gypsum",
+    "potassium-chloride": "KCl",
+    "sodium-chloride": "NaCl",
+  };
+
+  function formatStockFormula(formula) {
+    if (!formula || !Array.isArray(formula.minerals) || formula.minerals.length === 0) {
+      return "";
+    }
+    var parts = formula.minerals
+      .map(function (m) {
+        if (!m || typeof m !== "object") return "";
+        var label = STOCK_MINERAL_SHORT[m.mineralId] || m.mineralId || "?";
+        var grams = Number(m.grams);
+        if (!Number.isFinite(grams)) return "";
+        // Trim a trailing .0 so "5.0 g epsom" reads as "5 g epsom".
+        var gramsStr = grams === Math.round(grams) ? String(grams) : String(grams);
+        return gramsStr + " g " + label;
+      })
+      .filter(Boolean)
+      .join(" · ");
+    var bottle = Number(formula.bottleMl);
+    var dose = Number(formula.doseGramsPerL);
+    var bottleLabel = Number.isFinite(bottle) && bottle > 0 ? " in " + bottle + " mL" : "";
+    var doseLabel = Number.isFinite(dose) && dose > 0 ? " — " + dose + " g/L" : "";
+    return parts + bottleLabel + doseLabel;
+  }
+
   function createMineralTriplet(recipe, extraClass) {
     var wrap = el("div", "rx-mineral-triplet" + (extraClass ? " " + extraClass : ""));
     [
@@ -332,6 +370,17 @@
     // Description (2-line clamp via CSS -webkit-line-clamp)
     if (recipe.description) {
       card.appendChild(el("p", "rx-card-desc", recipe.description));
+    }
+
+    // DIY stock formula (only on Coffee ad Astra recipes for now). Shows the
+    // multi-mineral concentrate the recipe was published as. Phase B follow-up
+    // PRs will turn this into an active dispensing entity in the calculator.
+    var stockText = formatStockFormula(recipe.stockFormula);
+    if (stockText) {
+      var stockRow = el("div", "rx-card-stock");
+      stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
+      stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
+      card.appendChild(stockRow);
     }
 
     // Footer: tag chips (left) + method/roast meta (right)

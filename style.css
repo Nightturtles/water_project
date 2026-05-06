@@ -3020,6 +3020,41 @@ footer {
   min-height: 2.3em;
 }
 
+/* Stock-formula row. Shown only on library cards whose recipe was published
+   as a multi-mineral DIY concentrate (e.g. Coffee ad Astra). Compact one-
+   liner styled to feel adjacent to the description without competing with
+   it for visual weight. Two lines max via line-clamp so a long formula
+   doesn't blow out card height. */
+.rx-card-stock {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  font-size: 0.7rem;
+  color: var(--gray-600);
+  line-height: 1.35;
+  margin-top: -0.15rem;
+}
+
+.rx-card-stock-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  flex-shrink: 0;
+}
+
+.rx-card-stock-formula {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-width: 0;
+}
+
 .rx-card-footer {
   display: flex;
   align-items: flex-end;

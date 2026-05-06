@@ -16,7 +16,10 @@
   //   v3 — forced re-fetch after migration-011 added is_starter. Without
   //        this bump, pre-011 _v2 snapshots normalize to isStarter:false
   //        for every canonical row and break the starter rail silently.
-  var CACHE_KEY = "cw_library_public_recipes_v3";
+  //   v4 — forced re-fetch after migrations added stock_formula + 12 Coffee
+  //        ad Astra recipes. Pre-v4 snapshots have stockFormula:null on every
+  //        row and miss the new entries entirely.
+  var CACHE_KEY = "cw_library_public_recipes_v4";
   // Set (not Array) so re-registering the same function reference doesn't
   // duplicate firings — defends against bfcache restore and other scenarios
   // where the same classic-script evaluates twice against the same module
@@ -58,6 +61,11 @@
       // rows are only in the rail if the user has explicitly added them from
       // library.html. The actual filter lives in storage.getAllTargetPresets.
       isStarter: row.isStarter != null ? !!row.isStarter : !!row.is_starter,
+      // Multi-mineral DIY stock formula (Coffee ad Astra recipes; later
+      // user-defined stocks too). Shape: { bottleMl, doseGramsPerL, minerals:
+      // [{mineralId, grams}], source, via }. NULL on most library rows; the
+      // library card optionally renders it when present.
+      stockFormula: row.stock_formula || row.stockFormula || null,
     };
   }
 
