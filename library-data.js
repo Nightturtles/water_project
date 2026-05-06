@@ -130,7 +130,7 @@
     var result = await window.supabaseClient
       .from("target_profiles")
       .select(
-        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter"
+        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter, stock_formula"
       )
       .eq("is_public", true)
       .order("created_at", { ascending: false });
