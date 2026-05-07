@@ -71,26 +71,46 @@ function renderResultItems() {
 
   const selectedMinerals = loadSelectedMinerals();
   const selectedConcentrates = loadValidSelectedConcentrates();
-  const mgSourceIds = getEffectiveMagnesiumSources();
-  const caSourceIds = getEffectiveCalciumSources();
 
-  const bufferIds = alkalinitySources;
-  const candidates = [
-    ...mgSourceIds.map((id, i) => ({ mineralId: id, order: 0 + i * 0.1 })),
-    ...bufferIds.map((id, i) => ({ mineralId: id, order: 1 + i * 0.1 })),
-    ...caSourceIds.map((id, i) => ({ mineralId: id, order: 2 + i * 0.1 }))
-  ].filter((x) => x && x.mineralId);
+  // Active stock: dispenses a fixed-ratio multi-mineral mix at a prescribed
+  // dose. v1 rule is single-stock-per-recipe and stock-only output — when an
+  // enabled stock is found, suppress every per-mineral / single-mineral
+  // concentrate row so the user sees just the stock dispensing line. Mixed
+  // stock + supplemental dosing is deferred to a follow-up; revisit if users
+  // ask for it.
+  const activeStockId = getActiveStockId(selectedConcentrates);
+  const activeStockSpec = getActiveStockSpec(selectedConcentrates);
 
   const toShow = [];
-  for (const c of candidates) {
-    const mineralId = c.mineralId;
-    const showMineral = selectedMinerals.includes(mineralId);
-    if (showMineral) toShow.push({ kind: "mineral", id: mineralId, order: c.order });
-    selectedConcentrates.forEach((cid) => {
-      if (getConcentrateMineralId(cid) === mineralId) {
-        toShow.push({ kind: "concentrate", id: cid, mineralId, order: c.order + 0.05 });
-      }
+  if (activeStockSpec) {
+    toShow.push({
+      kind: "stock",
+      id: activeStockId,
+      label: activeStockSpec.label || activeStockId,
+      spec: activeStockSpec,
+      order: -1,
     });
+  } else {
+    const mgSourceIds = getEffectiveMagnesiumSources();
+    const caSourceIds = getEffectiveCalciumSources();
+
+    const bufferIds = alkalinitySources;
+    const candidates = [
+      ...mgSourceIds.map((id, i) => ({ mineralId: id, order: 0 + i * 0.1 })),
+      ...bufferIds.map((id, i) => ({ mineralId: id, order: 1 + i * 0.1 })),
+      ...caSourceIds.map((id, i) => ({ mineralId: id, order: 2 + i * 0.1 }))
+    ].filter((x) => x && x.mineralId);
+
+    for (const c of candidates) {
+      const mineralId = c.mineralId;
+      const showMineral = selectedMinerals.includes(mineralId);
+      if (showMineral) toShow.push({ kind: "mineral", id: mineralId, order: c.order });
+      selectedConcentrates.forEach((cid) => {
+        if (getConcentrateMineralId(cid) === mineralId) {
+          toShow.push({ kind: "concentrate", id: cid, mineralId, order: c.order + 0.05 });
+        }
+      });
+    }
   }
   toShow.sort((a, b) => a.order - b.order);
 
@@ -119,6 +139,33 @@ function renderResultItems() {
     return;
   }
   for (const item of toShow) {
+    if (item.kind === "stock") {
+      const div = document.createElement("div");
+      div.className = "result-item";
+      div.dataset.stock = item.id;
+      const resultInfo = document.createElement("div");
+      resultInfo.className = "result-info";
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "result-name";
+      nameSpan.textContent = item.label;
+      const stockBadge = document.createElement("span");
+      stockBadge.className = "badge badge-concentrate";
+      stockBadge.textContent = "STOCK";
+      nameSpan.appendChild(stockBadge);
+      const detailSpan = document.createElement("span");
+      detailSpan.className = "result-detail";
+      detailSpan.textContent = formatStockResultDetail(item.spec);
+      resultInfo.appendChild(nameSpan);
+      resultInfo.appendChild(detailSpan);
+      div.appendChild(resultInfo);
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "result-value";
+      valueSpan.textContent = "0.00 g";
+      div.appendChild(valueSpan);
+      resultsContainer.appendChild(div);
+      continue;
+    }
+
     const mineralId = item.kind === "concentrate" ? item.mineralId : item.id;
     const mineral = item.kind === "concentrate" && typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[item.id]
       ? { name: BRAND_CONCENTRATES[item.id].name, formula: BRAND_CONCENTRATES[item.id].formula }
@@ -564,6 +611,10 @@ function calculate() {
     volumeL *= GALLONS_TO_LITERS;
   }
 
+  const selectedConcentratesEarly = loadValidSelectedConcentrates();
+  const activeStockIdEarly = getActiveStockId(selectedConcentratesEarly);
+  const activeStockSpecEarly = getActiveStockSpec(selectedConcentratesEarly);
+
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
     const alkSources = getEffectiveAlkalinitySources();
@@ -576,6 +627,7 @@ function calculate() {
     mgSourceIds.forEach(id => { zeroValues[id] = 0; });
     caSourceIds.forEach(id => { zeroValues[id] = 0; });
     updateResultValues(zeroValues);
+    if (activeStockIdEarly) updateStockValues({ [activeStockIdEarly]: 0 });
     updateSummaryMetrics({});
     return;
   }
@@ -603,6 +655,55 @@ function calculate() {
   const rawDeltaCa = targetCaMgL - (sourceWater.calcium || 0);
   const rawDeltaMg = targetMgMgL - (sourceWater.magnesium || 0);
   const rawDeltaAlk = targetAlkAsCaCO3 - sourceAlkAsCaCO3;
+
+  // Active stock: bypass the per-mineral picker entirely. The stock dispenses
+  // a fixed-ratio mix at a prescribed dose; we forward-compute resulting ions
+  // and let the user compare to target visually. Source-exceeds-target
+  // warnings still apply because the user can't reduce ion concentrations by
+  // dosing more stock.
+  if (activeStockSpecEarly) {
+    const stockMineralGramsPerL = computeStockMineralGramsPerL(activeStockSpecEarly);
+    const dosePerL = Number(activeStockSpecEarly.doseGramsPerL) || 0;
+    const totalStockGrams = dosePerL * volumeL;
+    updateStockValues({ [activeStockIdEarly]: totalStockGrams });
+
+    const stockWarnings = [];
+    if (rawDeltaCa < 0) stockWarnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
+    if (rawDeltaMg < 0) stockWarnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
+    if (rawDeltaAlk < 0) stockWarnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`);
+    if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
+
+    const stockAddedIons = calculateIonPPMs(stockMineralGramsPerL);
+    const stockFinalIons = {};
+    ION_FIELDS.forEach((ion) => {
+      stockFinalIons[ion] = (sourceWater[ion] || 0) + (stockAddedIons[ion] || 0);
+    });
+    lastCalculatedIons = stockFinalIons;
+
+    const stockMetrics = calculateMetrics(stockFinalIons);
+    const stockBaselineMetrics = calculateMetrics(sourceWater || {});
+    const stockFinalSO4 = stockFinalIons.sulfate || 0;
+    const stockFinalCl = stockFinalIons.chloride || 0;
+    const stockSo4ToCl = stockFinalCl > 0 ? stockFinalSO4 / stockFinalCl : null;
+    const stockBaselineRatio = calculateSo4ClRatio(sourceWater || {});
+    updateSummaryMetrics({
+      gh: stockMetrics.gh,
+      kh: stockMetrics.kh,
+      tds: stockMetrics.tds,
+      ions: stockFinalIons,
+      baselineIons: sourceWater || {},
+      baselineMetrics: stockBaselineMetrics,
+      so4ToCl: stockSo4ToCl,
+      baselineRatio: stockBaselineRatio,
+      advancedMode: isAdvancedMineralDisplayMode(),
+      alkalinitySources: getEffectiveAlkalinitySources(),
+      calciumSource: getEffectiveCalciumSource(),
+      magnesiumSource: getEffectiveMagnesiumSource(),
+      brewMethod: activeBrewMethod,
+    });
+    return;
+  }
+
   const deltaCa = Math.max(0, rawDeltaCa);
   const deltaMg = Math.max(0, rawDeltaMg);
   const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
@@ -615,7 +716,7 @@ function calculate() {
   const hasCaSource = getEffectiveCalciumSources().length > 0;
   const warnings = [];
   const selectedMinerals = loadSelectedMinerals();
-  const selectedConcentrates = loadValidSelectedConcentrates();
+  const selectedConcentrates = selectedConcentratesEarly;
   const conflictMineralIds = new Set();
   selectedConcentrates.forEach((cid) => {
     const mineralId = getConcentrateMineralId(cid);
@@ -864,6 +965,48 @@ function updateResultValues(valuesByMineral) {
     }
   }
 }
+
+// Stock dispense uses grams (not mL like single-mineral concentrates), so it
+// gets its own updater rather than reusing updateConcentrateValues.
+function updateStockValues(valuesByStock) {
+  for (const [stockId, grams] of Object.entries(valuesByStock)) {
+    const item = resultsContainer.querySelector(`[data-stock="${CSS.escape(stockId)}"]`);
+    if (!item) continue;
+    const valEl = item.querySelector(".result-value");
+    if (valEl) valEl.textContent = formatGrams(grams);
+    if (grams > 0) {
+      const nameEl = item.querySelector(".result-name");
+      const name = nameEl ? nameEl.textContent : stockId;
+      item.setAttribute("aria-label", name + ", " + formatGrams(grams));
+    } else {
+      item.removeAttribute("aria-label");
+    }
+  }
+}
+
+// Compact "5g MgSO4·7H2O · 2g MgCl2·6H2O · ..." string for the calculator's
+// stock result row. Uses MINERAL_DB.formula as the salt label (already a
+// short notation like "CaCl2·2H2O") so the row stays scannable.
+function formatStockResultDetail(spec) {
+  if (!spec || !Array.isArray(spec.minerals)) return "";
+  const parts = spec.minerals
+    .map((m) => {
+      if (!m || typeof m !== "object" || !m.mineralId) return "";
+      const grams = Number(m.grams);
+      if (!Number.isFinite(grams) || grams <= 0) return "";
+      const mineral = MINERAL_DB[m.mineralId];
+      const label = mineral && mineral.formula ? mineral.formula : m.mineralId;
+      return grams + "g " + label;
+    })
+    .filter(Boolean);
+  if (parts.length === 0) return "";
+  return parts.join(" · ");
+}
+
+// `computeStockMineralGramsPerL` lives in storage.js next to other stock-spec
+// helpers; classic-script load order makes it a global by the time this file
+// runs. Keeping the implementation in storage.js means it's reachable from
+// unit tests without requiring script.js to set up a DOM.
 
 function updateConcentrateValues(valuesByConcentrate) {
   for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
