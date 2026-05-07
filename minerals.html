@@ -54,6 +54,22 @@
         </div>
       </div>
 
+      <button type="button" class="card-collapsible-summary" id="stock-concentrates-summary" aria-expanded="true" aria-controls="stock-concentrates-content">
+        <span class="card-collapsible-title">Stock Solutions</span>
+      </button>
+      <p class="hint">Multi-mineral stocks: dissolve several salts into one bottle, then dose by grams of stock per liter of brew water.</p>
+      <div class="card-collapsible-content" id="stock-concentrates-content">
+        <div class="concentrate-list" id="stock-concentrate-list">
+          <!-- Populated by JS -->
+        </div>
+        <div class="stock-actions">
+          <button type="button" class="preset-btn stock-add-new-btn" id="stock-add-new-btn">+ New stock solution</button>
+        </div>
+        <div class="stock-new-form" id="stock-new-form" hidden>
+          <!-- Populated by JS when "+ New stock solution" is clicked -->
+        </div>
+      </div>
+
       <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="true" aria-controls="brand-concentrates-content">
         <span class="card-collapsible-title">Brand Name Concentrates</span>
       </button>
@@ -132,6 +148,7 @@
   <script src="storage.js"></script>
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
+  <script src="library-data.js"></script>
   <script src="ui-shared.js"></script>
   <script>
     const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
@@ -288,6 +305,522 @@
       });
     }
 
+    // --- Stock Solutions (multi-mineral DIY concentrates) ---
+    const stockListEl = document.getElementById("stock-concentrate-list");
+    const stockAddBtn = document.getElementById("stock-add-new-btn");
+    const stockNewForm = document.getElementById("stock-new-form");
+
+    // Article-recipe slugs reserved by the library so user-defined stocks
+    // cannot shadow them. Auto-import from library rows lands in B3; this
+    // list is the conservative subset known at B2 ship time.
+    const RESERVED_LIBRARY_STOCK_SLUGS = [
+      "rao-perger", "dan-eils", "matt-perger", "rao-2013",
+      "melbourne-2013-wbc", "world-of-coffee-budapest",
+      "bh-simplified-sca-optimal", "bh-default", "bh-simplified-rao-2008",
+      "bh-simplified-hendon", "bh-hard", "bh-hard-af",
+    ];
+
+    function escapeHtml(s) {
+      return String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function uniqueStockSlug(baseSlug, existingSlugs) {
+      const base = baseSlug || "stock";
+      const taken = new Set(existingSlugs);
+      RESERVED_LIBRARY_STOCK_SLUGS.forEach((s) => taken.add(s));
+      if (!taken.has(base)) return base;
+      let i = 2;
+      while (taken.has(base + "-" + i)) i++;
+      return base + "-" + i;
+    }
+
+    function getStockOverLimitMineralIds(spec) {
+      if (!spec || !Array.isArray(spec.minerals)) return [];
+      const bottleMl = Math.max(0, Number(spec.bottleMl) || 0);
+      if (bottleMl <= 0) return [];
+      const liters = bottleMl / 1000;
+      const out = [];
+      for (const entry of spec.minerals) {
+        if (!entry || typeof entry !== "object") continue;
+        const limit = getSolubilityLimitGPerL(entry.mineralId);
+        if (limit == null) continue;
+        const grams = Math.max(0, Number(entry.grams) || 0);
+        if (grams <= 0) continue;
+        const gPerL = grams / liters;
+        if (gPerL >= limit) out.push(entry.mineralId);
+      }
+      return out;
+    }
+
+    function buildStockMineralOptionsHtml(selectedMineralId) {
+      let html = '<option value="">— Pick a mineral —</option>';
+      for (const [mid, m] of Object.entries(MINERAL_DB)) {
+        const sel = mid === selectedMineralId ? " selected" : "";
+        html += '<option value="' + mid + '"' + sel + '>' + escapeHtml(m.name) + '</option>';
+      }
+      return html;
+    }
+
+    function renderStockMineralRowsHtml(spec) {
+      const minerals = Array.isArray(spec.minerals) ? spec.minerals : [];
+      if (minerals.length === 0) {
+        return '<p class="hint stock-pane-empty">No minerals yet. Click "+ Add mineral" below.</p>';
+      }
+      let html = "";
+      minerals.forEach((entry, idx) => {
+        const grams = Number.isFinite(Number(entry.grams)) ? Number(entry.grams) : 0;
+        html +=
+          '<div class="stock-mineral-row" data-mineral-idx="' + idx + '">' +
+          '<select data-field="mineral-id">' + buildStockMineralOptionsHtml(entry.mineralId) + '</select>' +
+          '<input type="number" min="0" step="0.01" value="' + grams + '" data-field="mineral-grams" placeholder="grams">' +
+          '<button type="button" class="stock-mineral-remove" data-action="remove-mineral" aria-label="Remove mineral">×</button>' +
+          '</div>';
+      });
+      return html;
+    }
+
+    function renderStockRecipePaneHtml(spec) {
+      return (
+        '<div class="stock-mineral-list">' + renderStockMineralRowsHtml(spec) + "</div>" +
+        '<button type="button" class="preset-btn stock-add-mineral-btn" data-action="add-mineral">+ Add mineral</button>'
+      );
+    }
+
+    function renderStockRow(slug, spec) {
+      const concentrateId = "stock:" + slug;
+      const checked = loadSelectedConcentrates().includes(concentrateId);
+      const label = spec.label || slug;
+      const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
+      const doseGramsPerL = Number.isFinite(Number(spec.doseGramsPerL)) ? Number(spec.doseGramsPerL) : 0;
+      const isFromLibrary = !!spec.createdFrom;
+      const overLimitIds = getStockOverLimitMineralIds(spec);
+      const overLimitNames = overLimitIds.map(
+        (mid) => (MINERAL_DB[mid] && MINERAL_DB[mid].name) || mid,
+      );
+
+      const div = document.createElement("div");
+      div.className = "concentrate-item stock-concentrate-item" + (checked ? " selected" : "");
+      div.dataset.stockSlug = slug;
+
+      const badgeHtml = isFromLibrary
+        ? '<span class="badge badge-library">From library</span>'
+        : "";
+      const actionHtml = isFromLibrary
+        ? '<button type="button" class="stock-reset-link" data-action="reset-library">Reset to library values</button>'
+        : '<button type="button" class="stock-delete-btn" data-action="delete-stock" aria-label="Delete stock solution">×</button>';
+      const warningVisible = overLimitNames.length > 0;
+      const warningText = warningVisible
+        ? "Above solubility limit for " + overLimitNames.join(", ") + ". Try a larger bottle volume or fewer grams."
+        : "";
+
+      div.innerHTML =
+        '<div class="stock-row-header">' +
+          '<label class="concentrate-label">' +
+            '<input type="checkbox" value="' + concentrateId + '"' + (checked ? " checked" : "") + ">" +
+            '<div class="concentrate-info">' +
+              '<span class="mineral-name">' + escapeHtml(label) + badgeHtml + "</span>" +
+            "</div>" +
+          "</label>" +
+          actionHtml +
+        "</div>" +
+        '<div class="concentrate-inputs">' +
+          '<div class="input-group">' +
+            "<label>Bottle mL</label>" +
+            '<input type="number" min="0" step="1" value="' + bottleMl + '" data-field="bottle-ml">' +
+          "</div>" +
+          '<div class="input-group">' +
+            "<label>Dose g/L</label>" +
+            '<input type="number" min="0" step="0.01" value="' + doseGramsPerL + '" data-field="dose-g-per-l">' +
+          "</div>" +
+        "</div>" +
+        '<button type="button" class="stock-recipe-toggle" data-action="toggle-recipe" aria-expanded="false">Recipe</button>' +
+        '<div class="stock-recipe-pane" hidden>' + renderStockRecipePaneHtml(spec) + "</div>" +
+        '<div class="concentrate-warning"' + (warningVisible ? "" : " hidden") + ">" + escapeHtml(warningText) + "</div>";
+
+      return div;
+    }
+
+    function renderStockConcentrates() {
+      if (!stockListEl) return;
+      stockListEl.innerHTML = "";
+      const specs = loadStockConcentrateSpecs();
+      const slugs = Object.keys(specs);
+      if (slugs.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "stock-empty-hint";
+        empty.textContent = 'No stock solutions yet. Click "+ New stock solution" to add one.';
+        stockListEl.appendChild(empty);
+        return;
+      }
+      slugs.forEach((slug) => stockListEl.appendChild(renderStockRow(slug, specs[slug])));
+    }
+
+    renderStockConcentrates();
+
+    function updateStockSolubilityWarning(itemEl) {
+      if (!itemEl) return;
+      const slug = itemEl.dataset.stockSlug;
+      if (!slug) return;
+      const spec = loadStockConcentrateSpecs()[slug];
+      const warningEl = itemEl.querySelector(".concentrate-warning");
+      if (!warningEl) return;
+      const overLimitIds = spec ? getStockOverLimitMineralIds(spec) : [];
+      const names = overLimitIds.map((mid) => (MINERAL_DB[mid] && MINERAL_DB[mid].name) || mid);
+      if (names.length > 0) {
+        warningEl.textContent =
+          "Above solubility limit for " + names.join(", ") + ". Try a larger bottle volume or fewer grams.";
+        warningEl.hidden = false;
+      } else {
+        warningEl.textContent = "";
+        warningEl.hidden = true;
+      }
+    }
+
+    function refreshStockRecipePane(itemEl) {
+      if (!itemEl) return;
+      const slug = itemEl.dataset.stockSlug;
+      const spec = loadStockConcentrateSpecs()[slug];
+      const pane = itemEl.querySelector(".stock-recipe-pane");
+      if (!pane || !spec) return;
+      pane.innerHTML = renderStockRecipePaneHtml(spec);
+    }
+
+    if (stockListEl) {
+      stockListEl.addEventListener("change", (e) => {
+        const target = e.target;
+        if (target.type === "checkbox" && target.closest(".concentrate-label")) {
+          const item = target.closest(".stock-concentrate-item");
+          if (!item) return;
+          item.classList.toggle("selected", target.checked);
+          const checked = stockListEl.querySelectorAll(
+            '.stock-concentrate-item input[type="checkbox"]:checked',
+          );
+          const stockIds = Array.from(checked).map((cb) => cb.value);
+          const existing = loadSelectedConcentrates().filter(
+            (id) => typeof id === "string" && !id.startsWith("stock:"),
+          );
+          saveSelectedConcentrates(existing.concat(stockIds));
+          showSaved();
+          return;
+        }
+        if (target.tagName === "SELECT" && target.dataset.field === "mineral-id") {
+          const item = target.closest(".stock-concentrate-item");
+          const row = target.closest(".stock-mineral-row");
+          if (!item || !row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx)) return;
+          const slug = item.dataset.stockSlug;
+          const specs = loadStockConcentrateSpecs();
+          const spec = specs[slug];
+          if (!spec || !Array.isArray(spec.minerals) || !spec.minerals[idx]) return;
+          spec.minerals[idx].mineralId = target.value;
+          specs[slug] = spec;
+          saveStockConcentrateSpecs(specs);
+          updateStockSolubilityWarning(item);
+          showSaved();
+        }
+      });
+
+      stockListEl.addEventListener("input", (e) => {
+        const input = e.target;
+        if (!input || input.tagName !== "INPUT" || input.type !== "number") return;
+        const item = input.closest(".stock-concentrate-item");
+        if (!item) return;
+        const slug = item.dataset.stockSlug;
+        const specs = loadStockConcentrateSpecs();
+        const spec = specs[slug] || { label: slug, bottleMl: 0, doseGramsPerL: 0, minerals: [] };
+        const field = input.dataset.field;
+        if (field === "bottle-ml") {
+          spec.bottleMl = Math.max(0, parseFloat(input.value) || 0);
+        } else if (field === "dose-g-per-l") {
+          spec.doseGramsPerL = Math.max(0, parseFloat(input.value) || 0);
+        } else if (field === "mineral-grams") {
+          const row = input.closest(".stock-mineral-row");
+          if (!row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx) || !Array.isArray(spec.minerals) || !spec.minerals[idx]) return;
+          spec.minerals[idx].grams = Math.max(0, parseFloat(input.value) || 0);
+        } else {
+          return;
+        }
+        specs[slug] = spec;
+        saveStockConcentrateSpecs(specs);
+        updateStockSolubilityWarning(item);
+        showSaved();
+      });
+
+      stockListEl.addEventListener("click", (e) => {
+        const target = e.target instanceof HTMLElement ? e.target : null;
+        if (!target) return;
+        const action = target.dataset.action;
+        if (!action) return;
+        const item = target.closest(".stock-concentrate-item");
+        if (!item) return;
+        const slug = item.dataset.stockSlug;
+        if (!slug) return;
+
+        if (action === "toggle-recipe") {
+          const pane = item.querySelector(".stock-recipe-pane");
+          if (!pane) return;
+          const expanded = target.getAttribute("aria-expanded") === "true";
+          target.setAttribute("aria-expanded", String(!expanded));
+          pane.hidden = expanded;
+          return;
+        }
+
+        if (action === "delete-stock") {
+          const specs = loadStockConcentrateSpecs();
+          delete specs[slug];
+          saveStockConcentrateSpecs(specs);
+          const remaining = loadSelectedConcentrates().filter((id) => id !== "stock:" + slug);
+          saveSelectedConcentrates(remaining);
+          renderStockConcentrates();
+          showSaved();
+          return;
+        }
+
+        if (action === "reset-library") {
+          const specs = loadStockConcentrateSpecs();
+          const spec = specs[slug];
+          if (!spec || !spec.createdFrom) return;
+          const m = String(spec.createdFrom).match(/^library:(.+)$/);
+          if (!m) return;
+          const librarySlug = m[1];
+          if (typeof getPublicRecipesSync !== "function") {
+            alert("Recipe library failed to load. Please reload the page and try again.");
+            return;
+          }
+          const recipes = getPublicRecipesSync();
+          const row = recipes.find((r) => r.slug === librarySlug && r.stockFormula);
+          if (!row || !row.stockFormula) {
+            alert('No library entry found for slug "' + librarySlug + '".');
+            return;
+          }
+          specs[slug] = {
+            label: row.label || spec.label,
+            bottleMl: Number(row.stockFormula.bottleMl) || 0,
+            doseGramsPerL: Number(row.stockFormula.doseGramsPerL) || 0,
+            minerals: Array.isArray(row.stockFormula.minerals)
+              ? row.stockFormula.minerals.map((mm) => ({
+                  mineralId: mm.mineralId,
+                  grams: Number(mm.grams) || 0,
+                }))
+              : [],
+            createdFrom: spec.createdFrom,
+            source: row.stockFormula.source || spec.source,
+          };
+          saveStockConcentrateSpecs(specs);
+          renderStockConcentrates();
+          showSaved();
+          return;
+        }
+
+        if (action === "add-mineral") {
+          const specs = loadStockConcentrateSpecs();
+          const spec = specs[slug];
+          if (!spec) return;
+          if (!Array.isArray(spec.minerals)) spec.minerals = [];
+          spec.minerals.push({ mineralId: "", grams: 0 });
+          specs[slug] = spec;
+          saveStockConcentrateSpecs(specs);
+          refreshStockRecipePane(item);
+          updateStockSolubilityWarning(item);
+          showSaved();
+          return;
+        }
+
+        if (action === "remove-mineral") {
+          const row = target.closest(".stock-mineral-row");
+          if (!row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx)) return;
+          const specs = loadStockConcentrateSpecs();
+          const spec = specs[slug];
+          if (!spec || !Array.isArray(spec.minerals)) return;
+          spec.minerals.splice(idx, 1);
+          specs[slug] = spec;
+          saveStockConcentrateSpecs(specs);
+          refreshStockRecipePane(item);
+          updateStockSolubilityWarning(item);
+          showSaved();
+          return;
+        }
+      });
+    }
+
+    // --- Stock: New-stock inline form ---
+    let stockNewMinerals = [];
+
+    function buildStockNewMineralListHtml() {
+      if (stockNewMinerals.length === 0) {
+        return '<p class="hint stock-pane-empty">No minerals yet. Click "+ Add mineral" below.</p>';
+      }
+      return stockNewMinerals
+        .map(
+          (entry, idx) =>
+            '<div class="stock-mineral-row" data-mineral-idx="' + idx + '">' +
+            '<select data-field="new-mineral-id">' +
+            buildStockMineralOptionsHtml(entry.mineralId) +
+            "</select>" +
+            '<input type="number" min="0" step="0.01" value="' +
+            (Number.isFinite(Number(entry.grams)) ? Number(entry.grams) : 0) +
+            '" data-field="new-mineral-grams" placeholder="grams">' +
+            '<button type="button" class="stock-mineral-remove" data-action="new-remove-mineral" aria-label="Remove mineral">×</button>' +
+            "</div>",
+        )
+        .join("");
+    }
+
+    function refreshStockNewMineralList() {
+      if (!stockNewForm) return;
+      const list = stockNewForm.querySelector("#stock-new-mineral-list");
+      if (!list) return;
+      list.innerHTML = buildStockNewMineralListHtml();
+    }
+
+    function renderStockNewForm() {
+      if (!stockNewForm) return;
+      stockNewForm.innerHTML =
+        '<div class="input-group">' +
+          '<label for="stock-new-label">Name</label>' +
+          '<input type="text" id="stock-new-label" placeholder="My Stock">' +
+        "</div>" +
+        '<div class="concentrate-inputs">' +
+          '<div class="input-group">' +
+            '<label for="stock-new-bottle-ml">Bottle mL</label>' +
+            '<input type="number" id="stock-new-bottle-ml" min="0" step="1" value="200">' +
+          "</div>" +
+          '<div class="input-group">' +
+            '<label for="stock-new-dose">Dose g/L</label>' +
+            '<input type="number" id="stock-new-dose" min="0" step="0.01" value="4">' +
+          "</div>" +
+        "</div>" +
+        '<div class="stock-mineral-list" id="stock-new-mineral-list">' + buildStockNewMineralListHtml() + "</div>" +
+        '<button type="button" class="preset-btn stock-add-mineral-btn" data-action="new-add-mineral">+ Add mineral</button>' +
+        '<div class="stock-new-actions">' +
+          '<button type="button" class="preset-btn primary" data-action="new-save">Save</button>' +
+          '<button type="button" class="preset-btn" data-action="new-cancel">Cancel</button>' +
+        "</div>" +
+        '<div class="stock-new-error" id="stock-new-error" hidden></div>';
+    }
+
+    function openStockNewForm() {
+      stockNewMinerals = [];
+      renderStockNewForm();
+      if (stockNewForm) stockNewForm.hidden = false;
+      if (stockAddBtn) stockAddBtn.hidden = true;
+      const labelInput = stockNewForm && stockNewForm.querySelector("#stock-new-label");
+      if (labelInput) labelInput.focus();
+    }
+
+    function closeStockNewForm() {
+      stockNewMinerals = [];
+      if (stockNewForm) {
+        stockNewForm.innerHTML = "";
+        stockNewForm.hidden = true;
+      }
+      if (stockAddBtn) stockAddBtn.hidden = false;
+    }
+
+    function showStockNewError(msg) {
+      if (!stockNewForm) return;
+      const err = stockNewForm.querySelector("#stock-new-error");
+      if (!err) return;
+      err.textContent = msg;
+      err.hidden = !msg;
+    }
+
+    if (stockAddBtn) stockAddBtn.addEventListener("click", openStockNewForm);
+
+    if (stockNewForm) {
+      stockNewForm.addEventListener("click", (e) => {
+        const target = e.target instanceof HTMLElement ? e.target : null;
+        if (!target) return;
+        const action = target.dataset.action;
+        if (!action) return;
+
+        if (action === "new-add-mineral") {
+          stockNewMinerals.push({ mineralId: "", grams: 0 });
+          refreshStockNewMineralList();
+          const lastRow = stockNewForm.querySelector(
+            '.stock-mineral-row[data-mineral-idx="' + (stockNewMinerals.length - 1) + '"] select',
+          );
+          if (lastRow) lastRow.focus();
+          return;
+        }
+
+        if (action === "new-remove-mineral") {
+          const row = target.closest(".stock-mineral-row");
+          if (!row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx)) return;
+          stockNewMinerals.splice(idx, 1);
+          refreshStockNewMineralList();
+          return;
+        }
+
+        if (action === "new-save") {
+          const labelInput = stockNewForm.querySelector("#stock-new-label");
+          const bottleInput = stockNewForm.querySelector("#stock-new-bottle-ml");
+          const doseInput = stockNewForm.querySelector("#stock-new-dose");
+          const label = labelInput ? labelInput.value.trim() : "";
+          if (!label) { showStockNewError("Please enter a name."); return; }
+          const bottleMl = Math.max(0, parseFloat(bottleInput.value) || 0);
+          const doseGramsPerL = Math.max(0, parseFloat(doseInput.value) || 0);
+          if (bottleMl <= 0) { showStockNewError("Bottle volume must be greater than 0."); return; }
+          if (doseGramsPerL <= 0) { showStockNewError("Dose must be greater than 0."); return; }
+          if (stockNewMinerals.length === 0) { showStockNewError("Add at least one mineral."); return; }
+          const cleaned = [];
+          for (const m of stockNewMinerals) {
+            if (!m.mineralId) { showStockNewError("All mineral rows need a mineral selected."); return; }
+            if (!(m.grams > 0)) { showStockNewError("All mineral rows need a positive grams value."); return; }
+            cleaned.push({ mineralId: m.mineralId, grams: m.grams });
+          }
+          const specs = loadStockConcentrateSpecs();
+          const baseSlug = slugify(label) || "stock";
+          const finalSlug = uniqueStockSlug(baseSlug, Object.keys(specs));
+          specs[finalSlug] = { label, bottleMl, doseGramsPerL, minerals: cleaned };
+          saveStockConcentrateSpecs(specs);
+          renderStockConcentrates();
+          closeStockNewForm();
+          showSaved();
+          return;
+        }
+
+        if (action === "new-cancel") {
+          closeStockNewForm();
+          return;
+        }
+      });
+
+      stockNewForm.addEventListener("change", (e) => {
+        const target = e.target;
+        if (target.tagName === "SELECT" && target.dataset.field === "new-mineral-id") {
+          const row = target.closest(".stock-mineral-row");
+          if (!row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx) || !stockNewMinerals[idx]) return;
+          stockNewMinerals[idx].mineralId = target.value;
+        }
+      });
+
+      stockNewForm.addEventListener("input", (e) => {
+        const target = e.target;
+        if (target.tagName === "INPUT" && target.dataset.field === "new-mineral-grams") {
+          const row = target.closest(".stock-mineral-row");
+          if (!row) return;
+          const idx = parseInt(row.dataset.mineralIdx, 10);
+          if (Number.isNaN(idx) || !stockNewMinerals[idx]) return;
+          stockNewMinerals[idx].grams = Math.max(0, parseFloat(target.value) || 0);
+        }
+      });
+    }
+
     // --- Theme (Bug 6: safe radio selection) ---
     const themeInputs = document.querySelectorAll('input[name="theme"]');
     selectRadioByValue("theme", loadThemePreference());
@@ -328,6 +861,15 @@
       diySummary.addEventListener("click", () => {
         const expanded = diySummary.getAttribute("aria-expanded") !== "true";
         diySummary.setAttribute("aria-expanded", expanded);
+      });
+    }
+
+    const stockSummary = document.getElementById("stock-concentrates-summary");
+    const stockContent = document.getElementById("stock-concentrates-content");
+    if (stockSummary && stockContent) {
+      stockSummary.addEventListener("click", () => {
+        const expanded = stockSummary.getAttribute("aria-expanded") !== "true";
+        stockSummary.setAttribute("aria-expanded", expanded);
       });
     }
 
