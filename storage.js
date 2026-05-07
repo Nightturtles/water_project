@@ -780,6 +780,34 @@ function getStockMineralIds(spec) {
 }
 
 /**
+ * Returns the first "stock:<slug>" id in `concentrateIds`, or null if none
+ * is enabled. v1 single-stock-active rule: the calculator and recipe builder
+ * both dispense from this one stock and ignore any others. Centralized here
+ * so future multi-stock work touches one helper instead of three call sites.
+ * @param {unknown} concentrateIds
+ * @returns {string | null}
+ */
+function getActiveStockId(concentrateIds) {
+  if (!Array.isArray(concentrateIds)) return null;
+  for (const id of concentrateIds) {
+    if (typeof id === "string" && id.startsWith("stock:")) return id;
+  }
+  return null;
+}
+
+/**
+ * Convenience wrapper around getActiveStockId + getStockSpec — returns the
+ * resolved spec for the first enabled stock, or null if none enabled or the
+ * spec was deleted (orphan id).
+ * @param {unknown} concentrateIds
+ * @returns {StockConcentrateSpec | null}
+ */
+function getActiveStockSpec(concentrateIds) {
+  const id = getActiveStockId(concentrateIds);
+  return id ? getStockSpec(id) : null;
+}
+
+/**
  * Per-liter grams of each mineral when dispensing the stock at its prescribed
  * dose (one liter of brew water gets `doseGramsPerL` grams of stock; that
  * amount carries `mineral.grams / bottleMl` grams of each mineral per gram of
@@ -1347,6 +1375,8 @@ if (typeof module !== "undefined" && module.exports) {
     parseStockConcentrateId,
     getStockSpec,
     getStockMineralIds,
+    getActiveStockId,
+    getActiveStockSpec,
     computeStockMineralGramsPerL,
     loadSelectedConcentrates,
     saveSelectedConcentrates,

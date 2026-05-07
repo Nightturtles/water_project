@@ -78,8 +78,8 @@ function renderResultItems() {
   // concentrate row so the user sees just the stock dispensing line. Mixed
   // stock + supplemental dosing is deferred to a follow-up; revisit if users
   // ask for it.
-  const activeStockId = selectedConcentrates.find((cid) => cid.startsWith("stock:")) || null;
-  const activeStockSpec = activeStockId ? getStockSpec(activeStockId) : null;
+  const activeStockId = getActiveStockId(selectedConcentrates);
+  const activeStockSpec = getActiveStockSpec(selectedConcentrates);
 
   const toShow = [];
   if (activeStockSpec) {
@@ -612,9 +612,8 @@ function calculate() {
   }
 
   const selectedConcentratesEarly = loadValidSelectedConcentrates();
-  const activeStockIdEarly =
-    selectedConcentratesEarly.find((cid) => cid.startsWith("stock:")) || null;
-  const activeStockSpecEarly = activeStockIdEarly ? getStockSpec(activeStockIdEarly) : null;
+  const activeStockIdEarly = getActiveStockId(selectedConcentratesEarly);
+  const activeStockSpecEarly = getActiveStockSpec(selectedConcentratesEarly);
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {

@@ -318,9 +318,11 @@
     const mineralInputsHintEl = document.getElementById("mineral-inputs-hint");
 
     // Active stock for v1: first stock:* concentrate enabled in Settings.
-    // Manual mode just ignores stocks; stock mode uses this one.
-    const activeStockId = selectedConcentrates.find((cid) => cid.startsWith("stock:")) || null;
-    const activeStockSpec = activeStockId && typeof getStockSpec === "function" ? getStockSpec(activeStockId) : null;
+    // Manual mode just ignores stocks; stock mode uses this one. Helper
+    // pair lives in storage.js so all three call sites (calculator, recipe
+    // builder, future spots) share one definition of "active".
+    const activeStockId = typeof getActiveStockId === "function" ? getActiveStockId(selectedConcentrates) : null;
+    const activeStockSpec = typeof getActiveStockSpec === "function" ? getActiveStockSpec(selectedConcentrates) : null;
 
     function loadRecipeMineralInputs() {
       const parsed = safeParse(safeGetItem("cw_recipe_mineral_inputs"), {});
@@ -594,11 +596,13 @@
     });
     function onVolumeChanged() {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
+      refreshStockInputDisplay();
       debouncedRecalculate();
     }
     volumeInput.addEventListener("input", onVolumeChanged);
     volumeUnit.addEventListener("change", () => {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
+      refreshStockInputDisplay();
       recalculate();
     });
 
@@ -624,23 +628,41 @@
       return v;
     }
 
+    // Total grams of the active stock that recalculate should treat as
+    // dispensed: the user's persisted override if set, otherwise the live
+    // default of `doseGramsPerL × volumeL`. Keeping the default *unpersisted*
+    // is what lets the displayed grams scale with volume changes — once we
+    // wrote a default into recipeStockGrams it'd freeze and stay stale.
+    function getEffectiveStockTotalGrams(volumeL) {
+      if (!activeStockSpec || !activeStockId) return 0;
+      const savedRaw = recipeStockGrams[activeStockId];
+      if (savedRaw != null) {
+        return Math.max(0, parseFloat(savedRaw) || 0);
+      }
+      const dosePerL = Number(activeStockSpec.doseGramsPerL) || 0;
+      const v = Number(volumeL) || 0;
+      return dosePerL > 0 && v > 0 ? dosePerL * v : 0;
+    }
+
+    // Refresh the stock input's displayed value to the live default. Skipped
+    // when the user has saved an override — explicit overrides should
+    // persist across volume changes and only get cleared via direct edit.
+    function refreshStockInputDisplay() {
+      if (!activeStockSpec || !activeStockId || !stockInputsEl) return;
+      if (recipeStockGrams[activeStockId] != null) return;
+      const input = stockInputsEl.querySelector(
+        'input[data-stock-id="' + CSS.escape(activeStockId) + '"]',
+      );
+      if (!input) return;
+      input.value = String(getEffectiveStockTotalGrams(getCurrentRecipeVolumeL()));
+    }
+
     function buildStockDispenseUI() {
       if (!stockInputsEl) return;
       stockInputsEl.innerHTML = "";
       if (!activeStockSpec || !activeStockId) return;
 
-      const dosePerL = Number(activeStockSpec.doseGramsPerL) || 0;
-      const volumeL = getCurrentRecipeVolumeL();
-      const defaultGrams = dosePerL > 0 && volumeL > 0 ? dosePerL * volumeL : 0;
-      const savedRaw = recipeStockGrams[activeStockId];
-      const savedNum = savedRaw != null ? Number(savedRaw) : NaN;
-      const initialGrams = Number.isFinite(savedNum) ? savedNum : defaultGrams;
-
-      // Persist the default the first time so subsequent recalcs see it.
-      if (!Number.isFinite(savedNum)) {
-        recipeStockGrams[activeStockId] = String(initialGrams);
-        saveRecipeStockGrams(recipeStockGrams);
-      }
+      const initialGrams = getEffectiveStockTotalGrams(getCurrentRecipeVolumeL());
 
       const div = document.createElement("div");
       div.className = "mineral-input-row";
@@ -753,18 +775,19 @@
       if (volumeL > 0) {
         if (recipeDispenseMode === "stock" && activeStockSpec) {
           // Stock mode: distribute total stock grams across formula minerals.
-          // Per-mineral inputs in the DOM are hidden in this mode; ignore them.
-          const rawGrams = recipeStockGrams[activeStockId];
-          const totalStockGrams = Math.max(0, parseFloat(rawGrams != null ? rawGrams : 0) || 0);
-          const bottleMl = Number(activeStockSpec.bottleMl) || 0;
-          if (totalStockGrams > 0 && bottleMl > 0 && Array.isArray(activeStockSpec.minerals)) {
-            for (const m of activeStockSpec.minerals) {
-              if (!m || typeof m !== "object" || !m.mineralId) continue;
-              const grams = Number(m.grams);
-              if (!Number.isFinite(grams) || grams <= 0) continue;
-              const mineralTotalGrams = (grams / bottleMl) * totalStockGrams;
-              mineralGramsPerLiter[m.mineralId] =
-                (mineralGramsPerLiter[m.mineralId] || 0) + (mineralTotalGrams / volumeL);
+          // Per-mineral inputs in the DOM are hidden here; we ignore them.
+          // Routing through computeStockMineralGramsPerL keeps the
+          //   (grams / bottleMl) * totalStockGrams / volumeL
+          // formula in one place — same convention as the seeding script
+          // and the calculator's stock branch.
+          const totalStockGrams = getEffectiveStockTotalGrams(volumeL);
+          if (totalStockGrams > 0) {
+            const effectiveSpec = Object.assign({}, activeStockSpec, {
+              doseGramsPerL: totalStockGrams / volumeL,
+            });
+            const perL = computeStockMineralGramsPerL(effectiveSpec);
+            for (const id of Object.keys(perL)) {
+              mineralGramsPerLiter[id] = (mineralGramsPerLiter[id] || 0) + perL[id];
             }
           }
         } else {
@@ -941,9 +964,18 @@
     // --- Initial calculation ---
     recalculate();
 
-    // --- Multi-tab sync: reload when mineral selections change in another tab ---
+    // --- Multi-tab sync: reload when mineral selections, stock specs, or
+    // saved stock grams change in another tab. Without the stock keys, edits
+    // in the Settings tab (cw_stock_concentrate_specs) or stock-grams written
+    // by another recipe-builder tab wouldn't propagate here until navigation,
+    // leaving stale formulas / dispensed grams on screen. ---
     window.addEventListener("storage", function(e) {
-      if (e.key === "cw_selected_minerals" || e.key === "cw_selected_concentrates") {
+      if (
+        e.key === "cw_selected_minerals" ||
+        e.key === "cw_selected_concentrates" ||
+        e.key === "cw_stock_concentrate_specs" ||
+        e.key === "cw_recipe_stock_grams"
+      ) {
         location.reload();
       }
     });
