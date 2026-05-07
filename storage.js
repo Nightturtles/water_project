@@ -566,6 +566,7 @@ function invalidateAllCaches() {
   selectedMineralsCache = null;
   selectedConcentratesCache = null;
   diyConcentrateSpecsCache = null;
+  stockConcentrateSpecsCache = null;
   invalidateSourcePresetsCache();
   invalidateTargetPresetsCache();
 }
@@ -1323,6 +1324,7 @@ if (typeof module !== "undefined" && module.exports) {
     saveSelectedConcentrates,
     loadValidSelectedConcentrates,
     getAvailableMineralIds,
+    invalidateAllCaches,
   };
   Object.assign(module.exports, _umdExports);
   Object.assign(globalThis, _umdExports);

@@ -45,6 +45,7 @@ const {
   getStockMineralIds,
   saveSelectedConcentrates,
   getAvailableMineralIds,
+  invalidateAllCaches,
 } = storage;
 
 function resetState() {
@@ -188,6 +189,37 @@ describe("getStockMineralIds", () => {
     expect(getStockMineralIds(undefined)).toEqual([]);
     expect(getStockMineralIds({})).toEqual([]);
     expect(getStockMineralIds({ minerals: "not an array" })).toEqual([]);
+  });
+});
+
+describe("invalidateAllCaches resets stockConcentrateSpecsCache", () => {
+  // Regression guard: sync.js's pullFromCloud writes the new
+  // cw_stock_concentrate_specs into localStorage and then calls
+  // invalidateAllCaches() to force a re-read on next access. If the new
+  // cache is omitted from invalidateAllCaches, same-tab pulls return
+  // stale data until another path (save, cross-tab storage event,
+  // page reload) happens to clear it.
+  test("loadStockConcentrateSpecs sees fresh value after invalidateAllCaches() + localStorage update", () => {
+    saveStockConcentrateSpecs({
+      "old-stock": { label: "Old", bottleMl: 100, doseGramsPerL: 2, minerals: [] },
+    });
+    // Prime the cache.
+    expect(Object.keys(loadStockConcentrateSpecs())).toEqual(["old-stock"]);
+
+    // Simulate sync's pullFromCloud: write new value directly to
+    // localStorage, bypassing saveStockConcentrateSpecs (which would
+    // invalidate the cache itself).
+    global.localStorage.setItem(
+      "cw_stock_concentrate_specs",
+      JSON.stringify({
+        "new-stock": { label: "New", bottleMl: 200, doseGramsPerL: 4, minerals: [] },
+      }),
+    );
+
+    // Without invalidateAllCaches, the next load returns stale "old-stock".
+    invalidateAllCaches();
+
+    expect(Object.keys(loadStockConcentrateSpecs())).toEqual(["new-stock"]);
   });
 });
 
