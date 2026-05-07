@@ -914,8 +914,8 @@ select:focus {
 }
 
 .badge-library {
-  background: var(--blue-50);
-  color: var(--blue-600);
+  background: var(--blue-100);
+  color: var(--blue-700);
 }
 
 .stock-actions {

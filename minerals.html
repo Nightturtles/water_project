@@ -592,7 +592,7 @@
           if (!m) return;
           const librarySlug = m[1];
           if (typeof getPublicRecipesSync !== "function") {
-            alert("Library data isn't loaded yet. Open the Recipes page first, then come back.");
+            alert("Recipe library failed to load. Please reload the page and try again.");
             return;
           }
           const recipes = getPublicRecipesSync();
