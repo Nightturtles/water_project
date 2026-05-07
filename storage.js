@@ -780,6 +780,33 @@ function getStockMineralIds(spec) {
 }
 
 /**
+ * Per-liter grams of each mineral when dispensing the stock at its prescribed
+ * dose (one liter of brew water gets `doseGramsPerL` grams of stock; that
+ * amount carries `mineral.grams / bottleMl` grams of each mineral per gram of
+ * stock — same convention as scripts/compute-coffee-ad-astra-ions.cjs).
+ * Returns {} for malformed specs (zero/missing bottleMl or doseGramsPerL,
+ * non-array minerals, etc.).
+ * @param {StockConcentrateSpec | null | undefined} spec
+ * @returns {Record<string, number>}
+ */
+function computeStockMineralGramsPerL(spec) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  if (!spec || !Array.isArray(spec.minerals)) return out;
+  const bottleMl = Number(spec.bottleMl);
+  const doseGramsPerL = Number(spec.doseGramsPerL);
+  if (!Number.isFinite(bottleMl) || bottleMl <= 0) return out;
+  if (!Number.isFinite(doseGramsPerL) || doseGramsPerL <= 0) return out;
+  for (const m of spec.minerals) {
+    if (!m || typeof m !== "object" || !m.mineralId) continue;
+    const grams = Number(m.grams);
+    if (!Number.isFinite(grams) || grams <= 0) continue;
+    out[m.mineralId] = (out[m.mineralId] || 0) + (grams / bottleMl) * doseGramsPerL;
+  }
+  return out;
+}
+
+/**
  * Returns the MINERAL_DB id that this concentrate contributes (for ion math).
  * DIY: mineral id; brand: mapped mineralId; else null.
  * @param {unknown} concentrateId
@@ -1320,6 +1347,7 @@ if (typeof module !== "undefined" && module.exports) {
     parseStockConcentrateId,
     getStockSpec,
     getStockMineralIds,
+    computeStockMineralGramsPerL,
     loadSelectedConcentrates,
     saveSelectedConcentrates,
     loadValidSelectedConcentrates,

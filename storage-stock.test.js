@@ -43,6 +43,7 @@ const {
   parseStockConcentrateId,
   getStockSpec,
   getStockMineralIds,
+  computeStockMineralGramsPerL,
   saveSelectedConcentrates,
   getAvailableMineralIds,
   invalidateAllCaches,
@@ -189,6 +190,95 @@ describe("getStockMineralIds", () => {
     expect(getStockMineralIds(undefined)).toEqual([]);
     expect(getStockMineralIds({})).toEqual([]);
     expect(getStockMineralIds({ minerals: "not an array" })).toEqual([]);
+  });
+});
+
+describe("computeStockMineralGramsPerL", () => {
+  // Convention: per-L brew water grams of each mineral =
+  //   (mineral.grams / bottleMl) * doseGramsPerL
+  // Same dilution math as scripts/compute-coffee-ad-astra-ions.cjs (200 mL
+  // bottle / 4 g/L dose → divide author grams by 50 to get g/L brew).
+  test("Rao/Perger formula matches the seed-script convention", () => {
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "epsom-salt", grams: 5 },
+        { mineralId: "magnesium-chloride", grams: 2 },
+        { mineralId: "calcium-chloride", grams: 2 },
+        { mineralId: "baking-soda", grams: 1.7 },
+        { mineralId: "potassium-bicarbonate", grams: 2 },
+      ],
+    };
+    const out = computeStockMineralGramsPerL(spec);
+    expect(out["epsom-salt"]).toBeCloseTo(0.1, 6); // 5 / 50
+    expect(out["magnesium-chloride"]).toBeCloseTo(0.04, 6); // 2 / 50
+    expect(out["calcium-chloride"]).toBeCloseTo(0.04, 6);
+    expect(out["baking-soda"]).toBeCloseTo(0.034, 6); // 1.7 / 50
+    expect(out["potassium-bicarbonate"]).toBeCloseTo(0.04, 6);
+  });
+
+  test("empty / non-array minerals → {}", () => {
+    expect(computeStockMineralGramsPerL(null)).toEqual({});
+    expect(computeStockMineralGramsPerL(undefined)).toEqual({});
+    expect(computeStockMineralGramsPerL({})).toEqual({});
+    expect(
+      computeStockMineralGramsPerL({ bottleMl: 200, doseGramsPerL: 4, minerals: "nope" }),
+    ).toEqual({});
+  });
+
+  test("zero / missing bottleMl or doseGramsPerL → {}", () => {
+    const minerals = [{ mineralId: "epsom-salt", grams: 5 }];
+    expect(computeStockMineralGramsPerL({ bottleMl: 0, doseGramsPerL: 4, minerals })).toEqual({});
+    expect(computeStockMineralGramsPerL({ bottleMl: 200, doseGramsPerL: 0, minerals })).toEqual({});
+    expect(computeStockMineralGramsPerL({ doseGramsPerL: 4, minerals })).toEqual({});
+    expect(computeStockMineralGramsPerL({ bottleMl: 200, minerals })).toEqual({});
+    expect(computeStockMineralGramsPerL({ bottleMl: -100, doseGramsPerL: 4, minerals })).toEqual(
+      {},
+    );
+  });
+
+  test("malformed mineral entries are skipped", () => {
+    const out = computeStockMineralGramsPerL({
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "epsom-salt", grams: 5 },
+        null,
+        { mineralId: "", grams: 2 },
+        { mineralId: "magnesium-chloride" }, // missing grams
+        { mineralId: "magnesium-chloride", grams: 0 }, // zero grams
+        { mineralId: "magnesium-chloride", grams: -1 }, // negative grams
+        "not-an-object",
+        { grams: 1.7 }, // missing mineralId
+        { mineralId: "baking-soda", grams: 1.7 },
+      ],
+    });
+    expect(Object.keys(out).sort()).toEqual(["baking-soda", "epsom-salt"]);
+    expect(out["epsom-salt"]).toBeCloseTo(0.1, 6);
+    expect(out["baking-soda"]).toBeCloseTo(0.034, 6);
+  });
+
+  test("duplicate mineralIds sum together", () => {
+    // Permits user-defined stocks that add the same salt across multiple lines.
+    const out = computeStockMineralGramsPerL({
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "epsom-salt", grams: 3 },
+        { mineralId: "epsom-salt", grams: 2 },
+      ],
+    });
+    expect(out["epsom-salt"]).toBeCloseTo((3 + 2) / 50, 6);
+  });
+
+  test("dose scales linearly with doseGramsPerL", () => {
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 8, // doubled from the canonical 4
+      minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+    };
+    expect(computeStockMineralGramsPerL(spec)["epsom-salt"]).toBeCloseTo(0.2, 6); // 5/200 * 8
   });
 });
 

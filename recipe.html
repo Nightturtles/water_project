@@ -137,9 +137,16 @@
     <!-- Mineral Additions -->
     <section class="card">
       <h2>Add Minerals</h2>
-      <p class="hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
+      <p class="hint" id="mineral-inputs-hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
+      <div class="brew-method-toggle dispense-mode-toggle" id="dispense-mode-toggle" style="display:none;">
+        <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="manual">Manual minerals</button>
+        <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="stock">Stock dispense</button>
+      </div>
       <div class="mineral-inputs" id="mineral-inputs">
-        <!-- Populated by JS -->
+        <!-- Populated by JS in manual mode -->
+      </div>
+      <div class="stock-dispense-inputs" id="stock-dispense-inputs" style="display:none;">
+        <!-- Populated by JS in stock mode -->
       </div>
     </section>
 
@@ -306,6 +313,14 @@
     const selectedMinerals = loadSelectedMinerals();
     const selectedConcentrates = loadValidSelectedConcentrates();
     const mineralInputsEl = document.getElementById("mineral-inputs");
+    const stockInputsEl = document.getElementById("stock-dispense-inputs");
+    const dispenseModeToggleEl = document.getElementById("dispense-mode-toggle");
+    const mineralInputsHintEl = document.getElementById("mineral-inputs-hint");
+
+    // Active stock for v1: first stock:* concentrate enabled in Settings.
+    // Manual mode just ignores stocks; stock mode uses this one.
+    const activeStockId = selectedConcentrates.find((cid) => cid.startsWith("stock:")) || null;
+    const activeStockSpec = activeStockId && typeof getStockSpec === "function" ? getStockSpec(activeStockId) : null;
 
     function loadRecipeMineralInputs() {
       const parsed = safeParse(safeGetItem("cw_recipe_mineral_inputs"), {});
@@ -325,8 +340,32 @@
       safeSetItem("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
     }
 
+    function loadRecipeStockGrams() {
+      const parsed = safeParse(safeGetItem("cw_recipe_stock_grams"), {});
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    }
+
+    function saveRecipeStockGrams(values) {
+      safeSetItem("cw_recipe_stock_grams", JSON.stringify(values || {}));
+    }
+
+    function loadRecipeDispenseMode() {
+      const raw = safeGetItem("cw_recipe_dispense_mode");
+      if (raw === "manual" || raw === "stock") return raw;
+      // Default: stock mode when a stock is enabled (matches likely intent of
+      // the user enabling it in Settings); manual otherwise.
+      return activeStockSpec ? "stock" : "manual";
+    }
+
+    function saveRecipeDispenseMode(mode) {
+      if (mode !== "manual" && mode !== "stock") return;
+      safeSetItem("cw_recipe_dispense_mode", mode);
+    }
+
     const recipeMineralInputs = loadRecipeMineralInputs();
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
+    const recipeStockGrams = loadRecipeStockGrams();
+    let recipeDispenseMode = activeStockSpec ? loadRecipeDispenseMode() : "manual";
 
     function normalizeRecipeLotusInputValue(savedVal) {
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
@@ -563,6 +602,145 @@
       recalculate();
     });
 
+    // --- Stock dispense mode (B3) ---
+    function formatStockMineralList(spec) {
+      if (!spec || !Array.isArray(spec.minerals)) return "";
+      return spec.minerals
+        .map((m) => {
+          if (!m || typeof m !== "object" || !m.mineralId) return "";
+          const grams = Number(m.grams);
+          if (!Number.isFinite(grams) || grams <= 0) return "";
+          const mineral = MINERAL_DB[m.mineralId];
+          const label = mineral && mineral.formula ? mineral.formula : m.mineralId;
+          return grams + "g " + label;
+        })
+        .filter(Boolean)
+        .join(" · ");
+    }
+
+    function getCurrentRecipeVolumeL() {
+      let v = parseFloat(volumeInput.value) || 0;
+      if (volumeUnit.value === "gallons") v *= GALLONS_TO_LITERS;
+      return v;
+    }
+
+    function buildStockDispenseUI() {
+      if (!stockInputsEl) return;
+      stockInputsEl.innerHTML = "";
+      if (!activeStockSpec || !activeStockId) return;
+
+      const dosePerL = Number(activeStockSpec.doseGramsPerL) || 0;
+      const volumeL = getCurrentRecipeVolumeL();
+      const defaultGrams = dosePerL > 0 && volumeL > 0 ? dosePerL * volumeL : 0;
+      const savedRaw = recipeStockGrams[activeStockId];
+      const savedNum = savedRaw != null ? Number(savedRaw) : NaN;
+      const initialGrams = Number.isFinite(savedNum) ? savedNum : defaultGrams;
+
+      // Persist the default the first time so subsequent recalcs see it.
+      if (!Number.isFinite(savedNum)) {
+        recipeStockGrams[activeStockId] = String(initialGrams);
+        saveRecipeStockGrams(recipeStockGrams);
+      }
+
+      const div = document.createElement("div");
+      div.className = "mineral-input-row";
+      div.dataset.stockId = activeStockId;
+
+      const info = document.createElement("div");
+      info.className = "mineral-input-info";
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "mineral-input-name";
+      nameSpan.textContent = activeStockSpec.label || activeStockId;
+      const stockBadge = document.createElement("span");
+      stockBadge.className = "badge badge-concentrate";
+      stockBadge.textContent = "STOCK";
+      nameSpan.appendChild(stockBadge);
+      const formulaSpan = document.createElement("span");
+      formulaSpan.className = "mineral-input-formula";
+      formulaSpan.textContent = formatStockMineralList(activeStockSpec);
+      info.appendChild(nameSpan);
+      info.appendChild(formulaSpan);
+
+      const field = document.createElement("div");
+      field.className = "mineral-input-field";
+      const input = document.createElement("input");
+      input.type = "number";
+      input.id = "add-stock-" + activeStockId;
+      input.value = String(initialGrams);
+      input.min = "0";
+      input.step = "0.01";
+      input.dataset.stockId = activeStockId;
+      const unit = document.createElement("span");
+      unit.className = "mineral-input-unit";
+      unit.textContent = "g";
+      field.appendChild(input);
+      field.appendChild(unit);
+
+      div.appendChild(info);
+      div.appendChild(field);
+      stockInputsEl.appendChild(div);
+
+      input.addEventListener("input", () => {
+        recipeStockGrams[activeStockId] = input.value;
+        saveRecipeStockGrams(recipeStockGrams);
+        debouncedRecalculate();
+      });
+    }
+
+    function applyDispenseModeUI() {
+      if (!activeStockSpec) {
+        if (dispenseModeToggleEl) dispenseModeToggleEl.style.display = "none";
+        if (stockInputsEl) stockInputsEl.style.display = "none";
+        if (mineralInputsEl) mineralInputsEl.style.display = "";
+        if (mineralInputsHintEl) {
+          mineralInputsHintEl.textContent =
+            "Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.";
+        }
+        return;
+      }
+
+      if (dispenseModeToggleEl) {
+        dispenseModeToggleEl.style.display = "";
+        dispenseModeToggleEl.querySelectorAll(".dispense-mode-btn").forEach((btn) => {
+          btn.classList.toggle("active", btn.dataset.mode === recipeDispenseMode);
+        });
+      }
+
+      if (recipeDispenseMode === "stock") {
+        if (mineralInputsEl) mineralInputsEl.style.display = "none";
+        if (stockInputsEl) stockInputsEl.style.display = "";
+        if (mineralInputsHintEl) {
+          mineralInputsHintEl.textContent =
+            "Enter total grams of " + (activeStockSpec.label || activeStockId) +
+            " stock dispensed for the volume above. Default is the prescribed dose.";
+        }
+      } else {
+        if (mineralInputsEl) mineralInputsEl.style.display = "";
+        if (stockInputsEl) stockInputsEl.style.display = "none";
+        if (mineralInputsHintEl) {
+          mineralInputsHintEl.textContent =
+            "Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.";
+        }
+      }
+    }
+
+    if (dispenseModeToggleEl) {
+      dispenseModeToggleEl.addEventListener("click", (e) => {
+        const btn = e.target.closest(".dispense-mode-btn");
+        if (!btn) return;
+        const mode = btn.dataset.mode;
+        if (mode !== "manual" && mode !== "stock") return;
+        if (mode === recipeDispenseMode) return;
+        recipeDispenseMode = mode;
+        saveRecipeDispenseMode(mode);
+        applyDispenseModeUI();
+        recalculate();
+      });
+    }
+
+    buildStockDispenseUI();
+    applyDispenseModeUI();
+
     function recalculate() {
       const baseWater = sourceSection.getSourceWater();
       // Get volume in liters (mineral inputs are total grams for this volume)
@@ -573,37 +751,55 @@
       // Collect total grams of each mineral, convert to grams per liter for ion calculation
       const mineralGramsPerLiter = {};
       if (volumeL > 0) {
-        document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
-          const totalGrams = Math.max(0, parseFloat(input.value) || 0);
-          if (totalGrams > 0) {
-            mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
+        if (recipeDispenseMode === "stock" && activeStockSpec) {
+          // Stock mode: distribute total stock grams across formula minerals.
+          // Per-mineral inputs in the DOM are hidden in this mode; ignore them.
+          const rawGrams = recipeStockGrams[activeStockId];
+          const totalStockGrams = Math.max(0, parseFloat(rawGrams != null ? rawGrams : 0) || 0);
+          const bottleMl = Number(activeStockSpec.bottleMl) || 0;
+          if (totalStockGrams > 0 && bottleMl > 0 && Array.isArray(activeStockSpec.minerals)) {
+            for (const m of activeStockSpec.minerals) {
+              if (!m || typeof m !== "object" || !m.mineralId) continue;
+              const grams = Number(m.grams);
+              if (!Number.isFinite(grams) || grams <= 0) continue;
+              const mineralTotalGrams = (grams / bottleMl) * totalStockGrams;
+              mineralGramsPerLiter[m.mineralId] =
+                (mineralGramsPerLiter[m.mineralId] || 0) + (mineralTotalGrams / volumeL);
+            }
           }
-        });
+        } else {
+          document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
+            const totalGrams = Math.max(0, parseFloat(input.value) || 0);
+            if (totalGrams > 0) {
+              mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
+            }
+          });
 
-        // Concentrates (DIY + brand): convert mL or drops -> grams using concentrate strength
-        document.querySelectorAll("#mineral-inputs .mineral-input-row[data-concentrate-id]").forEach((row) => {
-          const concentrateId = row.dataset.concentrateId;
-          const mineralId = row.dataset.mineralId;
-          if (!concentrateId || !mineralId) return;
-          const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
-          let ml = 0;
-          if (isLotusConcentrate) {
-            const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
-            const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
-            const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
-            const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
-            ml = unit === "ml" ? value : (value * getLotusDropMl());
-          } else {
-            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
-            ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
-          }
-          if (ml <= 0) return;
-          const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
-          if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
-          const totalGrams = ml * gramsPerMl;
-          if (totalGrams <= 0) return;
-          mineralGramsPerLiter[mineralId] = (mineralGramsPerLiter[mineralId] || 0) + (totalGrams / volumeL);
-        });
+          // Concentrates (DIY + brand): convert mL or drops -> grams using concentrate strength
+          document.querySelectorAll("#mineral-inputs .mineral-input-row[data-concentrate-id]").forEach((row) => {
+            const concentrateId = row.dataset.concentrateId;
+            const mineralId = row.dataset.mineralId;
+            if (!concentrateId || !mineralId) return;
+            const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
+            let ml = 0;
+            if (isLotusConcentrate) {
+              const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
+              const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
+              const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+              const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
+              ml = unit === "ml" ? value : (value * getLotusDropMl());
+            } else {
+              const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+              ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
+            }
+            if (ml <= 0) return;
+            const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
+            if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
+            const totalGrams = ml * gramsPerMl;
+            if (totalGrams <= 0) return;
+            mineralGramsPerLiter[mineralId] = (mineralGramsPerLiter[mineralId] || 0) + (totalGrams / volumeL);
+          });
+        }
       }
 
       // Calculate ion contributions from minerals (calculateIonPPMs expects g/L)
