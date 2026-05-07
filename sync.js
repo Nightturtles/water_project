@@ -89,6 +89,7 @@
       selected_minerals: loadSelectedMinerals(),
       selected_concentrates: loadSelectedConcentrates(),
       diy_concentrate_specs: loadDiyConcentrateSpecs(),
+      stock_concentrate_specs: loadStockConcentrateSpecs(),
       lotus_concentrate_units: loadLotusConcentrateUnits(),
       volume_preferences: collectVolumePreferences(),
       creator_display_name: loadCreatorDisplayName(),
@@ -274,6 +275,8 @@
         safeSetItem("cw_selected_concentrates", JSON.stringify(settings.selected_concentrates));
       if (settings.diy_concentrate_specs)
         safeSetItem("cw_diy_concentrate_specs", JSON.stringify(settings.diy_concentrate_specs));
+      if (settings.stock_concentrate_specs)
+        safeSetItem("cw_stock_concentrate_specs", JSON.stringify(settings.stock_concentrate_specs));
       if (settings.lotus_concentrate_units)
         safeSetItem("cw_lotus_concentrate_units", JSON.stringify(settings.lotus_concentrate_units));
       if (settings.volume_preferences && typeof settings.volume_preferences === "object") {

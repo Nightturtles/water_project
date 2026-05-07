@@ -21,6 +21,17 @@
  * @property {number} [bottleMl]
  * @property {number} [gramsPerBottle]
  *
+ * @typedef {Object} StockMineralEntry
+ * @property {string} mineralId   - Key in MINERAL_DB (e.g. "epsom-salt").
+ * @property {number} grams       - Grams of this salt dissolved in the stock bottle.
+ *
+ * @typedef {Object} StockConcentrateSpec
+ * @property {string} [label]              - User-facing name (e.g. "Rao/Perger").
+ * @property {number} [bottleMl]           - Bottle volume the minerals are dissolved in.
+ * @property {number} [doseGramsPerL]      - Grams of stock per liter of brew water.
+ * @property {StockMineralEntry[]} [minerals]
+ * @property {string} [createdFrom]        - Optional back-reference (e.g. "library:rao-perger").
+ *
  * @typedef {Object} ValidateNameOptions
  * @property {boolean} [allowEmpty]
  * @property {string} [emptyMessage]
@@ -639,6 +650,8 @@ function loadSelectedMinerals() {
 let selectedConcentratesCache = null;
 /** @type {Record<string, DiyConcentrateSpec> | null} */
 let diyConcentrateSpecsCache = null;
+/** @type {Record<string, StockConcentrateSpec> | null} */
+let stockConcentrateSpecsCache = null;
 
 /** @param {string[]} concentrateIds */
 function saveSelectedConcentrates(concentrateIds) {
@@ -655,10 +668,13 @@ function loadSelectedConcentrates() {
   return selectedConcentratesCache;
 }
 
-/** Returns only valid concentrate IDs (diy: or brand: prefixed) from the selected concentrates list. */
+/** Returns only valid concentrate IDs (diy:, brand:, or stock: prefixed) from the selected concentrates list. */
 function loadValidSelectedConcentrates() {
   return loadSelectedConcentrates().filter(function (id) {
-    return typeof id === "string" && (id.startsWith("diy:") || id.startsWith("brand:"));
+    return (
+      typeof id === "string" &&
+      (id.startsWith("diy:") || id.startsWith("brand:") || id.startsWith("stock:"))
+    );
   });
 }
 
@@ -687,6 +703,79 @@ function parseDiyConcentrateId(concentrateId) {
   if (!concentrateId.startsWith("diy:")) return null;
   const mineralId = concentrateId.slice(4);
   return mineralId || null;
+}
+
+// --- Stock (multi-mineral DIY) concentrate specs ---
+// A stock spec describes ONE bottle that holds several minerals dissolved
+// together — e.g. 5 g epsom + 2 g MgCl2 + 1.5 g CaCl2 + 1.7 g NaHCO3 +
+// 2 g KHCO3 in 200 mL distilled water — and a per-liter dose rate. Coexists
+// with single-mineral diy:* and fixed brand:* concentrates. UI for defining
+// these arrives in B2; calculator dispensing in B3. Adding the storage
+// primitives now keeps each phase shippable independently.
+
+/** @param {Record<string, StockConcentrateSpec> | null | undefined} specs */
+function saveStockConcentrateSpecs(specs) {
+  safeSetItem("cw_stock_concentrate_specs", JSON.stringify(specs || {}));
+  stockConcentrateSpecsCache = null;
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+}
+
+/** @returns {Record<string, StockConcentrateSpec>} */
+function loadStockConcentrateSpecs() {
+  if (stockConcentrateSpecsCache) return Object.assign({}, stockConcentrateSpecsCache);
+  const parsed = safeParse(safeGetItem("cw_stock_concentrate_specs"), {});
+  stockConcentrateSpecsCache =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  return Object.assign({}, stockConcentrateSpecsCache);
+}
+
+/**
+ * Extracts the slug from a "stock:<slug>" concentrate id.
+ * @param {unknown} concentrateId
+ * @returns {string | null}
+ */
+function parseStockConcentrateId(concentrateId) {
+  if (typeof concentrateId !== "string") return null;
+  if (!concentrateId.startsWith("stock:")) return null;
+  const slug = concentrateId.slice(6);
+  return slug || null;
+}
+
+/**
+ * Returns the full StockConcentrateSpec for a "stock:<slug>" id, or null if
+ * not found / not a stock id.
+ * @param {unknown} concentrateId
+ * @returns {StockConcentrateSpec | null}
+ */
+function getStockSpec(concentrateId) {
+  const slug = parseStockConcentrateId(concentrateId);
+  if (!slug) return null;
+  const specs = loadStockConcentrateSpecs();
+  return specs && specs[slug] ? specs[slug] : null;
+}
+
+/**
+ * Returns all unique mineral ids contained in a stock spec. Each entry's
+ * mineralId is normalized; duplicates collapse. Used by getAvailableMineralIds
+ * so the calculator's mineral-source pickers see every mineral the user can
+ * dose via an enabled stock.
+ * @param {StockConcentrateSpec | null | undefined} spec
+ * @returns {string[]}
+ */
+function getStockMineralIds(spec) {
+  if (!spec || !Array.isArray(spec.minerals)) return [];
+  const out = new Set();
+  for (const entry of spec.minerals) {
+    if (
+      entry &&
+      typeof entry === "object" &&
+      typeof entry.mineralId === "string" &&
+      entry.mineralId
+    ) {
+      out.add(entry.mineralId);
+    }
+  }
+  return Array.from(out);
 }
 
 /**
@@ -736,7 +825,17 @@ function getAvailableMineralIds() {
   const concentrates = loadSelectedConcentrates();
   for (const cid of concentrates) {
     const mineralId = getConcentrateMineralId(cid);
-    if (mineralId) out.add(mineralId);
+    if (mineralId) {
+      out.add(mineralId);
+      continue;
+    }
+    // Stock concentrates are multi-mineral, so getConcentrateMineralId returns
+    // null. Enumerate every mineral inside the stock so downstream pickers
+    // (calcium-source, alkalinity-source) see them all.
+    if (typeof cid === "string" && cid.startsWith("stock:")) {
+      const spec = getStockSpec(cid);
+      for (const mid of getStockMineralIds(spec)) out.add(mid);
+    }
   }
   return Array.from(out);
 }
@@ -1163,6 +1262,9 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     if (e.key === "cw_diy_concentrate_specs") {
       diyConcentrateSpecsCache = null;
     }
+    if (e.key === "cw_stock_concentrate_specs") {
+      stockConcentrateSpecsCache = null;
+    }
     if (e.key === "cw_deleted_presets") {
       invalidateSourcePresetsCache();
       recipeAffected = true;
@@ -1210,6 +1312,17 @@ if (typeof module !== "undefined" && module.exports) {
     getExistingTargetProfileLabels,
     loadTargetPresetName,
     slugify,
+    // Stock concentrate helpers (B1) — exposed for unit tests; production
+    // callers already see them as classic-script globals.
+    loadStockConcentrateSpecs,
+    saveStockConcentrateSpecs,
+    parseStockConcentrateId,
+    getStockSpec,
+    getStockMineralIds,
+    loadSelectedConcentrates,
+    saveSelectedConcentrates,
+    loadValidSelectedConcentrates,
+    getAvailableMineralIds,
   };
   Object.assign(module.exports, _umdExports);
   Object.assign(globalThis, _umdExports);
