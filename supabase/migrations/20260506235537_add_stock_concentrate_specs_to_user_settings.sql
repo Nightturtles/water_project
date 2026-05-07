@@ -1,0 +1,34 @@
+-- =============================================================================
+-- Cafelytic — add stock_concentrate_specs column to user_settings
+--
+-- Phase B / B1: storage primitives for multi-mineral DIY stock concentrates.
+-- Each stock spec describes a bottle of distilled water + dissolved minerals
+-- the user mixes once and dispenses by gram-per-liter into brew water.
+--
+-- Stored as jsonb: a map keyed by stock slug. Coexists with existing
+-- diy_concentrate_specs (single-mineral) and the brand:lotus:* fixed
+-- concentrates. Future PRs add the settings UI (B2) and calculator dispensing
+-- (B3) on top of this column.
+--
+-- Shape on the wire (mirrors what loadStockConcentrateSpecs() returns):
+--   {
+--     "rao-perger": {
+--       "label": "Rao/Perger",
+--       "bottleMl": 200,
+--       "doseGramsPerL": 4,
+--       "minerals": [
+--         { "mineralId": "epsom-salt",          "grams": 5.0 },
+--         { "mineralId": "magnesium-chloride",  "grams": 2.0 },
+--         ...
+--       ],
+--       "createdFrom": "library:rao-perger"   -- optional back-reference
+--     },
+--     ...
+--   }
+--
+-- Default '{}'::jsonb so existing rows get an empty map on first read; no
+-- migration of existing data needed.
+-- =============================================================================
+
+ALTER TABLE user_settings
+  ADD COLUMN IF NOT EXISTS stock_concentrate_specs jsonb NOT NULL DEFAULT '{}'::jsonb;
