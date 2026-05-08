@@ -207,6 +207,50 @@ test.describe("library.html — Wave D recipe browser", () => {
     }
   });
 
+  test('"Add to my stocks" button imports a library stock formula (B3a)', async ({ page }) => {
+    // Hermetic run — clear any prior stock specs so the card renders the
+    // active button rather than the "In your pantry" indicator.
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("cw_"))
+        .forEach((k) => localStorage.removeItem(k));
+    });
+    await page.reload();
+
+    // Find the first card whose recipe has a stockFormula. The Coffee ad Astra
+    // tray was seeded with 12 such rows so at least one .rx-card-stock-add is
+    // expected to be rendered. Don't pin to a specific slug — robust to ordering.
+    const addBtn = page.locator(".rx-card-stock-add").first();
+    await expect(addBtn).toBeVisible();
+
+    const card = page
+      .locator(".rx-recipe-card", { has: page.locator(".rx-card-stock-add") })
+      .first();
+    const slug = await card.getAttribute("data-slug");
+    expect(slug).toBeTruthy();
+
+    await addBtn.click();
+
+    // Spec writes through to localStorage with the expected shape.
+    const spec = await page.evaluate((s) => {
+      const raw = localStorage.getItem("cw_stock_concentrate_specs");
+      return raw ? JSON.parse(raw)[s as string] : null;
+    }, slug);
+    expect(spec).toBeTruthy();
+    expect(spec.createdFrom).toBe(`library:${slug}`);
+    expect(Array.isArray(spec.minerals)).toBe(true);
+    expect(spec.minerals.length).toBeGreaterThan(0);
+
+    // Card flips from button → "In your pantry" indicator + Settings link.
+    const importedCard = page.locator(`.rx-recipe-card[data-slug="${slug}"]`).first();
+    await expect(importedCard.locator(".rx-card-stock-add")).toHaveCount(0);
+    await expect(importedCard.locator(".rx-card-stock-imported")).toBeVisible();
+    await expect(importedCard.locator(".rx-card-stock-settings")).toHaveAttribute(
+      "href",
+      "minerals.html#stock-concentrates-summary",
+    );
+  });
+
   test("cafelytic-filter appears in Featured AND Cafelytic Originals (default filters)", async ({
     page,
   }) => {

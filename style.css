@@ -3238,6 +3238,55 @@ footer {
   min-width: 0;
 }
 
+/* Sub-action under the stock-formula row. Either a text-button that imports
+   the formula into cw_stock_concentrate_specs (B3a) or a small status row
+   showing it's already there with a link to Settings (where the spec can be
+   edited or reset to library values). */
+.rx-card-stock-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.7rem;
+  margin-top: -0.05rem;
+}
+
+.rx-card-stock-add {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--blue-600);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-underline-offset: 2px;
+  transition:
+    text-decoration-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.rx-card-stock-add:hover,
+.rx-card-stock-add:focus-visible {
+  text-decoration-color: currentColor;
+  color: var(--blue-700);
+}
+
+.rx-card-stock-imported {
+  color: var(--green-600);
+  font-weight: 500;
+}
+
+.rx-card-stock-settings {
+  color: var(--gray-500);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+
+.rx-card-stock-settings:hover {
+  color: var(--gray-700);
+}
+
 .rx-card-footer {
   display: flex;
   align-items: flex-end;
