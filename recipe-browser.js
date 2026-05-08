@@ -204,6 +204,44 @@
     });
   }
 
+  // Shared DIY-stock UI block — used by both createRecipeCard (regular card)
+  // and createFeaturedHero (featured hero). Renders the formula text plus an
+  // import sub-action that flips between "+ Add to my stocks" (when the
+  // library slug isn't yet in cw_stock_concentrate_specs) and "✓ In your
+  // pantry" + a Settings link (when it is). Single source of truth so the
+  // two surfaces can't drift — CodeRabbit flagged the prior duplication on
+  // PR #64. Hero typography differences live in CSS via .rx-featured-hero
+  // .rx-card-stock-* overrides.
+  function appendStockUi(container, recipe, handlers) {
+    var stockText = formatStockFormula(recipe.stockFormula);
+    if (!stockText) return;
+
+    var stockRow = el("div", "rx-card-stock");
+    stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
+    stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
+    container.appendChild(stockRow);
+
+    var stockActions = el("div", "rx-card-stock-actions");
+    if (handlers.imported) {
+      var importedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
+      var settingsLink = el("a", "rx-card-stock-settings", "Settings");
+      settingsLink.href = "minerals.html#stock-concentrates-summary";
+      stockActions.appendChild(importedLabel);
+      stockActions.appendChild(settingsLink);
+    } else {
+      var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
+      addBtn.type = "button";
+      addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+      addBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (handlers.onAddStock) handlers.onAddStock(recipe);
+      });
+      stockActions.appendChild(addBtn);
+    }
+    container.appendChild(stockActions);
+  }
+
   function formatStockFormula(formula) {
     if (!formula || !Array.isArray(formula.minerals) || formula.minerals.length === 0) {
       return "";
@@ -385,39 +423,9 @@
       card.appendChild(el("p", "rx-card-desc", recipe.description));
     }
 
-    // DIY stock formula (only on Coffee ad Astra recipes for now). Shows the
-    // multi-mineral concentrate the recipe was published as, plus a sub-action
-    // that imports it into the user's pantry (cw_stock_concentrate_specs) so
-    // the calculator can dispense from it. Idempotent: if the slug is already
-    // present, the button is replaced with a "in your pantry" indicator + a
-    // link to Settings (where "Reset to library values" can refresh values).
-    var stockText = formatStockFormula(recipe.stockFormula);
-    if (stockText) {
-      var stockRow = el("div", "rx-card-stock");
-      stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
-      stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
-      card.appendChild(stockRow);
-
-      var stockActions = el("div", "rx-card-stock-actions");
-      if (handlers.imported) {
-        var importedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
-        var settingsLink = el("a", "rx-card-stock-settings", "Settings");
-        settingsLink.href = "minerals.html#stock-concentrates-summary";
-        stockActions.appendChild(importedLabel);
-        stockActions.appendChild(settingsLink);
-      } else {
-        var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
-        addBtn.type = "button";
-        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
-        addBtn.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (handlers.onAddStock) handlers.onAddStock(recipe);
-        });
-        stockActions.appendChild(addBtn);
-      }
-      card.appendChild(stockActions);
-    }
+    // DIY stock formula + import sub-action. Single source of truth in
+    // appendStockUi so the regular card and the featured hero can't drift.
+    appendStockUi(card, recipe, handlers);
 
     // Footer: tag chips (left) + method/roast meta (right). via:* tags are
     // metadata — see visibleChipTags above.
@@ -567,38 +575,10 @@
       section.appendChild(el("p", "rx-featured-desc", recipe.description));
     }
 
-    // DIY stock formula + import sub-action — same DOM/handlers as the regular
-    // card (createRecipeCard) so the hero closes the gap when a Coffee ad Astra
-    // recipe gets promoted to Featured. Reuses the rx-card-stock-* classes;
-    // hero-scoped overrides in style.css scale typography to match the hero's
-    // bigger description.
-    var heroStockText = formatStockFormula(recipe.stockFormula);
-    if (heroStockText) {
-      var heroStockRow = el("div", "rx-card-stock");
-      heroStockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
-      heroStockRow.appendChild(el("span", "rx-card-stock-formula", heroStockText));
-      section.appendChild(heroStockRow);
-
-      var heroStockActions = el("div", "rx-card-stock-actions");
-      if (handlers.imported) {
-        var heroImportedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
-        var heroSettingsLink = el("a", "rx-card-stock-settings", "Settings");
-        heroSettingsLink.href = "minerals.html#stock-concentrates-summary";
-        heroStockActions.appendChild(heroImportedLabel);
-        heroStockActions.appendChild(heroSettingsLink);
-      } else {
-        var heroAddBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
-        heroAddBtn.type = "button";
-        heroAddBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
-        heroAddBtn.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          if (handlers.onAddStock) handlers.onAddStock(recipe);
-        });
-        heroStockActions.appendChild(heroAddBtn);
-      }
-      section.appendChild(heroStockActions);
-    }
+    // DIY stock formula + import sub-action — shared with createRecipeCard
+    // via appendStockUi. Hero-scoped CSS overrides scale typography for the
+    // larger hero context (see .rx-featured-hero .rx-card-stock-*).
+    appendStockUi(section, recipe, handlers);
 
     var footer = el("div", "rx-featured-footer");
     var tagList = el("div", "rx-featured-tags");
