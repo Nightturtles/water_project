@@ -120,6 +120,25 @@ test.describe("minerals.html — Stock Solutions single-stock-active rule", () =
     expect(stored.filter((id: string) => id.startsWith("stock:"))).toEqual(["stock:test-stock-a"]);
   });
 
+  test("stale active slug from storage doesn't mute rendered rows", async ({ page }) => {
+    // Regression: if cw_selected_concentrates carries a stock:* id whose spec
+    // was deleted (or is from a cross-device sync of an unknown stock), the
+    // pre-fix updateStockLockState treated it as "active" and muted every
+    // rendered row (since none matched the stale slug). Fix: verify the
+    // active slug has a DOM row before applying .stock-other-active.
+    await page.evaluate(() => {
+      localStorage.setItem("cw_selected_concentrates", JSON.stringify(["stock:no-such-stock"]));
+    });
+    await page.reload();
+
+    const itemA = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-a"]');
+    const itemB = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-b"]');
+    await expect(itemA).toBeVisible();
+    await expect(itemB).toBeVisible();
+    await expect(itemA).not.toHaveClass(/stock-other-active/);
+    await expect(itemB).not.toHaveClass(/stock-other-active/);
+  });
+
   test("unchecking the active stock leaves both rows unmuted", async ({ page }) => {
     const itemA = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-a"]');
     const itemB = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-b"]');

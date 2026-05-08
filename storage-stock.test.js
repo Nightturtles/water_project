@@ -418,6 +418,24 @@ describe("importLibraryStockToPantry", () => {
     ]);
   });
 
+  test("rejects when every mineral entry is malformed (no inert spec persisted)", () => {
+    // Defensive: filtering produces an empty minerals[] which would be inert
+    // downstream, but persisting it would still pollute the user's pantry
+    // with a useless entry. Treat as invalid instead.
+    const before = loadStockConcentrateSpecs();
+    const result = importLibraryStockToPantry({
+      slug: "all-bad",
+      label: "All Bad",
+      stockFormula: {
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [null, { mineralId: "" }, { grams: 5 }, "string"],
+      },
+    });
+    expect(result).toEqual({ status: "invalid", slug: null });
+    expect(loadStockConcentrateSpecs()).toEqual(before);
+  });
+
   test("coerces non-numeric bottleMl / doseGramsPerL to 0", () => {
     // Mirrors the existing minerals.html reset-library handler's permissive
     // Number(...) || 0 coercion. Downstream (computeStockMineralGramsPerL)

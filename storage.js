@@ -869,6 +869,11 @@ function importLibraryStockToPantry(recipe) {
     if (!m || typeof m !== "object" || typeof m.mineralId !== "string" || !m.mineralId) continue;
     minerals.push({ mineralId: m.mineralId, grams: Number(m.grams) || 0 });
   }
+  // If every entry was malformed, the resulting spec would have an empty
+  // minerals array — inert (computeStockMineralGramsPerL returns {} for it)
+  // but still pollutes the user's pantry. Treat as invalid so we don't
+  // persist a dead-on-arrival entry.
+  if (minerals.length === 0) return { status: "invalid", slug: null };
 
   /** @type {StockConcentrateSpec} */
   const spec = {

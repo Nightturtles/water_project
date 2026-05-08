@@ -472,6 +472,7 @@
     function updateStockLockState() {
       if (!stockListEl) return;
       const selected = loadSelectedConcentrates();
+      const items = stockListEl.querySelectorAll(".stock-concentrate-item");
       let activeSlug = null;
       for (const id of selected) {
         if (typeof id === "string" && id.startsWith("stock:")) {
@@ -479,7 +480,19 @@
           break;
         }
       }
-      stockListEl.querySelectorAll(".stock-concentrate-item").forEach((item) => {
+      // Guard against stale state — if the active slug doesn't correspond to a
+      // rendered row (e.g. user deleted the spec while the id lingered in
+      // cw_selected_concentrates, or cross-device sync brought in an unknown
+      // slug), treat it as "no active stock" so we don't incorrectly mute every
+      // visible row.
+      if (activeSlug) {
+        let found = false;
+        items.forEach((item) => {
+          if (item.dataset.stockSlug === activeSlug) found = true;
+        });
+        if (!found) activeSlug = null;
+      }
+      items.forEach((item) => {
         const slug = item.dataset.stockSlug;
         if (activeSlug && slug !== activeSlug) {
           item.classList.add("stock-other-active");
