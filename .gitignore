@@ -7,3 +7,5 @@ playwright-report/
 .playwright-mcp/
 supabase/.temp/
 supabase/.branches/
+.env
+.env.*

@@ -49,9 +49,11 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 
 Every change that touches `sync.js`, `storage.js`, or row-level-security migrations has user-data risk. The bugs fixed in commits `6d8cd63`, `6464fdb`, `9f89a2e` all slipped past review and cost users recipes. Before merging anything in those files:
 
-1. Run `e2e/smoke-sync.md` against the dev server with a test account.
+1. Run `e2e/smoke-sync.md` (manual, full coverage) and/or `npm run test:e2e -- smoke-sync` (codified subset of Steps 1, 2, 4, 7, 9 covering the load-bearing sync round-trips).
 2. Re-read the affected `supabase/migrations/` file end-to-end — do not trust diffs alone.
 3. Prefer one extra PR round over a production rollback.
+
+The test-account credentials for the spec live in `.env.test` at the project root (gitignored). `CAFELYTIC_TEST_EMAIL` and `CAFELYTIC_TEST_PASSWORD` are loaded by `e2e/smoke-sync.spec.ts` via a small parser at the top of the file (no `dotenv` dep). When credentials are missing, the describe block is `test.skip`-ed so contributors without them still get a green run.
 
 ### Migrations
 
