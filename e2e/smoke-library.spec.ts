@@ -251,6 +251,51 @@ test.describe("library.html — Wave D recipe browser", () => {
     );
   });
 
+  test('featured hero renders DIY stock + "Add to my stocks" button when a stock-bearing recipe is featured (B3a-hero)', async ({
+    page,
+  }) => {
+    // Default FEATURED_PICKS doesn't promote any of the 12 Coffee ad Astra
+    // rows, so the hero stock affordances are dormant in vivo. We mutate the
+    // map in place (same reference held by pickFeaturedFromFiltered's
+    // closure) and force a re-render via a method-filter click. Hermetic
+    // localStorage clear before any state assertion.
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("cw_"))
+        .forEach((k) => localStorage.removeItem(k));
+      const picks = (window as unknown as { FEATURED_PICKS: Record<string, string> })
+        .FEATURED_PICKS;
+      picks.filter = "rao-perger";
+    });
+
+    await page.locator('.rx-segmented-button[data-value="filter"]').first().click();
+
+    const featured = page.locator('.rx-featured-hero[data-slug="rao-perger"]');
+    await expect(featured).toBeVisible();
+    await expect(featured.locator(".rx-card-stock")).toBeVisible();
+    await expect(featured.locator(".rx-card-stock-formula")).not.toBeEmpty();
+    await expect(featured.locator(".rx-card-stock-add")).toBeVisible();
+    await expect(featured.locator(".rx-card-stock-imported")).toHaveCount(0);
+
+    // Click the import button — spec lands in localStorage with the expected
+    // back-reference, and the hero flips to the imported indicator.
+    await featured.locator(".rx-card-stock-add").click();
+
+    const spec = await page.evaluate(() => {
+      const raw = localStorage.getItem("cw_stock_concentrate_specs");
+      return raw ? JSON.parse(raw)["rao-perger"] : null;
+    });
+    expect(spec).toBeTruthy();
+    expect(spec.createdFrom).toBe("library:rao-perger");
+
+    await expect(featured.locator(".rx-card-stock-add")).toHaveCount(0);
+    await expect(featured.locator(".rx-card-stock-imported")).toBeVisible();
+    await expect(featured.locator(".rx-card-stock-settings")).toHaveAttribute(
+      "href",
+      "minerals.html#stock-concentrates-summary",
+    );
+  });
+
   test("cafelytic-filter appears in Featured AND Cafelytic Originals (default filters)", async ({
     page,
   }) => {

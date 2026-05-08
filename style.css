@@ -3579,6 +3579,25 @@ footer {
   color: var(--gray-900);
 }
 
+/* Hero-scoped overrides for the stock formula row + import sub-action so the
+   typography matches the hero's larger description / mineral triplet. The DOM
+   reuses .rx-card-stock-* classes from the regular card; these rules only
+   bump font-size + spacing so the row doesn't read as cramped against the
+   bigger hero context. */
+.rx-featured-hero .rx-card-stock {
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.rx-featured-hero .rx-card-stock-label {
+  font-size: 0.7rem;
+}
+
+.rx-featured-hero .rx-card-stock-actions {
+  font-size: 0.85rem;
+  margin-top: 0.1rem;
+}
+
 .rx-featured-footer {
   display: flex;
   align-items: flex-end;
