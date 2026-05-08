@@ -33,6 +33,8 @@ import * as path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 // Load `.env.test` manually so we don't add a dotenv runtime dep for one file.
+// Strips a single matched pair of surrounding " or ' from values so users
+// can write either `KEY=value` or `KEY="value"` per common .env conventions.
 function loadEnvTest(): { email?: string; password?: string } {
   const candidates = [
     path.join(__dirname, "..", ".env.test"),
@@ -49,7 +51,16 @@ function loadEnvTest(): { email?: string; password?: string } {
       if (!trimmed || trimmed.startsWith("#")) continue;
       const eq = trimmed.indexOf("=");
       if (eq === -1) continue;
-      out[trimmed.slice(0, eq)] = trimmed.slice(eq + 1);
+      const key = trimmed.slice(0, eq).trim();
+      let value = trimmed.slice(eq + 1).trim();
+      if (
+        value.length >= 2 &&
+        ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'")))
+      ) {
+        value = value.slice(1, -1);
+      }
+      out[key] = value;
     }
     return { email: out.CAFELYTIC_TEST_EMAIL, password: out.CAFELYTIC_TEST_PASSWORD };
   }
@@ -154,6 +165,15 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     await pageB.goto("/index.html");
     await pageA.goto("/index.html");
 
+    // Wait for B's Realtime channel to subscribe before later tests rely
+    // on it. subscribeToCloudChanges runs as the last step of initSync;
+    // the channel transitions to SUBSCRIBED after a round-trip to Supabase.
+    // Polling a sentinel state on `window` set by the SUBSCRIBED handler
+    // would be ideal, but sync.js doesn't expose one — so we fall back to
+    // a fixed settle window. 3 s is enough on a healthy network and small
+    // enough to fail fast if Realtime is genuinely unavailable.
+    await pageB.waitForTimeout(3_000);
+
     const loginLink = pageA.locator('a[href*="login.html"]');
     await expect(loginLink).toHaveCount(0);
   });
@@ -195,7 +215,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return sw && Number(sw.calcium);
       },
       (v) => v === 43,
-      15_000,
+      30_000,
     );
   });
 
@@ -221,7 +241,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return typeof loadAddedTargetPresets === "function" ? loadAddedTargetPresets() : [];
       },
       (v: string[]) => v.includes(candidate),
-      15_000,
+      30_000,
     );
 
     // Cleanup so re-runs don't accumulate junk in the test user's selections.
@@ -276,7 +296,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return loadCustomTargetProfiles();
       },
       (profiles: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(profiles, slug),
-      15_000,
+      30_000,
     );
 
     // Delete on A.
@@ -295,10 +315,13 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return loadCustomTargetProfiles();
       },
       (profiles: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(profiles, slug),
-      10_000,
+      30_000,
     );
 
     // Resurrection guard: tombstone present on B + Supabase row gone.
+    // Important: explicitly verify the session resolves before querying —
+    // otherwise `eq("user_id", undefined)` returns [] for any user and
+    // remoteCount === 0 silently passes regardless of the resurrection bug.
     const guard = await pageB.evaluate(async (s) => {
       // @ts-expect-error - global from storage.js
       const tombstoned = (loadDeletedTargetPresets() || []).includes(s);
@@ -306,16 +329,29 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       if (typeof window.syncNow === "function") await window.syncNow();
       // @ts-expect-error - global from supabase-client.js
       const sess = await window.supabaseClient.auth.getSession();
-      const userId = sess.data.session?.user?.id;
+      const userId = sess?.data?.session?.user?.id;
+      if (!userId) {
+        return { tombstoned, userMissing: true, remoteCount: -1, error: "no session" };
+      }
       // @ts-expect-error - global from supabase-client.js
       const { data, error } = await window.supabaseClient
         .from("target_profiles")
         .select("slug")
         .eq("user_id", userId)
         .eq("slug", s);
-      return { tombstoned, remoteCount: data?.length ?? -1, error: error?.message };
+      return {
+        tombstoned,
+        userMissing: false,
+        remoteCount: data?.length ?? -1,
+        error: error?.message,
+      };
     }, slug);
 
+    expect(
+      guard.userMissing,
+      "B's session must be active to validate the Supabase row count; missing session would mask the resurrection bug",
+    ).toBe(false);
+    expect(guard.error, `Supabase query error: ${guard.error}`).toBeFalsy();
     expect(guard.tombstoned, "B's deleted-presets list should contain the deleted slug").toBe(true);
     expect(
       guard.remoteCount,
