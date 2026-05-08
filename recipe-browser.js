@@ -567,6 +567,39 @@
       section.appendChild(el("p", "rx-featured-desc", recipe.description));
     }
 
+    // DIY stock formula + import sub-action — same DOM/handlers as the regular
+    // card (createRecipeCard) so the hero closes the gap when a Coffee ad Astra
+    // recipe gets promoted to Featured. Reuses the rx-card-stock-* classes;
+    // hero-scoped overrides in style.css scale typography to match the hero's
+    // bigger description.
+    var heroStockText = formatStockFormula(recipe.stockFormula);
+    if (heroStockText) {
+      var heroStockRow = el("div", "rx-card-stock");
+      heroStockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
+      heroStockRow.appendChild(el("span", "rx-card-stock-formula", heroStockText));
+      section.appendChild(heroStockRow);
+
+      var heroStockActions = el("div", "rx-card-stock-actions");
+      if (handlers.imported) {
+        var heroImportedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
+        var heroSettingsLink = el("a", "rx-card-stock-settings", "Settings");
+        heroSettingsLink.href = "minerals.html#stock-concentrates-summary";
+        heroStockActions.appendChild(heroImportedLabel);
+        heroStockActions.appendChild(heroSettingsLink);
+      } else {
+        var heroAddBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
+        heroAddBtn.type = "button";
+        heroAddBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        heroAddBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (handlers.onAddStock) handlers.onAddStock(recipe);
+        });
+        heroStockActions.appendChild(heroAddBtn);
+      }
+      section.appendChild(heroStockActions);
+    }
+
     var footer = el("div", "rx-featured-footer");
     var tagList = el("div", "rx-featured-tags");
     visibleChipTags(recipe.tags).forEach(function (tag) {
@@ -654,7 +687,14 @@
     // the only selection affordance, matching the regular library cards.
     var featured = pickFeaturedFromFiltered(filtered, method);
     if (featured) {
-      var hero = createFeaturedHero(featured, handlers);
+      // Mirror the carousel-iteration pattern (createTrayCarousel resolves
+      // saved + imported per recipe before passing handlers into createCard).
+      // Letting createFeaturedHero see `imported:` here closes the gap when a
+      // stock-bearing recipe is promoted to Featured (B3a-hero).
+      var heroHandlers = Object.assign({}, handlers, {
+        imported: handlers.isStockImported && handlers.isStockImported(featured),
+      });
+      var hero = createFeaturedHero(featured, heroHandlers);
       if (hero) root.appendChild(hero);
     }
 
