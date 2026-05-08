@@ -44,6 +44,8 @@ const {
   getStockSpec,
   getStockMineralIds,
   computeStockMineralGramsPerL,
+  importLibraryStockToPantry,
+  loadSelectedConcentrates,
   saveSelectedConcentrates,
   getAvailableMineralIds,
   invalidateAllCaches,
@@ -310,6 +312,167 @@ describe("invalidateAllCaches resets stockConcentrateSpecsCache", () => {
     invalidateAllCaches();
 
     expect(Object.keys(loadStockConcentrateSpecs())).toEqual(["new-stock"]);
+  });
+});
+
+describe("importLibraryStockToPantry", () => {
+  // Canonical Coffee ad Astra row shape — mirrors what library-data.js
+  // normalizes from public_recipes.stock_formula.
+  const RAO_PERGER = {
+    slug: "rao-perger",
+    label: "Rao/Perger",
+    stockFormula: {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "epsom-salt", grams: 5 },
+        { mineralId: "magnesium-chloride", grams: 2 },
+        { mineralId: "calcium-chloride", grams: 2 },
+        { mineralId: "baking-soda", grams: 1.7 },
+        { mineralId: "potassium-bicarbonate", grams: 2 },
+      ],
+      source: "Rao & Perger",
+      via: "Coffee ad Astra (Jonathan Gagné, Dec 2018)",
+    },
+  };
+
+  test("imports a fresh library row keyed on slug with createdFrom set", () => {
+    const result = importLibraryStockToPantry(RAO_PERGER);
+    expect(result).toEqual({ status: "imported", slug: "rao-perger" });
+
+    const specs = loadStockConcentrateSpecs();
+    expect(specs["rao-perger"]).toEqual({
+      label: "Rao/Perger",
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "epsom-salt", grams: 5 },
+        { mineralId: "magnesium-chloride", grams: 2 },
+        { mineralId: "calcium-chloride", grams: 2 },
+        { mineralId: "baking-soda", grams: 1.7 },
+        { mineralId: "potassium-bicarbonate", grams: 2 },
+      ],
+      createdFrom: "library:rao-perger",
+      source: "Rao & Perger",
+    });
+  });
+
+  test("does NOT auto-enable the stock in cw_selected_concentrates", () => {
+    saveSelectedConcentrates([]);
+    importLibraryStockToPantry(RAO_PERGER);
+    // User has to flip the checkbox in Settings explicitly — re-importing
+    // should never silently enable a stock the user hadn't opted in to.
+    expect(loadSelectedConcentrates()).toEqual([]);
+  });
+
+  test("idempotent: re-import is a no-op that preserves existing edits", () => {
+    importLibraryStockToPantry(RAO_PERGER);
+    // Simulate the user editing the bottle volume in Settings to match the
+    // bottle they actually have on hand.
+    const specs = loadStockConcentrateSpecs();
+    specs["rao-perger"].bottleMl = 250;
+    saveStockConcentrateSpecs(specs);
+
+    const result = importLibraryStockToPantry(RAO_PERGER);
+    expect(result).toEqual({ status: "already-present", slug: "rao-perger" });
+    // The user's edit must survive — re-import must not overwrite. The path
+    // to refresh from library values is the "Reset to library values" link
+    // in Settings (minerals.html), not re-clicking on a library card.
+    expect(loadStockConcentrateSpecs()["rao-perger"].bottleMl).toBe(250);
+  });
+
+  test("falls back to slug when label is missing", () => {
+    importLibraryStockToPantry({ slug: "no-name", stockFormula: RAO_PERGER.stockFormula });
+    expect(loadStockConcentrateSpecs()["no-name"].label).toBe("no-name");
+  });
+
+  test("omits source when the formula has none", () => {
+    const noSource = Object.assign({}, RAO_PERGER, {
+      stockFormula: Object.assign({}, RAO_PERGER.stockFormula, { source: undefined }),
+    });
+    importLibraryStockToPantry(noSource);
+    const spec = loadStockConcentrateSpecs()["rao-perger"];
+    expect("source" in spec).toBe(false);
+  });
+
+  test("filters malformed mineral entries during import", () => {
+    importLibraryStockToPantry({
+      slug: "messy",
+      label: "Messy",
+      stockFormula: {
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [
+          { mineralId: "epsom-salt", grams: 5 },
+          null,
+          { mineralId: "", grams: 2 },
+          { grams: 1.7 }, // missing mineralId
+          "string",
+          { mineralId: "baking-soda", grams: 1.7 },
+        ],
+      },
+    });
+    expect(loadStockConcentrateSpecs()["messy"].minerals).toEqual([
+      { mineralId: "epsom-salt", grams: 5 },
+      { mineralId: "baking-soda", grams: 1.7 },
+    ]);
+  });
+
+  test("coerces non-numeric bottleMl / doseGramsPerL to 0", () => {
+    // Mirrors the existing minerals.html reset-library handler's permissive
+    // Number(...) || 0 coercion. Downstream (computeStockMineralGramsPerL)
+    // already returns {} for zero/missing values, so a malformed library row
+    // produces an inert spec rather than throwing.
+    importLibraryStockToPantry({
+      slug: "garbage",
+      label: "Garbage",
+      stockFormula: {
+        bottleMl: "abc",
+        doseGramsPerL: null,
+        minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+      },
+    });
+    const spec = loadStockConcentrateSpecs()["garbage"];
+    expect(spec.bottleMl).toBe(0);
+    expect(spec.doseGramsPerL).toBe(0);
+  });
+
+  test("rejects null / non-object recipe", () => {
+    expect(importLibraryStockToPantry(null)).toEqual({ status: "invalid", slug: null });
+    expect(importLibraryStockToPantry(undefined)).toEqual({ status: "invalid", slug: null });
+    expect(importLibraryStockToPantry("string")).toEqual({ status: "invalid", slug: null });
+  });
+
+  test("rejects recipe with missing slug or stockFormula", () => {
+    expect(importLibraryStockToPantry({ label: "no slug" })).toEqual({
+      status: "invalid",
+      slug: null,
+    });
+    expect(importLibraryStockToPantry({ slug: "x", label: "no formula" })).toEqual({
+      status: "invalid",
+      slug: null,
+    });
+    expect(importLibraryStockToPantry({ slug: "x", stockFormula: { bottleMl: 200 } })).toEqual({
+      status: "invalid",
+      slug: null,
+    });
+    expect(importLibraryStockToPantry({ slug: "x", stockFormula: { minerals: [] } })).toEqual({
+      status: "invalid",
+      slug: null,
+    });
+  });
+
+  test("written spec lights up calculator dispensing math end-to-end", () => {
+    // Sanity check that B3a + B3 hand-off works: import a library row, enable
+    // it as a selected concentrate, and the per-L mineral grams come out the
+    // same as the seed-script convention (verifying nothing got mangled
+    // during the normalize → save → load round-trip).
+    importLibraryStockToPantry(RAO_PERGER);
+    saveSelectedConcentrates(["stock:rao-perger"]);
+    const spec = getStockSpec("stock:rao-perger");
+    const perL = computeStockMineralGramsPerL(spec);
+    expect(perL["epsom-salt"]).toBeCloseTo(0.1, 6); // 5 / 50
+    expect(perL["potassium-bicarbonate"]).toBeCloseTo(0.04, 6); // 2 / 50
   });
 });
 

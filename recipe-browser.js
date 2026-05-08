@@ -373,14 +373,37 @@
     }
 
     // DIY stock formula (only on Coffee ad Astra recipes for now). Shows the
-    // multi-mineral concentrate the recipe was published as. Phase B follow-up
-    // PRs will turn this into an active dispensing entity in the calculator.
+    // multi-mineral concentrate the recipe was published as, plus a sub-action
+    // that imports it into the user's pantry (cw_stock_concentrate_specs) so
+    // the calculator can dispense from it. Idempotent: if the slug is already
+    // present, the button is replaced with a "in your pantry" indicator + a
+    // link to Settings (where "Reset to library values" can refresh values).
     var stockText = formatStockFormula(recipe.stockFormula);
     if (stockText) {
       var stockRow = el("div", "rx-card-stock");
       stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
       stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
       card.appendChild(stockRow);
+
+      var stockActions = el("div", "rx-card-stock-actions");
+      if (handlers.imported) {
+        var importedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
+        var settingsLink = el("a", "rx-card-stock-settings", "Settings");
+        settingsLink.href = "minerals.html#stock-concentrates-summary";
+        stockActions.appendChild(importedLabel);
+        stockActions.appendChild(settingsLink);
+      } else {
+        var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
+        addBtn.type = "button";
+        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        addBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (handlers.onAddStock) handlers.onAddStock(recipe);
+        });
+        stockActions.appendChild(addBtn);
+      }
+      card.appendChild(stockActions);
     }
 
     // Footer: tag chips (left) + method/roast meta (right)
@@ -461,6 +484,7 @@
           recipe,
           Object.assign({}, handlers, {
             saved: handlers.isSaved(recipe),
+            imported: handlers.isStockImported && handlers.isStockImported(recipe),
           }),
         ),
       );
@@ -733,6 +757,17 @@
       isSaved: function (recipe) {
         return typeof isRecipeInMyProfiles === "function" && isRecipeInMyProfiles(recipe);
       },
+      // Stock pantry membership — true if the user has already imported this
+      // library row's stockFormula into cw_stock_concentrate_specs. Read fresh
+      // each call so a click-to-import on one card flips other cards on the
+      // next render (cards keyed off the same library slug, e.g. if the same
+      // recipe appears in Featured + a tray, both reflect the new state).
+      isStockImported: function (recipe) {
+        if (!recipe || !recipe.slug || !recipe.stockFormula) return false;
+        if (typeof loadStockConcentrateSpecs !== "function") return false;
+        var specs = loadStockConcentrateSpecs();
+        return !!(specs && Object.prototype.hasOwnProperty.call(specs, recipe.slug));
+      },
       // Owner check — card passes recipe, we match against the fetched
       // user. userId === null on canonical library rows (SCA, Cafelytic,
       // etc.) so they're never rendered as owned.
@@ -744,6 +779,15 @@
         // Full re-render so every surface (hero + any carousel card) reflects
         // the new saved state. Cheap at 30 cards; revisit if catalog grows
         // past ~200.
+        render();
+      },
+      onAddStock: function (recipe) {
+        if (typeof importLibraryStockToPantry !== "function") return;
+        importLibraryStockToPantry(recipe);
+        // Re-render flips this card (and any duplicate of the same slug) from
+        // the "+ Add to my stocks" button to "✓ In your pantry". Idempotent:
+        // a no-op import (already-present) still re-renders, which is fine —
+        // the imported state was already true.
         render();
       },
       onUseRecipe: function (recipe) {

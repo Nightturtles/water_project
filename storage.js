@@ -31,6 +31,7 @@
  * @property {number} [doseGramsPerL]      - Grams of stock per liter of brew water.
  * @property {StockMineralEntry[]} [minerals]
  * @property {string} [createdFrom]        - Optional back-reference (e.g. "library:rao-perger").
+ * @property {string} [source]             - Optional attribution carried from the library row (e.g. "Rao & Perger").
  *
  * @typedef {Object} ValidateNameOptions
  * @property {boolean} [allowEmpty]
@@ -835,6 +836,56 @@ function computeStockMineralGramsPerL(spec) {
 }
 
 /**
+ * Imports a library recipe's stockFormula into the user's stock pantry, keyed
+ * on the library row's slug, with createdFrom set to "library:<slug>" so the
+ * "Reset to library values" link in Settings can find the source row later.
+ *
+ * Idempotent: if a spec with that slug is already present, returns
+ * {status:"already-present"} without writing. The user's path to refresh from
+ * library values is the reset link in Settings — re-importing here would
+ * silently clobber any edits the user made (e.g. matching the bottle volume
+ * they actually have on hand).
+ *
+ * Does NOT auto-enable the stock in cw_selected_concentrates; user explicitly
+ * enables it from Settings. saveStockConcentrateSpecs already triggers cloud
+ * sync via scheduleSyncToCloud.
+ *
+ * @param {{ slug?: unknown, label?: unknown, stockFormula?: any } | null | undefined} recipe
+ * @returns {{ status: "imported" | "already-present" | "invalid", slug: string | null }}
+ */
+function importLibraryStockToPantry(recipe) {
+  if (!recipe || typeof recipe !== "object") return { status: "invalid", slug: null };
+  const slug = typeof recipe.slug === "string" ? recipe.slug : "";
+  const formula = recipe.stockFormula;
+  if (!slug || !formula || !Array.isArray(formula.minerals) || formula.minerals.length === 0) {
+    return { status: "invalid", slug: null };
+  }
+  const specs = loadStockConcentrateSpecs();
+  if (specs[slug]) return { status: "already-present", slug };
+
+  /** @type {StockMineralEntry[]} */
+  const minerals = [];
+  for (const m of formula.minerals) {
+    if (!m || typeof m !== "object" || typeof m.mineralId !== "string" || !m.mineralId) continue;
+    minerals.push({ mineralId: m.mineralId, grams: Number(m.grams) || 0 });
+  }
+
+  /** @type {StockConcentrateSpec} */
+  const spec = {
+    label: typeof recipe.label === "string" && recipe.label ? recipe.label : slug,
+    bottleMl: Number(formula.bottleMl) || 0,
+    doseGramsPerL: Number(formula.doseGramsPerL) || 0,
+    minerals,
+    createdFrom: "library:" + slug,
+  };
+  if (typeof formula.source === "string" && formula.source) spec.source = formula.source;
+
+  specs[slug] = spec;
+  saveStockConcentrateSpecs(specs);
+  return { status: "imported", slug };
+}
+
+/**
  * Returns the MINERAL_DB id that this concentrate contributes (for ion math).
  * DIY: mineral id; brand: mapped mineralId; else null.
  * @param {unknown} concentrateId
@@ -1378,6 +1429,7 @@ if (typeof module !== "undefined" && module.exports) {
     getActiveStockId,
     getActiveStockSpec,
     computeStockMineralGramsPerL,
+    importLibraryStockToPantry,
     loadSelectedConcentrates,
     saveSelectedConcentrates,
     loadValidSelectedConcentrates,
