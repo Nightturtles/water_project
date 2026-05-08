@@ -191,6 +191,19 @@
     "sodium-chloride": "NaCl",
   };
 
+  // Tags that are metadata, not user-facing display. Convention: any value
+  // matching /^via:/ identifies the catalogued source the recipe came from
+  // (e.g. 'via:coffee-ad-astra'). We render only the user-facing flavor tags
+  // ("Bright", "Sweet", etc.) as chips; via:* stays on the recipe row for
+  // analytics + admin reporting. Filtering here (not in library-data.js's
+  // normalize step) keeps recipe.tags as the raw column value.
+  function visibleChipTags(tags) {
+    if (!Array.isArray(tags)) return [];
+    return tags.filter(function (t) {
+      return typeof t === "string" && !/^via:/.test(t);
+    });
+  }
+
   function formatStockFormula(formula) {
     if (!formula || !Array.isArray(formula.minerals) || formula.minerals.length === 0) {
       return "";
@@ -383,10 +396,11 @@
       card.appendChild(stockRow);
     }
 
-    // Footer: tag chips (left) + method/roast meta (right)
+    // Footer: tag chips (left) + method/roast meta (right). via:* tags are
+    // metadata — see visibleChipTags above.
     var footer = el("div", "rx-card-footer");
     var tagList = el("div", "rx-card-tags");
-    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
+    visibleChipTags(recipe.tags).forEach(function (tag) {
       tagList.appendChild(el("span", "rx-card-tag", tag));
     });
     footer.appendChild(tagList);
@@ -531,7 +545,7 @@
 
     var footer = el("div", "rx-featured-footer");
     var tagList = el("div", "rx-featured-tags");
-    (Array.isArray(recipe.tags) ? recipe.tags : []).forEach(function (tag) {
+    visibleChipTags(recipe.tags).forEach(function (tag) {
       tagList.appendChild(el("span", "rx-card-tag", tag));
     });
     footer.appendChild(tagList);
@@ -908,4 +922,7 @@
   // E2E coverage: e2e/smoke-library.spec.ts applyFilters cases.
   window.readFiltersFromUrl = readFiltersFromUrl;
   window.writeFiltersToUrl = writeFiltersToUrl;
+  // Internal export for e2e — lets the smoke spec assert the via:* metadata
+  // filter without needing prod data to contain such a tag yet.
+  window.__visibleChipTags = visibleChipTags;
 })();

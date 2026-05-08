@@ -30,6 +30,7 @@ declare global {
       recipes: Recipe[],
       options?: { isSaved?: (r: Recipe) => boolean },
     ) => Recipe[];
+    __visibleChipTags: (tags: unknown) => string[];
   }
 }
 
@@ -403,6 +404,39 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(page.locator(".rx-edit-error")).toContainText("Select at least one brew method");
 
     await ctx.close();
+  });
+
+  // visibleChipTags coverage --------------------------------------------
+  // Library rows can carry 'via:*' metadata tags (e.g. 'via:coffee-ad-astra'
+  // backfilled by migration 20260508045910) that identify the catalogued
+  // source. They must NOT render as chips on cards — only the user-facing
+  // flavor tags do. The filter is exposed as window.__visibleChipTags for
+  // direct verification (prod data may not contain a via:* tag yet at the
+  // time this test runs).
+  test("visibleChipTags drops via:* metadata while keeping flavor tags", async ({ page }) => {
+    const result = await page.evaluate(() =>
+      window.__visibleChipTags([
+        "Bright",
+        "via:coffee-ad-astra",
+        "Sweet",
+        "via:future-source",
+        "Balanced",
+      ]),
+    );
+    expect(result).toEqual(["Bright", "Sweet", "Balanced"]);
+  });
+
+  test("visibleChipTags handles non-array, non-string inputs defensively", async ({ page }) => {
+    const result = await page.evaluate(() => ({
+      nullInput: window.__visibleChipTags(null),
+      undefInput: window.__visibleChipTags(undefined),
+      stringInput: window.__visibleChipTags("not an array"),
+      mixed: window.__visibleChipTags(["Bright", null, 42, "via:x", { not: "string" }]),
+    }));
+    expect(result.nullInput).toEqual([]);
+    expect(result.undefInput).toEqual([]);
+    expect(result.stringInput).toEqual([]);
+    expect(result.mixed).toEqual(["Bright"]);
   });
 
   // applyFilters coverage ----------------------------------------------

@@ -208,13 +208,22 @@ function rowFor(recipe) {
     via: "Coffee ad Astra (Jonathan Gagné, Dec 2018)",
   };
 
+  // 'via:coffee-ad-astra' is a traceability tag — the client filters tags
+  // matching /^via:/ from chip rendering (recipe-browser.js) so this stays
+  // metadata, not user-facing display. Backfilled onto existing rows by
+  // 20260508045910_tag_coffee_ad_astra_recipes.sql; included here so any
+  // future regeneration of the seed migration matches the prod schema.
+  const tagsWithVia = recipe.tags.includes("via:coffee-ad-astra")
+    ? recipe.tags.slice()
+    : recipe.tags.concat(["via:coffee-ad-astra"]);
+
   return {
     slug: recipe.slug,
     label: recipe.label,
     description: recipe.description,
     creator: recipe.creator,
     roast: recipe.roast,
-    tags: recipe.tags,
+    tags: tagsWithVia,
     calcium: r1(ions.calcium),
     magnesium: r1(ions.magnesium),
     alkalinity: r1(alkalinity),
