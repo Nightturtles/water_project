@@ -764,21 +764,41 @@
       list.innerHTML = buildStockNewMineralListHtml();
     }
 
-    function renderStockNewForm() {
+    function renderStockNewForm(prefill) {
       if (!stockNewForm) return;
+      prefill = prefill || {};
+      const labelVal = prefill.label ? escapeHtml(String(prefill.label)) : "";
+      const bottleVal =
+        Number.isFinite(Number(prefill.bottleMl)) && Number(prefill.bottleMl) > 0
+          ? Number(prefill.bottleMl)
+          : 200;
+      const doseVal =
+        Number.isFinite(Number(prefill.doseGramsPerL)) && Number(prefill.doseGramsPerL) > 0
+          ? Number(prefill.doseGramsPerL)
+          : 4;
+      const hintHtml = prefill.hint
+        ? '<p class="hint stock-derive-hint">' + escapeHtml(String(prefill.hint)) + "</p>"
+        : "";
+      const notesHtml = Array.isArray(prefill.notes) && prefill.notes.length
+        ? prefill.notes
+            .map((n) => '<p class="hint stock-derive-note">' + escapeHtml(String(n)) + "</p>")
+            .join("")
+        : "";
       stockNewForm.innerHTML =
+        hintHtml +
+        notesHtml +
         '<div class="input-group">' +
           '<label for="stock-new-label">Name</label>' +
-          '<input type="text" id="stock-new-label" placeholder="My Stock">' +
+          '<input type="text" id="stock-new-label" placeholder="My Stock" value="' + labelVal + '">' +
         "</div>" +
         '<div class="concentrate-inputs">' +
           '<div class="input-group">' +
             '<label for="stock-new-bottle-ml">Bottle mL</label>' +
-            '<input type="number" id="stock-new-bottle-ml" min="0" step="1" value="200">' +
+            '<input type="number" id="stock-new-bottle-ml" min="0" step="1" value="' + bottleVal + '">' +
           "</div>" +
           '<div class="input-group">' +
             '<label for="stock-new-dose">Dose g/L</label>' +
-            '<input type="number" id="stock-new-dose" min="0" step="0.01" value="4">' +
+            '<input type="number" id="stock-new-dose" min="0" step="0.01" value="' + doseVal + '">' +
           "</div>" +
         "</div>" +
         '<div class="stock-mineral-list" id="stock-new-mineral-list">' + buildStockNewMineralListHtml() + "</div>" +
@@ -793,8 +813,41 @@
     function openStockNewForm() {
       stockNewMinerals = [];
       renderStockNewForm();
-      if (stockNewForm) stockNewForm.hidden = false;
+      if (stockNewForm) {
+        stockNewForm.hidden = false;
+        delete stockNewForm.dataset.deriveSlug;
+      }
       if (stockAddBtn) stockAddBtn.hidden = true;
+      const labelInput = stockNewForm && stockNewForm.querySelector("#stock-new-label");
+      if (labelInput) labelInput.focus();
+    }
+
+    // Used by the recipe-browser handoff (#stock-derive=<slug>): seeds the
+    // form with the derived formula plus a "review before saving" hint, and
+    // tags stockNewForm.dataset.deriveSlug so the save handler can record
+    // createdFrom: "derived:<recipe-slug>" on the resulting spec.
+    function openStockNewFormPrefilled(prefill) {
+      prefill = prefill || {};
+      stockNewMinerals = Array.isArray(prefill.minerals)
+        ? prefill.minerals.map((m) => ({
+            mineralId: typeof m.mineralId === "string" ? m.mineralId : "",
+            grams: Number(m.grams) || 0,
+          }))
+        : [];
+      renderStockNewForm(prefill);
+      if (stockNewForm) {
+        stockNewForm.hidden = false;
+        if (prefill.deriveSlug) {
+          stockNewForm.dataset.deriveSlug = String(prefill.deriveSlug);
+        } else {
+          delete stockNewForm.dataset.deriveSlug;
+        }
+      }
+      if (stockAddBtn) stockAddBtn.hidden = true;
+      const summary = document.getElementById("stock-concentrates-summary");
+      if (summary && typeof summary.scrollIntoView === "function") {
+        summary.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
       const labelInput = stockNewForm && stockNewForm.querySelector("#stock-new-label");
       if (labelInput) labelInput.focus();
     }
@@ -804,8 +857,62 @@
       if (stockNewForm) {
         stockNewForm.innerHTML = "";
         stockNewForm.hidden = true;
+        delete stockNewForm.dataset.deriveSlug;
       }
       if (stockAddBtn) stockAddBtn.hidden = false;
+    }
+
+    // Handoff from recipe-browser.js: when minerals.html loads with hash
+    // "#stock-derive=<slug>", look up the recipe in library-data, derive a
+    // stock formula from its targets, and pre-fill the new-stock editor.
+    // We re-derive on this page (rather than passing the formula across
+    // pages) so a future algorithm tweak doesn't leave stale handoffs.
+    function tryHandleDeriveHash() {
+      const m = (window.location.hash || "").match(/^#stock-derive=([^&]+)/);
+      if (!m) return;
+      const slug = decodeURIComponent(m[1]);
+      // Clear the hash so a refresh doesn't re-fire the open.
+      try {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } catch (e) { /* ignore */ }
+      if (typeof deriveStockFormulaFromTarget !== "function") {
+        console.warn("[minerals] deriveStockFormulaFromTarget not available");
+        return;
+      }
+      const apply = (recipe) => {
+        if (!recipe) return;
+        const derived = deriveStockFormulaFromTarget(recipe);
+        const recipeName = recipe.label || slug;
+        openStockNewFormPrefilled({
+          label: recipeName,
+          bottleMl: derived.bottleMl,
+          doseGramsPerL: derived.doseGramsPerL,
+          minerals: derived.minerals,
+          hint:
+            "Auto-derived from " + recipeName +
+            "’s ion targets — review and tweak before saving.",
+          notes: derived.notes || [],
+          deriveSlug: slug,
+        });
+      };
+      const recipes =
+        typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
+      const found =
+        Array.isArray(recipes) && recipes.find((r) => r && r.slug === slug);
+      if (found) {
+        apply(found);
+        return;
+      }
+      // Library data hasn't landed yet (cold load). Wait for the fetch.
+      if (typeof window.onLibraryDataLoaded === "function") {
+        const off = window.onLibraryDataLoaded((rs) => {
+          const r = Array.isArray(rs) && rs.find((x) => x && x.slug === slug);
+          if (r) {
+            if (typeof off === "function") off();
+            apply(r);
+          }
+        });
+      }
     }
 
     function showStockNewError(msg) {
@@ -817,6 +924,10 @@
     }
 
     if (stockAddBtn) stockAddBtn.addEventListener("click", openStockNewForm);
+
+    // Recipe-browser deep-link: open the form pre-filled when arriving via
+    // "minerals.html#stock-derive=<slug>".
+    tryHandleDeriveHash();
 
     if (stockNewForm) {
       stockNewForm.addEventListener("click", (e) => {
@@ -865,7 +976,18 @@
           const specs = loadStockConcentrateSpecs();
           const baseSlug = slugify(label) || "stock";
           const finalSlug = uniqueStockSlug(baseSlug, Object.keys(specs));
-          specs[finalSlug] = { label, bottleMl, doseGramsPerL, minerals: cleaned };
+          const spec = { label, bottleMl, doseGramsPerL, minerals: cleaned };
+          // When the form was opened via "#stock-derive=<recipe-slug>",
+          // record the source on the spec so a future Settings UI can
+          // offer a "re-derive from recipe" affordance and so the recipe
+          // card on library.html can flip to "✓ In your pantry". The
+          // "derived:" namespace pairs cleanly with the existing
+          // "library:<slug>" used by importLibraryStockToPantry.
+          const deriveSlug = stockNewForm && stockNewForm.dataset
+            ? stockNewForm.dataset.deriveSlug
+            : "";
+          if (deriveSlug) spec.createdFrom = "derived:" + deriveSlug;
+          specs[finalSlug] = spec;
           saveStockConcentrateSpecs(specs);
           renderStockConcentrates();
           closeStockNewForm();

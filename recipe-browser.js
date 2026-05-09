@@ -214,32 +214,78 @@
   // .rx-card-stock-* overrides.
   function appendStockUi(container, recipe, handlers) {
     var stockText = formatStockFormula(recipe.stockFormula);
-    if (!stockText) return;
 
-    var stockRow = el("div", "rx-card-stock");
-    stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
-    stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
-    container.appendChild(stockRow);
+    if (stockText) {
+      // Hand-authored formula (Coffee ad Astra rows): existing "+ Add to my
+      // stocks" path is canonical and preserved verbatim.
+      var stockRow = el("div", "rx-card-stock");
+      stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
+      stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
+      container.appendChild(stockRow);
 
-    var stockActions = el("div", "rx-card-stock-actions");
-    if (handlers.imported) {
-      var importedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
-      var settingsLink = el("a", "rx-card-stock-settings", "Settings");
-      settingsLink.href = "minerals.html#stock-concentrates-summary";
-      stockActions.appendChild(importedLabel);
-      stockActions.appendChild(settingsLink);
+      var stockActions = el("div", "rx-card-stock-actions");
+      if (handlers.imported) {
+        var importedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
+        var settingsLink = el("a", "rx-card-stock-settings", "Settings");
+        settingsLink.href = "minerals.html#stock-concentrates-summary";
+        stockActions.appendChild(importedLabel);
+        stockActions.appendChild(settingsLink);
+      } else {
+        var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
+        addBtn.type = "button";
+        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        addBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (handlers.onAddStock) handlers.onAddStock(recipe);
+        });
+        stockActions.appendChild(addBtn);
+      }
+      container.appendChild(stockActions);
+      return;
+    }
+
+    // No hand-authored formula. If the recipe has a non-trivial ion profile,
+    // offer to derive one — opens minerals.html with the stock-new editor
+    // pre-filled from the recipe's targets so the user can review and tweak
+    // before saving.
+    if (!hasDerivableIonProfile(recipe)) return;
+
+    var deriveActions = el("div", "rx-card-stock-actions");
+    if (handlers.derived) {
+      var derivedLabel = el("span", "rx-card-stock-imported", "✓ In your pantry");
+      var derivedSettings = el("a", "rx-card-stock-settings", "Settings");
+      derivedSettings.href = "minerals.html#stock-concentrates-summary";
+      deriveActions.appendChild(derivedLabel);
+      deriveActions.appendChild(derivedSettings);
     } else {
-      var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
-      addBtn.type = "button";
-      addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
-      addBtn.addEventListener("click", function (e) {
+      var deriveBtn = el("button", "rx-card-stock-add", "+ Make a stock");
+      deriveBtn.type = "button";
+      deriveBtn.setAttribute(
+        "aria-label",
+        "Generate a stock concentrate from this recipe's targets",
+      );
+      deriveBtn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
-        if (handlers.onAddStock) handlers.onAddStock(recipe);
+        if (handlers.onDeriveStock) handlers.onDeriveStock(recipe);
       });
-      stockActions.appendChild(addBtn);
+      deriveActions.appendChild(deriveBtn);
     }
-    container.appendChild(stockActions);
+    container.appendChild(deriveActions);
+  }
+
+  // Cards offer "+ Make a stock" only when at least one of the load-bearing
+  // ions (Ca/Mg/K/Na/HCO3) is non-zero. Distilled / RO / all-zero rows have
+  // no minerals to derive — skip rendering the action at all rather than
+  // showing a button that produces an empty editor.
+  function hasDerivableIonProfile(recipe) {
+    if (!recipe) return false;
+    var fields = ["calcium", "magnesium", "potassium", "sodium", "bicarbonate"];
+    for (var i = 0; i < fields.length; i++) {
+      if (Number(recipe[fields[i]]) > 0) return true;
+    }
+    return false;
   }
 
   function formatStockFormula(formula) {
@@ -507,6 +553,7 @@
           Object.assign({}, handlers, {
             saved: handlers.isSaved(recipe),
             imported: handlers.isStockImported && handlers.isStockImported(recipe),
+            derived: handlers.isStockDerived && handlers.isStockDerived(recipe),
           }),
         ),
       );
@@ -673,6 +720,7 @@
       // stock-bearing recipe is promoted to Featured (B3a-hero).
       var heroHandlers = Object.assign({}, handlers, {
         imported: handlers.isStockImported && handlers.isStockImported(featured),
+        derived: handlers.isStockDerived && handlers.isStockDerived(featured),
       });
       var hero = createFeaturedHero(featured, heroHandlers);
       if (hero) root.appendChild(hero);
@@ -802,6 +850,23 @@
         var specs = loadStockConcentrateSpecs();
         return !!(specs && Object.prototype.hasOwnProperty.call(specs, recipe.slug));
       },
+      // Derived-stock pantry membership — true if a previously-saved spec
+      // carries createdFrom: "derived:<slug>" matching this recipe. Lets the
+      // "+ Make a stock" CTA flip to "✓ In your pantry" on re-renders, the
+      // same way isStockImported does for the hand-authored Ad Astra path.
+      isStockDerived: function (recipe) {
+        if (!recipe || !recipe.slug) return false;
+        if (typeof loadStockConcentrateSpecs !== "function") return false;
+        var specs = loadStockConcentrateSpecs();
+        if (!specs) return false;
+        var marker = "derived:" + recipe.slug;
+        var keys = Object.keys(specs);
+        for (var i = 0; i < keys.length; i++) {
+          var spec = specs[keys[i]];
+          if (spec && spec.createdFrom === marker) return true;
+        }
+        return false;
+      },
       // Owner check — card passes recipe, we match against the fetched
       // user. userId === null on canonical library rows (SCA, Cafelytic,
       // etc.) so they're never rendered as owned.
@@ -823,6 +888,15 @@
         // a no-op import (already-present) still re-renders, which is fine —
         // the imported state was already true.
         render();
+      },
+      // Hands off to minerals.html, which reads the slug from the hash,
+      // looks the recipe up via library-data, calls deriveStockFormulaFromTarget,
+      // and opens the existing stock-new editor pre-filled. Hash carries only
+      // the slug — derivation runs on the destination page so a future
+      // algorithm change doesn't leave stale handoffs.
+      onDeriveStock: function (recipe) {
+        if (!recipe || !recipe.slug) return;
+        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
       },
       onUseRecipe: function (recipe) {
         var params = new URLSearchParams();
