@@ -592,7 +592,7 @@ function deriveStockFormulaFromTarget(target, options) {
   if (tCa > 0) {
     if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
       notes.push(
-        "Used calcium-chloride for Ca even though target favors sulfate — gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths."
+        "Used calcium-chloride for Ca even though target favors sulfate — gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
       );
     }
     var gCa = gramsForIon("calcium-chloride", "calcium", tCa);
@@ -626,8 +626,11 @@ function deriveStockFormulaFromTarget(target, options) {
   var residSO4 = tSO4 - producedSO4;
   if (residSO4 > 1) {
     notes.push(
-      "Target sulfate of " + Math.round(tSO4) + " mg/L exceeds what the chosen Mg source supplies (~" +
-      Math.round(producedSO4) + " mg/L). Gypsum could close the gap but isn't soluble at concentrate strengths."
+      "Target sulfate of " +
+        Math.round(tSO4) +
+        " mg/L exceeds what the chosen Mg source supplies (~" +
+        Math.round(producedSO4) +
+        " mg/L). Gypsum could close the gap but isn't soluble at concentrate strengths.",
     );
   }
 
@@ -653,8 +656,12 @@ function deriveStockFormulaFromTarget(target, options) {
         var entry = MINERAL_DB[m.mineralId];
         var name = (entry && entry.name) || m.mineralId;
         notes.push(
-          name + " in bottle (" + concentrationGperL.toFixed(1) + " g/L) exceeds approximate solubility (" +
-          cap + " g/L) — try a larger bottle or lower dose."
+          name +
+            " in bottle (" +
+            concentrationGperL.toFixed(1) +
+            " g/L) exceeds approximate solubility (" +
+            cap +
+            " g/L) — try a larger bottle or lower dose.",
         );
       }
     });

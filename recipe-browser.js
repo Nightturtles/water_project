@@ -896,8 +896,7 @@
       // algorithm change doesn't leave stale handoffs.
       onDeriveStock: function (recipe) {
         if (!recipe || !recipe.slug) return;
-        window.location.href =
-          "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
+        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
       },
       onUseRecipe: function (recipe) {
         var params = new URLSearchParams();
