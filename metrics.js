@@ -445,6 +445,225 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
 }
 
 /**
+ * Derive a multi-mineral stock concentrate formula from a recipe's per-ion
+ * target profile. Returns "a" valid solution, not "the" canonical one — the
+ * inverse problem is underdetermined (Mg can come from epsom or MgCl2, HCO3
+ * from baking-soda or KHCO3, etc.), so the user reviews and tweaks the
+ * derived list before saving.
+ *
+ * Greedy heuristic order:
+ *   1. HCO3 split between baking-soda (Na carrier) and KHCO3 (K carrier)
+ *      proportional to target Na and K (mirrors splitAlkalinityDelta).
+ *   2. Mg → epsom-salt or magnesium-chloride based on target SO4/Cl ratio.
+ *   3. Ca → calcium-chloride. Gypsum would match SO4-heavy targets but its
+ *      ~2 g/L solubility cap (constants.js MINERAL_SOLUBILITY_G_PER_L_25C_APPROX)
+ *      is exceeded by even modest Ca targets at concentrate strengths.
+ *   4. Residual K → potassium-chloride; residual Na → sodium-chloride.
+ *
+ * @param {Partial<Record<IonName, number | string | null | undefined>> | null | undefined} target
+ * @param {{ bottleMl?: number, doseGramsPerL?: number }} [options]
+ * @returns {{ bottleMl: number, doseGramsPerL: number, minerals: Array<{ mineralId: string, grams: number }>, notes: string[] }}
+ */
+function deriveStockFormulaFromTarget(target, options) {
+  options = options || {};
+  var bottleMl = Number(options.bottleMl);
+  var doseGramsPerL = Number(options.doseGramsPerL);
+  if (!Number.isFinite(bottleMl) || bottleMl <= 0) bottleMl = 200;
+  if (!Number.isFinite(doseGramsPerL) || doseGramsPerL <= 0) doseGramsPerL = 4;
+
+  /** @type {string[]} */
+  var notes = [];
+  /** @type {Array<{ mineralId: string, grams: number }>} */
+  var minerals = [];
+
+  /** @param {string} field */
+  function num(field) {
+    if (!target) return 0;
+    var v = Number(/** @type {Record<string, unknown>} */ (target)[field]);
+    return Number.isFinite(v) && v > 0 ? v : 0;
+  }
+
+  var tCa = num("calcium");
+  var tMg = num("magnesium");
+  var tK = num("potassium");
+  var tNa = num("sodium");
+  var tSO4 = num("sulfate");
+  var tCl = num("chloride");
+  var tHCO3 = num("bicarbonate");
+
+  if (tCa + tMg + tK + tNa + tSO4 + tCl + tHCO3 === 0) {
+    notes.push("Distilled / RO target — no minerals to derive.");
+    return { bottleMl: bottleMl, doseGramsPerL: doseGramsPerL, minerals: minerals, notes: notes };
+  }
+
+  // grams of salt to put in the bottle so that dosing at doseGramsPerL produces
+  // mgPerL of the target ion in brew water:
+  //   grams = (mgPerL × bottleMl) / (1000 × ion_fraction × doseGramsPerL)
+  /**
+   * @param {string} mineralId
+   * @param {string} ionName
+   * @param {number} mgPerL
+   */
+  function gramsForIon(mineralId, ionName, mgPerL) {
+    var entry = MINERAL_DB[mineralId];
+    if (!entry || !entry.ions) return 0;
+    var frac = /** @type {Record<string, number | undefined>} */ (entry.ions)[ionName] || 0;
+    if (frac <= 0 || mgPerL <= 0) return 0;
+    return (mgPerL * bottleMl) / (1000 * frac * doseGramsPerL);
+  }
+
+  /**
+   * mg/L of side-ion produced when the mineral is sized to deliver primaryMgPerL
+   * of the primary ion. = primaryMgPerL × (sideFrac / primaryFrac).
+   * @param {string} mineralId
+   * @param {string} primaryIon
+   * @param {number} primaryMgPerL
+   * @param {string} sideIon
+   */
+  function sideIonProduced(mineralId, primaryIon, primaryMgPerL, sideIon) {
+    var entry = MINERAL_DB[mineralId];
+    if (!entry || !entry.ions) return 0;
+    var ionsRec = /** @type {Record<string, number | undefined>} */ (entry.ions);
+    var primaryFrac = ionsRec[primaryIon] || 0;
+    var sideFrac = ionsRec[sideIon] || 0;
+    if (primaryFrac <= 0 || sideFrac <= 0 || primaryMgPerL <= 0) return 0;
+    return primaryMgPerL * (sideFrac / primaryFrac);
+  }
+
+  var producedNa = 0;
+  var producedK = 0;
+  var producedSO4 = 0;
+  var producedCl = 0;
+
+  // --- 1. Bicarbonate split ---
+  if (tHCO3 > 0) {
+    var hcoNa = 0;
+    var hcoK = 0;
+    if (tNa > 0 && tK > 0) {
+      var sumNaK = tNa + tK;
+      hcoNa = (tHCO3 * tNa) / sumNaK;
+      hcoK = (tHCO3 * tK) / sumNaK;
+    } else if (tNa > 0) {
+      hcoNa = tHCO3;
+    } else {
+      // K-driven, or both 0 — match splitAlkalinityDelta's KHCO3 default.
+      hcoK = tHCO3;
+    }
+    if (hcoNa > 0) {
+      var gBaking = gramsForIon("baking-soda", "bicarbonate", hcoNa);
+      if (gBaking > 0) {
+        minerals.push({ mineralId: "baking-soda", grams: gBaking });
+        producedNa += sideIonProduced("baking-soda", "bicarbonate", hcoNa, "sodium");
+      }
+    }
+    if (hcoK > 0) {
+      var gKHCO3 = gramsForIon("potassium-bicarbonate", "bicarbonate", hcoK);
+      if (gKHCO3 > 0) {
+        minerals.push({ mineralId: "potassium-bicarbonate", grams: gKHCO3 });
+        producedK += sideIonProduced("potassium-bicarbonate", "bicarbonate", hcoK, "potassium");
+      }
+    }
+  }
+
+  // --- 2. Magnesium ---
+  if (tMg > 0) {
+    var mgPick;
+    if (tSO4 > 0 && tCl === 0) {
+      mgPick = "epsom-salt";
+    } else if (tCl > 0 && tSO4 === 0) {
+      mgPick = "magnesium-chloride";
+    } else if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
+      mgPick = "epsom-salt";
+    } else {
+      mgPick = "magnesium-chloride";
+    }
+    var gMg = gramsForIon(mgPick, "magnesium", tMg);
+    if (gMg > 0) {
+      minerals.push({ mineralId: mgPick, grams: gMg });
+      if (mgPick === "epsom-salt") {
+        producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
+      } else {
+        producedCl += sideIonProduced("magnesium-chloride", "magnesium", tMg, "chloride");
+      }
+    }
+  }
+
+  // --- 3. Calcium (CaCl2 default; gypsum is impractical at concentrate strength) ---
+  if (tCa > 0) {
+    if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
+      notes.push(
+        "Used calcium-chloride for Ca even though target favors sulfate — gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths."
+      );
+    }
+    var gCa = gramsForIon("calcium-chloride", "calcium", tCa);
+    if (gCa > 0) {
+      minerals.push({ mineralId: "calcium-chloride", grams: gCa });
+      producedCl += sideIonProduced("calcium-chloride", "calcium", tCa, "chloride");
+    }
+  }
+
+  // --- 4. Residual K → KCl, residual Na → NaCl ---
+  var residK = Math.max(0, tK - producedK);
+  var residNa = Math.max(0, tNa - producedNa);
+  if (residK > 0) {
+    var gKCl = gramsForIon("potassium-chloride", "potassium", residK);
+    if (gKCl > 0) {
+      minerals.push({ mineralId: "potassium-chloride", grams: gKCl });
+      producedCl += sideIonProduced("potassium-chloride", "potassium", residK, "chloride");
+    }
+  }
+  if (residNa > 0) {
+    var gNaCl = gramsForIon("sodium-chloride", "sodium", residNa);
+    if (gNaCl > 0) {
+      minerals.push({ mineralId: "sodium-chloride", grams: gNaCl });
+      producedCl += sideIonProduced("sodium-chloride", "sodium", residNa, "chloride");
+    }
+  }
+
+  // Leftover SO4 the chosen sources can't supply (no salt in MINERAL_DB
+  // produces SO4 except gypsum + epsom; if Mg is on Cl side, we'd need gypsum
+  // to fill in, which isn't viable here).
+  var residSO4 = tSO4 - producedSO4;
+  if (residSO4 > 1) {
+    notes.push(
+      "Target sulfate of " + Math.round(tSO4) + " mg/L exceeds what the chosen Mg source supplies (~" +
+      Math.round(producedSO4) + " mg/L). Gypsum could close the gap but isn't soluble at concentrate strengths."
+    );
+  }
+
+  // Round grams to 0.1 g and drop rows that round to 0.
+  minerals = minerals
+    .map(function (m) {
+      return { mineralId: m.mineralId, grams: Math.round(m.grams * 10) / 10 };
+    })
+    .filter(function (m) {
+      return m.grams > 0;
+    });
+
+  // Solubility check on bottle concentration (g/L) of each rounded entry.
+  if (typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX !== "undefined") {
+    var solubility = /** @type {Record<string, number | undefined>} */ (
+      MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
+    );
+    minerals.forEach(function (m) {
+      var cap = solubility[m.mineralId];
+      if (!cap) return;
+      var concentrationGperL = m.grams / (bottleMl / 1000);
+      if (concentrationGperL > cap) {
+        var entry = MINERAL_DB[m.mineralId];
+        var name = (entry && entry.name) || m.mineralId;
+        notes.push(
+          name + " in bottle (" + concentrationGperL.toFixed(1) + " g/L) exceeds approximate solubility (" +
+          cap + " g/L) — try a larger bottle or lower dose."
+        );
+      }
+    });
+  }
+
+  return { bottleMl: bottleMl, doseGramsPerL: doseGramsPerL, minerals: minerals, notes: notes };
+}
+
+/**
  * Compute the full 7-ion profile from a Ca/Mg/Alk target. Uses the same
  * pickBestCaMgSources and splitAlkalinityDelta logic as the Calculator so ion
  * math stays consistent across pages.
@@ -608,6 +827,7 @@ if (typeof module !== "undefined" && module.exports) {
     pickBestCaMgSources,
     evaluateWaterProfileRanges,
     splitAlkalinityDelta,
+    deriveStockFormulaFromTarget,
     computeFullProfile,
     buildStoredTargetProfile,
   };
