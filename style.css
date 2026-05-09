@@ -1024,7 +1024,7 @@ select:focus {
 
 .stock-mineral-row {
   display: grid;
-  grid-template-columns: 1fr auto 28px;
+  grid-template-columns: 1fr 80px 28px;
   gap: 0.4rem;
   align-items: center;
 }
@@ -1038,8 +1038,8 @@ select:focus {
   min-width: 0;
 }
 
-.stock-mineral-row .mineral-input-field input {
-  width: 80px;
+.stock-mineral-row .input-with-suffix input {
+  padding-right: 1.3rem;
   text-align: right;
 }
 
