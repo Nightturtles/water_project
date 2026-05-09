@@ -218,17 +218,20 @@ test.describe("library.html — Wave D recipe browser", () => {
     });
     await page.reload();
 
-    // Find the first card whose recipe has a stockFormula. The Coffee ad Astra
-    // tray was seeded with 12 such rows so at least one .rx-card-stock-add is
-    // expected to be rendered. Don't pin to a specific slug — robust to ordering.
-    const addBtn = page.locator(".rx-card-stock-add").first();
-    await expect(addBtn).toBeVisible();
-
+    // Find the first card whose recipe has a hand-authored stockFormula —
+    // those render .rx-card-stock-formula plus the "+ Add to my stocks"
+    // button. Recipes without a formula now render "+ Make a stock" with
+    // the same .rx-card-stock-add class but a different (derive-and-prefill)
+    // action; not what this test exercises. The Coffee ad Astra tray seeded
+    // 12 stockFormula rows so at least one card matches.
     const card = page
-      .locator(".rx-recipe-card", { has: page.locator(".rx-card-stock-add") })
+      .locator(".rx-recipe-card", { has: page.locator(".rx-card-stock-formula") })
       .first();
     const slug = await card.getAttribute("data-slug");
     expect(slug).toBeTruthy();
+
+    const addBtn = card.locator(".rx-card-stock-add");
+    await expect(addBtn).toBeVisible();
 
     await addBtn.click();
 
