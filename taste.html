@@ -205,19 +205,19 @@
           <span class="metric-label">GH</span>
           <span class="metric-value" id="res-gh">--</span>
           <span class="metric-unit">mg/L as CaCO3</span>
-          <span class="metric-delta" id="delta-res-gh" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-res-gh" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">KH</span>
           <span class="metric-value" id="res-kh">--</span>
           <span class="metric-unit">mg/L as CaCO3</span>
-          <span class="metric-delta" id="delta-res-kh" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-res-kh" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">TDS</span>
           <span class="metric-value" id="res-tds">--</span>
           <span class="metric-unit">mg/L</span>
-          <span class="metric-delta" id="delta-res-tds" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-res-tds" aria-live="polite">-</span>
         </div>
       </div>
 
@@ -226,48 +226,48 @@
           <span class="result-label">Calcium</span>
           <span class="result-ppm" id="res-calcium">51</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-calcium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-calcium" aria-live="polite">-</span>
         </div>
         <div class="result-cell">
           <span class="result-label">Magnesium</span>
           <span class="result-ppm" id="res-magnesium">17</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-magnesium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-magnesium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Potassium</span>
           <span class="result-ppm" id="res-potassium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-potassium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-potassium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sodium</span>
           <span class="result-ppm" id="res-sodium">10</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-sodium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-sodium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Sulfate</span>
           <span class="result-ppm" id="res-sulfate">17</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-sulfate" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-sulfate" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Chloride</span>
           <span class="result-ppm" id="res-chloride">35</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-chloride" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-chloride" aria-live="polite">-</span>
         </div>
         <div class="result-cell always-hidden">
           <span class="result-label">Bicarbonate</span>
           <span class="result-ppm" id="res-bicarbonate">49</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-bicarbonate" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-bicarbonate" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box result-ratio-cell advanced-only sulfate-row-item">
           <span class="metric-label">SO₄:Cl</span>
-          <span class="metric-value" id="res-so4cl">—</span>
-          <span class="metric-delta" id="delta-res-so4cl" aria-live="polite">—</span>
+          <span class="metric-value" id="res-so4cl">-</span>
+          <span class="metric-delta" id="delta-res-so4cl" aria-live="polite">-</span>
         </div>
       </div>
 
@@ -632,7 +632,7 @@
       });
 
       const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
-      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
+      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "-" : so4ToCl.toFixed(2);
       const baselineRatio = calculateSo4ClRatio(base);
       setDeltaText(document.getElementById("delta-res-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
         decimals: 2,
@@ -703,7 +703,7 @@
       const adjusted = getAdjustedProfile();
       profiles[key] = buildStoredTargetProfile(name, adjusted, "", { brewMethod: activeBrewMethod });
       if (!saveCustomTargetProfiles(profiles)) {
-        showTasteSaveStatus("Storage full — could not save.", true);
+        showTasteSaveStatus("Storage full; could not save.", true);
         return;
       }
       renderTastePresets(key);
@@ -763,7 +763,7 @@
       const ions = getCurrentProfileIons();
       profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
       if (!saveCustomTargetProfiles(profiles)) {
-        showCurrentSaveStatus("Storage full — could not save.", true);
+        showCurrentSaveStatus("Storage full; could not save.", true);
         return;
       }
       renderTastePresets(key);
@@ -794,7 +794,7 @@
         const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(existing) : false;
         profiles[targetKey] = profile;
         if (!saveCustomTargetProfiles(profiles)) {
-          showCurrentSaveStatus("Storage full — could not save.", true);
+          showCurrentSaveStatus("Storage full; could not save.", true);
           return;
         }
         renderTastePresets(targetKey);

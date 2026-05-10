@@ -296,7 +296,7 @@ function initSourceWaterSection(options) {
     });
     profiles[key] = profile;
     if (!saveCustomProfiles(profiles)) {
-      showSourceSaveStatus("Storage full — could not save.", true);
+      showSourceSaveStatus("Storage full; could not save.", true);
       return;
     }
     renderSourcePresetButtons();
@@ -319,7 +319,7 @@ function initSourceWaterSection(options) {
       const profiles = loadCustomProfiles();
       profiles[activeSourcePreset] = profile;
       if (!saveCustomProfiles(profiles)) {
-        showSourceSaveStatus("Storage full — could not save.", true);
+        showSourceSaveStatus("Storage full; could not save.", true);
         return;
       }
       sourceEditBar.style.display = "none";

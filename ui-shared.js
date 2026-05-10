@@ -381,7 +381,7 @@ function roundDelta(delta, decimals = 0) {
 
 function formatDelta(delta, decimals = 0) {
   const rounded = roundDelta(delta, decimals);
-  if (rounded == null) return "\u2014";
+  if (rounded == null) return "-";
   const abs = decimals > 0 ? Math.abs(rounded).toFixed(decimals) : String(Math.abs(rounded));
   if (rounded > 0) return "+" + abs;
   if (rounded < 0) return "-" + abs;

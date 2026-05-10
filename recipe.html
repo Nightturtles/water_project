@@ -160,19 +160,19 @@
           <span class="metric-label">GH</span>
           <span class="metric-value" id="ppm-gh">0</span>
           <span class="metric-unit">mg/L as CaCO3</span>
-          <span class="metric-delta" id="delta-ppm-gh" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-ppm-gh" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">KH</span>
           <span class="metric-value" id="ppm-kh">0</span>
           <span class="metric-unit">mg/L as CaCO3</span>
-          <span class="metric-delta" id="delta-ppm-kh" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-ppm-kh" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box">
           <span class="metric-label">TDS</span>
           <span class="metric-value" id="ppm-tds">0</span>
           <span class="metric-unit">mg/L</span>
-          <span class="metric-delta" id="delta-ppm-tds" aria-live="polite">—</span>
+          <span class="metric-delta" id="delta-ppm-tds" aria-live="polite">-</span>
         </div>
       </div>
 
@@ -181,48 +181,48 @@
           <span class="result-label">Calcium</span>
           <span class="result-ppm" id="ppm-calcium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-calcium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-calcium" aria-live="polite">-</span>
         </div>
         <div class="result-cell">
           <span class="result-label">Magnesium</span>
           <span class="result-ppm" id="ppm-magnesium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-magnesium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-magnesium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Potassium</span>
           <span class="result-ppm" id="ppm-potassium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-potassium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-potassium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only">
           <span class="result-label">Sodium</span>
           <span class="result-ppm" id="ppm-sodium">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-sodium" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-sodium" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Sulfate</span>
           <span class="result-ppm" id="ppm-sulfate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-sulfate" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-sulfate" aria-live="polite">-</span>
         </div>
         <div class="result-cell advanced-only sulfate-row-item">
           <span class="result-label">Chloride</span>
           <span class="result-ppm" id="ppm-chloride">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-chloride" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-chloride" aria-live="polite">-</span>
         </div>
         <div class="result-cell always-hidden">
           <span class="result-label">Bicarbonate</span>
           <span class="result-ppm" id="ppm-bicarbonate">0</span>
           <span class="result-unit">mg/L</span>
-          <span class="result-delta" id="delta-ppm-bicarbonate" aria-live="polite">—</span>
+          <span class="result-delta" id="delta-ppm-bicarbonate" aria-live="polite">-</span>
         </div>
         <div class="metric highlight metric-box result-ratio-cell advanced-only sulfate-row-item">
           <span class="metric-label">SO₄:Cl</span>
-          <span class="metric-value" id="ratio-display">—</span>
-          <span class="metric-delta" id="delta-ratio-display" aria-live="polite">—</span>
+          <span class="metric-value" id="ratio-display">-</span>
+          <span class="metric-delta" id="delta-ratio-display" aria-live="polite">-</span>
         </div>
       </div>
 
@@ -873,7 +873,7 @@
 
       // SO4:Cl ratio
       const so4ToCl = totalIons.chloride > 0 ? totalIons.sulfate / totalIons.chloride : null;
-      document.getElementById("ratio-display").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
+      document.getElementById("ratio-display").textContent = so4ToCl === null ? "-" : so4ToCl.toFixed(2);
       const baselineRatio = calculateSo4ClRatio(baseWater || {});
       setDeltaText(document.getElementById("delta-ratio-display"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
         decimals: 2,
@@ -945,7 +945,7 @@
       const ions = lastTotalIons || {};
       profiles[key] = buildStoredTargetProfile(name, ions, "", { brewMethod: activeBrewMethod });
       if (!saveCustomTargetProfiles(profiles)) {
-        showRecipeSaveStatus("Storage full — could not save.", true);
+        showRecipeSaveStatus("Storage full; could not save.", true);
         return;
       }
       recipeTargetNameInput.value = "";

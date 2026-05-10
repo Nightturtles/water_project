@@ -2326,6 +2326,12 @@ footer {
   }
 }
 
+@media (max-width: 480px) {
+  header h1 {
+    font-size: 1.5rem;
+  }
+}
+
 @media (max-width: 750px) {
   .mineral-input-row {
     display: grid;
@@ -3816,6 +3822,30 @@ footer {
   scroll-margin-top: 4.5rem;
 }
 
+/* Beginners guide — long-form prose readability.
+   The global `* { margin: 0 }` reset wipes paragraph spacing; restore it
+   here, and constrain line length to a comfortable reading width. */
+.start-prose {
+  max-width: 65ch;
+  margin: 0 auto 1rem;
+  line-height: 1.7;
+}
+
+.start-prose p {
+  margin: 0 0 0.85rem;
+}
+
+.start-prose p:last-child {
+  margin-bottom: 0;
+}
+
+.start-prose h2 {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
 .start-key {
   font-weight: 600;
   color: var(--gray-900);
@@ -3833,7 +3863,6 @@ footer {
   border-left: 3px solid var(--blue-500);
   background: var(--gray-50);
   border-radius: 0 8px 8px 0;
-  font-size: 0.95rem;
 }
 
 .start-mineral-name {
@@ -3845,8 +3874,16 @@ footer {
 
 .start-principles,
 .start-bullets {
-  padding-left: 1.25rem;
   margin: 0.25rem 0 0;
+}
+
+.start-bullets {
+  padding-left: 1.25rem;
+}
+
+.start-principles {
+  padding-left: 0;
+  list-style: none;
 }
 
 .start-principles li,
@@ -3859,13 +3896,21 @@ footer {
   margin-bottom: 0;
 }
 
+.start-principles li strong {
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+.start-principles li {
+  margin-bottom: 0.85rem;
+}
+
 .start-recipe-card {
   padding: 0.85rem 1rem;
   background: var(--blue-50);
   border: 1px solid var(--blue-100);
   border-radius: 8px;
   margin: 0.5rem 0 0.75rem;
-  font-size: 0.95rem;
   line-height: 1.7;
   color: var(--gray-900);
 }
