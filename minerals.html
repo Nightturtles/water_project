@@ -59,14 +59,14 @@
       </button>
       <p class="hint">Multi-mineral stocks: dissolve several salts into one bottle, then dose by grams of stock per liter of brew water. Only one stock can be active at a time — selecting another switches the calculator over.</p>
       <div class="card-collapsible-content" id="stock-concentrates-content">
+        <div class="stock-new-form" id="stock-new-form" hidden>
+          <!-- Populated by JS when an editor is opened (+ New stock solution, + Make a stock, or + Add to my stocks). -->
+        </div>
         <div class="concentrate-list" id="stock-concentrate-list">
           <!-- Populated by JS -->
         </div>
         <div class="stock-actions">
           <button type="button" class="preset-btn stock-add-new-btn" id="stock-add-new-btn">+ New stock solution</button>
-        </div>
-        <div class="stock-new-form" id="stock-new-form" hidden>
-          <!-- Populated by JS when "+ New stock solution" is clicked -->
         </div>
       </div>
 
@@ -816,16 +816,19 @@
       if (stockNewForm) {
         stockNewForm.hidden = false;
         delete stockNewForm.dataset.deriveSlug;
+        delete stockNewForm.dataset.importSlug;
+        delete stockNewForm.dataset.importSource;
       }
       if (stockAddBtn) stockAddBtn.hidden = true;
       const labelInput = stockNewForm && stockNewForm.querySelector("#stock-new-label");
       if (labelInput) labelInput.focus();
     }
 
-    // Used by the recipe-browser handoff (#stock-derive=<slug>): seeds the
-    // form with the derived formula plus a "review before saving" hint, and
-    // tags stockNewForm.dataset.deriveSlug so the save handler can record
-    // createdFrom: "derived:<recipe-slug>" on the resulting spec.
+    // Used by the recipe-browser handoff: seeds the form with either a
+    // derived formula (#stock-derive=<slug>) or a hand-authored library
+    // formula (#stock-import=<slug>) plus a "review before saving" hint.
+    // Tags stockNewForm.dataset.{deriveSlug,importSlug,importSource} so the
+    // save handler can record the right createdFrom and source on the spec.
     function openStockNewFormPrefilled(prefill) {
       prefill = prefill || {};
       stockNewMinerals = Array.isArray(prefill.minerals)
@@ -841,6 +844,16 @@
           stockNewForm.dataset.deriveSlug = String(prefill.deriveSlug);
         } else {
           delete stockNewForm.dataset.deriveSlug;
+        }
+        if (prefill.importSlug) {
+          stockNewForm.dataset.importSlug = String(prefill.importSlug);
+        } else {
+          delete stockNewForm.dataset.importSlug;
+        }
+        if (prefill.source) {
+          stockNewForm.dataset.importSource = String(prefill.source);
+        } else {
+          delete stockNewForm.dataset.importSource;
         }
       }
       if (stockAddBtn) stockAddBtn.hidden = true;
@@ -858,6 +871,8 @@
         stockNewForm.innerHTML = "";
         stockNewForm.hidden = true;
         delete stockNewForm.dataset.deriveSlug;
+        delete stockNewForm.dataset.importSlug;
+        delete stockNewForm.dataset.importSource;
       }
       if (stockAddBtn) stockAddBtn.hidden = false;
     }
@@ -915,6 +930,58 @@
       }
     }
 
+    // Sister to tryHandleDeriveHash: when minerals.html loads with
+    // "#stock-import=<slug>", look up the recipe in library-data and open
+    // the new-stock editor pre-filled with the recipe's hand-authored
+    // stockFormula values (no derivation). Save records
+    // createdFrom: "library:<slug>" so the library card flips to "✓ In your
+    // pantry" — matching what importLibraryStockToPantry used to write
+    // before the editor flow took over the import path.
+    function tryHandleImportHash() {
+      const m = (window.location.hash || "").match(/^#stock-import=([^&]+)/);
+      if (!m) return;
+      const slug = decodeURIComponent(m[1]);
+      try {
+        history.replaceState(null, "", window.location.pathname + window.location.search);
+      } catch (e) { /* ignore */ }
+      const apply = (recipe) => {
+        if (!recipe || !recipe.stockFormula) return;
+        const f = recipe.stockFormula;
+        const recipeName = recipe.label || slug;
+        const minerals = Array.isArray(f.minerals)
+          ? f.minerals
+              .filter((m) => m && typeof m === "object" && typeof m.mineralId === "string" && m.mineralId)
+              .map((m) => ({ mineralId: m.mineralId, grams: Number(m.grams) || 0 }))
+          : [];
+        openStockNewFormPrefilled({
+          label: recipeName,
+          bottleMl: Number(f.bottleMl) || 0,
+          doseGramsPerL: Number(f.doseGramsPerL) || 0,
+          minerals,
+          hint: "Imported from " + recipeName + " — review and tweak before saving.",
+          importSlug: slug,
+          source: typeof f.source === "string" ? f.source : "",
+        });
+      };
+      const recipes =
+        typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
+      const found =
+        Array.isArray(recipes) && recipes.find((r) => r && r.slug === slug);
+      if (found) {
+        apply(found);
+        return;
+      }
+      if (typeof window.onLibraryDataLoaded === "function") {
+        const off = window.onLibraryDataLoaded((rs) => {
+          const r = Array.isArray(rs) && rs.find((x) => x && x.slug === slug);
+          if (r) {
+            if (typeof off === "function") off();
+            apply(r);
+          }
+        });
+      }
+    }
+
     function showStockNewError(msg) {
       if (!stockNewForm) return;
       const err = stockNewForm.querySelector("#stock-new-error");
@@ -925,9 +992,12 @@
 
     if (stockAddBtn) stockAddBtn.addEventListener("click", openStockNewForm);
 
-    // Recipe-browser deep-link: open the form pre-filled when arriving via
-    // "minerals.html#stock-derive=<slug>".
+    // Recipe-browser deep-links: open the form pre-filled when arriving via
+    // "minerals.html#stock-derive=<slug>" (auto-derive) or
+    // "minerals.html#stock-import=<slug>" (hand-authored library formula).
+    // Only one hash matches per load; handlers are mutually exclusive.
     tryHandleDeriveHash();
+    tryHandleImportHash();
 
     if (stockNewForm) {
       stockNewForm.addEventListener("click", (e) => {
@@ -974,19 +1044,37 @@
             cleaned.push({ mineralId: m.mineralId, grams: m.grams });
           }
           const specs = loadStockConcentrateSpecs();
-          const baseSlug = slugify(label) || "stock";
-          const finalSlug = uniqueStockSlug(baseSlug, Object.keys(specs));
+          // Form provenance — set by openStockNewFormPrefilled when the
+          // form is opened via #stock-derive=<slug> (auto-derive) or
+          // #stock-import=<slug> (hand-authored library formula). Drives
+          // (1) which slug we key the spec under, (2) the createdFrom
+          // marker on the spec, and (3) whether to preserve a library
+          // source string. The two namespaces ("derived:" vs "library:")
+          // are mutually exclusive — the parsers are gated on the same
+          // hash, so only one can be set per save.
+          const ds = (stockNewForm && stockNewForm.dataset) || {};
+          if (ds.importSlug && Object.prototype.hasOwnProperty.call(specs, ds.importSlug)) {
+            showStockNewError("This library stock is already in your pantry.");
+            return;
+          }
+          // Import path uses the library slug verbatim so the recipe card's
+          // isStockImported check (Object.hasOwn(specs, recipe.slug)) flips
+          // to "✓ In your pantry" on the next library render. Other paths
+          // run through uniqueStockSlug to avoid colliding with reserved
+          // library slugs or existing user stocks.
+          const baseSlug = ds.importSlug
+            ? String(ds.importSlug)
+            : (slugify(label) || "stock");
+          const finalSlug = ds.importSlug
+            ? baseSlug
+            : uniqueStockSlug(baseSlug, Object.keys(specs));
           const spec = { label, bottleMl, doseGramsPerL, minerals: cleaned };
-          // When the form was opened via "#stock-derive=<recipe-slug>",
-          // record the source on the spec so a future Settings UI can
-          // offer a "re-derive from recipe" affordance and so the recipe
-          // card on library.html can flip to "✓ In your pantry". The
-          // "derived:" namespace pairs cleanly with the existing
-          // "library:<slug>" used by importLibraryStockToPantry.
-          const deriveSlug = stockNewForm && stockNewForm.dataset
-            ? stockNewForm.dataset.deriveSlug
-            : "";
-          if (deriveSlug) spec.createdFrom = "derived:" + deriveSlug;
+          if (ds.deriveSlug) {
+            spec.createdFrom = "derived:" + ds.deriveSlug;
+          } else if (ds.importSlug) {
+            spec.createdFrom = "library:" + ds.importSlug;
+            if (ds.importSource) spec.source = ds.importSource;
+          }
           specs[finalSlug] = spec;
           saveStockConcentrateSpecs(specs);
           renderStockConcentrates();
