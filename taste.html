@@ -632,7 +632,7 @@
       });
 
       const so4ToCl = adjusted.chloride > 0 ? adjusted.sulfate / adjusted.chloride : null;
-      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "\u2014" : so4ToCl.toFixed(2);
+      document.getElementById("res-so4cl").textContent = so4ToCl === null ? "-" : so4ToCl.toFixed(2);
       const baselineRatio = calculateSo4ClRatio(base);
       setDeltaText(document.getElementById("delta-res-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
         decimals: 2,
