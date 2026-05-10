@@ -307,7 +307,7 @@
     var bottle = Number(formula.bottleMl);
     var dose = Number(formula.doseGramsPerL);
     var bottleLabel = Number.isFinite(bottle) && bottle > 0 ? " in " + bottle + " mL" : "";
-    var doseLabel = Number.isFinite(dose) && dose > 0 ? " — " + dose + " g/L" : "";
+    var doseLabel = Number.isFinite(dose) && dose > 0 ? " - " + dose + " g/L" : "";
     return parts + bottleLabel + doseLabel;
   }
 
@@ -324,7 +324,7 @@
         el(
           "span",
           "rx-mineral-value",
-          recipe[pair.field] != null ? String(recipe[pair.field]) : "—",
+          recipe[pair.field] != null ? String(recipe[pair.field]) : "-",
         ),
       );
       wrap.appendChild(item);

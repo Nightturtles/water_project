@@ -456,7 +456,7 @@ function persistTargetProfileEdits() {
   const profiles = loadCustomTargetProfiles();
   profiles[currentProfile] = profile;
   if (!saveCustomTargetProfiles(profiles)) {
-    showTargetSaveStatus("Storage full — could not save.", true);
+    showTargetSaveStatus("Storage full; could not save.", true);
     return { saved: false };
   }
   targetEditBar.style.display = "none";
@@ -569,7 +569,7 @@ targetSaveBtn.addEventListener("click", () => {
 
   profiles[key] = profile;
   if (!saveCustomTargetProfiles(profiles)) {
-    showTargetSaveStatus("Storage full — could not save.", true);
+    showTargetSaveStatus("Storage full; could not save.", true);
     return;
   }
 
@@ -753,7 +753,7 @@ function calculate() {
     const usedSources = Object.keys(alkAllocation).filter(function(k) { return alkAllocation[k] > 0; });
     if (usedSources.length === 1) {
       const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
-      warnings.push("Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split — using only " + usedName + ".");
+      warnings.push("Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split: using only " + usedName + ".");
     }
   }
 

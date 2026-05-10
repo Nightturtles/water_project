@@ -492,7 +492,7 @@ function deriveStockFormulaFromTarget(target, options) {
   var tHCO3 = num("bicarbonate");
 
   if (tCa + tMg + tK + tNa + tSO4 + tCl + tHCO3 === 0) {
-    notes.push("Distilled / RO target — no minerals to derive.");
+    notes.push("Distilled / RO target: no minerals to derive.");
     return { bottleMl: bottleMl, doseGramsPerL: doseGramsPerL, minerals: minerals, notes: notes };
   }
 
@@ -592,7 +592,7 @@ function deriveStockFormulaFromTarget(target, options) {
   if (tCa > 0) {
     if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
       notes.push(
-        "Used calcium-chloride for Ca even though target favors sulfate — gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
+        "Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
       );
     }
     var gCa = gramsForIon("calcium-chloride", "calcium", tCa);
@@ -661,7 +661,7 @@ function deriveStockFormulaFromTarget(target, options) {
             concentrationGperL.toFixed(1) +
             " g/L) exceeds approximate solubility (" +
             cap +
-            " g/L) — try a larger bottle or lower dose.",
+            " g/L); try a larger bottle or lower dose.",
         );
       }
     });
