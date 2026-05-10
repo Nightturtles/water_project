@@ -476,13 +476,15 @@ function initThemeListeners() {
 // --- Navigation ---
 function injectNav() {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
-  const pages = [
-    { href: "index.html",    label: "Calculator" },
-    { href: "recipe.html",   label: "Recipe Builder" },
-    { href: "taste.html",    label: "Taste Tuner" },
-    { href: "library.html",  label: "Library" },
-    { href: "start.html",    label: "Beginners Guide" },
-    { href: "minerals.html", label: "Settings" }
+  const navItems = [
+    { type: "group", label: "Tools", children: [
+      { href: "index.html",  label: "Calculator" },
+      { href: "recipe.html", label: "Recipe Builder" },
+      { href: "taste.html",  label: "Taste Tuner" }
+    ]},
+    { type: "link", href: "library.html",  label: "Library" },
+    { type: "link", href: "start.html",    label: "Beginners Guide" },
+    { type: "link", href: "minerals.html", label: "Settings" }
   ];
 
   const nav = document.createElement("nav");
@@ -514,12 +516,18 @@ function injectNav() {
   // Nav links
   const linksWrap = document.createElement("div");
   linksWrap.className = "nav-links";
-  pages.forEach(p => {
-    const a = document.createElement("a");
-    a.href = p.href;
-    a.textContent = p.label;
-    if (currentPage === p.href) a.className = "active";
-    linksWrap.appendChild(a);
+  navItems.forEach(item => {
+    if (item.type === "group") {
+      const built = _buildNavGroup(item, currentPage);
+      linksWrap.appendChild(built.wrap);
+      _wireNavGroupBehavior(built.wrap, built.trigger, built.menu);
+    } else {
+      const a = document.createElement("a");
+      a.href = item.href;
+      a.textContent = item.label;
+      if (currentPage === item.href) a.className = "active";
+      linksWrap.appendChild(a);
+    }
   });
   nav.appendChild(linksWrap);
 
@@ -579,6 +587,69 @@ async function _updateNavAuth(authWrap, currentPage) {
   } catch (_) {
     // Silently skip auth nav if Supabase is unavailable
   }
+}
+
+function _buildNavGroup(group, currentPage) {
+  const isCurrentInGroup = group.children.some(c => c.href === currentPage);
+
+  const wrap = document.createElement("div");
+  wrap.className = "nav-group";
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "nav-group-trigger" + (isCurrentInGroup ? " active" : "");
+  trigger.setAttribute("aria-haspopup", "menu");
+  trigger.setAttribute("aria-expanded", "false");
+  trigger.innerHTML = group.label + ' <span class="chevron" aria-hidden="true">▾</span>';
+
+  const menu = document.createElement("div");
+  menu.className = "nav-group-menu";
+  menu.setAttribute("role", "menu");
+  menu.hidden = true;
+
+  group.children.forEach(c => {
+    const a = document.createElement("a");
+    a.href = c.href;
+    a.textContent = c.label;
+    a.setAttribute("role", "menuitem");
+    if (currentPage === c.href) a.className = "active";
+    menu.appendChild(a);
+  });
+
+  wrap.appendChild(trigger);
+  wrap.appendChild(menu);
+
+  return { wrap, trigger, menu };
+}
+
+function _wireNavGroupBehavior(wrap, trigger, menu) {
+  function close() {
+    wrap.classList.remove("is-open");
+    trigger.setAttribute("aria-expanded", "false");
+    menu.hidden = true;
+  }
+  function open() {
+    wrap.classList.add("is-open");
+    trigger.setAttribute("aria-expanded", "true");
+    menu.hidden = false;
+  }
+
+  trigger.addEventListener("click", function (e) {
+    e.stopPropagation();
+    if (wrap.classList.contains("is-open")) close();
+    else open();
+  });
+
+  document.addEventListener("click", function (e) {
+    if (!wrap.contains(e.target)) close();
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && wrap.classList.contains("is-open")) {
+      close();
+      trigger.focus();
+    }
+  });
 }
 
 // --- Shared restore bar helpers ---
