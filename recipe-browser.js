@@ -880,18 +880,19 @@
         // past ~200.
         render();
       },
-      onAddStock: function (recipe) {
-        if (typeof importLibraryStockToPantry !== "function") return;
-        importLibraryStockToPantry(recipe);
-        // Re-render flips this card (and any duplicate of the same slug) from
-        // the "+ Add to my stocks" button to "✓ In your pantry". Idempotent:
-        // a no-op import (already-present) still re-renders, which is fine —
-        // the imported state was already true.
-        render();
-      },
       // Hands off to minerals.html, which reads the slug from the hash,
-      // looks the recipe up via library-data, calls deriveStockFormulaFromTarget,
-      // and opens the existing stock-new editor pre-filled. Hash carries only
+      // looks the recipe up via library-data, and opens the new-stock
+      // editor pre-filled with the recipe's hand-authored stockFormula.
+      // The user reviews/tweaks before saving — same UX shape as
+      // onDeriveStock below. On Save, the spec is keyed under recipe.slug
+      // so this card flips to "✓ In your pantry" on the next render.
+      onAddStock: function (recipe) {
+        if (!recipe || !recipe.slug) return;
+        window.location.href = "minerals.html#stock-import=" + encodeURIComponent(recipe.slug);
+      },
+      // Same handoff shape as onAddStock, but minerals.html derives the
+      // formula from recipe ion targets via deriveStockFormulaFromTarget
+      // instead of reading a hand-authored stockFormula. Hash carries only
       // the slug — derivation runs on the destination page so a future
       // algorithm change doesn't leave stale handoffs.
       onDeriveStock: function (recipe) {

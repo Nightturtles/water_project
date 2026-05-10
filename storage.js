@@ -850,6 +850,12 @@ function computeStockMineralGramsPerL(spec) {
  * enables it from Settings. saveStockConcentrateSpecs already triggers cloud
  * sync via scheduleSyncToCloud.
  *
+ * NOTE: No production caller as of #stock-import editor flow — recipe-browser.js
+ * onAddStock now navigates to "minerals.html#stock-import=<slug>" so the user
+ * can review/tweak before saving. Retained as the canonical "recreate library
+ * spec from a recipe" helper for storage-stock.test.js coverage and a planned
+ * "Reset to library values" affordance.
+ *
  * @param {{ slug?: unknown, label?: unknown, stockFormula?: any } | null | undefined} recipe
  * @returns {{ status: "imported" | "already-present" | "invalid", slug: string | null }}
  */

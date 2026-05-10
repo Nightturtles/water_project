@@ -233,7 +233,15 @@ test.describe("library.html — Wave D recipe browser", () => {
     const addBtn = card.locator(".rx-card-stock-add");
     await expect(addBtn).toBeVisible();
 
+    // Click navigates to minerals.html#stock-import=<slug> and opens the
+    // new-stock editor pre-filled with the library formula. tryHandleImportHash
+    // clears the hash via replaceState immediately, so waitForURL on the hash
+    // would race; assert on the form instead. Save is what writes the spec.
     await addBtn.click();
+    await page.waitForURL("**/minerals.html**");
+    await expect(page.locator("#stock-new-form")).toBeVisible();
+    await expect(page.locator("#stock-new-label")).toHaveValue(/.+/);
+    await page.locator('#stock-new-form [data-action="new-save"]').click();
 
     // Spec writes through to localStorage with the expected shape.
     const spec = await page.evaluate((s) => {
@@ -245,7 +253,9 @@ test.describe("library.html — Wave D recipe browser", () => {
     expect(Array.isArray(spec.minerals)).toBe(true);
     expect(spec.minerals.length).toBeGreaterThan(0);
 
-    // Card flips from button → "In your pantry" indicator + Settings link.
+    // Back on the library page, the card flips from button → "In your
+    // pantry" indicator + Settings link.
+    await page.goto("/library.html");
     const importedCard = page.locator(`.rx-recipe-card[data-slug="${slug}"]`).first();
     await expect(importedCard.locator(".rx-card-stock-add")).toHaveCount(0);
     await expect(importedCard.locator(".rx-card-stock-imported")).toBeVisible();
@@ -281,9 +291,14 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(featured.locator(".rx-card-stock-add")).toBeVisible();
     await expect(featured.locator(".rx-card-stock-imported")).toHaveCount(0);
 
-    // Click the import button — spec lands in localStorage with the expected
-    // back-reference, and the hero flips to the imported indicator.
+    // Click the import button — navigates to the editor pre-filled with the
+    // library formula. Save writes the spec; navigating back flips the hero
+    // to the imported indicator. Hash gets cleared by tryHandleImportHash
+    // before we can assert on it; rely on the form-visible signal instead.
     await featured.locator(".rx-card-stock-add").click();
+    await page.waitForURL("**/minerals.html**");
+    await expect(page.locator("#stock-new-form")).toBeVisible();
+    await page.locator('#stock-new-form [data-action="new-save"]').click();
 
     const spec = await page.evaluate(() => {
       const raw = localStorage.getItem("cw_stock_concentrate_specs");
@@ -292,9 +307,20 @@ test.describe("library.html — Wave D recipe browser", () => {
     expect(spec).toBeTruthy();
     expect(spec.createdFrom).toBe("library:rao-perger");
 
-    await expect(featured.locator(".rx-card-stock-add")).toHaveCount(0);
-    await expect(featured.locator(".rx-card-stock-imported")).toBeVisible();
-    await expect(featured.locator(".rx-card-stock-settings")).toHaveAttribute(
+    // Re-promote the featured pick after navigating back (in-memory mutation
+    // didn't survive the cross-page jump) and re-trigger the render.
+    await page.goto("/library.html");
+    await page.evaluate(() => {
+      const picks = (window as unknown as { FEATURED_PICKS: Record<string, string> })
+        .FEATURED_PICKS;
+      picks.filter = "rao-perger";
+    });
+    await page.locator('.rx-segmented-button[data-value="filter"]').first().click();
+
+    const importedFeatured = page.locator('.rx-featured-hero[data-slug="rao-perger"]');
+    await expect(importedFeatured.locator(".rx-card-stock-add")).toHaveCount(0);
+    await expect(importedFeatured.locator(".rx-card-stock-imported")).toBeVisible();
+    await expect(importedFeatured.locator(".rx-card-stock-settings")).toHaveAttribute(
       "href",
       "minerals.html#stock-concentrates-summary",
     );
