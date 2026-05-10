@@ -158,6 +158,92 @@ body {
   font-weight: 600;
 }
 
+/* Grouped nav dropdown (e.g. "Tools") */
+.nav-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.nav-group-trigger {
+  padding: 0.4rem 0.85rem;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.nav-group-trigger:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.nav-group-trigger.active {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  font-weight: 600;
+}
+
+.nav-group-trigger .chevron {
+  font-size: 0.7rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.nav-group.is-open .nav-group-trigger .chevron {
+  transform: rotate(180deg);
+}
+
+.nav-group-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  padding: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  z-index: 101;
+}
+
+.nav-group-menu[hidden] {
+  display: none;
+}
+
+.nav-group-menu a {
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--gray-500);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.nav-group-menu a:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+}
+
+.nav-group-menu a.active {
+  color: var(--blue-700);
+  background: var(--blue-50);
+  font-weight: 600;
+}
+
 /* Hamburger button — hidden on desktop */
 .nav-hamburger {
   display: none;
@@ -2183,6 +2269,54 @@ footer {
     padding: 0.6rem 0.75rem;
     font-size: 0.9rem;
     border-radius: 8px;
+    width: 100%;
+  }
+
+  /* Flatten nav-group inside the open hamburger menu —
+     no nested toggle, "Tools" becomes a subheading. */
+  .nav-group {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-group-trigger {
+    pointer-events: none;
+    padding: 0.5rem 0.75rem 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+    background: transparent;
+  }
+
+  .nav-group-trigger.active {
+    background: transparent;
+    color: var(--gray-500);
+  }
+
+  .nav-group-trigger .chevron {
+    display: none;
+  }
+
+  .nav-group-menu,
+  .nav-group-menu[hidden] {
+    position: static;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    padding: 0;
+    gap: 0;
+  }
+
+  .nav-group-menu a {
+    padding: 0.6rem 0.75rem 0.6rem 1.25rem;
+    font-size: 0.9rem;
     width: 100%;
   }
 
