@@ -604,14 +604,12 @@ function _buildNavGroup(group, currentPage) {
 
   const menu = document.createElement("div");
   menu.className = "nav-group-menu";
-  menu.setAttribute("role", "menu");
   menu.hidden = true;
 
   group.children.forEach(c => {
     const a = document.createElement("a");
     a.href = c.href;
     a.textContent = c.label;
-    a.setAttribute("role", "menuitem");
     if (currentPage === c.href) a.className = "active";
     menu.appendChild(a);
   });
