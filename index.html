@@ -129,7 +129,6 @@
         <h2>Target Water Profile</h2>
         <div class="section-header-buttons">
           <button type="button" id="target-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
-          <button type="button" id="target-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this recipe's targets">+ Make a stock</button>
           <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
       </div>
@@ -219,7 +218,10 @@
 
     <!-- Results -->
     <section class="card results-card">
-      <h2>Add to Your Water</h2>
+      <div class="section-header-actions">
+        <h2>Add to Your Water</h2>
+        <button type="button" id="target-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this recipe's targets">+ Make a stock</button>
+      </div>
       <p class="hint" id="results-hint">Using distilled/RO water as your base, add these mineral salts:</p>
       <div class="results" id="results-container">
         <!-- Populated by JS from selected minerals in Settings -->

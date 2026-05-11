@@ -144,7 +144,10 @@
 
     <!-- PPM Results -->
     <section class="card results-card">
-      <h2>Final Water Profile</h2>
+      <div class="section-header-actions">
+        <h2>Final Water Profile</h2>
+        <button type="button" id="recipe-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this saved profile">+ Make a stock from this profile</button>
+      </div>
       <p class="hint">Total PPM including your base water + mineral additions:</p>
 
       <div class="metrics-row">
@@ -226,7 +229,6 @@
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status" aria-live="polite"></div>
-      <button type="button" id="recipe-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this saved profile">+ Make a stock from this profile</button>
       <div class="range-guidance" id="recipe-range-warnings" aria-live="polite"></div>
       <p class="hint">All deltas shown vs Source Water.</p>
     </section>
