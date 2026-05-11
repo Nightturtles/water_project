@@ -25,7 +25,6 @@
         <h2>Current Water Profile</h2>
         <div class="section-header-buttons">
           <button type="button" id="taste-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
-          <button type="button" id="taste-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this recipe's targets">+ Make a stock</button>
           <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
       </div>
@@ -190,7 +189,10 @@
 
     <!-- Adjusted Result -->
     <section class="card results-card">
-      <h2>Adjusted Water Profile</h2>
+      <div class="section-header-actions">
+        <h2>Adjusted Water Profile</h2>
+        <button type="button" id="taste-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this adjusted profile">+ Make a stock</button>
+      </div>
       <p class="hint">Your new target water profile after taste adjustments:</p>
 
       <div class="metrics-row">
@@ -515,7 +517,15 @@
       const hasIons = ionFields.some(
         (ion) => (parseFloat(document.getElementById("cur-" + ion).value) || 0) > 0,
       );
-      tasteMakeStockBtn.style.display = hasSlug && hasIons ? "" : "none";
+      // Sliders are the dirty signal for adjustments. Any non-zero slider means
+      // the adjusted profile no longer matches the active preset's saved slug,
+      // so the handoff would silently produce a stock for the unadjusted preset.
+      // Saving the adjusted profile (taste-save-btn) re-activates a fresh preset
+      // and resets sliders to zero, which lets the button reappear.
+      const noSliderAdjustments = SLIDERS.every(
+        (slider) => (parseInt(document.getElementById("slider-" + slider).value) || 0) === 0,
+      );
+      tasteMakeStockBtn.style.display = hasSlug && hasIons && noSliderAdjustments ? "" : "none";
     }
 
     if (tasteMakeStockBtn) {
@@ -565,6 +575,7 @@
       el.addEventListener("input", () => {
         const v = parseInt(el.value);
         valEl.textContent = (v > 0 ? "+" : "") + v;
+        updateTasteMakeStockBtnVisibility();
         debouncedRecalculate();
       });
     });
@@ -576,6 +587,7 @@
         el.value = 0;
         document.getElementById("val-" + slider).textContent = "0";
       });
+      updateTasteMakeStockBtnVisibility();
     }
 
     document.getElementById("reset-sliders-btn").addEventListener("click", () => {
