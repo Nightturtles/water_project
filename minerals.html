@@ -398,6 +398,64 @@
       );
     }
 
+    // Per-stock edit drafts. Field/add/remove actions mutate the draft instead
+    // of persisting straight to localStorage; clicking Save commits, Cancel
+    // reverts. Selecting which stock is active and the one-shot Reset/Re-derive
+    // actions still write through immediately (they're not "editing the
+    // formula" in the same sense).
+    let stockDrafts = {};
+    function getStockView(slug) {
+      if (Object.prototype.hasOwnProperty.call(stockDrafts, slug)) return stockDrafts[slug];
+      return loadStockConcentrateSpecs()[slug];
+    }
+    function ensureStockDraft(slug) {
+      if (!Object.prototype.hasOwnProperty.call(stockDrafts, slug)) {
+        const saved = loadStockConcentrateSpecs()[slug];
+        stockDrafts[slug] = JSON.parse(JSON.stringify(saved || {}));
+      }
+      return stockDrafts[slug];
+    }
+    function discardStockDraft(slug) {
+      delete stockDrafts[slug];
+    }
+    function isStockDirty(slug) {
+      return Object.prototype.hasOwnProperty.call(stockDrafts, slug);
+    }
+    // If the draft has been edited back to match the persisted spec
+    // (e.g. user typed a new value then restored it, or added then removed
+    // a mineral row), drop the draft so the row stops looking dirty.
+    function syncStockDraftCleanup(slug) {
+      if (!isStockDirty(slug)) return;
+      const saved = loadStockConcentrateSpecs()[slug];
+      if (JSON.stringify(stockDrafts[slug]) === JSON.stringify(saved || {})) {
+        discardStockDraft(slug);
+      }
+    }
+    function updateStockDirtyVisibility(itemEl, slug) {
+      if (!itemEl) return;
+      const dirty = isStockDirty(slug);
+      itemEl.classList.toggle("is-dirty", dirty);
+      const actions = itemEl.querySelector(".stock-edit-actions");
+      if (actions) actions.hidden = !dirty;
+    }
+    // Mirrors the gates enforced in the "+ New stock solution" save handler
+    // so edits can't sneak in placeholder mineral rows or zero bottle/dose
+    // values that the create flow would have rejected.
+    function validateStockSpec(spec) {
+      if (!spec) return "Stock is empty.";
+      const bottleMl = Math.max(0, Number(spec.bottleMl) || 0);
+      const doseGramsPerL = Math.max(0, Number(spec.doseGramsPerL) || 0);
+      if (bottleMl <= 0) return "Bottle volume must be greater than 0.";
+      if (doseGramsPerL <= 0) return "Dose must be greater than 0.";
+      const minerals = Array.isArray(spec.minerals) ? spec.minerals : [];
+      if (minerals.length === 0) return "Add at least one mineral.";
+      for (const m of minerals) {
+        if (!m || !m.mineralId) return "All mineral rows need a mineral selected.";
+        if (!(Number(m.grams) > 0)) return "All mineral rows need a positive grams value.";
+      }
+      return null;
+    }
+
     function renderStockRow(slug, spec) {
       const concentrateId = "stock:" + slug;
       const checked = loadSelectedConcentrates().includes(concentrateId);
@@ -444,6 +502,9 @@
         ? "Above solubility limit for " + overLimitNames.join(", ") + ". Try a larger bottle volume or fewer grams."
         : "";
 
+      const dirty = isStockDirty(slug);
+      if (dirty) div.classList.add("is-dirty");
+
       div.innerHTML =
         '<div class="stock-row-header">' +
           '<label class="concentrate-label">' +
@@ -467,7 +528,11 @@
         "</div>" +
         '<button type="button" class="stock-recipe-toggle" data-action="toggle-recipe" aria-expanded="false">Recipe</button>' +
         '<div class="stock-recipe-pane" hidden>' + renderStockRecipePaneHtml(spec) + "</div>" +
-        '<div class="concentrate-warning"' + (warningVisible ? "" : " hidden") + ">" + escapeHtml(warningText) + "</div>";
+        '<div class="concentrate-warning"' + (warningVisible ? "" : " hidden") + ">" + escapeHtml(warningText) + "</div>" +
+        '<div class="stock-edit-actions"' + (dirty ? "" : " hidden") + ">" +
+          '<button type="button" class="preset-btn primary" data-action="save-stock">Save changes</button>' +
+          '<button type="button" class="preset-btn" data-action="cancel-stock">Cancel</button>' +
+        "</div>";
 
       return div;
     }
@@ -542,7 +607,7 @@
         stockListEl.appendChild(empty);
         return;
       }
-      slugs.forEach((slug) => stockListEl.appendChild(renderStockRow(slug, specs[slug])));
+      slugs.forEach((slug) => stockListEl.appendChild(renderStockRow(slug, getStockView(slug))));
       updateStockLockState();
     }
 
@@ -552,7 +617,7 @@
       if (!itemEl) return;
       const slug = itemEl.dataset.stockSlug;
       if (!slug) return;
-      const spec = loadStockConcentrateSpecs()[slug];
+      const spec = getStockView(slug);
       const warningEl = itemEl.querySelector(".concentrate-warning");
       if (!warningEl) return;
       const overLimitIds = spec ? getStockOverLimitMineralIds(spec) : [];
@@ -570,7 +635,7 @@
     function refreshStockRecipePane(itemEl) {
       if (!itemEl) return;
       const slug = itemEl.dataset.stockSlug;
-      const spec = loadStockConcentrateSpecs()[slug];
+      const spec = getStockView(slug);
       const pane = itemEl.querySelector(".stock-recipe-pane");
       if (!pane || !spec) return;
       pane.innerHTML = renderStockRecipePaneHtml(spec);
@@ -617,14 +682,12 @@
           const idx = parseInt(row.dataset.mineralIdx, 10);
           if (Number.isNaN(idx)) return;
           const slug = item.dataset.stockSlug;
-          const specs = loadStockConcentrateSpecs();
-          const spec = specs[slug];
+          const spec = ensureStockDraft(slug);
           if (!spec || !Array.isArray(spec.minerals) || !spec.minerals[idx]) return;
           spec.minerals[idx].mineralId = target.value;
-          specs[slug] = spec;
-          saveStockConcentrateSpecs(specs);
+          syncStockDraftCleanup(slug);
           updateStockSolubilityWarning(item);
-          showSaved();
+          updateStockDirtyVisibility(item, slug);
         }
       });
 
@@ -634,8 +697,7 @@
         const item = input.closest(".stock-concentrate-item");
         if (!item) return;
         const slug = item.dataset.stockSlug;
-        const specs = loadStockConcentrateSpecs();
-        const spec = specs[slug] || { label: slug, bottleMl: 0, doseGramsPerL: 0, minerals: [] };
+        const spec = ensureStockDraft(slug);
         const field = input.dataset.field;
         if (field === "bottle-ml") {
           spec.bottleMl = Math.max(0, parseFloat(input.value) || 0);
@@ -650,10 +712,9 @@
         } else {
           return;
         }
-        specs[slug] = spec;
-        saveStockConcentrateSpecs(specs);
+        syncStockDraftCleanup(slug);
         updateStockSolubilityWarning(item);
-        showSaved();
+        updateStockDirtyVisibility(item, slug);
       });
 
       stockListEl.addEventListener("click", (e) => {
@@ -677,105 +738,124 @@
 
         if (action === "delete-stock") {
           const specs = loadStockConcentrateSpecs();
-          delete specs[slug];
-          saveStockConcentrateSpecs(specs);
-          const remaining = loadSelectedConcentrates().filter((id) => id !== "stock:" + slug);
-          saveSelectedConcentrates(remaining);
-          renderStockConcentrates();
-          showSaved();
+          const label = (specs[slug] && specs[slug].label) || slug;
+          showConfirm('Delete stock solution "' + label + '"?', () => {
+            const cur = loadStockConcentrateSpecs();
+            delete cur[slug];
+            saveStockConcentrateSpecs(cur);
+            discardStockDraft(slug);
+            const remaining = loadSelectedConcentrates().filter((id) => id !== "stock:" + slug);
+            saveSelectedConcentrates(remaining);
+            renderStockConcentrates();
+            showSaved();
+          });
           return;
         }
 
         if (action === "reset-library") {
-          const specs = loadStockConcentrateSpecs();
-          const spec = specs[slug];
-          if (!spec || !spec.createdFrom) return;
-          const m = String(spec.createdFrom).match(/^library:(.+)$/);
-          if (!m) return;
-          const librarySlug = m[1];
-          if (typeof getPublicRecipesSync !== "function") {
-            alert("Recipe library failed to load. Please reload the page and try again.");
-            return;
-          }
-          const recipes = getPublicRecipesSync();
-          const row = recipes.find((r) => r.slug === librarySlug && r.stockFormula);
-          if (!row || !row.stockFormula) {
-            alert('No library entry found for slug "' + librarySlug + '".');
-            return;
-          }
-          specs[slug] = {
-            label: row.label || spec.label,
-            bottleMl: Number(row.stockFormula.bottleMl) || 0,
-            doseGramsPerL: Number(row.stockFormula.doseGramsPerL) || 0,
-            minerals: Array.isArray(row.stockFormula.minerals)
-              ? row.stockFormula.minerals.map((mm) => ({
-                  mineralId: mm.mineralId,
-                  grams: Number(mm.grams) || 0,
-                }))
-              : [],
-            createdFrom: spec.createdFrom,
-            source: row.stockFormula.source || spec.source,
+          const runReset = () => {
+            const specs = loadStockConcentrateSpecs();
+            const spec = specs[slug];
+            if (!spec || !spec.createdFrom) return;
+            const m = String(spec.createdFrom).match(/^library:(.+)$/);
+            if (!m) return;
+            const librarySlug = m[1];
+            if (typeof getPublicRecipesSync !== "function") {
+              alert("Recipe library failed to load. Please reload the page and try again.");
+              return;
+            }
+            const recipes = getPublicRecipesSync();
+            const row = recipes.find((r) => r.slug === librarySlug && r.stockFormula);
+            if (!row || !row.stockFormula) {
+              alert('No library entry found for slug "' + librarySlug + '".');
+              return;
+            }
+            specs[slug] = {
+              label: row.label || spec.label,
+              bottleMl: Number(row.stockFormula.bottleMl) || 0,
+              doseGramsPerL: Number(row.stockFormula.doseGramsPerL) || 0,
+              minerals: Array.isArray(row.stockFormula.minerals)
+                ? row.stockFormula.minerals.map((mm) => ({
+                    mineralId: mm.mineralId,
+                    grams: Number(mm.grams) || 0,
+                  }))
+                : [],
+              createdFrom: spec.createdFrom,
+              source: row.stockFormula.source || spec.source,
+            };
+            saveStockConcentrateSpecs(specs);
+            discardStockDraft(slug);
+            renderStockConcentrates();
+            showSaved();
           };
-          saveStockConcentrateSpecs(specs);
-          renderStockConcentrates();
-          showSaved();
+          if (isStockDirty(slug)) {
+            showConfirm("Discard your unsaved changes and reset to library values?", runReset);
+          } else {
+            runReset();
+          }
           return;
         }
 
         if (action === "reset-derived") {
-          const specs = loadStockConcentrateSpecs();
-          const spec = specs[slug];
-          if (!spec || !spec.createdFrom) return;
-          const m = String(spec.createdFrom).match(/^derived:(.+)$/);
-          if (!m) return;
-          const recipeSlug = m[1];
-          if (typeof deriveStockFormulaFromTarget !== "function") {
-            alert("Stock derivation is unavailable. Please reload the page and try again.");
-            return;
-          }
-          // Resolve the source recipe. Public library + published customs
-          // come from getPublicRecipesSync; private customs fall through to
-          // getTargetProfileByKey (which merges the 3-tier preset stack).
-          let recipe = null;
-          if (typeof getPublicRecipesSync === "function") {
-            const recipes = getPublicRecipesSync();
-            if (Array.isArray(recipes)) recipe = recipes.find((r) => r && r.slug === recipeSlug);
-          }
-          if (!recipe && typeof getTargetProfileByKey === "function") {
-            recipe = getTargetProfileByKey(recipeSlug);
-          }
-          if (!recipe) {
-            alert('No recipe found for slug "' + recipeSlug + '". It may have been deleted.');
-            return;
-          }
-          const derived = deriveStockFormulaFromTarget(recipe);
-          // Preserve the user's chosen label — the spec slug is keyed off
-          // that label, and changing it here would orphan the cw_selected_concentrates
-          // entry pointing to stock:<oldSlug>.
-          specs[slug] = {
-            label: spec.label,
-            bottleMl: derived.bottleMl,
-            doseGramsPerL: derived.doseGramsPerL,
-            minerals: derived.minerals,
-            createdFrom: spec.createdFrom,
+          const runReset = () => {
+            const specs = loadStockConcentrateSpecs();
+            const spec = specs[slug];
+            if (!spec || !spec.createdFrom) return;
+            const m = String(spec.createdFrom).match(/^derived:(.+)$/);
+            if (!m) return;
+            const recipeSlug = m[1];
+            if (typeof deriveStockFormulaFromTarget !== "function") {
+              alert("Stock derivation is unavailable. Please reload the page and try again.");
+              return;
+            }
+            // Resolve the source recipe. Public library + published customs
+            // come from getPublicRecipesSync; private customs fall through to
+            // getTargetProfileByKey (which merges the 3-tier preset stack).
+            let recipe = null;
+            if (typeof getPublicRecipesSync === "function") {
+              const recipes = getPublicRecipesSync();
+              if (Array.isArray(recipes)) recipe = recipes.find((r) => r && r.slug === recipeSlug);
+            }
+            if (!recipe && typeof getTargetProfileByKey === "function") {
+              recipe = getTargetProfileByKey(recipeSlug);
+            }
+            if (!recipe) {
+              alert('No recipe found for slug "' + recipeSlug + '". It may have been deleted.');
+              return;
+            }
+            const derived = deriveStockFormulaFromTarget(recipe);
+            // Preserve the user's chosen label — the spec slug is keyed off
+            // that label, and changing it here would orphan the cw_selected_concentrates
+            // entry pointing to stock:<oldSlug>.
+            specs[slug] = {
+              label: spec.label,
+              bottleMl: derived.bottleMl,
+              doseGramsPerL: derived.doseGramsPerL,
+              minerals: derived.minerals,
+              createdFrom: spec.createdFrom,
+            };
+            saveStockConcentrateSpecs(specs);
+            discardStockDraft(slug);
+            renderStockConcentrates();
+            showSaved();
           };
-          saveStockConcentrateSpecs(specs);
-          renderStockConcentrates();
-          showSaved();
+          if (isStockDirty(slug)) {
+            showConfirm("Discard your unsaved changes and re-derive from the recipe?", runReset);
+          } else {
+            runReset();
+          }
           return;
         }
 
         if (action === "add-mineral") {
-          const specs = loadStockConcentrateSpecs();
-          const spec = specs[slug];
+          const spec = ensureStockDraft(slug);
           if (!spec) return;
           if (!Array.isArray(spec.minerals)) spec.minerals = [];
           spec.minerals.push({ mineralId: "", grams: 0 });
-          specs[slug] = spec;
-          saveStockConcentrateSpecs(specs);
+          syncStockDraftCleanup(slug);
           refreshStockRecipePane(item);
           updateStockSolubilityWarning(item);
-          showSaved();
+          updateStockDirtyVisibility(item, slug);
           return;
         }
 
@@ -784,15 +864,37 @@
           if (!row) return;
           const idx = parseInt(row.dataset.mineralIdx, 10);
           if (Number.isNaN(idx)) return;
-          const specs = loadStockConcentrateSpecs();
-          const spec = specs[slug];
+          const spec = ensureStockDraft(slug);
           if (!spec || !Array.isArray(spec.minerals)) return;
           spec.minerals.splice(idx, 1);
-          specs[slug] = spec;
-          saveStockConcentrateSpecs(specs);
+          syncStockDraftCleanup(slug);
           refreshStockRecipePane(item);
           updateStockSolubilityWarning(item);
+          updateStockDirtyVisibility(item, slug);
+          return;
+        }
+
+        if (action === "save-stock") {
+          if (!isStockDirty(slug)) return;
+          const draft = stockDrafts[slug];
+          const error = validateStockSpec(draft);
+          if (error) {
+            showSaveStatus(error, true);
+            return;
+          }
+          const specs = loadStockConcentrateSpecs();
+          specs[slug] = draft;
+          saveStockConcentrateSpecs(specs);
+          discardStockDraft(slug);
+          renderStockConcentrates();
           showSaved();
+          return;
+        }
+
+        if (action === "cancel-stock") {
+          if (!isStockDirty(slug)) return;
+          discardStockDraft(slug);
+          renderStockConcentrates();
           return;
         }
       });
