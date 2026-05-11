@@ -540,9 +540,31 @@ function deriveStockFormulaFromTarget(target, options) {
     var hcoNa = 0;
     var hcoK = 0;
     if (tNa > 0 && tK > 0) {
-      var sumNaK = tNa + tK;
-      hcoNa = (tHCO3 * tNa) / sumNaK;
-      hcoK = (tHCO3 * tK) / sumNaK;
+      // Try sizing each buffer for its respective monovalent target ion. When
+      // the recipe's Na/K/HCO3 numbers are internally consistent (the common
+      // case — recipe authors typically derive HCO3 from the buffer salts they
+      // chose), the resulting HCO3 falls within tolerance of the target and we
+      // hit both Na and K exactly. Eliminates the K-overshoot the proportional
+      // split produced on recipes like Lotus Simple Sweet. Falls back to the
+      // proportional split when targets aren't aligned.
+      var bakingDb = MINERAL_DB["baking-soda"];
+      var khcoDb = MINERAL_DB["potassium-bicarbonate"];
+      var bakingNaFrac = (bakingDb && bakingDb.ions && bakingDb.ions.sodium) || 0;
+      var bakingHCO3Frac = (bakingDb && bakingDb.ions && bakingDb.ions.bicarbonate) || 0;
+      var khcoKFrac = (khcoDb && khcoDb.ions && khcoDb.ions.potassium) || 0;
+      var khcoHCO3Frac = (khcoDb && khcoDb.ions && khcoDb.ions.bicarbonate) || 0;
+      var directNaHCO3 = bakingNaFrac > 0 ? tNa * (bakingHCO3Frac / bakingNaFrac) : 0;
+      var directKHCO3 = khcoKFrac > 0 ? tK * (khcoHCO3Frac / khcoKFrac) : 0;
+      var directTotalHCO3 = directNaHCO3 + directKHCO3;
+      var tolerance = Math.max(1, tHCO3 * 0.1);
+      if (Math.abs(directTotalHCO3 - tHCO3) <= tolerance) {
+        hcoNa = directNaHCO3;
+        hcoK = directKHCO3;
+      } else {
+        var sumNaK = tNa + tK;
+        hcoNa = (tHCO3 * tNa) / sumNaK;
+        hcoK = (tHCO3 * tK) / sumNaK;
+      }
     } else if (tNa > 0) {
       hcoNa = tHCO3;
     } else {
@@ -566,13 +588,21 @@ function deriveStockFormulaFromTarget(target, options) {
   }
 
   // --- 2. Magnesium ---
+  // - tCl === 0 (whether or not SO4 specified): epsom keeps Cl out of the
+  //   resulting brew water. Important when SO4 and Cl are both unspecified
+  //   (e.g. SCA-style Ca/Mg/Alk-only profiles): the Ca source is already
+  //   pinned to CaCl2 (gypsum is insoluble at concentrate strengths) which
+  //   contributes its own Cl, so defaulting Mg to epsom keeps the side-ion
+  //   spread balanced rather than compounding Cl.
+  // - tSO4 === 0 with tCl > 0: MgCl2 (Mg side matches the recipe's Cl target).
+  // - Both > 0: pick by SO4/Cl ratio.
   if (tMg > 0) {
     var mgPick;
-    if (tSO4 > 0 && tCl === 0) {
+    if (tCl === 0) {
       mgPick = "epsom-salt";
-    } else if (tCl > 0 && tSO4 === 0) {
+    } else if (tSO4 === 0) {
       mgPick = "magnesium-chloride";
-    } else if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
+    } else if (tSO4 / Math.max(tCl, 1) > 1) {
       mgPick = "epsom-salt";
     } else {
       mgPick = "magnesium-chloride";

@@ -326,6 +326,143 @@ test.describe("library.html — Wave D recipe browser", () => {
     );
   });
 
+  test('"+ Make a stock" derives a stock formula from a recipe without stockFormula (B3b)', async ({
+    page,
+  }) => {
+    // Hermetic — wipe any prior pantry state so the card renders the derive
+    // CTA, not the imported indicator.
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("cw_"))
+        .forEach((k) => localStorage.removeItem(k));
+    });
+    await page.reload();
+
+    // Find the first card WITHOUT a hand-authored stockFormula — those render
+    // the same .rx-card-stock-add class but resolve to the new derive flow.
+    // The B3a test exercises stockFormula-bearing cards; here we want a
+    // derive-candidate. Library rows like Hendon / Cafelytic Filter / Lotus
+    // all qualify; pick by absence of .rx-card-stock-formula so the test
+    // doesn't pin to any single slug.
+    const card = page
+      .locator(".rx-recipe-card", { hasNot: page.locator(".rx-card-stock-formula") })
+      .first();
+    const slug = await card.getAttribute("data-slug");
+    expect(slug).toBeTruthy();
+
+    const deriveBtn = card.locator(".rx-card-stock-add");
+    await expect(deriveBtn).toBeVisible();
+    await expect(deriveBtn).toHaveText("+ Make a stock");
+
+    // Click navigates to minerals.html#stock-derive=<slug> and opens the
+    // new-stock editor pre-filled with the *derived* formula plus a hint
+    // banner. As with B3a, tryHandleDeriveHash clears the hash immediately,
+    // so assert on form visibility instead.
+    await deriveBtn.click();
+    await page.waitForURL("**/minerals.html**");
+    const form = page.locator("#stock-new-form");
+    await expect(form).toBeVisible();
+    await expect(form.locator("#stock-new-label")).toHaveValue(/.+/);
+    await expect(form.locator(".stock-derive-hint")).toContainText(/Auto-derived from/);
+    // At least one mineral row should have been populated by the derivation.
+    expect(await form.locator(".stock-mineral-row").count()).toBeGreaterThan(0);
+
+    await page.locator('#stock-new-form [data-action="new-save"]').click();
+
+    // Spec persists with the "derived:<recipe-slug>" namespace so the
+    // recipe card flips and a future re-derive affordance can find the
+    // source.
+    const spec = await page.evaluate(() => {
+      const raw = localStorage.getItem("cw_stock_concentrate_specs");
+      if (!raw) return null;
+      const all = JSON.parse(raw);
+      const keys = Object.keys(all);
+      return keys.length ? all[keys[0]] : null;
+    });
+    expect(spec).toBeTruthy();
+    expect(spec.createdFrom).toBe(`derived:${slug}`);
+    expect(Array.isArray(spec.minerals)).toBe(true);
+    expect(spec.minerals.length).toBeGreaterThan(0);
+
+    // Back on the library page, the same card flips from "+ Make a stock"
+    // to "✓ In your pantry" via isStockDerived.
+    await page.goto("/library.html");
+    const derivedCard = page.locator(`.rx-recipe-card[data-slug="${slug}"]`).first();
+    await expect(derivedCard.locator(".rx-card-stock-add")).toHaveCount(0);
+    await expect(derivedCard.locator(".rx-card-stock-imported")).toBeVisible();
+  });
+
+  test('"Re-derive from recipe" overwrites the spec from current target ions (B3b-settings)', async ({
+    page,
+  }) => {
+    // Hermetic — same wipe as the derive test.
+    await page.evaluate(() => {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith("cw_"))
+        .forEach((k) => localStorage.removeItem(k));
+    });
+    await page.reload();
+
+    // Drive a derive flow end-to-end so we have a spec with
+    // createdFrom: "derived:<slug>" to operate on.
+    const card = page
+      .locator(".rx-recipe-card", { hasNot: page.locator(".rx-card-stock-formula") })
+      .first();
+    const slug = await card.getAttribute("data-slug");
+    await card.locator(".rx-card-stock-add").click();
+    await page.waitForURL("**/minerals.html**");
+    await expect(page.locator("#stock-new-form")).toBeVisible();
+    await page.locator('#stock-new-form [data-action="new-save"]').click();
+
+    // Capture the initial derived spec, then bump the underlying library
+    // row's Ca target in-memory and re-derive. The library row is what
+    // getPublicRecipesSync returns, so mutating the in-memory cache before
+    // clicking is enough — the spec's minerals should track the new Ca.
+    const initial = await page.evaluate(() => {
+      const raw = localStorage.getItem("cw_stock_concentrate_specs");
+      const all = raw ? JSON.parse(raw) : {};
+      const k = Object.keys(all)[0];
+      return { key: k, spec: all[k] };
+    });
+    expect(initial.spec.createdFrom).toBe(`derived:${slug}`);
+
+    // Bump Ca on the cached library row, then trigger Re-derive.
+    await page.evaluate((s) => {
+      const recipes = (
+        window as unknown as { getPublicRecipesSync: () => Recipe[] }
+      ).getPublicRecipesSync();
+      const row = (recipes as unknown as Array<{ slug: string; calcium: number }>).find(
+        (r) => r.slug === s,
+      );
+      if (row) row.calcium = (row.calcium || 0) + 50;
+    }, slug);
+
+    await page.locator(`[data-stock-slug="${initial.key}"] [data-action="reset-derived"]`).click();
+
+    const updated = await page.evaluate((k) => {
+      const raw = localStorage.getItem("cw_stock_concentrate_specs");
+      const all = raw ? JSON.parse(raw) : {};
+      return all[k as string];
+    }, initial.key);
+    expect(updated.createdFrom).toBe(initial.spec.createdFrom);
+    expect(updated.label).toBe(initial.spec.label);
+    // Ca bumped by 50 mg/L → calcium-chloride grams should be strictly higher
+    // than the initial derivation. Find the CaCl2 entry in both and compare.
+    const caBefore = (initial.spec.minerals as Array<{ mineralId: string; grams: number }>).find(
+      (m) => m.mineralId === "calcium-chloride",
+    );
+    const caAfter = (updated.minerals as Array<{ mineralId: string; grams: number }>).find(
+      (m) => m.mineralId === "calcium-chloride",
+    );
+    expect(caAfter).toBeTruthy();
+    if (caBefore) {
+      expect(caAfter.grams).toBeGreaterThan(caBefore.grams);
+    } else {
+      // Initial recipe had Ca=0 → no CaCl2 row before, now there's one.
+      expect(caAfter.grams).toBeGreaterThan(0);
+    }
+  });
+
   test("cafelytic-filter appears in Featured AND Cafelytic Originals (default filters)", async ({
     page,
   }) => {

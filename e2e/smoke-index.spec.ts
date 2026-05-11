@@ -61,6 +61,51 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     expect(consoleErrors).toEqual([]);
   });
 
+  test('"+ Make a stock" hides on the unnamed custom scratchpad and on unsaved edits', async ({
+    page,
+  }) => {
+    // The Calculator's third header button — surfaces the recipe-browser
+    // derive flow on any saved target profile. Its visibility is gated by
+    // updateMakeStockBtnVisibility(): hide for the "custom" scratchpad
+    // (no slug to hand off), hide when every primary ion is zero (RO),
+    // and hide while the user has unsaved edits to a saved profile (those
+    // would silently re-derive from stale persisted data on minerals.html,
+    // which CodeRabbit caught on the original PR).
+    const btn = page.locator("#target-make-stock-btn");
+
+    // Welcome modal intercepts pointer events on a fresh visit. Dismiss it
+    // before interacting with anything underneath.
+    const welcomeOk = page.locator("#welcome-modal-ok");
+    if (await welcomeOk.isVisible()) {
+      await welcomeOk.click();
+      await expect(page.locator("#welcome-modal-overlay")).toBeHidden();
+    }
+
+    // Activate a saved library preset with non-zero ions. cafelytic-filter
+    // is a is_starter=true row so it's always in the default rail.
+    await page.locator('#profile-buttons [data-profile="cafelytic-filter"]').click();
+    await expect(btn).toBeVisible();
+
+    // The ion inputs are hidden outside edit mode (updateTargetModeUI in
+    // script.js). Click "Edit Profiles" to expose them — the production flow
+    // to edit a saved profile in place.
+    await page.locator("#target-edit-mode-btn").click();
+    const ca = page.locator("#target-calcium");
+    await expect(ca).toBeVisible();
+
+    // Editing Ca diverges from saved values → hasUnsavedTargetChanges() flips
+    // true → button hides. Reverting brings it back.
+    const saved = await ca.inputValue();
+    await ca.fill("99");
+    await expect(btn).toBeHidden();
+    await ca.fill(saved);
+    await expect(btn).toBeVisible();
+
+    // Switching to the unnamed "custom" scratchpad (no slug) hides the button.
+    await page.locator('#profile-buttons [data-profile="custom"]').click();
+    await expect(btn).toBeHidden();
+  });
+
   test("step 5: FOUC guard — data-theme resolved to light|dark on documentElement", async ({
     page,
   }) => {
