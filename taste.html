@@ -33,6 +33,7 @@
         <h2>Current Water Profile</h2>
         <div class="section-header-buttons">
           <button type="button" id="taste-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
+          <button type="button" id="taste-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this recipe's targets">+ Make a stock</button>
           <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
       </div>
@@ -366,6 +367,7 @@
     // --- Dynamic preset buttons ---
     const tastePresetsContainer = document.getElementById("taste-presets");
     const tasteEditModeBtn = document.getElementById("taste-edit-mode-btn");
+    const tasteMakeStockBtn = document.getElementById("taste-make-stock-btn");
     const tasteReadonlyTags = document.getElementById("taste-readonly-tags");
     const brewMethodToggle = document.getElementById("brew-method-toggle");
     const currentSaveBar = document.getElementById("current-save-bar");
@@ -395,6 +397,7 @@
         if (reset) resetSliders();
         updateCurrentEditBar();
         updateTasteModeUI();
+        updateTasteMakeStockBtnVisibility();
         recalculate();
         return;
       }
@@ -416,6 +419,7 @@
       }
       updateCurrentEditBar();
       updateTasteModeUI();
+      updateTasteMakeStockBtnVisibility();
     }
 
     function renderTastePresets(activePreset = null, options = {}) {
@@ -501,6 +505,35 @@
       }
     }
 
+    // "+ Make a stock" — hand off the active preset's slug to minerals.html,
+    // which re-derives via deriveStockFormulaFromTarget. The Taste Tuner auto-
+    // switches active preset to "custom" on any cur-* edit (see ION_FIELDS
+    // input listener), so a non-custom active preset is by construction
+    // saved-and-unedited — no separate hasUnsavedTargetChanges guard needed.
+    function getTasteActivePresetKey() {
+      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      return activeBtn ? activeBtn.dataset.preset : null;
+    }
+
+    function updateTasteMakeStockBtnVisibility() {
+      if (!tasteMakeStockBtn) return;
+      const key = getTasteActivePresetKey();
+      const hasSlug = key && key !== "custom";
+      const ionFields = ["calcium", "magnesium", "potassium", "sodium", "alkalinity"];
+      const hasIons = ionFields.some(
+        (ion) => (parseFloat(document.getElementById("cur-" + ion).value) || 0) > 0,
+      );
+      tasteMakeStockBtn.style.display = hasSlug && hasIons ? "" : "none";
+    }
+
+    if (tasteMakeStockBtn) {
+      tasteMakeStockBtn.addEventListener("click", () => {
+        const key = getTasteActivePresetKey();
+        if (!key || key === "custom") return;
+        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(key);
+      });
+    }
+
     // --- Preset click handler (event delegation) ---
     tastePresetsContainer.addEventListener("click", (e) => {
       const deleteKey = e.target.dataset.delete;
@@ -527,6 +560,7 @@
         tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
         tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
         updateCurrentEditBar();
+        updateTasteMakeStockBtnVisibility();
         updateTasteModeUI();
         debouncedRecalculate();
       });
