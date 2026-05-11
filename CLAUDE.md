@@ -47,7 +47,7 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 
 ### Analytics on localhost
 
-[analytics-init.js](analytics-init.js) skips loading GA4 when the hostname is `localhost`/`127.0.0.1`, when `navigator.webdriver` is true, or when `localStorage.cafelytic_no_analytics === "1"`. So all dev, Playwright, and Claude Preview MCP traffic is excluded automatically. To exclude a personal browser on the live site: `localStorage.setItem("cafelytic_no_analytics","1")` in devtools.
+[analytics-init.js](analytics-init.js) skips loading GA4 when the hostname is `localhost`/`127.0.0.1`, when `navigator.webdriver` is true, or when `localStorage.cafelytic_no_analytics === "1"`. So all dev, Playwright, and Claude Preview MCP traffic is excluded automatically. To exclude a personal browser on the live site, visit `https://cafelytic.com/?no-analytics=1` once (the script sets the flag and strips the param via `history.replaceState`; subsequent loads run without GA) — `?no-analytics=0` clears it. Devtools fallback: `localStorage.setItem("cafelytic_no_analytics","1")`.
 
 ## Supabase safety
 

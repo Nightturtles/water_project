@@ -1,5 +1,26 @@
 (function () {
   var MEASUREMENT_ID = "G-BGJWVRGJJC";
+  var urlOptOut = false;
+  try {
+    var params = new URLSearchParams(location.search);
+    if (params.has("no-analytics")) {
+      var v = params.get("no-analytics");
+      if (v === "1") {
+        urlOptOut = true;
+        try {
+          localStorage.setItem("cafelytic_no_analytics", "1");
+        } catch (e) {}
+      } else if (v === "0") {
+        try {
+          localStorage.removeItem("cafelytic_no_analytics");
+        } catch (e) {}
+      }
+      params.delete("no-analytics");
+      var q = params.toString();
+      history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash);
+    }
+  } catch (e) {}
+  if (urlOptOut) return;
   var h = location.hostname;
   if (
     h === "localhost" ||
