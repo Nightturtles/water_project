@@ -339,6 +339,18 @@
       return base + "-" + i;
     }
 
+    // Discriminate the two namespaces written into spec.createdFrom by the
+    // save handler — "library:<recipe-slug>" (hand-authored verbatim) vs
+    // "derived:<recipe-slug>" (auto-derived from ion targets). Returns null
+    // for legacy specs (no createdFrom) or unrecognized prefixes so the
+    // delete-only path still applies.
+    function parseStockSourceKind(value) {
+      if (typeof value !== "string") return null;
+      if (value.indexOf("library:") === 0) return "library";
+      if (value.indexOf("derived:") === 0) return "derived";
+      return null;
+    }
+
     function getStockOverLimitMineralIds(spec) {
       if (!spec || !Array.isArray(spec.minerals)) return [];
       const bottleMl = Math.max(0, Number(spec.bottleMl) || 0);
@@ -400,7 +412,7 @@
       const label = spec.label || slug;
       const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
       const doseGramsPerL = Number.isFinite(Number(spec.doseGramsPerL)) ? Number(spec.doseGramsPerL) : 0;
-      const isFromLibrary = !!spec.createdFrom;
+      const sourceKind = parseStockSourceKind(spec.createdFrom);
       const overLimitIds = getStockOverLimitMineralIds(spec);
       const overLimitNames = overLimitIds.map(
         (mid) => (MINERAL_DB[mid] && MINERAL_DB[mid].name) || mid,
@@ -410,12 +422,31 @@
       div.className = "concentrate-item stock-concentrate-item" + (checked ? " selected" : "");
       div.dataset.stockSlug = slug;
 
-      const badgeHtml = isFromLibrary
+      // Two source kinds round-trip through createdFrom:
+      //   "library:<slug>" — hand-authored library formula imported verbatim.
+      //                       Reset overwrites with the canonical mineral list.
+      //   "derived:<slug>" — auto-derived from a recipe's ion targets.
+      //                       "Reset" here means re-running the derivation
+      //                       (deriveStockFormulaFromTarget) against the
+      //                       current recipe — different semantics, different
+      //                       label so users don't confuse them.
+      const badgeHtml = sourceKind === "library"
         ? '<span class="badge badge-library">From library</span>'
-        : "";
-      const actionHtml = isFromLibrary
+        : sourceKind === "derived"
+          ? '<span class="badge badge-library">Derived</span>'
+          : "";
+      // Reset/re-derive is the secondary action for tracked specs; delete is
+      // always available so users can still remove an imported or derived
+      // stock from the pantry. Earlier (#71 + this PR) the secondary action
+      // had been swapping out delete, which CodeRabbit flagged as a
+      // regression for both library and derived rows.
+      const secondaryActionHtml = sourceKind === "library"
         ? '<button type="button" class="stock-reset-link" data-action="reset-library">Reset to library values</button>'
-        : '<button type="button" class="stock-delete-btn" data-action="delete-stock" aria-label="Delete stock solution">×</button>';
+        : sourceKind === "derived"
+          ? '<button type="button" class="stock-reset-link" data-action="reset-derived">Re-derive from recipe</button>'
+          : "";
+      const deleteActionHtml =
+        '<button type="button" class="stock-delete-btn" data-action="delete-stock" aria-label="Delete stock solution">×</button>';
       const warningVisible = overLimitNames.length > 0;
       const warningText = warningVisible
         ? "Above solubility limit for " + overLimitNames.join(", ") + ". Try a larger bottle volume or fewer grams."
@@ -429,7 +460,8 @@
               '<span class="mineral-name">' + escapeHtml(label) + badgeHtml + "</span>" +
             "</div>" +
           "</label>" +
-          actionHtml +
+          secondaryActionHtml +
+          deleteActionHtml +
         "</div>" +
         '<div class="concentrate-inputs">' +
           '<div class="input-group">' +
@@ -698,6 +730,49 @@
           return;
         }
 
+        if (action === "reset-derived") {
+          const specs = loadStockConcentrateSpecs();
+          const spec = specs[slug];
+          if (!spec || !spec.createdFrom) return;
+          const m = String(spec.createdFrom).match(/^derived:(.+)$/);
+          if (!m) return;
+          const recipeSlug = m[1];
+          if (typeof deriveStockFormulaFromTarget !== "function") {
+            alert("Stock derivation is unavailable. Please reload the page and try again.");
+            return;
+          }
+          // Resolve the source recipe. Public library + published customs
+          // come from getPublicRecipesSync; private customs fall through to
+          // getTargetProfileByKey (which merges the 3-tier preset stack).
+          let recipe = null;
+          if (typeof getPublicRecipesSync === "function") {
+            const recipes = getPublicRecipesSync();
+            if (Array.isArray(recipes)) recipe = recipes.find((r) => r && r.slug === recipeSlug);
+          }
+          if (!recipe && typeof getTargetProfileByKey === "function") {
+            recipe = getTargetProfileByKey(recipeSlug);
+          }
+          if (!recipe) {
+            alert('No recipe found for slug "' + recipeSlug + '". It may have been deleted.');
+            return;
+          }
+          const derived = deriveStockFormulaFromTarget(recipe);
+          // Preserve the user's chosen label — the spec slug is keyed off
+          // that label, and changing it here would orphan the cw_selected_concentrates
+          // entry pointing to stock:<oldSlug>.
+          specs[slug] = {
+            label: spec.label,
+            bottleMl: derived.bottleMl,
+            doseGramsPerL: derived.doseGramsPerL,
+            minerals: derived.minerals,
+            createdFrom: spec.createdFrom,
+          };
+          saveStockConcentrateSpecs(specs);
+          renderStockConcentrates();
+          showSaved();
+          return;
+        }
+
         if (action === "add-mineral") {
           const specs = loadStockConcentrateSpecs();
           const spec = specs[slug];
@@ -917,6 +992,19 @@
       if (found) {
         apply(found);
         return;
+      }
+      // Fallback: private user-authored customs (cw_custom_target_profiles)
+      // never appear in getPublicRecipesSync because library-data filters on
+      // is_public=true. getTargetProfileByKey routes through getAllTargetPresets,
+      // which merges customs on top of library rows, so it resolves both.
+      // Inject the slug so the rest of the apply path (which keys off
+      // recipe.slug) works for the local-only case too.
+      if (typeof getTargetProfileByKey === "function") {
+        const custom = getTargetProfileByKey(slug);
+        if (custom) {
+          apply(Object.assign({ slug: slug }, custom));
+          return;
+        }
       }
       // Library data hasn't landed yet (cold load). Wait for the fetch.
       if (typeof window.onLibraryDataLoaded === "function") {
