@@ -1,5 +1,16 @@
 (function () {
   var MEASUREMENT_ID = "G-BGJWVRGJJC";
+  try {
+    var params = new URLSearchParams(location.search);
+    if (params.has("no-analytics")) {
+      var v = params.get("no-analytics");
+      if (v === "1") localStorage.setItem("cafelytic_no_analytics", "1");
+      else if (v === "0") localStorage.removeItem("cafelytic_no_analytics");
+      params.delete("no-analytics");
+      var q = params.toString();
+      history.replaceState(null, "", location.pathname + (q ? "?" + q : "") + location.hash);
+    }
+  } catch (e) {}
   var h = location.hostname;
   if (
     h === "localhost" ||
