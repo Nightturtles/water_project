@@ -429,12 +429,39 @@
     function isStockDirty(slug) {
       return Object.prototype.hasOwnProperty.call(stockDrafts, slug);
     }
+    // If the draft has been edited back to match the persisted spec
+    // (e.g. user typed a new value then restored it, or added then removed
+    // a mineral row), drop the draft so the row stops looking dirty.
+    function syncStockDraftCleanup(slug) {
+      if (!isStockDirty(slug)) return;
+      const saved = loadStockConcentrateSpecs()[slug];
+      if (JSON.stringify(stockDrafts[slug]) === JSON.stringify(saved || {})) {
+        discardStockDraft(slug);
+      }
+    }
     function updateStockDirtyVisibility(itemEl, slug) {
       if (!itemEl) return;
       const dirty = isStockDirty(slug);
       itemEl.classList.toggle("is-dirty", dirty);
       const actions = itemEl.querySelector(".stock-edit-actions");
       if (actions) actions.hidden = !dirty;
+    }
+    // Mirrors the gates enforced in the "+ New stock solution" save handler
+    // so edits can't sneak in placeholder mineral rows or zero bottle/dose
+    // values that the create flow would have rejected.
+    function validateStockSpec(spec) {
+      if (!spec) return "Stock is empty.";
+      const bottleMl = Math.max(0, Number(spec.bottleMl) || 0);
+      const doseGramsPerL = Math.max(0, Number(spec.doseGramsPerL) || 0);
+      if (bottleMl <= 0) return "Bottle volume must be greater than 0.";
+      if (doseGramsPerL <= 0) return "Dose must be greater than 0.";
+      const minerals = Array.isArray(spec.minerals) ? spec.minerals : [];
+      if (minerals.length === 0) return "Add at least one mineral.";
+      for (const m of minerals) {
+        if (!m || !m.mineralId) return "All mineral rows need a mineral selected.";
+        if (!(Number(m.grams) > 0)) return "All mineral rows need a positive grams value.";
+      }
+      return null;
     }
 
     function renderStockRow(slug, spec) {
@@ -666,6 +693,7 @@
           const spec = ensureStockDraft(slug);
           if (!spec || !Array.isArray(spec.minerals) || !spec.minerals[idx]) return;
           spec.minerals[idx].mineralId = target.value;
+          syncStockDraftCleanup(slug);
           updateStockSolubilityWarning(item);
           updateStockDirtyVisibility(item, slug);
         }
@@ -692,6 +720,7 @@
         } else {
           return;
         }
+        syncStockDraftCleanup(slug);
         updateStockSolubilityWarning(item);
         updateStockDirtyVisibility(item, slug);
       });
@@ -831,6 +860,7 @@
           if (!spec) return;
           if (!Array.isArray(spec.minerals)) spec.minerals = [];
           spec.minerals.push({ mineralId: "", grams: 0 });
+          syncStockDraftCleanup(slug);
           refreshStockRecipePane(item);
           updateStockSolubilityWarning(item);
           updateStockDirtyVisibility(item, slug);
@@ -845,6 +875,7 @@
           const spec = ensureStockDraft(slug);
           if (!spec || !Array.isArray(spec.minerals)) return;
           spec.minerals.splice(idx, 1);
+          syncStockDraftCleanup(slug);
           refreshStockRecipePane(item);
           updateStockSolubilityWarning(item);
           updateStockDirtyVisibility(item, slug);
@@ -854,6 +885,11 @@
         if (action === "save-stock") {
           if (!isStockDirty(slug)) return;
           const draft = stockDrafts[slug];
+          const error = validateStockSpec(draft);
+          if (error) {
+            showSaveStatus(error, true);
+            return;
+          }
           const specs = loadStockConcentrateSpecs();
           specs[slug] = draft;
           saveStockConcentrateSpecs(specs);
