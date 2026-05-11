@@ -315,16 +315,25 @@ function highlightProfile(profileName) {
 // "+ Make a stock" surfaces the recipe-browser entry point on the Calculator
 // page so users can derive a stock from any saved target profile — including
 // private customs (cw_custom_target_profiles) that never appear on library.html.
-// Hides when the active profile is the unnamed "custom" scratchpad (no slug to
-// hand off) or when every primary ion is zero (distilled / RO target —
-// nothing to derive). Match recipe-browser.js's hasDerivableIonProfile, but
-// read from the live target inputs so visibility tracks edits.
+// Hides when:
+//   - the active profile is the unnamed "custom" scratchpad (no slug to hand
+//     off to minerals.html)
+//   - every primary ion is zero (distilled / RO target — nothing to derive)
+//   - the user has unsaved edits on a saved profile (handoff carries only the
+//     slug, so minerals.html would re-derive from stale persisted data —
+//     surfacing the action while it would silently produce the wrong stock
+//     is worse than hiding it until the user saves)
+// Match recipe-browser.js's hasDerivableIonProfile, but read from the live
+// target inputs so visibility tracks edits, and use target-alkalinity (the
+// input the user actually sees and edits) rather than target-bicarbonate
+// (hidden, not updated by the live flow).
 function updateMakeStockBtnVisibility() {
   if (!targetMakeStockBtn) return;
   const hasSlug = currentProfile && currentProfile !== "custom";
-  const ions = [targetCa, targetMg, targetK, targetNa, targetHCO3];
+  const ions = [targetCa, targetMg, targetK, targetNa, targetAlk];
   const hasIons = ions.some((el) => (parseFloat(el && el.value) || 0) > 0);
-  targetMakeStockBtn.style.display = hasSlug && hasIons ? "" : "none";
+  const isSaved = !hasUnsavedTargetChanges();
+  targetMakeStockBtn.style.display = hasSlug && hasIons && isSaved ? "" : "none";
 }
 
 function activateProfile(profileName) {
@@ -403,9 +412,14 @@ profileButtonsContainer.addEventListener("click", (e) => {
 // pre-filled. The slug round-trips through the hash; minerals.html falls
 // back to getTargetProfileByKey so private customs (cw_custom_target_profiles)
 // resolve too.
+//
+// updateMakeStockBtnVisibility already hides the button on unsaved edits, but
+// keep a defensive guard here in case a click race lands first (e.g. user
+// types, immediately clicks before the input listener fires).
 if (targetMakeStockBtn) {
   targetMakeStockBtn.addEventListener("click", () => {
     if (!currentProfile || currentProfile === "custom") return;
+    if (hasUnsavedTargetChanges()) return;
     window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
   });
 }

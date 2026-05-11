@@ -435,11 +435,18 @@
         : sourceKind === "derived"
           ? '<span class="badge badge-library">Derived</span>'
           : "";
-      const actionHtml = sourceKind === "library"
+      // Reset/re-derive is the secondary action for tracked specs; delete is
+      // always available so users can still remove an imported or derived
+      // stock from the pantry. Earlier (#71 + this PR) the secondary action
+      // had been swapping out delete, which CodeRabbit flagged as a
+      // regression for both library and derived rows.
+      const secondaryActionHtml = sourceKind === "library"
         ? '<button type="button" class="stock-reset-link" data-action="reset-library">Reset to library values</button>'
         : sourceKind === "derived"
           ? '<button type="button" class="stock-reset-link" data-action="reset-derived">Re-derive from recipe</button>'
-          : '<button type="button" class="stock-delete-btn" data-action="delete-stock" aria-label="Delete stock solution">×</button>';
+          : "";
+      const deleteActionHtml =
+        '<button type="button" class="stock-delete-btn" data-action="delete-stock" aria-label="Delete stock solution">×</button>';
       const warningVisible = overLimitNames.length > 0;
       const warningText = warningVisible
         ? "Above solubility limit for " + overLimitNames.join(", ") + ". Try a larger bottle volume or fewer grams."
@@ -453,7 +460,8 @@
               '<span class="mineral-name">' + escapeHtml(label) + badgeHtml + "</span>" +
             "</div>" +
           "</label>" +
-          actionHtml +
+          secondaryActionHtml +
+          deleteActionHtml +
         "</div>" +
         '<div class="concentrate-inputs">' +
           '<div class="input-group">' +
