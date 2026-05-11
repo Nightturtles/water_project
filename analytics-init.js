@@ -1,7 +1,15 @@
 (function () {
   var MEASUREMENT_ID = "G-BGJWVRGJJC";
   var h = location.hostname;
-  if (h === "localhost" || h === "127.0.0.1" || h === "0.0.0.0" || h === "") return;
+  if (
+    h === "localhost" ||
+    h === "127.0.0.1" ||
+    h === "0.0.0.0" ||
+    h === "::1" ||
+    h === "[::1]" ||
+    h === ""
+  )
+    return;
   if (navigator.webdriver === true) return;
   try {
     if (localStorage.getItem("cafelytic_no_analytics") === "1") return;
