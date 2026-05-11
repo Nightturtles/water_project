@@ -234,6 +234,7 @@
         <button id="recipe-save-target-btn" class="preset-btn">Save</button>
       </div>
       <div class="save-status" id="recipe-save-status" aria-live="polite"></div>
+      <button type="button" id="recipe-make-stock-btn" class="preset-btn" style="display:none;" aria-label="Generate a stock concentrate from this saved profile">+ Make a stock from this profile</button>
       <div class="range-guidance" id="recipe-range-warnings" aria-live="polite"></div>
       <p class="hint">All deltas shown vs Source Water.</p>
     </section>
@@ -296,6 +297,7 @@
         const btn = e.target.closest(".brew-method-btn");
         if (!btn) return;
         if (btn.dataset.brewMethod === activeBrewMethod) return;
+        clearLastSavedTargetState();
         setRecipeBrewMethod(btn.dataset.brewMethod);
       });
       recipeBrewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
@@ -305,8 +307,25 @@
 
     // --- Source water section (shared module) ---
     let lastTotalIons = null;
+    // Slug of the most-recently-saved Final Water Profile. Cleared on any user
+    // input so the displayed profile and the saved slug never drift apart.
+    let lastSavedTargetSlug = null;
+    const recipeMakeStockBtn = document.getElementById("recipe-make-stock-btn");
+    const recipeSaveStatus = document.getElementById("recipe-save-status");
+    function clearLastSavedTargetState() {
+      if (lastSavedTargetSlug === null && (!recipeSaveStatus || !recipeSaveStatus.textContent)) return;
+      lastSavedTargetSlug = null;
+      if (recipeMakeStockBtn) recipeMakeStockBtn.style.display = "none";
+      if (recipeSaveStatus) {
+        recipeSaveStatus.textContent = "";
+        recipeSaveStatus.classList.remove("visible", "error");
+      }
+    }
     const sourceSection = initSourceWaterSection({
-      onChanged: recalculate
+      onChanged: () => {
+        clearLastSavedTargetState();
+        recalculate();
+      }
     });
 
     // --- Load selected minerals + concentrates and build inputs ---
@@ -562,6 +581,7 @@
           }
           saveRecipeConcentrateInputs(recipeConcentrateInputs);
         }
+        clearLastSavedTargetState();
         debouncedRecalculate();
       });
     });
@@ -591,18 +611,21 @@
         el.dataset.currentUnit = nextUnit;
         saveLotusConcentrateUnitFor(key, nextUnit);
         saveRecipeConcentrateInputs(recipeConcentrateInputs);
+        clearLastSavedTargetState();
         recalculate();
       });
     });
     function onVolumeChanged() {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
       refreshStockInputDisplay();
+      clearLastSavedTargetState();
       debouncedRecalculate();
     }
     volumeInput.addEventListener("input", onVolumeChanged);
     volumeUnit.addEventListener("change", () => {
       saveVolumePreference("recipe", volumeInput.value, volumeUnit.value);
       refreshStockInputDisplay();
+      clearLastSavedTargetState();
       recalculate();
     });
 
@@ -705,6 +728,7 @@
       input.addEventListener("input", () => {
         recipeStockGrams[activeStockId] = input.value;
         saveRecipeStockGrams(recipeStockGrams);
+        clearLastSavedTargetState();
         debouncedRecalculate();
       });
     }
@@ -756,6 +780,7 @@
         recipeDispenseMode = mode;
         saveRecipeDispenseMode(mode);
         applyDispenseModeUI();
+        clearLastSavedTargetState();
         recalculate();
       });
     }
@@ -897,7 +922,6 @@
     // --- Save Final Water Profile as Target Water Profile ---
     const recipeTargetNameInput = document.getElementById("recipe-target-name");
     const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
-    const recipeSaveStatus = document.getElementById("recipe-save-status");
 
     function updateRecipeTargetNameError() {
       const errEl = document.getElementById("recipe-target-name-error");
@@ -952,6 +976,9 @@
       updateRecipeTargetNameError();
       showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
 
+      lastSavedTargetSlug = key;
+      if (recipeMakeStockBtn) recipeMakeStockBtn.style.display = "";
+
       // Sync immediately so the save persists even if the user navigates away
       if (typeof syncNow === "function") syncNow();
 
@@ -960,6 +987,13 @@
         showSharePrompt(key);
       }
     });
+
+    if (recipeMakeStockBtn) {
+      recipeMakeStockBtn.addEventListener("click", () => {
+        if (!lastSavedTargetSlug) return;
+        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+      });
+    }
 
     // --- Initial calculation ---
     recalculate();
