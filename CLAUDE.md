@@ -45,6 +45,10 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 
 **Default**: reach for Claude Preview first. Escalate to Playwright only when the test requires what Claude Preview can't do (external origins, multiple contexts, richer assertion primitives).
 
+### Analytics on localhost
+
+[analytics-init.js](analytics-init.js) skips loading GA4 when the hostname is `localhost`/`127.0.0.1`, when `navigator.webdriver` is true, or when `localStorage.cafelytic_no_analytics === "1"`. So all dev, Playwright, and Claude Preview MCP traffic is excluded automatically. To exclude a personal browser on the live site: `localStorage.setItem("cafelytic_no_analytics","1")` in devtools.
+
 ## Supabase safety
 
 Every change that touches `sync.js`, `storage.js`, or row-level-security migrations has user-data risk. The bugs fixed in commits `6d8cd63`, `6464fdb`, `9f89a2e` all slipped past review and cost users recipes. Before merging anything in those files:
