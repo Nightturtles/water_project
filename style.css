@@ -2194,7 +2194,8 @@ footer {
   }
 
   .section-header-actions .profile-edit-toggle,
-  .section-header-actions .profile-add-from-library {
+  .section-header-actions .profile-add-from-library,
+  .section-header-actions .profile-make-stock {
     width: auto;
     flex: 0 0 auto;
     min-height: 2rem;
@@ -2367,7 +2368,8 @@ footer {
 
 @media (max-width: 350px) {
   .section-header-actions .profile-edit-toggle,
-  .section-header-actions .profile-add-from-library {
+  .section-header-actions .profile-add-from-library,
+  .section-header-actions .profile-make-stock {
     width: auto;
     flex: 0 0 auto;
     min-height: 2rem;
