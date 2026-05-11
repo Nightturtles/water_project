@@ -64,6 +64,10 @@ module.exports = tseslint.config(
       // script tag before the Sentry CDN loader). Not under @ts-check yet,
       // but benefits from the same style rules.
       "sentry-init.js",
+      // analytics-init.js: gates GA4 loading by hostname / webdriver /
+      // localStorage opt-out so dev + Playwright traffic doesn't inflate
+      // Cafelytic's GA active-user count. Same classic-script pattern.
+      "analytics-init.js",
       // Wave D recipe-browser — classic script loaded by library.html,
       // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
       // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
