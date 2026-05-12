@@ -245,7 +245,7 @@ function renderProfileButtons() {
     btn.className = "profile-btn";
     btn.dataset.profile = key;
     btn.textContent = profile.label;
-    if (isTargetEditMode && key !== "custom") {
+    if (isTargetEditMode && key !== "custom" && key !== "library") {
       const del = document.createElement("span");
       del.className = "preset-delete";
       del.dataset.delete = key;
@@ -340,6 +340,21 @@ function activateProfile(profileName) {
   const visibleProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
   if (!visibleProfiles[profileName]) {
     profileName = findFallbackPreset(visibleProfiles);
+  }
+  // "library" is an action pseudo-tile, not a real profile: opening the picker
+  // must not mutate currentProfile or persist a saved-preset name (would
+  // auto-open the picker on next load).
+  if (profileName === "library") {
+    if (typeof window.showLibraryPicker === "function") {
+      window.showLibraryPicker({
+        brewMethod: activeBrewMethod,
+        onAdd: (slug) => {
+          renderProfileButtons();
+          activateProfile(slug);
+        },
+      });
+    }
+    return;
   }
   currentProfile = profileName;
   saveTargetPresetName(profileName);
@@ -527,19 +542,6 @@ if (targetEditModeBtn) {
     isTargetEditMode = !isTargetEditMode;
     renderProfileButtons();
     updateTargetModeUI();
-  });
-}
-
-const targetAddFromLibraryBtn = document.getElementById("target-add-from-library-btn");
-if (targetAddFromLibraryBtn && typeof window.showLibraryPicker === "function") {
-  targetAddFromLibraryBtn.addEventListener("click", () => {
-    window.showLibraryPicker({
-      brewMethod: activeBrewMethod,
-      onAdd: (slug) => {
-        renderProfileButtons();
-        activateProfile(slug);
-      }
-    });
   });
 }
 

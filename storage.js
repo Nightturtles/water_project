@@ -1141,7 +1141,8 @@ function getAllTargetPresets() {
     result[ck] = cv;
   }
 
-  result["custom"] = { label: "+ Add Custom" };
+  result["custom"] = { label: "+ Custom" };
+  result["library"] = { label: "+ From Library" };
   targetPresetsCache = result;
   return targetPresetsCache;
 }
@@ -1215,7 +1216,7 @@ function getTargetPresetsForBrewMethod(method) {
   /** @type {Record<string, TargetProfile>} */
   const filtered = {};
   for (const [key, profile] of Object.entries(allPresets)) {
-    if (key === "custom") {
+    if (key === "custom" || key === "library") {
       filtered[key] = profile;
       continue;
     }
@@ -1224,7 +1225,10 @@ function getTargetPresetsForBrewMethod(method) {
     }
   }
   if (!filtered.custom) {
-    filtered.custom = { label: "+ Add Custom" };
+    filtered.custom = { label: "+ Custom" };
+  }
+  if (!filtered.library) {
+    filtered.library = { label: "+ From Library" };
   }
   return filtered;
 }

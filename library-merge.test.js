@@ -92,16 +92,19 @@ beforeEach(resetState);
 // ---------------------------------------------------------------------------
 
 describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
-  test("empty library + no custom → rail is shim + '+ Add Custom'", () => {
+  test("empty library + no custom → rail is shim + '+ Custom' + '+ From Library'", () => {
     const result = getAllTargetPresets();
     // Shim contains 5 entries (constants.js TARGET_PRESETS).
     expect(Object.keys(result)).toContain("sca");
     expect(Object.keys(result)).toContain("cafelytic-filter");
     // Ion values come from the shim row verbatim.
     expect(result["sca"].calcium).toBe(51);
-    // "+ Add Custom" always present.
+    // Action pseudo-tiles always present: "+ Custom" (scratch mode) and
+    // "+ From Library" (opens the library picker).
     expect(result["custom"]).toBeDefined();
-    expect(result["custom"].label).toBe("+ Add Custom");
+    expect(result["custom"].label).toBe("+ Custom");
+    expect(result["library"]).toBeDefined();
+    expect(result["library"].label).toBe("+ From Library");
   });
 
   test("library row overrides shim at the same slug", () => {
