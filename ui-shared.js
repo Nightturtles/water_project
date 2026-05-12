@@ -659,7 +659,7 @@ function updateRestoreSourceBar() {
 
 function findFallbackPreset(allPresets) {
   const keys = Object.keys(allPresets);
-  return keys.find(function(k) { return k !== "custom"; }) || "custom";
+  return keys.find(function(k) { return k !== "custom" && k !== "library"; }) || "custom";
 }
 
 // --- Safe radio selection (Bug 6) ---

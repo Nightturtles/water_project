@@ -24,7 +24,6 @@
       <div class="section-header-actions">
         <h2>Current Water Profile</h2>
         <div class="section-header-buttons">
-          <button type="button" id="taste-add-from-library-btn" class="preset-btn profile-add-from-library">Add From Library</button>
           <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
       </div>
@@ -432,7 +431,7 @@
           }
         }
         btn.textContent = profile.label;
-        if (isTasteEditMode && key !== "custom") {
+        if (isTasteEditMode && key !== "custom" && key !== "library") {
           const del = document.createElement("span");
           del.className = "preset-delete";
           del.dataset.delete = key;
@@ -443,9 +442,12 @@
       }
       const keys = Object.keys(allPresets);
       const savedPreset = loadTargetPresetName(activeBrewMethod);
-      const initialKey = (activePreset && keys.includes(activePreset))
+      // Defensive: "library" is an action tile, never a valid initial selection
+      // even if it somehow leaks into a saved preset name.
+      const realKeys = keys.filter((k) => k !== "library");
+      const initialKey = (activePreset && activePreset !== "library" && realKeys.includes(activePreset))
         ? activePreset
-        : (keys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
+        : (realKeys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
       if (initialKey) activateTastePreset(initialKey, { resetSliders });
     }
 
@@ -553,6 +555,19 @@
 
       const btn = e.target.closest(".taste-preset-btn");
       if (!btn) return;
+      // "library" is an action pseudo-tile, not a real preset: open the picker
+      // and skip activation so it never becomes the active preset.
+      if (btn.dataset.preset === "library") {
+        if (typeof window.showLibraryPicker === "function") {
+          window.showLibraryPicker({
+            brewMethod: activeBrewMethod,
+            onAdd: (slug) => {
+              renderTastePresets(slug, { resetSliders: false });
+            },
+          });
+        }
+        return;
+      }
       activateTastePreset(btn.dataset.preset, { resetSliders: true });
     });
 
@@ -894,18 +909,7 @@
         updateTasteModeUI();
       });
     }
-    const tasteAddFromLibraryBtn = document.getElementById("taste-add-from-library-btn");
-    if (tasteAddFromLibraryBtn && typeof window.showLibraryPicker === "function") {
-      tasteAddFromLibraryBtn.addEventListener("click", () => {
-        window.showLibraryPicker({
-          brewMethod: activeBrewMethod,
-          onAdd: (slug) => {
-            renderTastePresets(slug, { resetSliders: false });
-          }
-        });
-      });
-    }
-    // Optional deep-link from recipe-browser hero ("Use this recipe"): preset
+// Optional deep-link from recipe-browser hero ("Use this recipe"): preset
     // names the slug to activate, method pre-switches the brew toggle when the
     // target recipe is method-specific (espresso-only recipes wouldn't render
     // under a filter-mode rail).
