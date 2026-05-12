@@ -294,17 +294,17 @@ const TARGET_PRESETS = {
   "cafelytic-filter": {
     label: "Cafelytic Filter",
     brewMethod: "filter",
-    calcium: 2,
-    magnesium: 11,
-    alkalinity: 11,
-    potassium: 9,
+    calcium: 7,
+    magnesium: 18,
+    alkalinity: 20,
+    potassium: 16,
     sodium: 0,
     sulfate: 0,
-    chloride: 36,
-    bicarbonate: 13.41,
+    chloride: 63,
+    bicarbonate: 24.39,
     description:
       "Cafelytic in-house light-roast filter recipe. Direct dosing per liter: " +
-      "0.007g CaCl\u2082\u00b72H\u2082O + 0.092g MgCl\u2082\u00b76H\u2082O + 0.023g KHCO\u2083. " +
+      "0.024g CaCl\u2082\u00b72H\u2082O + 0.148g MgCl\u2082\u00b76H\u2082O + 0.040g KHCO\u2083. " +
       "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
   },
   "cafelytic-espresso": {

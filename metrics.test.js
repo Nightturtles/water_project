@@ -96,10 +96,12 @@ describe("toStableBicarbonateFromAlkalinity", () => {
 });
 
 describe("evaluateWaterProfileRanges — preset calibration", () => {
-  // These cases pin the calibration: the canonical SCA reference must produce
-  // zero findings, and famous extreme recipes (RPavlis, Cafelytic) must fire
-  // warn-tier findings that explain why the water is unusual — never danger.
-  // No band finding may emit `info` (info tier was removed for credibility).
+  // These cases pin the calibration: known recipes (SCA, RPavlis, Cafelytic
+  // Filter) must produce the expected severity profile. SCA and Cafelytic
+  // Filter sit cleanly within bands; RPavlis is an extreme recipe and must
+  // fire warn-tier findings (low GH/Ca/Mg) that explain why the water is
+  // unusual — never danger. No band finding may emit `info` (info tier was
+  // removed for credibility).
   const noSources = { alkalinitySources: [], calciumSource: null, magnesiumSource: null };
 
   test("SCA Standard (Ca=51, Mg=17, alk≈40) produces zero findings", () => {
@@ -123,24 +125,22 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
     expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
   });
 
-  test("Cafelytic Filter (Ca=2, Mg=11, KH≈11) fires one warn (low Ca) — KH=11 stays silent", () => {
-    const ions = { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 };
+  test("Cafelytic Filter (Ca=7, Mg=18, KH=20) sits within all bands", () => {
+    const ions = { calcium: 7, magnesium: 18, potassium: 16, chloride: 63, bicarbonate: 24.39 };
     const { findings } = metrics.evaluateWaterProfileRanges(ions, {
       alkalinitySources: ["potassium-bicarbonate"],
       calciumSource: "calcium-chloride",
       magnesiumSource: "magnesium-chloride",
     });
     expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
-    const warns = findings.filter((f) => f.severity === "warn");
-    expect(warns).toHaveLength(1);
-    expect(warns[0].message).toMatch(/^Calcium is too low/);
+    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
   });
 
   test("no preset emits an info-tier band finding (info tier removed)", () => {
     const samples = [
       { calcium: 51, magnesium: 17, bicarbonate: 48.77 }, // SCA
       { potassium: 39, bicarbonate: 60.9 }, // RPavlis
-      { calcium: 2, magnesium: 11, potassium: 9, chloride: 36, bicarbonate: 13.41 }, // Cafelytic Filter
+      { calcium: 7, magnesium: 18, potassium: 16, chloride: 63, bicarbonate: 24.39 }, // Cafelytic Filter
     ];
     for (const ions of samples) {
       const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
