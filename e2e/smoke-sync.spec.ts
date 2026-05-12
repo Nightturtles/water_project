@@ -35,6 +35,8 @@ import { test, expect, type Browser, type BrowserContext, type Page } from "@pla
 // Load `.env.test` manually so we don't add a dotenv runtime dep for one file.
 // Strips a single matched pair of surrounding " or ' from values so users
 // can write either `KEY=value` or `KEY="value"` per common .env conventions.
+// Falls back to process.env so CI can plumb credentials via the workflow's
+// `env:` block (GitHub Actions repo secrets) without materializing a file.
 function loadEnvTest(): { email?: string; password?: string } {
   const candidates = [
     path.join(__dirname, "..", ".env.test"),
@@ -64,10 +66,23 @@ function loadEnvTest(): { email?: string; password?: string } {
     }
     return { email: out.CAFELYTIC_TEST_EMAIL, password: out.CAFELYTIC_TEST_PASSWORD };
   }
+  if (process.env.CAFELYTIC_TEST_EMAIL || process.env.CAFELYTIC_TEST_PASSWORD) {
+    return {
+      email: process.env.CAFELYTIC_TEST_EMAIL,
+      password: process.env.CAFELYTIC_TEST_PASSWORD,
+    };
+  }
   return {};
 }
 
 const { email: EMAIL, password: PASSWORD } = loadEnvTest();
+
+// Per-poll budget for "wait for Realtime push to land". Supabase Realtime is
+// fast in the steady state (~250ms PULL_DEBOUNCE_MS + RTT, typically <2s),
+// but the channel-subscribe and post-write paths can spike to ~30s under
+// occasional Supabase latency. 60s gives 2x headroom; the describe-level
+// 90s test timeout still leaves ~30s for goto + evaluate round-trips.
+const REALTIME_POLL_TIMEOUT_MS = 60_000;
 
 test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2, 4, 7, 9)", () => {
   test.skip(
@@ -75,7 +90,13 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     "CAFELYTIC_TEST_EMAIL/CAFELYTIC_TEST_PASSWORD missing in .env.test",
   );
 
-  test.setTimeout(90_000);
+  // Per-test timeout 90s: pollPage budgets up to 30s for Realtime push, and
+  // tests do non-trivial work outside the poll (page navigation, evaluate
+  // round-trips). The playwright.config.ts default of 30s races pollPage's
+  // budget and surfaces as "Test timeout of 30000ms exceeded" mid-poll.
+  // describe.configure is the documented API; a bare test.setTimeout() at
+  // describe-body level is a no-op (it targets "the currently running test").
+  test.describe.configure({ timeout: 90_000 });
 
   let browser: Browser;
   let contextA: BrowserContext;
@@ -124,6 +145,27 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       .toBe(true);
   }
 
+  // Wait until the page's Supabase Realtime channel reaches `joined` state.
+  // This is the deterministic signal that postgres_changes subscriptions
+  // are wired and ready to receive broadcasts. Used in place of fixed
+  // sleeps after sign-in and after navigation: a fixed wait either races
+  // ahead (channel still joining → broadcasts missed) or wastes time
+  // (channel ready in 500 ms but we wait 8 s anyway).
+  async function waitForRealtimeJoined(page: Page, timeoutMs = 15_000) {
+    await expect
+      .poll(
+        async () => {
+          return await page.evaluate(() => {
+            // @ts-expect-error - global from supabase-client.js
+            const channels = window.supabaseClient?.getChannels?.() ?? [];
+            return channels.some((c: { state?: string }) => c.state === "joined");
+          });
+        },
+        { timeout: timeoutMs, intervals: [250, 500, 1000] },
+      )
+      .toBe(true);
+  }
+
   test.beforeAll(async ({ browser: b }) => {
     browser = b;
     contextA = await browser.newContext();
@@ -165,14 +207,12 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     await pageB.goto("/index.html");
     await pageA.goto("/index.html");
 
-    // Wait for B's Realtime channel to subscribe before later tests rely
-    // on it. subscribeToCloudChanges runs as the last step of initSync;
-    // the channel transitions to SUBSCRIBED after a round-trip to Supabase.
-    // Polling a sentinel state on `window` set by the SUBSCRIBED handler
-    // would be ideal, but sync.js doesn't expose one — so we fall back to
-    // a fixed settle window. 3 s is enough on a healthy network and small
-    // enough to fail fast if Realtime is genuinely unavailable.
-    await pageB.waitForTimeout(3_000);
+    // Wait for B's Realtime channel to reach `joined` state — the
+    // deterministic readiness signal from @supabase/realtime-js. Without
+    // this, A's subsequent write can outrun B's channel.subscribe round-
+    // trip, postgres_changes broadcasts miss B entirely, and pollPage
+    // times out waiting on data that never arrives.
+    await waitForRealtimeJoined(pageB);
 
     const loginLink = pageA.locator('a[href*="login.html"]');
     await expect(loginLink).toHaveCount(0);
@@ -215,7 +255,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return sw && Number(sw.calcium);
       },
       (v) => v === 43,
-      30_000,
+      REALTIME_POLL_TIMEOUT_MS,
     );
   });
 
@@ -241,7 +281,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return typeof loadAddedTargetPresets === "function" ? loadAddedTargetPresets() : [];
       },
       (v: string[]) => v.includes(candidate),
-      30_000,
+      REALTIME_POLL_TIMEOUT_MS,
     );
 
     // Cleanup so re-runs don't accumulate junk in the test user's selections.
@@ -260,8 +300,12 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
 
     // Ensure both contexts are on a page that loads storage.js. /index.html
     // works for both — recipe-browser/sync/storage all initialize there.
+    // These goto's reload the page and re-run initSync; B's Realtime
+    // channel gets torn down and resubscribed. Wait for channel readiness
+    // before proceeding, mirroring the Step 1 warmup.
     await pageA.goto("/index.html");
     await pageB.goto("/index.html");
+    await waitForRealtimeJoined(pageB);
 
     // Create on A.
     await pageA.evaluate(
@@ -296,7 +340,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return loadCustomTargetProfiles();
       },
       (profiles: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(profiles, slug),
-      30_000,
+      REALTIME_POLL_TIMEOUT_MS,
     );
 
     // Delete on A.
@@ -315,7 +359,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         return loadCustomTargetProfiles();
       },
       (profiles: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(profiles, slug),
-      30_000,
+      REALTIME_POLL_TIMEOUT_MS,
     );
 
     // Resurrection guard: tombstone present on B + Supabase row gone.
