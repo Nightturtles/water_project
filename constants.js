@@ -408,6 +408,7 @@ const RESERVED_TARGET_KEYS = new Set([
   ...BUILTIN_TARGET_KEYS,
   ...LEGACY_RESERVED_TARGET_KEYS,
   "custom",
+  "library",
 ]);
 /** @type {Record<string, string>} */
 const BUILTIN_TARGET_LABELS = {};

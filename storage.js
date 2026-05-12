@@ -448,8 +448,13 @@ function loadTargetPresetName(brewMethod) {
   // replaces the prior "always return cafelytic-filter then let
   // findFallbackPreset correct it" pattern — the default is now explicit
   // per mode instead of relying on a silent downstream correction.
+  //
+  // "library" is an action pseudo-tile, not a real profile. The click
+  // handlers never persist it, but devtools tampering or a future
+  // regression could leave it stuck in storage; treat it as missing so a
+  // bad value can't auto-open the picker on every page load.
   const saved = safeGetItem("cw_target_preset");
-  if (saved) return saved;
+  if (saved && saved !== "library") return saved;
   return brewMethod === "espresso" ? "cafelytic-espresso" : "cafelytic-filter";
 }
 
