@@ -222,26 +222,32 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       // push, and the page-load initSync already returned early (no session
       // at IIFE-eval time).
       await page.goto("/login.html");
-      const signedIn = await page.evaluate(
+      // Throw on cleanup failure rather than swallow: if cleanup can't run,
+      // tests will run against a polluted account and fail in confusing
+      // downstream ways. Failing here gives a clear setup-failure signal.
+      await page.evaluate(
         async (creds) => {
           // @ts-expect-error - global from supabase-client.js
           const { data, error } = await window.supabaseClient.auth.signInWithPassword({
             email: creds.email,
             password: creds.password,
           });
-          return !!data?.session && !error;
+          if (error) {
+            throw new Error("cleanup sign-in failed: " + (error.message || String(error)));
+          }
+          if (!data?.session) {
+            throw new Error("cleanup sign-in returned no session");
+          }
         },
         { email: EMAIL!, password: PASSWORD! },
       );
-      if (!signedIn) {
-        console.warn("[smoke-sync] cleanup: sign-in failed; skipping");
-        return;
-      }
       const deleted = await page.evaluate(async () => {
         // @ts-expect-error - global from supabase-client.js
         const sess = await window.supabaseClient.auth.getSession();
         const userId = sess?.data?.session?.user?.id;
-        if (!userId) return 0;
+        if (!userId) {
+          throw new Error("cleanup delete: no session at delete time");
+        }
         let total = 0;
         for (const prefix of ["smoke-", "smoke5-", "smoke6-"]) {
           // @ts-expect-error - global from supabase-client.js
@@ -250,6 +256,14 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
             .delete({ count: "exact" })
             .eq("user_id", userId)
             .like("slug", prefix + "%");
+          if (res.error) {
+            throw new Error(
+              "cleanup delete failed for prefix=" +
+                prefix +
+                ": " +
+                (res.error.message || String(res.error)),
+            );
+          }
           if (res.count) total += res.count;
         }
         return total;

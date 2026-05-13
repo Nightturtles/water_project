@@ -586,22 +586,33 @@
       safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(newTargetSnapshots));
     }
 
-    // Refresh single-row lastPushed snapshots so the next pushAllToCloud
-    // doesn't re-upload everything we just pulled. We rebuild the would-be
-    // payload from localStorage (which we just updated above), so the
-    // snapshot matches exactly what buildSettingsPayload/buildSelectionsPayload
-    // would produce on the next push.
-    safeSetItem(
-      LAST_PUSHED_SETTINGS_KEY,
-      snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
-    );
-    safeSetItem(
-      LAST_PUSHED_SELECTIONS_KEY,
-      snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
-    );
-
-    // Invalidate all storage caches so next read picks up the new data
+    // Invalidate all storage caches so next read picks up the new data.
+    // Done BEFORE building the lastPushed snapshots below, so the load*()
+    // helpers inside buildSettingsPayload/buildSelectionsPayload read the
+    // just-pulled values (some load helpers use module-level caches that
+    // would otherwise return pre-pull state).
     if (typeof invalidateAllCaches === "function") invalidateAllCaches();
+
+    // Refresh single-row lastPushed snapshots so the next pushAllToCloud
+    // doesn't re-upload data that already matches cloud. Guard each on the
+    // corresponding pull actually returning a row — if cloud has no
+    // user_settings/user_selections row yet, we have NOT pushed it, and
+    // claiming we did would let the next push skip the seed-upsert and
+    // leave the row missing forever. Snapshots are built via the same
+    // buildXxxPayload + snapshotForCompare path push uses, so a no-op push
+    // immediately after pull is correctly detected as no-op.
+    if (settings) {
+      safeSetItem(
+        LAST_PUSHED_SETTINGS_KEY,
+        snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
+      );
+    }
+    if (selections) {
+      safeSetItem(
+        LAST_PUSHED_SELECTIONS_KEY,
+        snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
+      );
+    }
   }
 
   // --- Returns true if local data is entirely default (no user customization) ---
