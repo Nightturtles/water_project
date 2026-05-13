@@ -46,9 +46,6 @@ jobs:
         # System deps aren't cached by the browser cache; install them only.
         run: npx playwright install-deps chromium
       - run: npm run test:e2e
-        env:
-          CAFELYTIC_TEST_EMAIL: ${{ secrets.CAFELYTIC_TEST_EMAIL }}
-          CAFELYTIC_TEST_PASSWORD: ${{ secrets.CAFELYTIC_TEST_PASSWORD }}
       - if: failure()
         uses: actions/upload-artifact@v4
         with:
