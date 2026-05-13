@@ -96,7 +96,16 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
   // budget and surfaces as "Test timeout of 30000ms exceeded" mid-poll.
   // describe.configure is the documented API; a bare test.setTimeout() at
   // describe-body level is a no-op (it targets "the currently running test").
-  test.describe.configure({ timeout: 90_000 });
+  //
+  // mode: "serial" — these tests share state via beforeAll-allocated
+  // contexts and rely on Step 1's signin + navigation. In default mode,
+  // Playwright restarts the worker on any test failure, beforeAll runs
+  // again in the new worker (pageA/pageB are fresh at about:blank), and
+  // only the failed test retries — so e.g. Step 7's retry sees pageA
+  // at about:blank and dies with "addAddedTargetPreset is not defined".
+  // Serial mode retries the entire describe from Step 1, so navigation
+  // setup re-runs before the retried assertion.
+  test.describe.configure({ mode: "serial", timeout: 90_000 });
 
   let browser: Browser;
   let contextA: BrowserContext;
