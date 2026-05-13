@@ -154,29 +154,121 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       .toBe(true);
   }
 
-  // Wait until the page's Supabase Realtime channel reaches `joined` state.
-  // This is the deterministic signal that postgres_changes subscriptions
-  // are wired and ready to receive broadcasts. Used in place of fixed
-  // sleeps after sign-in and after navigation: a fixed wait either races
-  // ahead (channel still joining → broadcasts missed) or wastes time
-  // (channel ready in 500 ms but we wait 8 s anyway).
-  async function waitForRealtimeJoined(page: Page, timeoutMs = 15_000) {
-    await expect
-      .poll(
-        async () => {
-          return await page.evaluate(() => {
-            // @ts-expect-error - global from supabase-client.js
-            const channels = window.supabaseClient?.getChannels?.() ?? [];
-            return channels.some((c: { state?: string }) => c.state === "joined");
+  // Wait until the page's sync layer reaches a deterministic ready state by
+  // awaiting two promises that sync.js exposes on `window`:
+  //
+  //   - initSyncPromise: push-then-pull on page load is done and
+  //     subscribeToCloudChanges has been called.
+  //   - realtimeSubscribedPromise: first SUBSCRIBED status from the Realtime
+  //     channel — the protocol-level signal that postgres_changes events
+  //     will now be delivered (distinct from channel.state === "joined",
+  //     which is just the WebSocket-level handshake and fires earlier).
+  //
+  // Replaces a prior `joined`-state poll. That helper closed only half the
+  // race: page.goto resolves on `load`, but sync.js's IIFE keeps running
+  // (getSession → push → pull → subscribe) asynchronously. A test write
+  // between `load` and the end of initSync's pull would be silently stomped
+  // when pull landed. Awaiting initSyncPromise closes that race; awaiting
+  // realtimeSubscribedPromise closes the second race where Realtime joined
+  // but the SUBSCRIBED handshake hadn't completed before the publisher
+  // broadcast.
+  async function waitForSyncReady(page: Page, timeoutMs = 30_000) {
+    // The IIFE runs synchronously during script eval, so by the time
+    // page.goto resolves on `load` the globals SHOULD be set. The 5s poll
+    // is a safety net in case the order shifts; if it ever fires, that's
+    // a signal something changed in sync.js's bottom-of-IIFE wiring.
+    await page.waitForFunction(
+      () =>
+        typeof window.initSyncPromise !== "undefined" &&
+        typeof window.realtimeSubscribedPromise !== "undefined",
+      null,
+      { timeout: 5_000 },
+    );
+    await page.evaluate(async (ms) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const timeoutP = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`sync not ready in ${ms}ms`)), ms);
+      });
+      try {
+        await Promise.race([
+          Promise.all([window.initSyncPromise, window.realtimeSubscribedPromise]),
+          timeoutP,
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }, timeoutMs);
+  }
+
+  // One-time cleanup before the suite runs: prior failed runs may have leaked
+  // smoke-* slugs into the test user's target_profiles. Step 9's create-
+  // then-delete path skips cleanup if any assertion fails before reaching
+  // the delete; over many failed runs the accumulation grows and turns
+  // every fresh page load's initSync.pushAllToCloud into a postgres_changes
+  // broadcast storm (one event per upserted row), which races later test
+  // assertions. The Step 7/9 try/finally blocks below prevent future leaks;
+  // this beforeAll cleanup catches pre-existing accumulation. RLS scopes
+  // the delete to the test user.
+  async function cleanupStaleJunk(b: Browser): Promise<void> {
+    const ctx = await b.newContext();
+    const page = await ctx.newPage();
+    try {
+      // Load /login.html because it pulls in supabase-client.js. We do NOT
+      // submit the form: that would redirect to /index.html, whose IIFE
+      // runs initSync.pushAllToCloud after handleFirstLoginMerge.pullFromCloud
+      // has populated localStorage with the very junk we're about to delete,
+      // re-upserting it back to cloud and racing our DELETE. Signing in via
+      // the supabase-js API directly avoids both side effects: no pull, no
+      // push, and the page-load initSync already returned early (no session
+      // at IIFE-eval time).
+      await page.goto("/login.html");
+      const signedIn = await page.evaluate(
+        async (creds) => {
+          // @ts-expect-error - global from supabase-client.js
+          const { data, error } = await window.supabaseClient.auth.signInWithPassword({
+            email: creds.email,
+            password: creds.password,
           });
+          return !!data?.session && !error;
         },
-        { timeout: timeoutMs, intervals: [250, 500, 1000] },
-      )
-      .toBe(true);
+        { email: EMAIL!, password: PASSWORD! },
+      );
+      if (!signedIn) {
+        console.warn("[smoke-sync] cleanup: sign-in failed; skipping");
+        return;
+      }
+      const deleted = await page.evaluate(async () => {
+        // @ts-expect-error - global from supabase-client.js
+        const sess = await window.supabaseClient.auth.getSession();
+        const userId = sess?.data?.session?.user?.id;
+        if (!userId) return 0;
+        let total = 0;
+        for (const prefix of ["smoke-", "smoke5-", "smoke6-"]) {
+          // @ts-expect-error - global from supabase-client.js
+          const res = await window.supabaseClient
+            .from("target_profiles")
+            .delete({ count: "exact" })
+            .eq("user_id", userId)
+            .like("slug", prefix + "%");
+          if (res.count) total += res.count;
+        }
+        return total;
+      });
+      if (deleted > 0) {
+        console.log(`[smoke-sync] cleanup: deleted ${deleted} stale smoke-* slugs`);
+      }
+    } finally {
+      await ctx.close();
+    }
   }
 
   test.beforeAll(async ({ browser: b }) => {
     browser = b;
+
+    if (EMAIL && PASSWORD) {
+      await cleanupStaleJunk(browser);
+    }
+
     contextA = await browser.newContext();
     contextB = await browser.newContext();
     pageA = await contextA.newPage();
@@ -216,12 +308,16 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     await pageB.goto("/index.html");
     await pageA.goto("/index.html");
 
-    // Wait for B's Realtime channel to reach `joined` state — the
-    // deterministic readiness signal from @supabase/realtime-js. Without
-    // this, A's subsequent write can outrun B's channel.subscribe round-
-    // trip, postgres_changes broadcasts miss B entirely, and pollPage
-    // times out waiting on data that never arrives.
-    await waitForRealtimeJoined(pageB);
+    // Wait for B's sync layer to reach a deterministic ready state: push+pull
+    // settled AND first SUBSCRIBED received. Without this, A's subsequent
+    // write (made on a different page in Step 2) can outrun B's
+    // channel.subscribe round-trip and postgres_changes broadcasts miss B
+    // entirely. We don't wait on A here because A navigates to /recipe.html
+    // in Step 2, which tears down this page's IIFE; the /recipe.html-side
+    // waitForSyncReady there is what actually matters for A. Awaiting both
+    // pages concurrently here also doubles Supabase load (each runs push +
+    // pull), which was observed to make later steps more flaky, not less.
+    await waitForSyncReady(pageB);
 
     const loginLink = pageA.locator('a[href*="login.html"]');
     await expect(loginLink).toHaveCount(0);
@@ -229,6 +325,10 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
 
   test("Step 2: source-water write persists locally and pushes to Supabase", async () => {
     await pageA.goto("/recipe.html");
+    // The recipe.html load runs a fresh sync.js IIFE — wait for its
+    // initSync push-then-pull to settle before the test write, otherwise
+    // the test write can race the pull and get stomped.
+    await waitForSyncReady(pageA);
     await pageA.evaluate(() => {
       // @ts-expect-error - global from storage.js
       saveSourceWater({
@@ -283,23 +383,30 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       if (typeof window.syncNow === "function") return window.syncNow();
     }, candidate);
 
-    await pollPage(
-      pageB,
-      () => {
-        // @ts-expect-error - global from storage.js
-        return typeof loadAddedTargetPresets === "function" ? loadAddedTargetPresets() : [];
-      },
-      (v: string[]) => v.includes(candidate),
-      REALTIME_POLL_TIMEOUT_MS,
-    );
-
-    // Cleanup so re-runs don't accumulate junk in the test user's selections.
-    await pageA.evaluate((slug) => {
-      // @ts-expect-error - global from storage.js
-      if (typeof removeAddedTargetPreset === "function") removeAddedTargetPreset(slug);
-      // @ts-expect-error - global from sync.js
-      if (typeof window.syncNow === "function") return window.syncNow();
-    }, candidate);
+    try {
+      await pollPage(
+        pageB,
+        () => {
+          // @ts-expect-error - global from storage.js
+          return typeof loadAddedTargetPresets === "function" ? loadAddedTargetPresets() : [];
+        },
+        (v: string[]) => v.includes(candidate),
+        REALTIME_POLL_TIMEOUT_MS,
+      );
+    } finally {
+      // Always clean up so re-runs (and retries) don't accumulate junk in
+      // the test user's selections, even if the pollPage above failed.
+      await pageA
+        .evaluate((slug) => {
+          // @ts-expect-error - global from storage.js
+          if (typeof removeAddedTargetPreset === "function") removeAddedTargetPreset(slug);
+          // @ts-expect-error - global from sync.js
+          if (typeof window.syncNow === "function") return window.syncNow();
+        }, candidate)
+        .catch(() => {
+          /* swallow — finally must never mask the original assertion failure */
+        });
+    }
   });
 
   test("Step 9: cross-device delete + resurrection guard", async () => {
@@ -310,105 +417,141 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     // Ensure both contexts are on a page that loads storage.js. /index.html
     // works for both — recipe-browser/sync/storage all initialize there.
     // These goto's reload the page and re-run initSync; B's Realtime
-    // channel gets torn down and resubscribed. Wait for channel readiness
-    // before proceeding, mirroring the Step 1 warmup.
+    // channel gets torn down and resubscribed. Wait on both sequentially —
+    // each waitForSyncReady triggers/awaits a push+pull cycle, and
+    // concurrent cycles were observed to amplify the replication-lag race
+    // in later operations. A is awaited first because it's the writer;
+    // we need its initSync settled before the create-on-A evaluate below.
     await pageA.goto("/index.html");
+    await waitForSyncReady(pageA);
     await pageB.goto("/index.html");
-    await waitForRealtimeJoined(pageB);
+    await waitForSyncReady(pageB);
 
-    // Create on A.
-    await pageA.evaluate(
-      (args) => {
+    try {
+      // Create on A.
+      await pageA.evaluate(
+        (args) => {
+          // @ts-expect-error - global from storage.js
+          const profiles = loadCustomTargetProfiles();
+          profiles[args.slug] = {
+            label: args.label,
+            calcium: 17,
+            magnesium: 8,
+            alkalinity: 40,
+            potassium: 0,
+            sodium: 0,
+            sulfate: 0,
+            chloride: 0,
+            bicarbonate: 0,
+            brewMethod: "all",
+          };
+          // @ts-expect-error - global from storage.js
+          saveCustomTargetProfiles(profiles);
+          // @ts-expect-error - global from sync.js
+          if (typeof window.syncNow === "function") return window.syncNow();
+        },
+        { slug, label },
+      );
+
+      // B's storage should reflect the new profile via Realtime push.
+      await pollPage(
+        pageB,
+        () => {
+          // @ts-expect-error - global from storage.js
+          return loadCustomTargetProfiles();
+        },
+        (profiles: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(profiles, slug),
+        REALTIME_POLL_TIMEOUT_MS,
+      );
+
+      // Delete on A.
+      await pageA.evaluate((s) => {
         // @ts-expect-error - global from storage.js
-        const profiles = loadCustomTargetProfiles();
-        profiles[args.slug] = {
-          label: args.label,
-          calcium: 17,
-          magnesium: 8,
-          alkalinity: 40,
-          potassium: 0,
-          sodium: 0,
-          sulfate: 0,
-          chloride: 0,
-          bicarbonate: 0,
-          brewMethod: "all",
-        };
-        // @ts-expect-error - global from storage.js
-        saveCustomTargetProfiles(profiles);
+        deleteCustomTargetProfile(s);
         // @ts-expect-error - global from sync.js
         if (typeof window.syncNow === "function") return window.syncNow();
-      },
-      { slug, label },
-    );
+      }, slug);
 
-    // B's storage should reflect the new profile via Realtime push.
-    await pollPage(
-      pageB,
-      () => {
+      // B's storage should drop it.
+      await pollPage(
+        pageB,
+        () => {
+          // @ts-expect-error - global from storage.js
+          return loadCustomTargetProfiles();
+        },
+        (profiles: Record<string, unknown>) =>
+          !Object.prototype.hasOwnProperty.call(profiles, slug),
+        REALTIME_POLL_TIMEOUT_MS,
+      );
+
+      // Resurrection guard: tombstone present on B + Supabase row gone.
+      // Important: explicitly verify the session resolves before querying —
+      // otherwise `eq("user_id", undefined)` returns [] for any user and
+      // remoteCount === 0 silently passes regardless of the resurrection bug.
+      const guard = await pageB.evaluate(async (s) => {
         // @ts-expect-error - global from storage.js
-        return loadCustomTargetProfiles();
-      },
-      (profiles: Record<string, unknown>) => Object.prototype.hasOwnProperty.call(profiles, slug),
-      REALTIME_POLL_TIMEOUT_MS,
-    );
+        const tombstoned = (loadDeletedTargetPresets() || []).includes(s);
+        // @ts-expect-error - global from sync.js
+        if (typeof window.syncNow === "function") await window.syncNow();
+        // @ts-expect-error - global from supabase-client.js
+        const sess = await window.supabaseClient.auth.getSession();
+        const userId = sess?.data?.session?.user?.id;
+        if (!userId) {
+          return { tombstoned, userMissing: true, remoteCount: -1, error: "no session" };
+        }
+        // @ts-expect-error - global from supabase-client.js
+        const { data, error } = await window.supabaseClient
+          .from("target_profiles")
+          .select("slug")
+          .eq("user_id", userId)
+          .eq("slug", s);
+        return {
+          tombstoned,
+          userMissing: false,
+          remoteCount: data?.length ?? -1,
+          error: error?.message,
+        };
+      }, slug);
 
-    // Delete on A.
-    await pageA.evaluate((s) => {
-      // @ts-expect-error - global from storage.js
-      deleteCustomTargetProfile(s);
-      // @ts-expect-error - global from sync.js
-      if (typeof window.syncNow === "function") return window.syncNow();
-    }, slug);
-
-    // B's storage should drop it.
-    await pollPage(
-      pageB,
-      () => {
-        // @ts-expect-error - global from storage.js
-        return loadCustomTargetProfiles();
-      },
-      (profiles: Record<string, unknown>) => !Object.prototype.hasOwnProperty.call(profiles, slug),
-      REALTIME_POLL_TIMEOUT_MS,
-    );
-
-    // Resurrection guard: tombstone present on B + Supabase row gone.
-    // Important: explicitly verify the session resolves before querying —
-    // otherwise `eq("user_id", undefined)` returns [] for any user and
-    // remoteCount === 0 silently passes regardless of the resurrection bug.
-    const guard = await pageB.evaluate(async (s) => {
-      // @ts-expect-error - global from storage.js
-      const tombstoned = (loadDeletedTargetPresets() || []).includes(s);
-      // @ts-expect-error - global from sync.js
-      if (typeof window.syncNow === "function") await window.syncNow();
-      // @ts-expect-error - global from supabase-client.js
-      const sess = await window.supabaseClient.auth.getSession();
-      const userId = sess?.data?.session?.user?.id;
-      if (!userId) {
-        return { tombstoned, userMissing: true, remoteCount: -1, error: "no session" };
-      }
-      // @ts-expect-error - global from supabase-client.js
-      const { data, error } = await window.supabaseClient
-        .from("target_profiles")
-        .select("slug")
-        .eq("user_id", userId)
-        .eq("slug", s);
-      return {
-        tombstoned,
-        userMissing: false,
-        remoteCount: data?.length ?? -1,
-        error: error?.message,
-      };
-    }, slug);
-
-    expect(
-      guard.userMissing,
-      "B's session must be active to validate the Supabase row count; missing session would mask the resurrection bug",
-    ).toBe(false);
-    expect(guard.error, `Supabase query error: ${guard.error}`).toBeFalsy();
-    expect(guard.tombstoned, "B's deleted-presets list should contain the deleted slug").toBe(true);
-    expect(
-      guard.remoteCount,
-      `Supabase should have 0 rows for slug=${slug}; if non-zero the resurrection bug is back`,
-    ).toBe(0);
+      expect(
+        guard.userMissing,
+        "B's session must be active to validate the Supabase row count; missing session would mask the resurrection bug",
+      ).toBe(false);
+      expect(guard.error, `Supabase query error: ${guard.error}`).toBeFalsy();
+      expect(guard.tombstoned, "B's deleted-presets list should contain the deleted slug").toBe(
+        true,
+      );
+      expect(
+        guard.remoteCount,
+        `Supabase should have 0 rows for slug=${slug}; if non-zero the resurrection bug is back`,
+      ).toBe(0);
+    } finally {
+      // Belt-and-suspenders: if any assertion above failed before the test's
+      // own delete step, the slug may still be in cloud. Delete directly via
+      // the Supabase client (bypasses the tombstone/sync path which may also
+      // have failed). RLS scopes the delete to the test user. Runs on success
+      // too — idempotent, and means a successful Step 9 leaves cloud clean
+      // even if the tombstone delete didn't quite land.
+      await pageA
+        .evaluate(async (s) => {
+          try {
+            // @ts-expect-error - global from supabase-client.js
+            const sess = await window.supabaseClient.auth.getSession();
+            const userId = sess?.data?.session?.user?.id;
+            if (!userId) return;
+            // @ts-expect-error - global from supabase-client.js
+            await window.supabaseClient
+              .from("target_profiles")
+              .delete()
+              .eq("user_id", userId)
+              .eq("slug", s);
+          } catch {
+            /* finally must never mask an in-flight assertion failure */
+          }
+        }, slug)
+        .catch(() => {
+          /* swallow */
+        });
+    }
   });
 });
