@@ -27,6 +27,60 @@
   var pullDebounceTimer = undefined;
   var PULL_DEBOUNCE_MS = 250;
 
+  // Test-observable readiness signals. `initSyncPromise` (created below at the
+  // bottom of the IIFE) resolves when initSync's push+pull are done and
+  // subscribeToCloudChanges has been called. `realtimeSubscribedPromise`
+  // resolves on the first SUBSCRIBED status from the Realtime channel — the
+  // signal that postgres_changes subscriptions are wired and broadcasts will
+  // be delivered. `joined` (channel.state) is the WebSocket-level handshake
+  // and fires earlier; tests that polled it were racing the SUBSCRIBED handshake
+  // and missing broadcasts.
+  /** @type {((value?: void) => void) | undefined} */
+  var realtimeSubscribedResolve;
+  /** @type {Promise<void>} */
+  var realtimeSubscribedPromise = new Promise(function (resolve) {
+    realtimeSubscribedResolve = resolve;
+  });
+
+  // Dirty-tracking storage keys. Each holds the last-successfully-pushed
+  // snapshot for one table. `pushAllToCloud` / `syncCustomProfiles` compare
+  // current localStorage state to these snapshots and skip upserts when
+  // nothing changed — avoids the postgres_changes broadcast storm that fires
+  // on every page-load initSync.push otherwise (each upserted row emits a
+  // broadcast, and every subscribed page receives them, including the
+  // pusher itself, which then runs a redundant pullFromCloud that can race
+  // an immediately-following local write).
+  var LAST_PUSHED_SETTINGS_KEY = "cw_last_pushed_settings";
+  var LAST_PUSHED_SELECTIONS_KEY = "cw_last_pushed_selections";
+  var LAST_PUSHED_SOURCES_KEY = "cw_last_pushed_source_profiles";
+  var LAST_PUSHED_TARGETS_KEY = "cw_last_pushed_target_profiles";
+
+  // Stable JSON.stringify: sorts object keys so two objects with the same
+  // content but different insertion order serialize identically. Used for
+  // content-equality comparisons against last-pushed snapshots — without
+  // sorted keys, a reload that rebuilds the same object in a different key
+  // order would falsely look "changed" and trigger a redundant push.
+  /**
+   * @param {unknown} v
+   * @returns {string}
+   */
+  function stableStringify(v) {
+    if (v === null || typeof v !== "object") return JSON.stringify(v);
+    if (Array.isArray(v)) {
+      return "[" + v.map(stableStringify).join(",") + "]";
+    }
+    var keys = Object.keys(/** @type {object} */ (v)).sort();
+    return (
+      "{" +
+      keys
+        .map(function (k) {
+          return JSON.stringify(k) + ":" + stableStringify(/** @type {any} */ (v)[k]);
+        })
+        .join(",") +
+      "}"
+    );
+  }
+
   // --- Debounced sync trigger (called from storage.js save functions) ---
   function scheduleSyncToCloud() {
     clearTimeout(syncTimer);
@@ -73,14 +127,11 @@
     return volumes;
   }
 
-  // --- Push all localStorage data to Supabase ---
-  async function pushAllToCloud() {
-    var userId = await getLoggedInUserId();
-    if (!userId) return;
-
-    var now = new Date().toISOString();
-
-    var settingsPayload = {
+  // Build the user_settings push payload from localStorage. Returns a fresh
+  // object each call so callers can serialize/mutate freely.
+  /** @param {string} userId @param {string} now */
+  function buildSettingsPayload(userId, now) {
+    return {
       user_id: userId,
       theme: loadThemePreference(),
       mineral_display_mode: loadMineralDisplayMode(),
@@ -95,8 +146,12 @@
       creator_display_name: loadCreatorDisplayName(),
       updated_at: now,
     };
+  }
 
-    var selectionsPayload = {
+  // Build the user_selections push payload from localStorage.
+  /** @param {string} userId @param {string} now */
+  function buildSelectionsPayload(userId, now) {
+    return {
       user_id: userId,
       source_preset: loadSourcePresetName(),
       source_water: loadSourceWater(),
@@ -106,20 +161,135 @@
       added_target_presets: loadAddedTargetPresets(),
       updated_at: now,
     };
+  }
 
-    var results = await Promise.all([
-      window.supabaseClient
-        .from("user_settings")
-        .upsert(settingsPayload, { onConflict: "user_id" }),
-      window.supabaseClient
-        .from("user_selections")
-        .upsert(selectionsPayload, { onConflict: "user_id" }),
-    ]);
+  // Snapshot used for dirty-tracking comparisons. Strips fields that change
+  // on every push (updated_at) so a no-op push doesn't look like a real change.
+  // user_id is kept since it identifies the row and stays stable per user.
+  /** @param {Record<string, unknown>} payload */
+  function snapshotForCompare(payload) {
+    /** @type {Record<string, unknown>} */
+    var copy = {};
+    Object.keys(payload).forEach(function (k) {
+      if (k !== "updated_at") copy[k] = payload[k];
+    });
+    return stableStringify(copy);
+  }
 
-    if (results[0].error) console.warn("[sync] user_settings upsert failed:", results[0].error);
-    if (results[1].error) console.warn("[sync] user_selections upsert failed:", results[1].error);
+  // --- Push all localStorage data to Supabase ---
+  async function pushAllToCloud() {
+    var userId = await getLoggedInUserId();
+    if (!userId) return;
+
+    var now = new Date().toISOString();
+
+    var settingsPayload = buildSettingsPayload(userId, now);
+    var selectionsPayload = buildSelectionsPayload(userId, now);
+
+    // Skip upserts when the payload hasn't changed since our last successful
+    // push to that table. This is the storm-prevention path: every page-load
+    // initSync.push would otherwise re-upsert the full row, fire a
+    // postgres_changes broadcast that arrives back at our own channel, and
+    // trigger a redundant pullFromCloud — which can race a local write that
+    // happened in the same tick (replication-lag may return the stale value).
+    var settingsSnapshot = snapshotForCompare(settingsPayload);
+    var selectionsSnapshot = snapshotForCompare(selectionsPayload);
+    var lastSettingsSnapshot = safeGetItem(LAST_PUSHED_SETTINGS_KEY);
+    var lastSelectionsSnapshot = safeGetItem(LAST_PUSHED_SELECTIONS_KEY);
+    var settingsChanged = settingsSnapshot !== lastSettingsSnapshot;
+    var selectionsChanged = selectionsSnapshot !== lastSelectionsSnapshot;
+
+    /** @type {Array<{ table: string; promise: any; snapshot: string; key: string }>} */
+    var upserts = [];
+    if (settingsChanged) {
+      upserts.push({
+        table: "user_settings",
+        promise: window.supabaseClient
+          .from("user_settings")
+          .upsert(settingsPayload, { onConflict: "user_id" }),
+        snapshot: settingsSnapshot,
+        key: LAST_PUSHED_SETTINGS_KEY,
+      });
+    }
+    if (selectionsChanged) {
+      upserts.push({
+        table: "user_selections",
+        promise: window.supabaseClient
+          .from("user_selections")
+          .upsert(selectionsPayload, { onConflict: "user_id" }),
+        snapshot: selectionsSnapshot,
+        key: LAST_PUSHED_SELECTIONS_KEY,
+      });
+    }
+
+    if (upserts.length > 0) {
+      var results = await Promise.all(
+        upserts.map(function (u) {
+          return u.promise;
+        }),
+      );
+      results.forEach(function (r, idx) {
+        var u = upserts[idx];
+        if (!u) return;
+        if (r.error) {
+          console.warn("[sync] " + u.table + " upsert failed:", r.error);
+        } else {
+          safeSetItem(u.key, u.snapshot);
+        }
+      });
+    }
 
     await syncCustomProfiles(userId, now);
+  }
+
+  /**
+   * Sync custom source and target profiles (upsert new/changed, delete removed).
+   * @param {string} userId
+   * @param {string} [now]
+   */
+  // Build the source_profiles row from a local profile entry (sans updated_at).
+  /** @param {string} userId @param {string} slug @param {SourceProfile} p */
+  function buildSourceRow(userId, slug, p) {
+    return {
+      user_id: userId,
+      slug: slug,
+      label: p.label || slug,
+      calcium: Number(p.calcium) || 0,
+      magnesium: Number(p.magnesium) || 0,
+      potassium: Number(p.potassium) || 0,
+      sodium: Number(p.sodium) || 0,
+      sulfate: Number(p.sulfate) || 0,
+      chloride: Number(p.chloride) || 0,
+      bicarbonate: Number(p.bicarbonate) || 0,
+    };
+  }
+
+  // Build the target_profiles row from a local profile entry (sans updated_at).
+  /** @param {string} userId @param {string} slug @param {any} p */
+  function buildTargetRow(userId, slug, p) {
+    return {
+      user_id: userId,
+      slug: slug,
+      label: p.label || slug,
+      brew_method: p.brewMethod || "filter",
+      calcium: Number(p.calcium) || 0,
+      magnesium: Number(p.magnesium) || 0,
+      alkalinity: Number(p.alkalinity) || 0,
+      potassium: Number(p.potassium) || 0,
+      sodium: Number(p.sodium) || 0,
+      sulfate: Number(p.sulfate) || 0,
+      chloride: Number(p.chloride) || 0,
+      bicarbonate: Number(p.bicarbonate) || 0,
+      description: p.description || "",
+      is_public: !!p.isPublic,
+      creator_display_name: p.creatorDisplayName || "",
+      // Default creator_user_id to the current user for locally-created
+      // profiles that haven't yet been attributed.  Library copies explicitly
+      // set creatorUserId to the original author.
+      creator_user_id: p.creatorUserId !== undefined ? p.creatorUserId : userId,
+      tags: Array.isArray(p.tags) ? p.tags : [],
+      roast: Array.isArray(p.roast) && p.roast.length > 0 ? p.roast : ["all"],
+    };
   }
 
   /**
@@ -145,12 +315,23 @@
     var tombstonedSourceSet = new Set(deletedSources);
     var tombstonedTargetSet = new Set(deletedTargets);
 
+    // Dirty-tracking snapshots: { slug: stableStringify(row-without-updated_at) }.
+    // Compared per-slug in the upsert path below; updated on successful upsert
+    // and on tombstone delete. pullFromCloud also refreshes these so we don't
+    // re-push cloud state right back.
+    /** @type {Record<string, string>} */
+    var lastSourceSnapshots = safeParse(safeGetItem(LAST_PUSHED_SOURCES_KEY), null) || {};
+    /** @type {Record<string, string>} */
+    var lastTargetSnapshots = safeParse(safeGetItem(LAST_PUSHED_TARGETS_KEY), null) || {};
+
     // Delete cloud rows for tombstoned slugs.  This replaces the previous
     // SELECT+diff pattern, which could delete rows created on other devices
     // whenever local state was stale (e.g. a debounced push that ran without
     // a fresh pull).  Tombstones are the authoritative record of deletion.
     var deleteCalls = [];
-    if (deletedSources.length > 0) {
+    var deletedSourcesPending = deletedSources.length > 0;
+    var deletedTargetsPending = deletedTargets.length > 0;
+    if (deletedSourcesPending) {
       deleteCalls.push(
         window.supabaseClient
           .from("source_profiles")
@@ -159,7 +340,7 @@
           .in("slug", deletedSources),
       );
     }
-    if (deletedTargets.length > 0) {
+    if (deletedTargetsPending) {
       deleteCalls.push(
         window.supabaseClient
           .from("target_profiles")
@@ -170,78 +351,90 @@
     }
     if (deleteCalls.length > 0) {
       var delResults = await Promise.all(deleteCalls);
-      delResults.forEach(function (r) {
-        if (r.error) console.warn("[sync] tombstone delete failed:", r.error);
-      });
+      var nextIdx = 0;
+      if (deletedSourcesPending) {
+        var srcDel = delResults[nextIdx++];
+        if (srcDel && srcDel.error) {
+          console.warn("[sync] tombstone delete failed:", srcDel.error);
+        } else {
+          deletedSources.forEach(function (s) {
+            delete lastSourceSnapshots[s];
+          });
+        }
+      }
+      if (deletedTargetsPending) {
+        var tgtDel = delResults[nextIdx];
+        if (tgtDel && tgtDel.error) {
+          console.warn("[sync] tombstone delete failed:", tgtDel.error);
+        } else {
+          deletedTargets.forEach(function (s) {
+            delete lastTargetSnapshots[s];
+          });
+        }
+      }
     }
 
-    // Upsert local source profiles, skipping any tombstoned slugs so a
-    // local dict that still holds a deleted entry can't resurrect it.
-    var sourceEntries = Object.entries(localSource).filter(function (entry) {
-      return !tombstonedSourceSet.has(entry[0]);
+    // Upsert local source profiles, skipping (a) any tombstoned slugs so a
+    // local dict that still holds a deleted entry can't resurrect it, and
+    // (b) any rows whose content matches our last-pushed snapshot (storm-
+    // prevention — see snapshotForCompare's rationale).
+    /** @type {Array<{ slug: string; row: any; snapshot: string }>} */
+    var sourceChanged = [];
+    Object.entries(localSource).forEach(function (entry) {
+      var slug = entry[0];
+      if (tombstonedSourceSet.has(slug)) return;
+      var row = buildSourceRow(userId, slug, entry[1]);
+      var snapshot = stableStringify(row);
+      if (lastSourceSnapshots[slug] === snapshot) return;
+      sourceChanged.push({ slug: slug, row: row, snapshot: snapshot });
     });
-    if (sourceEntries.length > 0) {
-      var sourceRows = sourceEntries.map(function (entry) {
-        var slug = entry[0],
-          p = entry[1];
-        return {
-          user_id: userId,
-          slug: slug,
-          label: p.label || slug,
-          calcium: Number(p.calcium) || 0,
-          magnesium: Number(p.magnesium) || 0,
-          potassium: Number(p.potassium) || 0,
-          sodium: Number(p.sodium) || 0,
-          sulfate: Number(p.sulfate) || 0,
-          chloride: Number(p.chloride) || 0,
-          bicarbonate: Number(p.bicarbonate) || 0,
-          updated_at: now,
-        };
+    if (sourceChanged.length > 0) {
+      var sourceRows = sourceChanged.map(function (e) {
+        return Object.assign({}, e.row, { updated_at: now });
       });
       var srcResult = await window.supabaseClient
         .from("source_profiles")
         .upsert(sourceRows, { onConflict: "user_id,slug" });
-      if (srcResult.error) console.warn("[sync] source_profiles upsert failed:", srcResult.error);
+      if (srcResult.error) {
+        console.warn("[sync] source_profiles upsert failed:", srcResult.error);
+      } else {
+        sourceChanged.forEach(function (e) {
+          lastSourceSnapshots[e.slug] = e.snapshot;
+        });
+      }
     }
 
-    // Upsert local target profiles, skipping any tombstoned slugs.
-    var targetEntries = Object.entries(localTarget).filter(function (entry) {
-      return !tombstonedTargetSet.has(entry[0]);
+    // Upsert local target profiles, same filtering as sources.
+    /** @type {Array<{ slug: string; row: any; snapshot: string }>} */
+    var targetChanged = [];
+    Object.entries(localTarget).forEach(function (entry) {
+      var slug = entry[0];
+      if (tombstonedTargetSet.has(slug)) return;
+      var row = buildTargetRow(userId, slug, entry[1]);
+      var snapshot = stableStringify(row);
+      if (lastTargetSnapshots[slug] === snapshot) return;
+      targetChanged.push({ slug: slug, row: row, snapshot: snapshot });
     });
-    if (targetEntries.length > 0) {
-      var targetRows = targetEntries.map(function (entry) {
-        var slug = entry[0],
-          p = entry[1];
-        return {
-          user_id: userId,
-          slug: slug,
-          label: p.label || slug,
-          brew_method: p.brewMethod || "filter",
-          calcium: Number(p.calcium) || 0,
-          magnesium: Number(p.magnesium) || 0,
-          alkalinity: Number(p.alkalinity) || 0,
-          potassium: Number(p.potassium) || 0,
-          sodium: Number(p.sodium) || 0,
-          sulfate: Number(p.sulfate) || 0,
-          chloride: Number(p.chloride) || 0,
-          bicarbonate: Number(p.bicarbonate) || 0,
-          description: p.description || "",
-          is_public: !!p.isPublic,
-          creator_display_name: p.creatorDisplayName || "",
-          // Default creator_user_id to the current user for locally-created
-          // profiles that haven't yet been attributed.  Library copies
-          // explicitly set creatorUserId to the original author.
-          creator_user_id: p.creatorUserId !== undefined ? p.creatorUserId : userId,
-          tags: Array.isArray(p.tags) ? p.tags : [],
-          roast: Array.isArray(p.roast) && p.roast.length > 0 ? p.roast : ["all"],
-          updated_at: now,
-        };
+    if (targetChanged.length > 0) {
+      var targetRows = targetChanged.map(function (e) {
+        return Object.assign({}, e.row, { updated_at: now });
       });
       var tgtResult = await window.supabaseClient
         .from("target_profiles")
         .upsert(targetRows, { onConflict: "user_id,slug" });
-      if (tgtResult.error) console.warn("[sync] target_profiles upsert failed:", tgtResult.error);
+      if (tgtResult.error) {
+        console.warn("[sync] target_profiles upsert failed:", tgtResult.error);
+      } else {
+        targetChanged.forEach(function (e) {
+          lastTargetSnapshots[e.slug] = e.snapshot;
+        });
+      }
     }
+
+    // Persist updated snapshots back to localStorage (covers both
+    // tombstone-delete cleanup and successful upserts above).
+    safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(lastSourceSnapshots));
+    safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(lastTargetSnapshots));
   }
 
   // --- Pull all cloud data into localStorage and invalidate caches ---
@@ -256,10 +449,16 @@
       window.supabaseClient.from("target_profiles").select("*").eq("user_id", userId),
     ]);
 
-    var settings = results[0].data;
-    var selections = results[1].data;
-    var sourceRows = results[2].data;
-    var targetRows = results[3].data;
+    // Re-bind userId as `string` (not `string | null`) so the forEach
+    // closures below can hand it to buildSourceRow/buildTargetRow without
+    // a runtime null check — TS doesn't carry the `if (!userId) return`
+    // narrowing across the closure boundary.
+    /** @type {string} */
+    var sessionUserId = userId;
+    var settings = results[0] && results[0].data;
+    var selections = results[1] && results[1].data;
+    var sourceRows = results[2] && results[2].data;
+    var targetRows = results[3] && results[3].data;
 
     // Apply user_settings
     if (settings) {
@@ -316,10 +515,13 @@
       var tombstonedSources = loadDeletedPresets();
       /** @type {Record<string, SourceProfile>} */
       var srcProfiles = {};
+      /** @type {Record<string, string>} */
+      var newSourceSnapshots = {};
       sourceRows.forEach(
         /** @param {any} row */ function (row) {
           if (tombstonedSources.indexOf(row.slug) !== -1) return;
-          srcProfiles[row.slug] = {
+          /** @type {SourceProfile} */
+          var profile = {
             label: row.label,
             calcium: row.calcium,
             magnesium: row.magnesium,
@@ -329,9 +531,17 @@
             chloride: row.chloride,
             bicarbonate: row.bicarbonate,
           };
+          srcProfiles[row.slug] = profile;
+          // Refresh lastPushed snapshot for dirty-tracking — we just learned
+          // what cloud has, so a follow-up push of the same data is a no-op
+          // and should be skipped.
+          newSourceSnapshots[row.slug] = stableStringify(
+            buildSourceRow(sessionUserId, row.slug, profile),
+          );
         },
       );
       safeSetItem("cw_custom_profiles", JSON.stringify(srcProfiles));
+      safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(newSourceSnapshots));
     }
 
     // Apply target profiles, skipping any that are tombstoned locally
@@ -342,10 +552,13 @@
       var tombstonedTargets = loadDeletedTargetPresets();
       /** @type {Record<string, TargetProfile>} */
       var tgtProfiles = {};
+      /** @type {Record<string, string>} */
+      var newTargetSnapshots = {};
       targetRows.forEach(
         /** @param {any} row */ function (row) {
           if (tombstonedTargets.indexOf(row.slug) !== -1) return;
-          tgtProfiles[row.slug] = {
+          /** @type {TargetProfile} */
+          var profile = {
             label: row.label,
             brewMethod: row.brew_method,
             calcium: row.calcium,
@@ -363,13 +576,43 @@
             tags: Array.isArray(row.tags) ? row.tags : [],
             roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
           };
+          tgtProfiles[row.slug] = profile;
+          newTargetSnapshots[row.slug] = stableStringify(
+            buildTargetRow(sessionUserId, row.slug, profile),
+          );
         },
       );
       safeSetItem("cw_custom_target_profiles", JSON.stringify(tgtProfiles));
+      safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(newTargetSnapshots));
     }
 
-    // Invalidate all storage caches so next read picks up the new data
+    // Invalidate all storage caches so next read picks up the new data.
+    // Done BEFORE building the lastPushed snapshots below, so the load*()
+    // helpers inside buildSettingsPayload/buildSelectionsPayload read the
+    // just-pulled values (some load helpers use module-level caches that
+    // would otherwise return pre-pull state).
     if (typeof invalidateAllCaches === "function") invalidateAllCaches();
+
+    // Refresh single-row lastPushed snapshots so the next pushAllToCloud
+    // doesn't re-upload data that already matches cloud. Guard each on the
+    // corresponding pull actually returning a row — if cloud has no
+    // user_settings/user_selections row yet, we have NOT pushed it, and
+    // claiming we did would let the next push skip the seed-upsert and
+    // leave the row missing forever. Snapshots are built via the same
+    // buildXxxPayload + snapshotForCompare path push uses, so a no-op push
+    // immediately after pull is correctly detected as no-op.
+    if (settings) {
+      safeSetItem(
+        LAST_PUSHED_SETTINGS_KEY,
+        snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
+      );
+    }
+    if (selections) {
+      safeSetItem(
+        LAST_PUSHED_SELECTIONS_KEY,
+        snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
+      );
+    }
   }
 
   // --- Returns true if local data is entirely default (no user customization) ---
@@ -547,6 +790,10 @@
     });
 
     channel.subscribe(function (status) {
+      if (status === "SUBSCRIBED" && realtimeSubscribedResolve) {
+        realtimeSubscribedResolve();
+        realtimeSubscribedResolve = undefined;
+      }
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.warn("[sync] realtime channel status:", status);
       }
@@ -666,7 +913,12 @@
   window.pushAllToCloud = pushAllToCloud;
   window.pullFromCloud = pullFromCloud;
   window.handleFirstLoginMerge = handleFirstLoginMerge;
+  window.realtimeSubscribedPromise = realtimeSubscribedPromise;
 
-  // Kick off background sync
-  initSync();
+  // Kick off background sync. Expose the promise so tests (and any other
+  // out-of-tree caller) can await push+pull settling before issuing writes —
+  // page.goto resolves on `load`, but initSync's async work keeps running
+  // afterward, and a test write between those points races initSync's pull.
+  var initSyncPromise = initSync();
+  window.initSyncPromise = initSyncPromise;
 })();

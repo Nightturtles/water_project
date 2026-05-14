@@ -261,6 +261,16 @@
       document.removeEventListener("keydown", keyHandler);
       overlay.removeEventListener("click", overlayClickHandler);
       overlay.remove();
+      // Replay the deferred re-render hook. While the modal was open,
+      // recipe-browser's cw:cloud-data-changed listener was gated by
+      // _cwEditModalOpenSlug and skipped any refetchAndRender calls for
+      // Realtime updates that arrived in that window. Dispatching a
+      // synthetic event here gives those listeners exactly one chance
+      // to catch up — refetchAndRender is a single Supabase query so the
+      // cost in the no-changes case is small.
+      if (typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+      }
     }
 
     function keyHandler(e) {

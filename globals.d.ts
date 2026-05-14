@@ -179,5 +179,12 @@ declare global {
     pushAllToCloud?: () => Promise<void>;
     pullFromCloud?: () => Promise<void>;
     handleFirstLoginMerge?: () => Promise<void>;
+    // Resolves when initSync's push-then-pull completes and the Realtime
+    // channel has been subscribed. Lets test code (e2e/smoke-sync.spec.ts)
+    // await readiness without polling internal state.
+    initSyncPromise?: Promise<void>;
+    // Resolves on the first SUBSCRIBED status from channel.subscribe —
+    // the signal that postgres_changes events will be delivered.
+    realtimeSubscribedPromise?: Promise<void>;
   }
 }
