@@ -22,6 +22,11 @@
 // they involve UI race conditions (modal interaction during Realtime push,
 // pagehide handler timing, etc.) that are too brittle to automate without
 // becoming flaky guards that get disabled and silently miss real regressions.
+// Step 6 specifically has a Supabase read-replica lag race that affects
+// every cross-device read primitive we have (broadcast-triggered pull,
+// reload-triggered initSync pull, direct SELECT) and can't be cleanly
+// worked around at the test level without retries masking real regressions
+// — see smoke-sync.md Step 6 for the manual walk + known-flash caveat.
 //
 // Test account credentials live in `.env.test` at the project root. If
 // CAFELYTIC_TEST_EMAIL or CAFELYTIC_TEST_PASSWORD are unset, the whole
