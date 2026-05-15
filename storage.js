@@ -331,10 +331,7 @@ function migrateHendonSlug() {
 
   const deleted = safeParse(safeGetItem("cw_deleted_target_presets"), []);
   if (Array.isArray(deleted) && deleted.includes(FROM)) {
-    safeSetItem(
-      "cw_deleted_target_presets",
-      JSON.stringify(deleted.filter((s) => s !== FROM)),
-    );
+    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted.filter((s) => s !== FROM)));
   }
 }
 

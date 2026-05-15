@@ -312,7 +312,7 @@ const TARGET_PRESETS = {
     brewMethod: "espresso",
     calcium: 2.16,
     magnesium: 8.65,
-    alkalinity: 17.30,
+    alkalinity: 17.3,
     potassium: 13.51,
     sodium: 0,
     sulfate: 0,
