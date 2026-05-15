@@ -308,6 +308,33 @@ function deleteCustomTargetProfile(key) {
   addDeletedTargetPreset(key);
 }
 
+// One-shot localStorage rewrite for the 2026-05 Hendon Water consolidation.
+// Migration 20260515232747 deleted the 'eaf-hendon-water' canonical row and
+// kept 'bh-simplified-hendon' as the canonical Hendon entry. Without this
+// rewrite, a user editing their rail offline could push a stale
+// 'eaf-hendon-water' reference back to the server after the migration runs.
+// Idempotent — safe to re-run. Can be dropped once nobody can plausibly have
+// stale state (~3 months from the migration date).
+function migrateHendonSlug() {
+  const FROM = "eaf-hendon-water";
+  const TO = "bh-simplified-hendon";
+
+  if (safeGetItem("cw_target_preset") === FROM) {
+    safeSetItem("cw_target_preset", TO);
+  }
+
+  const added = safeParse(safeGetItem("cw_added_target_presets"), []);
+  if (Array.isArray(added) && added.includes(FROM)) {
+    const next = Array.from(new Set(added.map((s) => (s === FROM ? TO : s))));
+    safeSetItem("cw_added_target_presets", JSON.stringify(next));
+  }
+
+  const deleted = safeParse(safeGetItem("cw_deleted_target_presets"), []);
+  if (Array.isArray(deleted) && deleted.includes(FROM)) {
+    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted.filter((s) => s !== FROM)));
+  }
+}
+
 // --- Deleted target preset tracking (tombstones so deletions survive pull) ---
 /** @returns {string[]} */
 function loadDeletedTargetPresets() {
@@ -1367,6 +1394,9 @@ function saveCalculatorWelcomeDismissed() {
 // Guarded for Node / Vitest contexts (unit tests may stub window as a bare
 // object on globalThis, so check for the actual method before calling).
 if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  // Run one-shot localStorage migrations once per page load.
+  migrateHendonSlug();
+
   window.addEventListener("storage", function (e) {
     if (!e.key) return;
     var recipeAffected = false;

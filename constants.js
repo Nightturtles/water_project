@@ -294,32 +294,32 @@ const TARGET_PRESETS = {
   "cafelytic-filter": {
     label: "Cafelytic Filter",
     brewMethod: "filter",
-    calcium: 7,
-    magnesium: 18,
-    alkalinity: 20,
-    potassium: 16,
+    calcium: 4,
+    magnesium: 10,
+    alkalinity: 11,
+    potassium: 8.65,
     sodium: 0,
     sulfate: 0,
-    chloride: 63,
-    bicarbonate: 24.39,
+    chloride: 34.05,
+    bicarbonate: 13.18,
     description:
-      "Cafelytic in-house light-roast filter recipe. Direct dosing per liter: " +
+      "Cafelytic in-house light-roast filter recipe. Direct dosing per 1.85L: " +
       "0.024g CaCl\u2082\u00b72H\u2082O + 0.148g MgCl\u2082\u00b76H\u2082O + 0.040g KHCO\u2083. " +
       "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
   },
   "cafelytic-espresso": {
     label: "Cafelytic Espresso",
     brewMethod: "espresso",
-    calcium: 4,
-    magnesium: 16,
-    alkalinity: 32,
-    potassium: 25,
+    calcium: 2.16,
+    magnesium: 8.65,
+    alkalinity: 17.3,
+    potassium: 13.51,
     sodium: 0,
     sulfate: 0,
-    chloride: 54,
-    bicarbonate: 39.02,
+    chloride: 29.19,
+    bicarbonate: 21.09,
     description:
-      "Cafelytic in-house espresso companion to Cafelytic Filter. Direct dosing per liter: " +
+      "Cafelytic in-house espresso companion to Cafelytic Filter. Direct dosing per 1.85L: " +
       "0.015g CaCl\u2082\u00b72H\u2082O + 0.134g MgCl\u2082\u00b76H\u2082O + 0.064g KHCO\u2083. " +
       "Preserves the Cafelytic house character (Cl-heavy, no SO\u2084, sodium-free, " +
       "K-buffered) at espresso concentrations.",
