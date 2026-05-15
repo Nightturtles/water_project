@@ -26,6 +26,9 @@ jobs:
     # Fail fast if webServer hangs or browser wedges — protects the runner from
     # burning minutes on a stuck job.
     timeout-minutes: 15
+    permissions:
+      issues: write
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -49,6 +52,20 @@ jobs:
         env:
           CAFELYTIC_TEST_EMAIL: ${{ secrets.CAFELYTIC_TEST_EMAIL }}
           CAFELYTIC_TEST_PASSWORD: ${{ secrets.CAFELYTIC_TEST_PASSWORD }}
+      # Telemetry: post a one-line flake summary to the tracking issue on
+      # push-to-main runs. Skipped silently on PRs and when the repo variable
+      # FLAKE_TRACKING_ISSUE is unset (one-time setup). continue-on-error keeps
+      # logger hiccups from masking the real e2e outcome.
+      - name: Post flake summary to tracking issue
+        if: always() && github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.FLAKE_TRACKING_ISSUE != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          GH_SHA: ${{ github.sha }}
+        run: |
+          body=$(node scripts/append-flake-log.cjs)
+          gh issue comment "${{ vars.FLAKE_TRACKING_ISSUE }}" --body "$body" --repo "$GITHUB_REPOSITORY"
       - if: failure()
         uses: actions/upload-artifact@v4
         with:

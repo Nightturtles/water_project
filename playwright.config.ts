@@ -16,7 +16,13 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   // Parallelism: one worker locally for clear output; CI can scale up.
   workers: process.env.CI ? 2 : 1,
-  reporter: process.env.CI ? [["github"], ["html", { open: "never" }]] : "list",
+  reporter: process.env.CI
+    ? [
+        ["github"],
+        ["html", { open: "never" }],
+        ["json", { outputFile: "playwright-report/results.json" }],
+      ]
+    : "list",
 
   use: {
     baseURL: "http://localhost:8080",
