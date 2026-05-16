@@ -1485,10 +1485,11 @@ if (typeof module !== "undefined" && module.exports) {
     loadValidSelectedConcentrates,
     getAvailableMineralIds,
     invalidateAllCaches,
+    // Loaders consumed by metrics.js and sync.js's payload builders. Browser
+    // sees these as classic-script globals; the shim routes them through
+    // module.exports for unit tests (metrics-storage.test.js, sync.test.js).
     saveSelectedMinerals,
     loadSelectedMinerals,
-    // Effective-source getters consumed by metrics.js. The browser sees these
-    // as classic-script globals; tests reach them through this shim.
     getEffectiveCalciumSources,
     getEffectiveMagnesiumSources,
     getEffectiveAlkalinitySources,
@@ -1496,6 +1497,21 @@ if (typeof module !== "undefined" && module.exports) {
     getSourceWaterByPreset,
     loadSourcePresetName,
     loadBrewMethod,
+    loadThemePreference,
+    loadMineralDisplayMode,
+    loadLotusDropperType,
+    loadDiyConcentrateSpecs,
+    loadLotusConcentrateUnits,
+    loadCreatorDisplayName,
+    loadSourceWater,
+    loadDeletedPresets,
+    loadCustomProfiles,
+    // safeGetItem / safeParse are used by sync.js's collectVolumePreferences
+    // (lexical reference to a storage.js classic-script global). Without
+    // these in the shim, the call throws ReferenceError under Node and
+    // collectVolumePreferences silently returns {} via its outer try/catch.
+    safeGetItem,
+    safeParse,
   };
   Object.assign(module.exports, _umdExports);
   Object.assign(globalThis, _umdExports);

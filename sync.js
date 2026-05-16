@@ -921,4 +921,21 @@
   // afterward, and a test write between those points races initSync's pull.
   var initSyncPromise = initSync();
   window.initSyncPromise = initSyncPromise;
+
+  // Node/Vitest UMD shim. Exposes the payload-builder + dirty-tracking
+  // helpers for unit tests. Full-flow sync paths (pushAllToCloud,
+  // pullFromCloud, handleFirstLoginMerge) stay covered by
+  // e2e/smoke-sync.spec.ts — the IIFE captures Supabase + localStorage
+  // state in lexical closures that don't lend themselves to Node stubbing.
+  if (typeof module !== "undefined" && module.exports) {
+    Object.assign(module.exports, {
+      stableStringify: stableStringify,
+      buildSourceRow: buildSourceRow,
+      buildTargetRow: buildTargetRow,
+      snapshotForCompare: snapshotForCompare,
+      buildSettingsPayload: buildSettingsPayload,
+      buildSelectionsPayload: buildSelectionsPayload,
+      isDefaultData: isDefaultData,
+    });
+  }
 })();
