@@ -489,6 +489,8 @@
       applyFilters: applyFilters,
       partitionByCategory: partitionByCategory,
       pickFeaturedFromFiltered: pickFeaturedFromFiltered,
+      normalizePublicRecipeRow: normalizePublicRecipeRow,
+      generateUniqueSlug: generateUniqueSlug,
     };
   }
 
