@@ -5,16 +5,16 @@
 1. **recipe.html source-water auto-persist** — per-ion edits in the Base Water section round-trip through localStorage and survive a page reload, but only on the "custom" preset (saved presets are overwritten by `activateSourcePreset` during init).
 2. **index.html creator-gated share prompt** (commit ae7376e) — after "Save Changes" on a target profile, the share-to-library prompt appears for the recipe's creator and is suppressed for non-creators (e.g. saved-from-library copies). The gate lives in `script.js`'s `offerShareAfterEdit(key, wasCreator)`. A regression that fires the prompt on every non-creator edit is exactly the bug ae7376e fixed.
 
-Spec: [smoke-recipe.spec.ts](smoke-recipe.spec.ts) codifies both. Step 2 needs the same `.env.test` credentials as `smoke-sync.spec.ts` (CAFELYTIC_TEST_EMAIL / CAFELYTIC_TEST_PASSWORD); when missing, the signed-in describe is `test.skip`-ed.
+Spec: [smoke-recipe.spec.ts](smoke-recipe.spec.ts) codifies both. The signed-in creator-gated flow (Scope item 2 / Steps 3–5 below) needs the same `.env.test` credentials as `smoke-sync.spec.ts` (CAFELYTIC_TEST_EMAIL / CAFELYTIC_TEST_PASSWORD); when missing, the signed-in describe is `test.skip`-ed. Steps 1–2 (anonymous recipe.html persistence) run for everyone.
 
 **Naming note**: this runbook used to be titled "Recipe Builder" and described both flows as recipe.html-only. That was incorrect — the creator-gated share prompt is on **index.html** (the Calculator), not recipe.html. The runbook below has been corrected. Treat the spec as the source of truth.
 
-**Requires (for Step 2)**: a Supabase test account. The spec seeds and tears down its own `smoke-recipe-*` slugs on each run; manual runs against prod should use the same prefix and clean up after themselves to avoid polluting the test user's library.
+**Requires (for Steps 3–5)**: a Supabase test account. The spec seeds and tears down its own `smoke-recipe-*` slugs on each run; manual runs against prod should use the same prefix and clean up after themselves to avoid polluting the test user's library.
 
 ## Pre-flight
 
 1. Start dev server (`preview_start` → `dev`) or target `https://cafelytic.com`.
-2. For Step 2, sign in via `/login.html` with the test account.
+2. For Steps 3–5 (the signed-in creator-gated flow), sign in via `/login.html` with the test account.
 
 ## Steps
 

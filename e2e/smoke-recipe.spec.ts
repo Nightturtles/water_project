@@ -65,7 +65,13 @@ function loadEnvTest(): { email?: string; password?: string } {
       }
       out[key] = value;
     }
-    return { email: out.CAFELYTIC_TEST_EMAIL, password: out.CAFELYTIC_TEST_PASSWORD };
+    // Per-key fallback to process.env so a partial .env.test (only one of
+    // the two keys present) doesn't silently skip the suite. The bare-file
+    // case stays untouched: out.* === undefined, both fall back to process.env.
+    return {
+      email: out.CAFELYTIC_TEST_EMAIL || process.env.CAFELYTIC_TEST_EMAIL,
+      password: out.CAFELYTIC_TEST_PASSWORD || process.env.CAFELYTIC_TEST_PASSWORD,
+    };
   }
   if (process.env.CAFELYTIC_TEST_EMAIL || process.env.CAFELYTIC_TEST_PASSWORD) {
     return {
