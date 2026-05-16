@@ -209,3 +209,173 @@ describe("MINERAL_DB integrity (constants.js sanity)", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// splitAlkalinityDelta — pure: caller passes the alkalinitySources array, so
+// no storage stubs needed.
+// ---------------------------------------------------------------------------
+
+describe("splitAlkalinityDelta", () => {
+  test("empty sources → empty object", () => {
+    expect(metrics.splitAlkalinityDelta([], 50, null, null)).toEqual({});
+  });
+
+  test("single source 'baking-soda' → full delta assigned to baking-soda", () => {
+    const result = metrics.splitAlkalinityDelta(["baking-soda"], 40, null, null);
+    expect(result).toEqual({ "baking-soda": 40 });
+  });
+
+  test("single source 'potassium-bicarbonate' → full delta assigned to that source", () => {
+    const result = metrics.splitAlkalinityDelta(["potassium-bicarbonate"], 40, null, null);
+    expect(result).toEqual({ "potassium-bicarbonate": 40 });
+  });
+
+  test("both sources, target has only sodium → all delta to baking-soda", () => {
+    const result = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      30,
+      { sodium: 0, potassium: 0 },
+      { sodium: 20, potassium: 0 },
+    );
+    expect(result["baking-soda"]).toBe(30);
+    expect(result["potassium-bicarbonate"]).toBeUndefined();
+  });
+
+  test("both sources, target has only potassium → all delta to potassium-bicarbonate", () => {
+    const result = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      30,
+      { sodium: 0, potassium: 0 },
+      { sodium: 0, potassium: 20 },
+    );
+    expect(result["potassium-bicarbonate"]).toBe(30);
+    expect(result["baking-soda"]).toBeUndefined();
+  });
+
+  test("both sources, both Na and K positive → split proportional to deltas", () => {
+    // deltaNa = 30 - 0 = 30, deltaK = 10 - 0 = 10, total = 40.
+    // baking-soda gets 100 * 30/40 = 75, potassium-bicarbonate gets 100 * 10/40 = 25.
+    const result = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      100,
+      { sodium: 0, potassium: 0 },
+      { sodium: 30, potassium: 10 },
+    );
+    expect(result["baking-soda"]).toBeCloseTo(75, 5);
+    expect(result["potassium-bicarbonate"]).toBeCloseTo(25, 5);
+  });
+
+  test("both sources, target Na/K both absent or zero → fallback to potassium-bicarbonate", () => {
+    // The 'K-driven or both 0' branch at metrics.js:441-442.
+    const result = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      50,
+      null,
+      null,
+    );
+    expect(result).toEqual({ "potassium-bicarbonate": 50 });
+  });
+
+  test("source water Na/K subtract from target before splitting", () => {
+    // targetNa=30, sourceNa=10 → deltaNa=20; targetK=20, sourceK=20 → deltaK=0.
+    // deltaK is 0, so all the alk goes to baking-soda.
+    const result = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      40,
+      { sodium: 10, potassium: 20 },
+      { sodium: 30, potassium: 20 },
+    );
+    expect(result["baking-soda"]).toBe(40);
+    expect(result["potassium-bicarbonate"]).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildStoredTargetProfile — pure when options.brewMethod is passed
+// explicitly. The brewMethod-fallback branch (loadBrewMethod) is covered
+// in metrics-storage.test.js.
+// ---------------------------------------------------------------------------
+
+describe("buildStoredTargetProfile", () => {
+  test("ion round-trip with rounding and missing fields defaulted to 0", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "Test",
+      { calcium: "51.4", magnesium: 17, bicarbonate: "48.77" },
+      "Test desc",
+      { brewMethod: "filter", alkalinity: 40 },
+    );
+    expect(profile.label).toBe("Test");
+    expect(profile.calcium).toBe(51);
+    expect(profile.magnesium).toBe(17);
+    expect(profile.bicarbonate).toBe(49);
+    expect(profile.alkalinity).toBe(40);
+    // Missing ions default to 0.
+    expect(profile.potassium).toBe(0);
+    expect(profile.sodium).toBe(0);
+    expect(profile.sulfate).toBe(0);
+    expect(profile.chloride).toBe(0);
+    expect(profile.description).toBe("Test desc");
+    expect(profile.brewMethod).toBe("filter");
+  });
+
+  test("options.brewMethod 'espresso' is preserved", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "Espresso",
+      { calcium: 50, magnesium: 20, bicarbonate: 60 },
+      "",
+      { brewMethod: "espresso", alkalinity: 50 },
+    );
+    expect(profile.brewMethod).toBe("espresso");
+  });
+
+  test("options.brewMethod 'filter' is preserved", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "Filter",
+      { calcium: 50, magnesium: 20, bicarbonate: 60 },
+      "",
+      { brewMethod: "filter", alkalinity: 50 },
+    );
+    expect(profile.brewMethod).toBe("filter");
+  });
+
+  test("options.alkalinity passed → used verbatim (rounded)", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "X",
+      { calcium: 0, magnesium: 0, bicarbonate: 100 },
+      null,
+      { brewMethod: "filter", alkalinity: 87.3 },
+    );
+    expect(profile.alkalinity).toBe(87);
+  });
+
+  test("options.alkalinity absent → derived from calculateMetrics.kh", () => {
+    // 61 mg/L HCO3 × HCO3_TO_CACO3 (≈0.8202) ≈ 50.03 → rounds to 50.
+    const profile = metrics.buildStoredTargetProfile(
+      "X",
+      { calcium: 0, magnesium: 0, bicarbonate: 61 },
+      "",
+      { brewMethod: "filter" },
+    );
+    expect(profile.alkalinity).toBe(50);
+  });
+
+  test("null description coerces to ''", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "X",
+      { calcium: 10, magnesium: 5, bicarbonate: 12 },
+      null,
+      { brewMethod: "filter", alkalinity: 10 },
+    );
+    expect(profile.description).toBe("");
+  });
+
+  test("label passes through verbatim", () => {
+    const profile = metrics.buildStoredTargetProfile(
+      "My Custom Label",
+      { calcium: 10, magnesium: 5, bicarbonate: 12 },
+      "",
+      { brewMethod: "filter", alkalinity: 10 },
+    );
+    expect(profile.label).toBe("My Custom Label");
+  });
+});

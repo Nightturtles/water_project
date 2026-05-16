@@ -1485,6 +1485,17 @@ if (typeof module !== "undefined" && module.exports) {
     loadValidSelectedConcentrates,
     getAvailableMineralIds,
     invalidateAllCaches,
+    saveSelectedMinerals,
+    loadSelectedMinerals,
+    // Effective-source getters consumed by metrics.js. The browser sees these
+    // as classic-script globals; tests reach them through this shim.
+    getEffectiveCalciumSources,
+    getEffectiveMagnesiumSources,
+    getEffectiveAlkalinitySources,
+    getEffectiveAlkalinitySource,
+    getSourceWaterByPreset,
+    loadSourcePresetName,
+    loadBrewMethod,
   };
   Object.assign(module.exports, _umdExports);
   Object.assign(globalThis, _umdExports);
