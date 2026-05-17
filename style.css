@@ -3998,3 +3998,158 @@ footer {
   background: var(--blue-100);
   color: var(--gray-700);
 }
+
+/* =============================================================================
+   Inline mineral selector widget (mineral-selector.js)
+   Chip strip + "Edit minerals" button that opens a modal.
+   ========================================================================== */
+
+.mineral-selector-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--surface);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+}
+
+.mineral-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+}
+
+.mineral-chip {
+  display: inline-block;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.85rem;
+  line-height: 1.2;
+  border: 1px solid var(--gray-300);
+  border-radius: 999px;
+  background: var(--gray-100);
+  color: var(--gray-900);
+  white-space: nowrap;
+}
+
+.mineral-chip--empty {
+  color: var(--gray-500);
+  font-style: italic;
+  background: transparent;
+  border-style: dashed;
+}
+
+.mineral-edit-link {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid var(--blue-500);
+  color: var(--blue-700);
+  cursor: pointer;
+  font-size: 0.88rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  min-height: 36px;
+}
+
+.mineral-edit-link:hover,
+.mineral-edit-link:focus-visible {
+  background: var(--blue-50);
+  outline: none;
+}
+
+.mineral-selector-modal-list {
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+/* Tab nav + panels inside the mineral selector modal. Matches the
+   .brew-method-toggle pattern used elsewhere on the site. */
+.mineral-selector-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+  padding: 0.6rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 10px;
+  background: var(--gray-100);
+}
+
+.mineral-selector-tab {
+  flex: 1;
+  margin: 0;
+}
+
+.mineral-selector-tab--active {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+  color: var(--blue-700);
+  font-weight: 600;
+}
+
+.mineral-selector-tab-panels {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 0.25rem;
+}
+
+.mineral-selector-tab-panel[hidden] {
+  display: none;
+}
+
+/* Subsections inside Concentrates tab. */
+.mineral-selector-subsection {
+  margin-bottom: 1.25rem;
+}
+
+.mineral-selector-subsection-title {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+  color: var(--gray-900);
+}
+
+.mineral-selector-sublist {
+  margin-top: 0.5rem;
+}
+
+.mineral-selector-empty {
+  font-style: italic;
+  color: var(--gray-500);
+  margin: 0.5rem 0;
+}
+
+.mineral-selector-dropper-toggle {
+  display: flex;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+  flex-wrap: wrap;
+}
+
+.mineral-selector-dropper-btn {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.75rem;
+  min-height: 36px;
+}
+
+.mineral-selector-dropper-btn.active {
+  border-color: var(--blue-500);
+  color: var(--blue-700);
+}
+
+.mineral-selector-manage-link {
+  display: inline-block;
+  margin-top: 0.5rem;
+  font-size: 0.9rem;
+  color: var(--blue-700);
+  text-decoration: none;
+}
+
+.mineral-selector-manage-link:hover {
+  text-decoration: underline;
+}

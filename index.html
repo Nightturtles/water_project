@@ -215,6 +215,9 @@
       </p>
     </section>
 
+    <!-- Inline mineral selector (chips + modal). -->
+    <div id="mineral-selector-mount"></div>
+
     <!-- Results -->
     <section class="card results-card">
       <div class="section-header-actions">
@@ -369,9 +372,23 @@
   <script src="ui-shared.js"></script>
   <script src="library-data.js"></script>
   <script src="library-picker.js"></script>
+  <script src="mineral-selector.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="script.js"></script>
   <script>
+    // --- Inline mineral selector (mount + in-tab re-render) ---
+    if (typeof window.mountMineralSelector === "function") {
+      window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
+    }
+    // The cross-tab storage listener in script.js calls renderResultItems +
+    // calculate when cw_selected_minerals changes; mirror that for in-tab
+    // edits made via the inline widget. (Both functions are exposed by
+    // script.js; only the welcome modal lives in its own IIFE.)
+    window.addEventListener("cw:minerals-changed", function () {
+      if (typeof renderResultItems === "function") renderResultItems();
+      if (typeof calculate === "function") calculate();
+    });
+
     (function () {
       var banner = document.getElementById("start-banner");
       var closeBtn = document.getElementById("start-banner-close");
