@@ -123,7 +123,8 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Single-mineral solutions you've made at home. Configure bottle volume and grams per bottle in Settings.";
+    hint.textContent =
+      "Single-mineral solutions you've made at home. Configure bottle volume and grams per bottle in Settings.";
     targetEl.appendChild(hint);
 
     var list = document.createElement("div");
@@ -161,7 +162,8 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Multi-mineral stocks. Only one can be active at a time. Create or edit stocks in Settings.";
+    hint.textContent =
+      "Multi-mineral stocks. Only one can be active at a time. Create or edit stocks in Settings.";
     targetEl.appendChild(hint);
 
     var specs = typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
@@ -261,7 +263,8 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Pre-made concentrates with fixed concentration. Pick your dropper style; checked items appear on tool pages.";
+    hint.textContent =
+      "Pre-made concentrates with fixed concentration. Pick your dropper style; checked items appear on tool pages.";
     targetEl.appendChild(hint);
 
     // Dropper-style toggle.
@@ -274,7 +277,8 @@
     ].forEach(function (opt) {
       var btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "preset-btn mineral-selector-dropper-btn" + (dropperType === opt.value ? " active" : "");
+      btn.className =
+        "preset-btn mineral-selector-dropper-btn" + (dropperType === opt.value ? " active" : "");
       btn.dataset.dropper = opt.value;
       btn.textContent = opt.label;
       btn.addEventListener("click", function () {
@@ -288,9 +292,12 @@
     });
     targetEl.appendChild(dropperWrap);
 
-    var brandIds = (typeof LOTUS_CONCENTRATE_IDS !== "undefined" && LOTUS_CONCENTRATE_IDS)
-      ? LOTUS_CONCENTRATE_IDS
-      : (typeof BRAND_CONCENTRATES !== "undefined" ? Object.keys(BRAND_CONCENTRATES) : []);
+    var brandIds =
+      typeof LOTUS_CONCENTRATE_IDS !== "undefined" && LOTUS_CONCENTRATE_IDS
+        ? LOTUS_CONCENTRATE_IDS
+        : typeof BRAND_CONCENTRATES !== "undefined"
+          ? Object.keys(BRAND_CONCENTRATES)
+          : [];
 
     var selected = loadSelectedConcentrates();
     var selectedSet = {};
@@ -451,7 +458,9 @@
     directTabBtn.id = "mineral-selector-tab-direct";
     directTabBtn.setAttribute("aria-controls", "mineral-selector-panel-direct");
     directTabBtn.textContent = "Direct Dose";
-    directTabBtn.addEventListener("click", function () { setActiveTab("direct"); });
+    directTabBtn.addEventListener("click", function () {
+      setActiveTab("direct");
+    });
 
     concTabBtn = document.createElement("button");
     concTabBtn.type = "button";
@@ -460,7 +469,9 @@
     concTabBtn.id = "mineral-selector-tab-concentrates";
     concTabBtn.setAttribute("aria-controls", "mineral-selector-panel-concentrates");
     concTabBtn.textContent = "Concentrates";
-    concTabBtn.addEventListener("click", function () { setActiveTab("concentrates"); });
+    concTabBtn.addEventListener("click", function () {
+      setActiveTab("concentrates");
+    });
 
     tabs.appendChild(directTabBtn);
     tabs.appendChild(concTabBtn);
