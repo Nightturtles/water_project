@@ -19,6 +19,9 @@
   </header>
 
   <main>
+    <!-- Inline mineral selector (panel or chips, per ?mineral-ui= query param). -->
+    <div id="mineral-selector-mount"></div>
+
     <!-- Current Water Profile -->
     <section class="card">
       <div class="section-header-actions">
@@ -325,7 +328,13 @@
   <script src="ui-shared.js"></script>
   <script src="library-data.js"></script>
   <script src="library-picker.js"></script>
+  <script src="mineral-selector.js"></script>
   <script>
+    // --- Inline mineral selector (mount + in-tab re-render) ---
+    if (typeof window.mountMineralSelector === "function") {
+      window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
+    }
+
     const SLIDERS = ["acidity", "clarity", "fruit", "sweet", "body"];
 
     // --- Slider adjustment factors ---
@@ -945,6 +954,11 @@
     }
     // Cross-device sync: re-render when sync.js Realtime pull writes new data.
     window.addEventListener("cw:cloud-data-changed", refreshTasteRail);
+    // In-tab edits via the inline mineral selector: refresh range guidance
+    // (which depends on getEffective*Source) by re-running recalculate.
+    window.addEventListener("cw:minerals-changed", function () {
+      if (typeof recalculate === "function") recalculate();
+    });
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

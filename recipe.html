@@ -126,6 +126,9 @@
       </div>
     </section>
 
+    <!-- Inline mineral selector (chips + modal). -->
+    <div id="mineral-selector-mount"></div>
+
     <!-- Mineral Additions -->
     <section class="card">
       <h2>Add Minerals</h2>
@@ -271,8 +274,34 @@
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="mineral-selector.js"></script>
   <script src="source-water-ui.js"></script>
   <script>
+    // --- Inline mineral selector (mount + reload-on-change) ---
+    if (typeof window.mountMineralSelector === "function") {
+      window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
+    }
+    // recipe.html snapshots selectedMinerals into a top-level const at load
+    // time and has no per-row rebuild, so we reload to pick up changes. But
+    // if the inline-selector modal is open we'd close it mid-multi-toggle —
+    // defer the reload until the modal closes. The selector dispatches
+    // cw:mineral-selector-closed from closeModal() so we know when to act.
+    let mineralSelectorReloadPending = false;
+    function isMineralSelectorModalOpen() {
+      const modal = document.getElementById("mineral-selector-modal-overlay");
+      return !!(modal && modal.style.display !== "none");
+    }
+    window.addEventListener("cw:minerals-changed", function () {
+      if (isMineralSelectorModalOpen()) {
+        mineralSelectorReloadPending = true;
+      } else {
+        location.reload();
+      }
+    });
+    window.addEventListener("cw:mineral-selector-closed", function () {
+      if (mineralSelectorReloadPending) location.reload();
+    });
+
     // --- Brew method (persisted across pages; default Filter) ---
     let activeBrewMethod = loadBrewMethod();
     const recipeBrewMethodToggle = document.getElementById("recipe-brew-method-toggle");
@@ -397,12 +426,7 @@
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
       const p = document.createElement("p");
       p.className = "hint";
-      p.textContent = "No minerals or concentrates selected. Go to ";
-      const a = document.createElement("a");
-      a.href = "minerals.html";
-      a.textContent = "Settings";
-      p.appendChild(a);
-      p.appendChild(document.createTextNode(" to pick some."));
+      p.textContent = "Pick some minerals from the selector above to start dosing.";
       mineralInputsEl.appendChild(p);
     } else {
       // Minerals (grams)
