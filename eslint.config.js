@@ -76,6 +76,12 @@ module.exports = tseslint.config(
       // storage.js (loadCustomTargetProfiles, RESERVED_TARGET_KEYS, slugify),
       // constants.js (LIBRARY_TAGS), supabase-client.js, library-data.js.
       "my-recipes-ui.js",
+      // mineral-selector: inline chip strip + tabbed modal on tool pages.
+      // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
+      // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
+      // load/saveSelectedConcentrates, load/saveLotusDropperType,
+      // loadStockConcentrateSpecs, getActiveStockId).
+      "mineral-selector.js",
     ],
     languageOptions: {
       sourceType: "script",
