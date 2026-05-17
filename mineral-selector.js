@@ -611,6 +611,14 @@
 
   function mountMineralSelector(targetEl) {
     if (!targetEl) return;
+    // If this element was already mounted, detach the previous chip-rerender
+    // listener so re-mount doesn't leak duplicates (the old closure's chips
+    // element is also out of the DOM, so its renderChips would no-op anyway,
+    // but stale window listeners accumulate).
+    if (typeof targetEl._cwMineralSelectorCleanup === "function") {
+      targetEl._cwMineralSelectorCleanup();
+      targetEl._cwMineralSelectorCleanup = null;
+    }
     targetEl.innerHTML = "";
 
     var wrap = document.createElement("div");
@@ -647,6 +655,9 @@
 
     editBtn.addEventListener("click", openModal);
     window.addEventListener("cw:minerals-changed", renderChips);
+    targetEl._cwMineralSelectorCleanup = function () {
+      window.removeEventListener("cw:minerals-changed", renderChips);
+    };
     renderChips();
 
     wrap.appendChild(chips);
