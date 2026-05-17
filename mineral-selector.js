@@ -306,9 +306,10 @@
     var list = document.createElement("div");
     list.className = "mineral-list mineral-selector-sublist";
 
+    var brandDb = typeof BRAND_CONCENTRATES !== "undefined" ? BRAND_CONCENTRATES : {};
     for (var k = 0; k < brandIds.length; k++) {
       var bid = brandIds[k];
-      var brand = BRAND_CONCENTRATES[bid] || {};
+      var brand = brandDb[bid] || {};
       var checked = !!selectedSet[bid];
       var item = document.createElement("div");
       item.className = "mineral-item" + (checked ? " selected" : "");
@@ -589,14 +590,18 @@
     }
     if (modalPreviousFocus && modalPreviousFocus.focus) modalPreviousFocus.focus();
     modalPreviousFocus = null;
+    // Lets host pages that defer their re-render (e.g. recipe.html, which
+    // location.reload()s on mineral changes) act when the user is done
+    // editing rather than mid-toggle.
+    window.dispatchEvent(new CustomEvent("cw:mineral-selector-closed"));
   }
 
-  // When ANY save happens (mineral or concentrate), refresh the Concentrates
-  // tab so other categories' UI stays consistent with current state. The
-  // direct-dose list rebuilds on next open; that's fine.
-  window.addEventListener("cw:minerals-changed", function () {
-    if (modalEl && modalEl.style.display !== "none") rebuildConcentratesTab();
-  });
+  // Note: deliberately NO `cw:minerals-changed` listener that rebuilds the
+  // modal's subsections on self-fired events. The change handlers update
+  // their own DOM in place (.selected class + checkbox state), and
+  // openModal() rebuilds everything from scratch on each open so cross-tab
+  // edits land on the next open. Listening here would wipe focus mid-click
+  // on the just-toggled checkbox.
 
   function chipLabelFor(mineral) {
     return mineral.formula || mineral.name;

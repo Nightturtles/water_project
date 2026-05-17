@@ -282,10 +282,25 @@
       window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
     }
     // recipe.html snapshots selectedMinerals into a top-level const at load
-    // time and has no per-row rebuild. Match the existing cross-tab storage
-    // listener (which already reloads on cw_selected_minerals changes) for
-    // in-tab edits made via the inline widget.
-    window.addEventListener("cw:minerals-changed", function () { location.reload(); });
+    // time and has no per-row rebuild, so we reload to pick up changes. But
+    // if the inline-selector modal is open we'd close it mid-multi-toggle —
+    // defer the reload until the modal closes. The selector dispatches
+    // cw:mineral-selector-closed from closeModal() so we know when to act.
+    let mineralSelectorReloadPending = false;
+    function isMineralSelectorModalOpen() {
+      const modal = document.getElementById("mineral-selector-modal-overlay");
+      return !!(modal && modal.style.display !== "none");
+    }
+    window.addEventListener("cw:minerals-changed", function () {
+      if (isMineralSelectorModalOpen()) {
+        mineralSelectorReloadPending = true;
+      } else {
+        location.reload();
+      }
+    });
+    window.addEventListener("cw:mineral-selector-closed", function () {
+      if (mineralSelectorReloadPending) location.reload();
+    });
 
     // --- Brew method (persisted across pages; default Filter) ---
     let activeBrewMethod = loadBrewMethod();
