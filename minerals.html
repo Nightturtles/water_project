@@ -879,6 +879,16 @@
         }
 
         if (action === "save-stock") {
+          // Mirror the new-save gate: applyAuthGate locks the "+ New stock"
+          // opener but the per-row "Save changes" button is rendered after
+          // an authenticated session pre-seeded the row, so a logout in the
+          // same tab can leave an unlocked button visible.
+          if (typeof window.isLoggedInSync === "function" && !window.isLoggedInSync()) {
+            if (typeof window.openLoginModal === "function") {
+              window.openLoginModal({ reason: "save-stock" });
+            }
+            return;
+          }
           if (!isStockDirty(slug)) return;
           const draft = stockDrafts[slug];
           const error = validateStockSpec(draft);
