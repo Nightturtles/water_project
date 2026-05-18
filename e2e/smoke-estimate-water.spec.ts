@@ -1,4 +1,4 @@
-// Stubbed verification of the "Estimate from my address" feature.
+// Stubbed verification of the "Estimate from my ZIP" feature.
 //
 // Drives the client-side flow end-to-end without touching the Supabase Edge
 // Function or the Anthropic API. Both the preflight allowlist check and the

@@ -1,5 +1,5 @@
 // ============================================
-// Estimate Water UI — "Estimate from my address" feature
+// Estimate Water UI — "Estimate from my ZIP" feature
 // Calls Supabase Edge Function `estimate-water` which proxies to the
 // Claude API (web_search + forced report_water_profile tool). Populates
 // the existing #src-* inputs so the rest of the source-water pipeline

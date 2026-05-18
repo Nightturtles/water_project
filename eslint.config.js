@@ -82,7 +82,7 @@ module.exports = tseslint.config(
       // load/saveSelectedConcentrates, load/saveLotusDropperType,
       // loadStockConcentrateSpecs, getActiveStockId).
       "mineral-selector.js",
-      // estimate-water-ui: "Estimate from my address" feature. Classic script
+      // estimate-water-ui: "Estimate from my ZIP" feature. Classic script
       // depending on globals from constants.js (ION_FIELDS), supabase-client.js
       // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).
       "estimate-water-ui.js",
