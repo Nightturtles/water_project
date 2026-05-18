@@ -207,9 +207,6 @@ declare global {
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
-    applyAuthGate?: (
-      el: HTMLElement | null | undefined,
-      opts?: { reason?: string },
-    ) => void;
+    applyAuthGate?: (el: HTMLElement | null | undefined, opts?: { reason?: string }) => void;
   }
 }

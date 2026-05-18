@@ -1417,7 +1417,7 @@ function loadCreatorDisplayName() {
 
 /** @param {string} name */
 function saveCreatorDisplayName(name) {
-  _setGated("cw_creator_display_name",name);
+  _setGated("cw_creator_display_name", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 

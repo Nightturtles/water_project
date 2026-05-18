@@ -64,32 +64,57 @@
   // never cleared.
   var USER_CONTENT_KEYS_EXACT = [
     // Category A
-    "cw_source_water", "cw_source_preset", "cw_target_preset", "cw_brew_method",
-    "cw_selected_minerals", "cw_selected_concentrates",
-    "cw_lotus_dropper_type", "cw_lotus_concentrate_units", "cw_lotus_concentrate_unit",
-    "cw_mineral_display_mode", "cw_mineral_selector_tab",
-    "cw_recipe_mineral_inputs", "cw_recipe_concentrate_inputs",
-    "cw_recipe_stock_grams", "cw_recipe_dispense_mode",
+    "cw_source_water",
+    "cw_source_preset",
+    "cw_target_preset",
+    "cw_brew_method",
+    "cw_selected_minerals",
+    "cw_selected_concentrates",
+    "cw_lotus_dropper_type",
+    "cw_lotus_concentrate_units",
+    "cw_lotus_concentrate_unit",
+    "cw_mineral_display_mode",
+    "cw_mineral_selector_tab",
+    "cw_recipe_mineral_inputs",
+    "cw_recipe_concentrate_inputs",
+    "cw_recipe_stock_grams",
+    "cw_recipe_dispense_mode",
     // Category B
-    "cw_custom_profiles", "cw_custom_target_profiles",
-    "cw_stock_concentrate_specs", "cw_diy_concentrate_specs",
-    "cw_deleted_presets", "cw_deleted_target_presets", "cw_added_target_presets",
+    "cw_custom_profiles",
+    "cw_custom_target_profiles",
+    "cw_stock_concentrate_specs",
+    "cw_diy_concentrate_specs",
+    "cw_deleted_presets",
+    "cw_deleted_target_presets",
+    "cw_added_target_presets",
     "cw_creator_display_name",
     // Category C
-    "cw_last_pushed_settings", "cw_last_pushed_selections",
-    "cw_last_pushed_source_profiles", "cw_last_pushed_target_profiles",
-    "cw_synced_user_id", "cw_starter_migration_applied"
+    "cw_last_pushed_settings",
+    "cw_last_pushed_selections",
+    "cw_last_pushed_source_profiles",
+    "cw_last_pushed_target_profiles",
+    "cw_synced_user_id",
+    "cw_starter_migration_applied",
   ];
   var USER_CONTENT_KEYS_PREFIX = ["cw_volume_"];
   // Category A keys, used for routing to sessionStorage when anonymous
   // (commit 3) and for tracking which keys participate in transient state.
   var TRANSIENT_KEYS = [
-    "cw_source_water", "cw_source_preset", "cw_target_preset", "cw_brew_method",
-    "cw_selected_minerals", "cw_selected_concentrates",
-    "cw_lotus_dropper_type", "cw_lotus_concentrate_units", "cw_lotus_concentrate_unit",
-    "cw_mineral_display_mode", "cw_mineral_selector_tab",
-    "cw_recipe_mineral_inputs", "cw_recipe_concentrate_inputs",
-    "cw_recipe_stock_grams", "cw_recipe_dispense_mode"
+    "cw_source_water",
+    "cw_source_preset",
+    "cw_target_preset",
+    "cw_brew_method",
+    "cw_selected_minerals",
+    "cw_selected_concentrates",
+    "cw_lotus_dropper_type",
+    "cw_lotus_concentrate_units",
+    "cw_lotus_concentrate_unit",
+    "cw_mineral_display_mode",
+    "cw_mineral_selector_tab",
+    "cw_recipe_mineral_inputs",
+    "cw_recipe_concentrate_inputs",
+    "cw_recipe_stock_grams",
+    "cw_recipe_dispense_mode",
   ];
   var TRANSIENT_KEYS_PREFIX = ["cw_volume_"];
 
@@ -929,8 +954,12 @@
   // the SIGNED_OUT auth handler below as defense-in-depth.
   function clearLocalUserContent() {
     USER_CONTENT_KEYS_EXACT.forEach(function (k) {
-      try { localStorage.removeItem(k); } catch (_) {}
-      try { sessionStorage.removeItem(k); } catch (_) {}
+      try {
+        localStorage.removeItem(k);
+      } catch (_) {}
+      try {
+        sessionStorage.removeItem(k);
+      } catch (_) {}
     });
     /** @param {Storage} store */
     function sweepPrefix(store) {
@@ -947,11 +976,17 @@
         }
       }
       toRemove.forEach(function (key) {
-        try { store.removeItem(key); } catch (_) {}
+        try {
+          store.removeItem(key);
+        } catch (_) {}
       });
     }
-    try { sweepPrefix(localStorage); } catch (_) {}
-    try { sweepPrefix(sessionStorage); } catch (_) {}
+    try {
+      sweepPrefix(localStorage);
+    } catch (_) {}
+    try {
+      sweepPrefix(sessionStorage);
+    } catch (_) {}
     try {
       document.dispatchEvent(new Event("cw:storage-invalidated"));
     } catch (_) {}

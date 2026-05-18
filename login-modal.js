@@ -15,13 +15,13 @@
   "use strict";
 
   var REASON_HEADINGS = {
-    "save": "Sign in to save",
+    save: "Sign in to save",
     "save-recipe": "Sign in to save this recipe",
     "save-profile": "Sign in to save this profile",
     "save-stock": "Sign in to create a stock",
-    "publish": "Sign in to publish",
-    "bookmark": "Sign in to bookmark",
-    "default": "Sign in to Cafelytic"
+    publish: "Sign in to publish",
+    bookmark: "Sign in to bookmark",
+    default: "Sign in to Cafelytic",
   };
 
   var modalEl = null;
@@ -43,27 +43,27 @@
       '  <div class="login-mode-toggle" role="group" aria-label="Authentication mode">',
       '    <button type="button" class="login-mode-btn active" data-mode="signin" aria-pressed="true">Sign in</button>',
       '    <button type="button" class="login-mode-btn" data-mode="signup" aria-pressed="false">Create account</button>',
-      '  </div>',
+      "  </div>",
       '  <form class="login-form" novalidate>',
       '    <div class="input-group">',
       '      <label for="login-modal-email">Email</label>',
       '      <input type="email" id="login-modal-email" autocomplete="email" placeholder="you@example.com" required>',
-      '    </div>',
+      "    </div>",
       '    <div class="input-group login-modal-password-group">',
       '      <label for="login-modal-password">Password</label>',
       '      <input type="password" id="login-modal-password" autocomplete="current-password" placeholder="Password" required>',
-      '    </div>',
+      "    </div>",
       '    <div class="login-error" role="alert" aria-live="polite"></div>',
       '    <div class="login-success" role="status" aria-live="polite" style="display:none;"></div>',
       '    <button type="submit" class="login-submit-btn">Sign in</button>',
       '    <button type="button" class="login-text-link login-modal-forgot"',
       '            style="background:none;border:none;color:var(--blue-600);cursor:pointer;font-size:0.85rem;margin-top:0.5rem;padding:0;">',
-      '      Forgot password?',
-      '    </button>',
+      "      Forgot password?",
+      "    </button>",
       '    <button type="button" class="login-text-link login-modal-back" style="display:none;background:none;border:none;color:var(--blue-600);cursor:pointer;font-size:0.85rem;margin-top:0.5rem;padding:0;">',
-      '      Back to sign in',
-      '    </button>',
-      '  </form>',
+      "      Back to sign in",
+      "    </button>",
+      "  </form>",
       '  <div class="login-divider login-modal-divider">or</div>',
       '  <button type="button" class="login-google-btn login-modal-google">',
       '    <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true">',
@@ -71,10 +71,10 @@
       '      <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>',
       '      <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>',
       '      <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>',
-      '    </svg>',
-      '    Continue with Google',
-      '  </button>',
-      '</div>'
+      "    </svg>",
+      "    Continue with Google",
+      "  </button>",
+      "</div>",
     ].join("\n");
 
     document.body.appendChild(modalEl);
@@ -150,17 +150,27 @@
     }
 
     modeBtns.forEach(function (btn) {
-      btn.addEventListener("click", function () { setMode(btn.getAttribute("data-mode")); });
+      btn.addEventListener("click", function () {
+        setMode(btn.getAttribute("data-mode"));
+      });
     });
-    forgotBtn.addEventListener("click", function () { setMode("forgot"); });
-    backBtn.addEventListener("click", function () { setMode("signin"); });
+    forgotBtn.addEventListener("click", function () {
+      setMode("forgot");
+    });
+    backBtn.addEventListener("click", function () {
+      setMode("signin");
+    });
 
     form.addEventListener("submit", async function (e) {
       e.preventDefault();
       var email = (emailInput.value || "").trim();
       var password = passwordInput.value || "";
       if (!email || (formMode !== "forgot" && !password)) {
-        showError(formMode === "forgot" ? "Please enter your email." : "Please enter your email and password.");
+        showError(
+          formMode === "forgot"
+            ? "Please enter your email."
+            : "Please enter your email and password.",
+        );
         return;
       }
       submitBtn.disabled = true;
@@ -168,13 +178,19 @@
       try {
         if (formMode === "signin") {
           var signinRes = await window.signInWithEmail(email, password);
-          if (signinRes && signinRes.error) { showError(signinRes.error.message); return; }
+          if (signinRes && signinRes.error) {
+            showError(signinRes.error.message);
+            return;
+          }
           // sync.js's onAuthStateChange SIGNED_IN handler takes it from here
           // (pulls cloud data, dispatches cw:data-refreshed).  Close immediately.
           closeModal();
         } else if (formMode === "signup") {
           var signupRes = await window.signUpWithEmail(email, password);
-          if (signupRes && signupRes.error) { showError(signupRes.error.message); return; }
+          if (signupRes && signupRes.error) {
+            showError(signupRes.error.message);
+            return;
+          }
           setMode("signin");
           showSuccess("Check your email to confirm your account, then sign in.");
         } else {
@@ -234,7 +250,9 @@
     document.body.classList.add("login-modal-open");
     var emailInput = $(root, "#login-modal-email");
     if (emailInput) {
-      setTimeout(function () { emailInput.focus(); }, 50);
+      setTimeout(function () {
+        emailInput.focus();
+      }, 50);
     }
   }
 
