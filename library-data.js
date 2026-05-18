@@ -223,6 +223,15 @@
   // User-published rows (userId != null) always fork to a new custom profile
   // with a unique slug — we don't mutate someone else's publish.
   function copyRecipeToMyProfiles(recipe) {
+    // Refuse early when anonymous.  Callers (recipe-browser.js bookmark,
+    // library-picker Add) check for a falsy return; treating null as "open
+    // the login modal" is wired in commit 5.
+    if (typeof window.isLoggedInSync === "function" && !window.isLoggedInSync()) {
+      if (typeof window.openLoginModal === "function") {
+        window.openLoginModal({ reason: "save-recipe" });
+      }
+      return null;
+    }
     if (recipe && recipe.userId == null && recipe.slug) {
       if (typeof loadDeletedTargetPresets === "function" &&
           typeof removeDeletedTargetPreset === "function") {

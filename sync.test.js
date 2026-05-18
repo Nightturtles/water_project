@@ -56,6 +56,8 @@ global.window.addEventListener = () => {};
 global.localStorage = makeFakeStorage();
 global.sessionStorage = makeFakeStorage();
 global.window.supabaseClient = undefined;
+global.isLoggedInSync = () => true;
+global._cachedAuthUserId = "test-user-id";
 
 require("./constants.js");
 const storage = require("./storage.js");

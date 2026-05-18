@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke for minerals.html (Settings) Stock Solutions section.
 //
@@ -20,6 +21,11 @@ test.describe("minerals.html — Stock Solutions single-stock-active rule", () =
     page.on("pageerror", (err) => {
       consoleErrors.push(err.message);
     });
+
+    // Stock specs are Category B (named artifacts); reads return null when
+    // anonymous.  Stub the test user as logged in so the seeded specs are
+    // visible to the page code.
+    await stubLoggedIn(page);
 
     // Land on minerals.html with two stocks pre-seeded in localStorage so the
     // page renders both rows. Pre-seeding via addInitScript runs BEFORE any

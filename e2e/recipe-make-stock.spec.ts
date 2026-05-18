@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke for the Recipe Builder "+ Make a stock from this profile" follow-up
 // (see PRs #74 / #75 for the Calculator + Taste Tuner equivalents).
@@ -27,6 +28,9 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
     // page.addInitScript for cleanup: it re-fires on every navigation,
     // including the make-stock click that takes us to minerals.html, which
     // would wipe the just-saved profile out from under the destination.
+    // Save flows require auth (Category B writes are gated); stub the test
+    // user as logged in so the save buttons aren't locked.
+    await stubLoggedIn(page);
     await page.goto("/recipe.html");
   });
 

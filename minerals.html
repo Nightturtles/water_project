@@ -142,6 +142,7 @@
   <script src="metrics.js"></script>
   <script src="library-data.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="login-modal.js"></script>
   <script>
     const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
     const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
@@ -301,6 +302,9 @@
     const stockListEl = document.getElementById("stock-concentrate-list");
     const stockAddBtn = document.getElementById("stock-add-new-btn");
     const stockNewForm = document.getElementById("stock-new-form");
+    if (typeof window.applyAuthGate === "function" && stockAddBtn) {
+      window.applyAuthGate(stockAddBtn, { reason: "save-stock" });
+    }
 
     // Article-recipe slugs reserved by the library so user-defined stocks
     // cannot shadow them. Auto-import from library rows lands in B3; this

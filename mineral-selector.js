@@ -20,17 +20,14 @@
   var ACTIVE_TAB_KEY = "cw_mineral_selector_tab";
 
   function readActiveTab() {
-    try {
-      var v = localStorage.getItem(ACTIVE_TAB_KEY);
-      if (v === "concentrates") return "concentrates";
-    } catch (e) {}
+    // Category A: routes to sessionStorage when anonymous.
+    var v = typeof _getTransient === "function" ? _getTransient(ACTIVE_TAB_KEY) : null;
+    if (v === "concentrates") return "concentrates";
     return "direct";
   }
 
   function writeActiveTab(tab) {
-    try {
-      localStorage.setItem(ACTIVE_TAB_KEY, tab);
-    } catch (e) {}
+    if (typeof _setTransient === "function") _setTransient(ACTIVE_TAB_KEY, tab);
   }
 
   function dispatchChanged(detail) {

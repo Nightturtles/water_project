@@ -458,6 +458,9 @@
       e.stopPropagation();
       handlers.onToggleSave(recipe);
     });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(bookmark, { reason: "bookmark" });
+    }
     header.appendChild(bookmark);
     card.appendChild(header);
 
@@ -614,6 +617,9 @@
       e.stopPropagation();
       handlers.onToggleSave(recipe);
     });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(bookmark, { reason: "bookmark" });
+    }
     section.appendChild(bookmark);
 
     section.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));

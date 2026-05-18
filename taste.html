@@ -326,6 +326,7 @@
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="login-modal.js"></script>
   <script src="library-data.js"></script>
   <script src="library-picker.js"></script>
   <script src="mineral-selector.js"></script>
@@ -719,6 +720,9 @@
     const tasteSaveBtn = document.getElementById("taste-save-btn");
     const tasteProfileNameInput = document.getElementById("taste-profile-name");
     const tasteSaveStatus = document.getElementById("taste-save-status");
+    if (typeof window.applyAuthGate === "function" && tasteSaveBtn) {
+      window.applyAuthGate(tasteSaveBtn, { reason: "save-recipe" });
+    }
 
     function updateTasteProfileNameError() {
       const errEl = document.getElementById("taste-profile-name-error");
@@ -780,6 +784,9 @@
     const currentProfileNameInput = document.getElementById("current-profile-name");
     const currentSaveBtn = document.getElementById("current-save-btn");
     const currentSaveStatus = document.getElementById("current-save-status");
+    if (typeof window.applyAuthGate === "function" && currentSaveBtn) {
+      window.applyAuthGate(currentSaveBtn, { reason: "save-profile" });
+    }
 
     function updateCurrentProfileNameError() {
       const errEl = document.getElementById("current-profile-name-error");

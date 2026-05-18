@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke suite for library.html (the Wave D recipe browser). Covers the
 // interactive filter bar (segmented controls, chip toggles, search debounce,
@@ -45,6 +46,12 @@ test.describe("library.html — Wave D recipe browser", () => {
     page.on("pageerror", (err) => {
       consoleErrors.push(err.message);
     });
+
+    // Bookmark / "Add to my stocks" / "+ Make a stock" flows write Category B
+    // keys (cw_custom_target_profiles, cw_stock_concentrate_specs, etc.) and
+    // those are gated behind sign-in.  Stub a logged-in session so the gated
+    // writes go through.
+    await stubLoggedIn(page);
 
     await page.goto("/library.html");
   });

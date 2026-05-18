@@ -34,6 +34,15 @@ const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
 const targetSaveStatus = document.getElementById("target-save-status");
 const targetMakeStockBtn = document.getElementById("target-make-stock-btn");
 
+// Gate the named-target-profile save affordances when the user is anonymous.
+// Capture-phase click handler intercepts before the bubble-phase save logic
+// below ever fires, so no localStorage write happens off the locked button.
+if (typeof window.applyAuthGate === "function") {
+  if (targetSaveBtn) window.applyAuthGate(targetSaveBtn, { reason: "save-recipe" });
+  if (targetSaveChangesBtn) window.applyAuthGate(targetSaveChangesBtn, { reason: "save-recipe" });
+  if (targetMakeStockBtn) window.applyAuthGate(targetMakeStockBtn, { reason: "save-stock" });
+}
+
 let lastCalculatedIons = null;
 let isTargetEditMode = false;
 
