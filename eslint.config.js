@@ -76,6 +76,11 @@ module.exports = tseslint.config(
       // storage.js (loadCustomTargetProfiles, RESERVED_TARGET_KEYS, slugify),
       // constants.js (LIBRARY_TAGS), supabase-client.js, library-data.js.
       "my-recipes-ui.js",
+      // estimate-water-ui: "Estimate from my address" feature. Classic script
+      // depending on globals from constants.js (ALLOWED_ESTIMATE_EMAILS,
+      // ION_FIELDS), supabase-client.js (window.supabaseClient, window.getUser),
+      // sentry-init.js (window.Sentry).
+      "estimate-water-ui.js",
     ],
     languageOptions: {
       sourceType: "script",
