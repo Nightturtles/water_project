@@ -76,10 +76,15 @@ module.exports = tseslint.config(
       // storage.js (loadCustomTargetProfiles, RESERVED_TARGET_KEYS, slugify),
       // constants.js (LIBRARY_TAGS), supabase-client.js, library-data.js.
       "my-recipes-ui.js",
+      // mineral-selector: inline chip strip + tabbed modal on tool pages.
+      // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
+      // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
+      // load/saveSelectedConcentrates, load/saveLotusDropperType,
+      // loadStockConcentrateSpecs, getActiveStockId).
+      "mineral-selector.js",
       // estimate-water-ui: "Estimate from my address" feature. Classic script
-      // depending on globals from constants.js (ALLOWED_ESTIMATE_EMAILS,
-      // ION_FIELDS), supabase-client.js (window.supabaseClient, window.getUser),
-      // sentry-init.js (window.Sentry).
+      // depending on globals from constants.js (ION_FIELDS), supabase-client.js
+      // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).
       "estimate-water-ui.js",
     ],
     languageOptions: {
