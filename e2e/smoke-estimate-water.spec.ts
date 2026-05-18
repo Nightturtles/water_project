@@ -50,7 +50,9 @@ async function stubAuth(page: Page, email: string | null): Promise<void> {
       configurable: true,
       enumerable: true,
       get: () => fakeFn,
-      set: () => { /* intercept reassignment from supabase-client.js */ },
+      set: () => {
+        /* intercept reassignment from supabase-client.js */
+      },
     });
   }, email);
 }
@@ -70,12 +72,13 @@ async function stubEdgeFunction(page: Page, response: unknown, status = 200): Pr
     const w = window as unknown as { supabaseClient?: { functions?: { invoke?: unknown } } };
     const install = () => {
       if (!w.supabaseClient || !w.supabaseClient.functions) return false;
-      w.supabaseClient.functions.invoke = () =>
-        Promise.resolve({ data: payload, error: null });
+      w.supabaseClient.functions.invoke = () => Promise.resolve({ data: payload, error: null });
       return true;
     };
     if (!install()) {
-      const iv = setInterval(() => { if (install()) clearInterval(iv); }, 25);
+      const iv = setInterval(() => {
+        if (install()) clearInterval(iv);
+      }, 25);
       setTimeout(() => clearInterval(iv), 5000);
     }
   }, response);

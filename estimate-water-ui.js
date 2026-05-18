@@ -104,17 +104,18 @@
       controller.abort();
     }, REQUEST_TIMEOUT_MS);
     try {
-      const { data, error } = await window.supabaseClient.functions.invoke(
-        "estimate-water",
-        {
-          body: { zip: zip, provider: provider },
-        },
-      );
+      const { data, error } = await window.supabaseClient.functions.invoke("estimate-water", {
+        body: { zip: zip, provider: provider },
+      });
       if (error) {
         // FunctionsHttpError carries the response — try to parse the JSON body.
         let parsedBody = null;
         if (error.context && typeof error.context.json === "function") {
-          try { parsedBody = await error.context.json(); } catch (_) { /* ignore */ }
+          try {
+            parsedBody = await error.context.json();
+          } catch (_) {
+            /* ignore */
+          }
         }
         const code =
           (parsedBody && parsedBody.error) ||
@@ -134,15 +135,24 @@
 
   function friendlyError(code) {
     switch (code) {
-      case "unauthorized": return "Please log in again.";
-      case "forbidden":    return "This feature is not enabled for your account.";
-      case "bad_request":  return "Check your zip and provider, then try again.";
-      case "rate_limit":   return "Too many requests. Try again in a minute.";
-      case "parse_error":  return "Couldn't estimate this address. Try entering ions manually.";
-      case "model_error":  return "The estimator is unavailable right now. Try again later.";
-      case "network":      return "Network problem. Check your connection.";
-      case "client_init":  return "Page is still loading. Try again in a moment.";
-      default:             return "Something went wrong. Try entering ions manually.";
+      case "unauthorized":
+        return "Please log in again.";
+      case "forbidden":
+        return "This feature is not enabled for your account.";
+      case "bad_request":
+        return "Check your zip and provider, then try again.";
+      case "rate_limit":
+        return "Too many requests. Try again in a minute.";
+      case "parse_error":
+        return "Couldn't estimate this address. Try entering ions manually.";
+      case "model_error":
+        return "The estimator is unavailable right now. Try again later.";
+      case "network":
+        return "Network problem. Check your connection.";
+      case "client_init":
+        return "Page is still loading. Try again in a moment.";
+      default:
+        return "Something went wrong. Try entering ions manually.";
     }
   }
 
@@ -174,8 +184,7 @@
       const meta = document.createElement("span");
       const confidence = result.confidence ? " (" + result.confidence + " confidence)" : "";
       const source = result.source ? " - " + result.source : "";
-      meta.textContent =
-        "Estimated " + relativeTime(result.timestamp) + confidence + source;
+      meta.textContent = "Estimated " + relativeTime(result.timestamp) + confidence + source;
       const reEstimate = document.createElement("button");
       reEstimate.type = "button";
       reEstimate.className = "estimate-reestimate-link";
@@ -283,23 +292,32 @@
       submitEstimate({ bypassCache: false });
     });
     zipInput.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); providerInput.focus(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        providerInput.focus();
+      }
     });
     providerInput.addEventListener("keydown", function (e) {
-      if (e.key === "Enter") { e.preventDefault(); submitBtn.click(); }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        submitBtn.click();
+      }
     });
 
     // Allowlist gate: only show the card for allowlisted accounts. The server
     // function also checks; this is just UX so non-allowlisted users don't see
     // a button that always errors out.
     if (typeof window.getUser !== "function") return;
-    window.getUser().then(function (res) {
-      const user = res && res.data && res.data.user;
-      if (!isAllowlisted(user)) return;
-      card.hidden = false;
-    }).catch(function () {
-      // Network error reading session — leave hidden.
-    });
+    window
+      .getUser()
+      .then(function (res) {
+        const user = res && res.data && res.data.user;
+        if (!isAllowlisted(user)) return;
+        card.hidden = false;
+      })
+      .catch(function () {
+        // Network error reading session — leave hidden.
+      });
   }
 
   window.initEstimateWaterUI = initEstimateWaterUI;

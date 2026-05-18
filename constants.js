@@ -106,10 +106,7 @@ const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
 // Client-side hint: hides the "Estimate from my address" UI for non-listed
 // emails. The Supabase Edge Function enforces the same allowlist via the
 // ESTIMATE_WATER_ALLOWLIST env var, which is the real security boundary.
-const ALLOWED_ESTIMATE_EMAILS = [
-  "kylestanderson@gmail.com",
-  "kyliz2012@gmail.com",
-];
+const ALLOWED_ESTIMATE_EMAILS = ["kylestanderson@gmail.com", "kyliz2012@gmail.com"];
 
 // --- Shared ion field list and labels ---
 const ION_FIELDS = [
