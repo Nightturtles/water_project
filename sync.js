@@ -928,34 +928,30 @@
   // logout button (in ui-shared.js) AFTER signOut() resolves, and also from
   // the SIGNED_OUT auth handler below as defense-in-depth.
   function clearLocalUserContent() {
-    var i, k, store, stores;
-    for (i = 0; i < USER_CONTENT_KEYS_EXACT.length; i++) {
-      k = USER_CONTENT_KEYS_EXACT[i];
+    USER_CONTENT_KEYS_EXACT.forEach(function (k) {
       try { localStorage.removeItem(k); } catch (_) {}
       try { sessionStorage.removeItem(k); } catch (_) {}
-    }
-    stores = [];
-    try { stores.push(localStorage); } catch (_) {}
-    try { stores.push(sessionStorage); } catch (_) {}
-    for (var si = 0; si < stores.length; si++) {
-      store = stores[si];
-      try {
-        var toRemove = [];
-        for (var j = 0; j < store.length; j++) {
-          var key = store.key(j);
-          if (!key) continue;
-          for (var p = 0; p < USER_CONTENT_KEYS_PREFIX.length; p++) {
-            if (key.indexOf(USER_CONTENT_KEYS_PREFIX[p]) === 0) {
-              toRemove.push(key);
-              break;
-            }
+    });
+    /** @param {Storage} store */
+    function sweepPrefix(store) {
+      var toRemove = [];
+      for (var j = 0; j < store.length; j++) {
+        var key = store.key(j);
+        if (!key) continue;
+        for (var p = 0; p < USER_CONTENT_KEYS_PREFIX.length; p++) {
+          var prefix = USER_CONTENT_KEYS_PREFIX[p];
+          if (prefix && key.indexOf(prefix) === 0) {
+            toRemove.push(key);
+            break;
           }
         }
-        for (var ri = 0; ri < toRemove.length; ri++) {
-          try { store.removeItem(toRemove[ri]); } catch (_) {}
-        }
-      } catch (_) {}
+      }
+      toRemove.forEach(function (key) {
+        try { store.removeItem(key); } catch (_) {}
+      });
     }
+    try { sweepPrefix(localStorage); } catch (_) {}
+    try { sweepPrefix(sessionStorage); } catch (_) {}
     try {
       document.dispatchEvent(new Event("cw:storage-invalidated"));
     } catch (_) {}

@@ -179,6 +179,11 @@ declare global {
     pushAllToCloud?: () => Promise<void>;
     pullFromCloud?: () => Promise<void>;
     handleFirstLoginMerge?: () => Promise<void>;
+    // Exposed from sync.js so the logout button (in ui-shared.js) can flush
+    // any debounced edit to cloud BEFORE signOut() clears the session, and
+    // wipe Categories A/B/C from both storage areas AFTER signOut() resolves.
+    flushPendingSync?: () => Promise<void>;
+    clearLocalUserContent?: () => void;
     // Resolves when initSync's push-then-pull completes and the Realtime
     // channel has been subscribed. Lets test code (e2e/smoke-sync.spec.ts)
     // await readiness without polling internal state.
@@ -186,5 +191,25 @@ declare global {
     // Resolves on the first SUBSCRIBED status from channel.subscribe —
     // the signal that postgres_changes events will be delivered.
     realtimeSubscribedPromise?: Promise<void>;
+    // Synchronous auth cache populated by supabase-client.js. Storage helpers
+    // (_getTransient / _getGated in storage.js) read these to route between
+    // localStorage and sessionStorage without awaiting getSession() on every
+    // call. _authStateResolved flips true once the initial getSession()
+    // settles (cw:auth-state-resolved fires at the same moment).
+    _cachedAuthUserId?: string | null;
+    _authStateResolved?: boolean;
+    isLoggedInSync?: () => boolean;
+    // Login modal API exposed from login-modal.js. openLoginModal mounts the
+    // dialog on first call; the reason string drives the heading ("save",
+    // "save-recipe", "save-profile", "save-stock", "publish", "bookmark").
+    openLoginModal?: (opts?: { reason?: string }) => void;
+    closeLoginModal?: () => void;
+    // Auth-gate helper exposed from ui-shared.js. Locks save affordances
+    // when the user is anonymous, intercepts clicks in capture phase, and
+    // opens the login modal instead of running the underlying save.
+    applyAuthGate?: (
+      el: HTMLElement | null | undefined,
+      opts?: { reason?: string },
+    ) => void;
   }
 }
