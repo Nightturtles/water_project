@@ -1,4 +1,3 @@
-// @ts-nocheck
 // Login modal — shared across all pages that load ui-shared.js.
 //
 // Anonymous users hitting a gated "Save" affordance see this modal instead

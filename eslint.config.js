@@ -86,6 +86,11 @@ module.exports = tseslint.config(
       // depending on globals from constants.js (ION_FIELDS), supabase-client.js
       // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).
       "estimate-water-ui.js",
+      // login-modal: inline sign-in / sign-up modal used by every page that
+      // loads ui-shared.js. Depends on globals from supabase-client.js
+      // (window.signInWithEmail / signUpWithEmail / signInWithGoogle /
+      // resetPasswordForEmail) and the cw:auth-changed event dispatched there.
+      "login-modal.js",
     ],
     languageOptions: {
       sourceType: "script",
