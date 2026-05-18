@@ -40,7 +40,9 @@
       <div id="estimate-water-card" class="estimate-water-card" hidden>
         <button type="button" id="estimate-open-btn" class="preset-btn">Estimate from my address</button>
         <div id="estimate-form" class="estimate-water-form" hidden>
+          <label for="estimate-zip" class="visually-hidden">ZIP code (5 digits)</label>
           <input type="text" id="estimate-zip" placeholder="ZIP (5 digits)" inputmode="numeric" maxlength="5" autocomplete="postal-code">
+          <label for="estimate-provider" class="visually-hidden">Water provider</label>
           <input type="text" id="estimate-provider" placeholder="Water provider (e.g. SFPUC)" maxlength="120">
           <button type="button" id="estimate-submit-btn" class="preset-btn">Estimate</button>
           <button type="button" id="estimate-cancel-btn" class="preset-btn">Cancel</button>

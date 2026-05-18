@@ -58,7 +58,6 @@ declare global {
   // --- Constants from constants.js (classic-script globals) ---
   const MINERAL_DB: Record<string, MineralEntry>;
   const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: Record<string, number>;
-  const ALLOWED_ESTIMATE_EMAILS: readonly string[];
   const ION_FIELDS: readonly IonName[];
   const ION_LABELS: Record<IonName, string>;
   const SOURCE_PRESETS: Record<string, { label: string; [key: string]: unknown }>;

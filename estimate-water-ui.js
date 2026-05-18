@@ -86,28 +86,25 @@
     });
   }
 
-  function isAllowlisted(user) {
-    if (!user || !user.email) return false;
-    if (typeof ALLOWED_ESTIMATE_EMAILS === "undefined") return false;
-    const email = String(user.email).toLowerCase();
-    return ALLOWED_ESTIMATE_EMAILS.some(function (e) {
-      return String(e).toLowerCase() === email;
-    });
-  }
-
-  async function callEstimate(zip, provider) {
+  async function invokeEstimateFunction(body, timeoutMs) {
     if (!window.supabaseClient || !window.supabaseClient.functions) {
       throw Object.assign(new Error("supabase client not ready"), { code: "client_init" });
     }
     const controller = new AbortController();
-    const timeout = setTimeout(function () {
+    const timer = setTimeout(function () {
       controller.abort();
-    }, REQUEST_TIMEOUT_MS);
+    }, timeoutMs);
     try {
       const { data, error } = await window.supabaseClient.functions.invoke("estimate-water", {
-        body: { zip: zip, provider: provider },
+        body: body,
+        // supabase-js v2.45+ forwards `signal` to the underlying fetch so
+        // our REQUEST_TIMEOUT_MS actually cancels the request.
+        signal: controller.signal,
       });
       if (error) {
+        if (controller.signal.aborted) {
+          throw Object.assign(new Error("request timed out"), { code: "timeout" });
+        }
         // FunctionsHttpError carries the response — try to parse the JSON body.
         let parsedBody = null;
         if (error.context && typeof error.context.json === "function") {
@@ -128,9 +125,30 @@
         throw Object.assign(new Error((data && data.message) || code), { code: code });
       }
       return data;
+    } catch (e) {
+      if (e && e.name === "AbortError") {
+        throw Object.assign(new Error("request timed out"), { code: "timeout" });
+      }
+      throw e;
     } finally {
-      clearTimeout(timeout);
+      clearTimeout(timer);
     }
+  }
+
+  // Server preflight: returns true if the current user passes the Edge
+  // Function's allowlist check. Kept lightweight (no Claude call) so we can
+  // call it on every page load to decide whether to show the UI.
+  async function isAllowedByServer() {
+    try {
+      const data = await invokeEstimateFunction({ check: true }, 8000);
+      return data && data.allowed === true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function callEstimate(zip, provider) {
+    return invokeEstimateFunction({ zip: zip, provider: provider }, REQUEST_TIMEOUT_MS);
   }
 
   function friendlyError(code) {
@@ -149,6 +167,8 @@
         return "The estimator is unavailable right now. Try again later.";
       case "network":
         return "Network problem. Check your connection.";
+      case "timeout":
+        return "The estimator took too long. Try again in a moment.";
       case "client_init":
         return "Page is still loading. Try again in a moment.";
       default:
@@ -276,6 +296,7 @@
           "bad_request",
           "client_init",
           "network",
+          "timeout",
         ]);
         if (!expected.has(code)) {
           // Don't pair zip+provider in one field — mild PII pairing.
@@ -304,20 +325,23 @@
       }
     });
 
-    // Allowlist gate: only show the card for allowlisted accounts. The server
-    // function also checks; this is just UX so non-allowlisted users don't see
-    // a button that always errors out.
-    if (typeof window.getUser !== "function") return;
-    window
-      .getUser()
-      .then(function (res) {
-        const user = res && res.data && res.data.user;
-        if (!isAllowlisted(user)) return;
-        card.hidden = false;
-      })
-      .catch(function () {
-        // Network error reading session — leave hidden.
-      });
+    // Allowlist gate: ask the server whether the current user can use the
+    // feature. The Edge Function is the only place the email allowlist
+    // lives, so non-allowlisted accounts never see the button. Requires an
+    // authenticated session — anonymous users skip the preflight entirely
+    // (a logged-out call would error out anyway).
+    (async function gateOnServer() {
+      try {
+        if (typeof window.isLoggedIn === "function") {
+          const loggedIn = await window.isLoggedIn();
+          if (!loggedIn) return;
+        }
+        const allowed = await isAllowedByServer();
+        if (allowed) card.hidden = false;
+      } catch (_) {
+        // Leave hidden on any failure — the server is the source of truth.
+      }
+    })();
   }
 
   window.initEstimateWaterUI = initEstimateWaterUI;

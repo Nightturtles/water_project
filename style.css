@@ -1353,6 +1353,20 @@ select:focus {
   color: var(--blue-600);
 }
 
+/* Visually-hidden — keeps content available to screen readers without
+   taking visual space. Reused by the estimate-water inputs. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 /* Estimate-water UI (allowlisted; see estimate-water-ui.js) */
 .estimate-water-card {
   display: flex;

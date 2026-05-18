@@ -109,15 +109,30 @@ Deno.serve(async (req: Request): Promise<Response> => {
     return json({ ok: false, error: "forbidden" }, 403);
   }
 
-  // 3. Parse + validate input.
-  let body: { zip?: string; provider?: string };
+  // 3. Parse + validate input. Guard against null / array / primitive
+  //    bodies from clients that misuse the endpoint — req.json() resolves
+  //    to whatever the body parses to, not necessarily a plain object.
+  let body: unknown;
   try {
     body = await req.json();
   } catch {
     return json({ ok: false, error: "bad_request", message: "invalid json" }, 400);
   }
-  const zip = String(body.zip ?? "").trim();
-  const provider = String(body.provider ?? "").trim();
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
+    return json({ ok: false, error: "bad_request", message: "body must be an object" }, 400);
+  }
+  const obj = body as Record<string, unknown>;
+
+  // Preflight ping: client uses this on page load to decide whether to
+  // render the UI without leaking the allowlist client-side. Reaches this
+  // point only after JWT + allowlist pass, so a 200 here means "you may
+  // call the estimator". Cheap — no Claude call.
+  if (obj.check === true) {
+    return json({ ok: true, allowed: true });
+  }
+
+  const zip = String(obj.zip ?? "").trim();
+  const provider = String(obj.provider ?? "").trim();
   if (!/^\d{5}$/.test(zip)) {
     return json({ ok: false, error: "bad_request", message: "zip must be 5 digits" }, 400);
   }
@@ -130,6 +145,11 @@ Deno.serve(async (req: Request): Promise<Response> => {
   if (!anthropicKey) {
     return json({ ok: false, error: "server_misconfigured" }, 500);
   }
+
+  // 25s deadline. Anthropic responses with web_search typically finish in
+  // 5-15s; this keeps a single stuck request from holding the function
+  // worker open until the platform's hard timeout.
+  const ANTHROPIC_TIMEOUT_MS = 25000;
 
   let resp: Response;
   try {
@@ -162,10 +182,15 @@ Deno.serve(async (req: Request): Promise<Response> => {
           },
         ],
       }),
+      signal: AbortSignal.timeout(ANTHROPIC_TIMEOUT_MS),
     });
   } catch (e) {
+    const err = e as Error;
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      return json({ ok: false, error: "timeout", message: "anthropic request timed out" }, 504);
+    }
     return json(
-      { ok: false, error: "network", message: String((e as Error).message ?? e) },
+      { ok: false, error: "network", message: String(err.message ?? e) },
       502,
     );
   }

@@ -102,12 +102,6 @@ const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
   "sodium-chloride": 360,
 };
 
-// --- Estimate-water allowlist (initial rollout gate) ---
-// Client-side hint: hides the "Estimate from my address" UI for non-listed
-// emails. The Supabase Edge Function enforces the same allowlist via the
-// ESTIMATE_WATER_ALLOWLIST env var, which is the real security boundary.
-const ALLOWED_ESTIMATE_EMAILS = ["kylestanderson@gmail.com", "kyliz2012@gmail.com"];
-
 // --- Shared ion field list and labels ---
 const ION_FIELDS = [
   "calcium",
@@ -614,7 +608,6 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MINERAL_DB,
     MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
-    ALLOWED_ESTIMATE_EMAILS,
     ION_FIELDS,
     ION_LABELS,
     SOURCE_PRESETS,
