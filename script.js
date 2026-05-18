@@ -59,6 +59,10 @@ const sourceSection = initSourceWaterSection({
   onActivated: updateSourceHintLabel
 });
 
+if (typeof initEstimateWaterUI === "function") {
+  initEstimateWaterUI();
+}
+
 // --- Result items: show only minerals selected in Settings ---
 
 function renderResultItems() {
