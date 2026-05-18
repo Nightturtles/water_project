@@ -194,7 +194,13 @@
           setMode("signin");
           showSuccess("Check your email to confirm your account, then sign in.");
         } else {
-          await window.resetPasswordForEmail(email);
+          // Match login.html: log errors but still show the generic success
+          // message so a failed request cannot be used to enumerate which
+          // email addresses have accounts.
+          var resetRes = await window.resetPasswordForEmail(email);
+          if (resetRes && resetRes.error) {
+            console.warn("reset request error (suppressed from UI):", resetRes.error);
+          }
           showSuccess("If an account exists for that email, we've sent a reset link.");
         }
       } catch (err) {

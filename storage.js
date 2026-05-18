@@ -372,19 +372,28 @@ function migrateHendonSlug() {
   const FROM = "eaf-hendon-water";
   const TO = "bh-simplified-hendon";
 
-  if (_getTransient("cw_target_preset") === FROM) {
-    _setTransient("cw_target_preset", TO);
+  // This migration runs once per page load before auth resolves, so it must
+  // touch the raw storage areas directly — the auth-routed helpers would
+  // return null on a cold signed-in load and the stale slug would survive
+  // long enough to get pushed back up on the next sync.
+  if (safeGetItem("cw_target_preset") === FROM) {
+    safeSetItem("cw_target_preset", TO);
   }
+  try {
+    if (sessionStorage.getItem("cw_target_preset") === FROM) {
+      sessionStorage.setItem("cw_target_preset", TO);
+    }
+  } catch (e) {}
 
-  const added = safeParse(_getGated("cw_added_target_presets"), []);
+  const added = safeParse(safeGetItem("cw_added_target_presets"), []);
   if (Array.isArray(added) && added.includes(FROM)) {
     const next = Array.from(new Set(added.map((s) => (s === FROM ? TO : s))));
-    _setGated("cw_added_target_presets", JSON.stringify(next));
+    safeSetItem("cw_added_target_presets", JSON.stringify(next));
   }
 
-  const deleted = safeParse(_getGated("cw_deleted_target_presets"), []);
+  const deleted = safeParse(safeGetItem("cw_deleted_target_presets"), []);
   if (Array.isArray(deleted) && deleted.includes(FROM)) {
-    _setGated("cw_deleted_target_presets", JSON.stringify(deleted.filter((s) => s !== FROM)));
+    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted.filter((s) => s !== FROM)));
   }
 }
 
@@ -1505,7 +1514,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
     document.addEventListener("cw:auth-changed", function () {
       if (typeof invalidateAllCaches === "function") invalidateAllCaches();
     });
-    document.addEventListener("cw:storage-invalidated", function () {
+    window.addEventListener("cw:storage-invalidated", function () {
       if (typeof invalidateAllCaches === "function") invalidateAllCaches();
     });
   }

@@ -38,6 +38,11 @@ const targetMakeStockBtn = document.getElementById("target-make-stock-btn");
 // Capture-phase click handler intercepts before the bubble-phase save logic
 // below ever fires, so no localStorage write happens off the locked button.
 if (typeof window.applyAuthGate === "function") {
+  // Edit mode exposes delete affordances and the "Done Editing" path that
+  // auto-saves dirty changes through persistTargetProfileEdits(); gate the
+  // toggle so anonymous users see the modal instead of an opaque
+  // "Storage full" error from the silent _setGated no-op.
+  if (targetEditModeBtn) window.applyAuthGate(targetEditModeBtn, { reason: "save-recipe" });
   if (targetSaveBtn) window.applyAuthGate(targetSaveBtn, { reason: "save-recipe" });
   if (targetSaveChangesBtn) window.applyAuthGate(targetSaveChangesBtn, { reason: "save-recipe" });
   if (targetMakeStockBtn) window.applyAuthGate(targetMakeStockBtn, { reason: "save-stock" });

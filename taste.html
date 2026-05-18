@@ -721,7 +721,7 @@
     const tasteProfileNameInput = document.getElementById("taste-profile-name");
     const tasteSaveStatus = document.getElementById("taste-save-status");
     if (typeof window.applyAuthGate === "function" && tasteSaveBtn) {
-      window.applyAuthGate(tasteSaveBtn, { reason: "save-recipe" });
+      window.applyAuthGate(tasteSaveBtn, { reason: "save-profile" });
     }
 
     function updateTasteProfileNameError() {

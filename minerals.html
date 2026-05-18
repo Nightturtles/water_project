@@ -1213,6 +1213,15 @@
         }
 
         if (action === "new-save") {
+          // applyAuthGate locks the opener button, but openStockNewFormPrefilled()
+          // can render the form via library-import / make-stock paths, so guard
+          // the save entry point itself.
+          if (typeof window.isLoggedInSync === "function" && !window.isLoggedInSync()) {
+            if (typeof window.openLoginModal === "function") {
+              window.openLoginModal({ reason: "save-stock" });
+            }
+            return;
+          }
           const labelInput = stockNewForm.querySelector("#stock-new-label");
           const bottleInput = stockNewForm.querySelector("#stock-new-bottle-ml");
           const doseInput = stockNewForm.querySelector("#stock-new-dose");

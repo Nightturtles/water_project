@@ -239,6 +239,9 @@
           e.stopPropagation();
           if (handlers.onAddStock) handlers.onAddStock(recipe);
         });
+        if (typeof window.applyAuthGate === "function") {
+          window.applyAuthGate(addBtn, { reason: "save-stock" });
+        }
         stockActions.appendChild(addBtn);
       }
       container.appendChild(stockActions);
@@ -265,6 +268,9 @@
         "aria-label",
         "Generate a stock concentrate from this recipe's targets",
       );
+      if (typeof window.applyAuthGate === "function") {
+        window.applyAuthGate(deriveBtn, { reason: "save-stock" });
+      }
       deriveBtn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();

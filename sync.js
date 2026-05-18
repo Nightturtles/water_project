@@ -988,7 +988,9 @@
       sweepPrefix(sessionStorage);
     } catch (_) {}
     try {
-      document.dispatchEvent(new Event("cw:storage-invalidated"));
+      // Dispatch on window to match the cw:cloud-data-changed convention
+      // used elsewhere in this file.
+      window.dispatchEvent(new Event("cw:storage-invalidated"));
     } catch (_) {}
   }
 

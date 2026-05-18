@@ -613,7 +613,16 @@ async function _updateNavAuth(authWrap, currentPage) {
         if (typeof window.flushPendingSync === "function") {
           try { await window.flushPendingSync(); } catch (_) {}
         }
-        try { await signOut(); } catch (_) {}
+        // If signOut() throws (network blip, transient Supabase error), the
+        // auth token survives — wiping local state and redirecting in that
+        // case would leave the next page load authenticated, which defeats
+        // the purpose of logout. Bail loudly instead.
+        try {
+          await signOut();
+        } catch (err) {
+          console.warn("[auth] signOut failed:", err);
+          return;
+        }
         if (typeof window.clearLocalUserContent === "function") {
           window.clearLocalUserContent();
         }
