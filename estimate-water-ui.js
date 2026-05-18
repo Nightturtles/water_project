@@ -5,8 +5,9 @@
 // the existing #src-* inputs so the rest of the source-water pipeline
 // (debouncedSave + cloud sync + onChanged) takes over.
 //
-// Allowlisted by ALLOWED_ESTIMATE_EMAILS during initial rollout. The
-// Supabase Edge Function enforces the same gate via ESTIMATE_WATER_ALLOWLIST.
+// Allowlist lives only in the Edge Function's ESTIMATE_WATER_ALLOWLIST
+// env var. The client decides whether to render the UI by making a
+// lightweight {check: true} preflight call on init.
 // ============================================
 
 (function () {
@@ -14,11 +15,23 @@
   const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
   const REQUEST_TIMEOUT_MS = 30000;
 
+  // Module-scope reference to the in-flight estimate AbortController.
+  // closeForm() aborts this so canceling the form actually stops the
+  // network call (otherwise the request keeps running and burns quota).
+  // Preflight ({check: true}) calls do NOT register here — they're short
+  // and self-contained, and we don't want a form cancel to also kill an
+  // unrelated allowlist ping in progress.
+  let activeEstimateController = null;
+
   function providerSlug(provider) {
-    return String(provider || "")
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "");
+    // Lossless: encodeURIComponent preserves every distinct input after a
+    // simple lower-case + trim. "A+B Water" and "A B Water" stay separate
+    // cache keys instead of colliding under a punctuation-stripping pass.
+    return encodeURIComponent(
+      String(provider || "")
+        .trim()
+        .toLowerCase(),
+    );
   }
 
   function cacheKey(zip, provider) {
@@ -86,14 +99,34 @@
     });
   }
 
-  async function invokeEstimateFunction(body, timeoutMs) {
+  async function invokeEstimateFunction(body, timeoutMs, options) {
+    options = options || {};
     if (!window.supabaseClient || !window.supabaseClient.functions) {
       throw Object.assign(new Error("supabase client not ready"), { code: "client_init" });
     }
     const controller = new AbortController();
+    // Register only the actual estimate call (not the preflight) so
+    // closeForm() can abort it. Distinguishing user-cancel from timeout
+    // happens by tracking the trigger separately below.
+    let userCanceled = false;
+    if (options.trackAsActive) {
+      activeEstimateController = controller;
+    }
     const timer = setTimeout(function () {
       controller.abort();
     }, timeoutMs);
+    // When closeForm aborts the controller it also clears
+    // activeEstimateController; that asymmetry is our signal that the
+    // user canceled rather than the timeout firing.
+    controller.signal.addEventListener(
+      "abort",
+      function () {
+        if (options.trackAsActive && activeEstimateController !== controller) {
+          userCanceled = true;
+        }
+      },
+      { once: true },
+    );
     try {
       const { data, error } = await window.supabaseClient.functions.invoke("estimate-water", {
         body: body,
@@ -103,7 +136,9 @@
       });
       if (error) {
         if (controller.signal.aborted) {
-          throw Object.assign(new Error("request timed out"), { code: "timeout" });
+          throw Object.assign(new Error(userCanceled ? "canceled" : "request timed out"), {
+            code: userCanceled ? "canceled" : "timeout",
+          });
         }
         // FunctionsHttpError carries the response — try to parse the JSON body.
         let parsedBody = null;
@@ -127,11 +162,16 @@
       return data;
     } catch (e) {
       if (e && e.name === "AbortError") {
-        throw Object.assign(new Error("request timed out"), { code: "timeout" });
+        throw Object.assign(new Error(userCanceled ? "canceled" : "request timed out"), {
+          code: userCanceled ? "canceled" : "timeout",
+        });
       }
       throw e;
     } finally {
       clearTimeout(timer);
+      if (options.trackAsActive && activeEstimateController === controller) {
+        activeEstimateController = null;
+      }
     }
   }
 
@@ -148,7 +188,9 @@
   }
 
   function callEstimate(zip, provider) {
-    return invokeEstimateFunction({ zip: zip, provider: provider }, REQUEST_TIMEOUT_MS);
+    return invokeEstimateFunction({ zip: zip, provider: provider }, REQUEST_TIMEOUT_MS, {
+      trackAsActive: true,
+    });
   }
 
   function friendlyError(code) {
@@ -169,6 +211,8 @@
         return "Network problem. Check your connection.";
       case "timeout":
         return "The estimator took too long. Try again in a moment.";
+      case "canceled":
+        return "";
       case "client_init":
         return "Page is still loading. Try again in a moment.";
       default:
@@ -229,9 +273,21 @@
     }
 
     function closeForm() {
+      // Abort any in-flight estimate so cancel actually stops the network
+      // call. Clearing activeEstimateController before .abort() signals to
+      // invokeEstimateFunction that this was a user cancel, not a timeout —
+      // its catch arm then throws code: "canceled" which maps to no error UI.
+      if (activeEstimateController) {
+        const controller = activeEstimateController;
+        activeEstimateController = null;
+        controller.abort();
+      }
       form.hidden = true;
       openBtn.hidden = false;
-      setStatus("");
+      // Intentionally do NOT clear status here — submitEstimate sets a
+      // success message right before closing the form and the user needs
+      // to see it. Explicit clears live with the caller (cancel button,
+      // openForm) so they don't conflict.
       submitBtn.disabled = false;
       submitBtn.textContent = "Estimate";
     }
@@ -287,6 +343,8 @@
         closeForm();
       } catch (err) {
         const code = err && err.code ? err.code : "model_error";
+        // User cancel: no error UI, closeForm has already reset the form.
+        if (code === "canceled") return;
         setStatus(friendlyError(code), "error");
         // Report only unexpected failures. Expected user/auth states are noise.
         const expected = new Set([
@@ -297,6 +355,7 @@
           "client_init",
           "network",
           "timeout",
+          "canceled",
         ]);
         if (!expected.has(code)) {
           // Don't pair zip+provider in one field — mild PII pairing.
@@ -308,7 +367,13 @@
     }
 
     openBtn.addEventListener("click", openForm);
-    cancelBtn.addEventListener("click", closeForm);
+    cancelBtn.addEventListener("click", function () {
+      // closeForm() no longer wipes status (so submit-success messages
+      // survive); the cancel button explicitly clears it because pressing
+      // Cancel is a "start over" intent.
+      setStatus("");
+      closeForm();
+    });
     submitBtn.addEventListener("click", function () {
       submitEstimate({ bypassCache: false });
     });

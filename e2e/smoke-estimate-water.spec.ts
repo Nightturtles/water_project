@@ -105,29 +105,39 @@ test.describe("estimate-water UI", () => {
     await expect(page.locator("#estimate-water-card")).toBeHidden();
   });
 
-  test("allowlisted users see the card; submit populates all 7 ion inputs", async ({ page }) => {
-    await stubFunctions(page, defaultStubHandler);
-    await page.goto("/");
-    await dismissWelcomeModal(page);
+  // Happy path runs against both index.html and recipe.html since the
+  // feature mounts on each (different inline script calls initEstimateWaterUI).
+  // Driving both catches integration regressions on the second page that a
+  // single-page test would miss.
+  for (const path of ["/", "/recipe.html"]) {
+    test(`allowlisted users see the card; submit populates all 7 ion inputs (${path})`, async ({
+      page,
+    }) => {
+      await stubFunctions(page, defaultStubHandler);
+      await page.goto(path);
+      await dismissWelcomeModal(page);
 
-    const card = page.locator("#estimate-water-card");
-    await expect(card).toBeVisible();
+      const card = page.locator("#estimate-water-card");
+      await expect(card).toBeVisible();
 
-    await page.locator("#estimate-open-btn").click();
-    await page.locator("#estimate-zip").fill("94107");
-    await page.locator("#estimate-provider").fill("SFPUC");
-    await page.locator("#estimate-submit-btn").click();
+      await page.locator("#estimate-open-btn").click();
+      await page.locator("#estimate-zip").fill("94107");
+      await page.locator("#estimate-provider").fill("SFPUC");
+      await page.locator("#estimate-submit-btn").click();
 
-    // Each ion field should now hold the stub value.
-    for (const [ion, expected] of Object.entries(STUB_PROFILE)) {
-      const el = page.locator(`#src-${ion}`);
-      await expect(el).toHaveValue(String(expected));
-    }
+      // Each ion field should now hold the stub value.
+      for (const [ion, expected] of Object.entries(STUB_PROFILE)) {
+        const el = page.locator(`#src-${ion}`);
+        await expect(el).toHaveValue(String(expected));
+      }
 
-    // Result line surfaces the source citation.
-    await expect(page.locator("#estimate-last-result")).toContainText("Test fixture - SFPUC 2024");
-    await expect(page.locator("#estimate-last-result")).toContainText(/medium confidence/);
-  });
+      // Result line surfaces the source citation.
+      await expect(page.locator("#estimate-last-result")).toContainText(
+        "Test fixture - SFPUC 2024",
+      );
+      await expect(page.locator("#estimate-last-result")).toContainText(/medium confidence/);
+    });
+  }
 
   test("cancel closes the form without invoking the estimator", async ({ page }) => {
     const { invocations } = await stubFunctions(page, defaultStubHandler);
