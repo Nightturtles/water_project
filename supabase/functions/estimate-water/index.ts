@@ -1,14 +1,20 @@
 // Supabase Edge Function: estimate-water
 //
-// Takes { zip, provider } from the browser, validates JWT + email allowlist,
-// then calls the Anthropic Messages API with web_search + a forced
-// report_water_profile tool. Returns the 7-ion profile (mg/L) to the client.
+// Takes { zip, provider } from the browser, validates JWT, enforces a per-user
+// daily call cap, then calls the Anthropic Messages API with web_search + a
+// forced report_water_profile tool. Returns the 7-ion profile (mg/L) to the
+// client.
+//
+// Daily cap: DAILY_LIMIT actual Anthropic calls per user per day. Cache hits
+// live entirely client-side and never reach this function, so the cap only
+// reflects calls that incur real cost.
 //
 // Secrets required (set via `supabase secrets set ...`):
 //   ANTHROPIC_API_KEY            - Anthropic API key
-//   ESTIMATE_WATER_ALLOWLIST     - comma-separated emails allowed to call this
 //
-// SUPABASE_URL and SUPABASE_ANON_KEY are auto-injected by the platform.
+// SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are
+// auto-injected by the platform. The service role key is used to call the
+// `increment_estimate_water_quota` RPC, which lives behind RLS.
 
 // @ts-nocheck — Deno runtime; the project's tsconfig targets the browser JS
 //               files and tries to resolve these `https://` imports.
@@ -18,6 +24,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
 const MODEL = "claude-haiku-4-5";
+const DAILY_LIMIT = 5;
 
 const SYSTEM_PROMPT =
   "You estimate US tap water mineral profiles (calcium, magnesium, " +
@@ -83,7 +90,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   // 1. JWT validation. The Supabase JS client auto-injects the user's
   //    Bearer token when called via supabaseClient.functions.invoke, so we
-  //    re-create a user-scoped client here to resolve user.email.
+  //    re-create a user-scoped client here to resolve user.id.
   const auth = req.headers.get("Authorization");
   if (!auth || !auth.startsWith("Bearer ")) {
     return json({ ok: false, error: "unauthorized" }, 401);
@@ -94,22 +101,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     { global: { headers: { Authorization: auth } } },
   );
   const { data: userData, error: userErr } = await supabase.auth.getUser();
-  const email = userData?.user?.email;
-  if (userErr || !email) {
+  const userId = userData?.user?.id;
+  if (userErr || !userId) {
     return json({ ok: false, error: "unauthorized" }, 401);
   }
 
-  // 2. Server-side allowlist — security boundary. Client-side gate in
-  //    estimate-water-ui.js is a UX hint only.
-  const allow = (Deno.env.get("ESTIMATE_WATER_ALLOWLIST") ?? "")
-    .split(",")
-    .map((s: string) => s.trim().toLowerCase())
-    .filter(Boolean);
-  if (!allow.includes(email.toLowerCase())) {
-    return json({ ok: false, error: "forbidden" }, 403);
-  }
-
-  // 3. Parse + validate input. Guard against null / array / primitive
+  // 2. Parse + validate input. Guard against null / array / primitive
   //    bodies from clients that misuse the endpoint — req.json() resolves
   //    to whatever the body parses to, not necessarily a plain object.
   let body: unknown;
@@ -123,14 +120,6 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   const obj = body as Record<string, unknown>;
 
-  // Preflight ping: client uses this on page load to decide whether to
-  // render the UI without leaking the allowlist client-side. Reaches this
-  // point only after JWT + allowlist pass, so a 200 here means "you may
-  // call the estimator". Cheap — no Claude call.
-  if (obj.check === true) {
-    return json({ ok: true, allowed: true });
-  }
-
   const zip = String(obj.zip ?? "").trim();
   const provider = String(obj.provider ?? "").trim();
   if (!/^\d{5}$/.test(zip)) {
@@ -138,6 +127,41 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
   if (provider.length === 0 || provider.length > 120) {
     return json({ ok: false, error: "bad_request", message: "provider must be 1-120 chars" }, 400);
+  }
+
+  // 3. Daily quota check. Atomically increment via the RPC and inspect
+  //    the new count. If the user already hit the cap, return 429 without
+  //    calling Anthropic. The increment happens BEFORE the upstream call,
+  //    so a failed Anthropic call still consumes quota — that's the
+  //    right tradeoff: it prevents tight-loop retry abuse, and a user who
+  //    really wants to retry can wait until tomorrow.
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!serviceKey) {
+    return json({ ok: false, error: "server_misconfigured" }, 500);
+  }
+  const supabaseAdmin = createClient(Deno.env.get("SUPABASE_URL") ?? "", serviceKey);
+  const { data: rpcData, error: rpcErr } = await supabaseAdmin.rpc(
+    "increment_estimate_water_quota",
+    { p_user_id: userId },
+  );
+  if (rpcErr || typeof rpcData !== "number") {
+    // If the quota infra is down, fail closed — better to block legitimate
+    // users briefly than to let an unbounded number of calls through.
+    return json(
+      { ok: false, error: "quota_unavailable", message: rpcErr?.message ?? "no count" },
+      503,
+    );
+  }
+  if (rpcData > DAILY_LIMIT) {
+    return json(
+      {
+        ok: false,
+        error: "daily_limit",
+        message: `You've hit today's ${DAILY_LIMIT}-estimate limit. Cached lookups still work; try again tomorrow.`,
+        limit: DAILY_LIMIT,
+      },
+      429,
+    );
   }
 
   // 4. Call Anthropic. Raw fetch (no SDK) keeps the cold-start small in Deno.
