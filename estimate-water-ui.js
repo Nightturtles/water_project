@@ -175,18 +175,6 @@
     }
   }
 
-  // Server preflight: returns true if the current user passes the Edge
-  // Function's allowlist check. Kept lightweight (no Claude call) so we can
-  // call it on every page load to decide whether to show the UI.
-  async function isAllowedByServer() {
-    try {
-      const data = await invokeEstimateFunction({ check: true }, 8000);
-      return data && data.allowed === true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   function callEstimate(zip, provider) {
     return invokeEstimateFunction({ zip: zip, provider: provider }, REQUEST_TIMEOUT_MS, {
       trackAsActive: true,
@@ -203,6 +191,12 @@
         return "Check your zip and provider, then try again.";
       case "rate_limit":
         return "Too many requests. Try again in a minute.";
+      case "daily_limit":
+        // Server returns a friendlier message with the limit value; submitEstimate
+        // prefers err.message over the canned text for this code.
+        return "You've hit today's daily limit. Cached lookups still work; try again tomorrow.";
+      case "quota_unavailable":
+        return "Couldn't check today's usage. Try again in a moment.";
       case "parse_error":
         return "Couldn't estimate this address. Try entering ions manually.";
       case "model_error":
@@ -345,7 +339,11 @@
         const code = err && err.code ? err.code : "model_error";
         // User cancel: no error UI, closeForm has already reset the form.
         if (code === "canceled") return;
-        setStatus(friendlyError(code), "error");
+        // Server-provided message wins for codes where it adds context
+        // (e.g. daily_limit mentions the limit value). Otherwise fall back
+        // to the canned friendly text.
+        const useServerMessage = code === "daily_limit" && err && err.message;
+        setStatus(useServerMessage ? err.message : friendlyError(code), "error");
         // Report only unexpected failures. Expected user/auth states are noise.
         const expected = new Set([
           "unauthorized",
@@ -356,6 +354,8 @@
           "network",
           "timeout",
           "canceled",
+          "daily_limit",
+          "quota_unavailable",
         ]);
         if (!expected.has(code)) {
           // Don't pair zip+provider in one field — mild PII pairing.
@@ -390,23 +390,16 @@
       }
     });
 
-    // Allowlist gate: ask the server whether the current user can use the
-    // feature. The Edge Function is the only place the email allowlist
-    // lives, so non-allowlisted accounts never see the button. Requires an
-    // authenticated session — anonymous users skip the preflight entirely
-    // (a logged-out call would error out anyway).
-    (async function gateOnServer() {
-      try {
-        if (typeof window.isLoggedIn === "function") {
-          const loggedIn = await window.isLoggedIn();
-          if (!loggedIn) return;
-        }
-        const allowed = await isAllowedByServer();
-        if (allowed) card.hidden = false;
-      } catch (_) {
-        // Leave hidden on any failure — the server is the source of truth.
-      }
-    })();
+    // Show the card to everyone (the feature is GA). applyAuthGate visually
+    // locks the open button for anonymous users and opens the login modal on
+    // click, matching how the rest of the site gates auth-required actions
+    // (see ui-shared.js). The server is the real boundary — even if a user
+    // bypasses the gate, the function 401s without a valid JWT and enforces
+    // the per-user daily cap via the increment_estimate_water_quota RPC.
+    card.hidden = false;
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(openBtn, { reason: "estimate-water" });
+    }
   }
 
   window.initEstimateWaterUI = initEstimateWaterUI;
