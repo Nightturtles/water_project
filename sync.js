@@ -55,6 +55,69 @@
   var LAST_PUSHED_SOURCES_KEY = "cw_last_pushed_source_profiles";
   var LAST_PUSHED_TARGETS_KEY = "cw_last_pushed_target_profiles";
 
+  // User-content keys gated by auth.  Wiped on logout by clearLocalUserContent.
+  // Category A: transient state (routed to sessionStorage when anonymous).
+  // Category B: named artifacts (refused when anonymous).
+  // Category C: sync tracking (only meaningful while logged in).
+  // Category D keys (cw_theme, banner dismissals, cafelytic_no_analytics,
+  // cw_estimate_cache_v1:*, sb-*-auth-token) are NOT in these lists and are
+  // never cleared.
+  var USER_CONTENT_KEYS_EXACT = [
+    // Category A
+    "cw_source_water",
+    "cw_source_preset",
+    "cw_target_preset",
+    "cw_brew_method",
+    "cw_selected_minerals",
+    "cw_selected_concentrates",
+    "cw_lotus_dropper_type",
+    "cw_lotus_concentrate_units",
+    "cw_lotus_concentrate_unit",
+    "cw_mineral_display_mode",
+    "cw_mineral_selector_tab",
+    "cw_recipe_mineral_inputs",
+    "cw_recipe_concentrate_inputs",
+    "cw_recipe_stock_grams",
+    "cw_recipe_dispense_mode",
+    // Category B
+    "cw_custom_profiles",
+    "cw_custom_target_profiles",
+    "cw_stock_concentrate_specs",
+    "cw_diy_concentrate_specs",
+    "cw_deleted_presets",
+    "cw_deleted_target_presets",
+    "cw_added_target_presets",
+    "cw_creator_display_name",
+    // Category C
+    "cw_last_pushed_settings",
+    "cw_last_pushed_selections",
+    "cw_last_pushed_source_profiles",
+    "cw_last_pushed_target_profiles",
+    "cw_synced_user_id",
+    "cw_starter_migration_applied",
+  ];
+  var USER_CONTENT_KEYS_PREFIX = ["cw_volume_"];
+  // Category A keys, used for routing to sessionStorage when anonymous
+  // (commit 3) and for tracking which keys participate in transient state.
+  var TRANSIENT_KEYS = [
+    "cw_source_water",
+    "cw_source_preset",
+    "cw_target_preset",
+    "cw_brew_method",
+    "cw_selected_minerals",
+    "cw_selected_concentrates",
+    "cw_lotus_dropper_type",
+    "cw_lotus_concentrate_units",
+    "cw_lotus_concentrate_unit",
+    "cw_mineral_display_mode",
+    "cw_mineral_selector_tab",
+    "cw_recipe_mineral_inputs",
+    "cw_recipe_concentrate_inputs",
+    "cw_recipe_stock_grams",
+    "cw_recipe_dispense_mode",
+  ];
+  var TRANSIENT_KEYS_PREFIX = ["cw_volume_"];
+
   // Stable JSON.stringify: sorts object keys so two objects with the same
   // content but different insertion order serialize identically. Used for
   // content-equality comparisons against last-pushed snapshots — without
@@ -868,14 +931,67 @@
   }
 
   // --- Flush pending sync when navigating away ---
+  // Returns a promise that resolves when the inflight push settles.  Logout
+  // awaits this before calling signOut() so a debounced edit (made within
+  // SYNC_DEBOUNCE_MS of clicking Log out) reaches the cloud before the
+  // session is cleared.  Background callers (visibilitychange, pagehide) can
+  // ignore the return value.
   function flushPendingSync() {
     if (syncTimer) {
       clearTimeout(syncTimer);
       syncTimer = undefined;
-      pushAllToCloud().catch(function (err) {
+      return pushAllToCloud().catch(function (err) {
         console.warn("[sync] flush on leave failed:", err);
       });
     }
+    return Promise.resolve();
+  }
+
+  // Wipe all Category A/B/C keys from both localStorage and sessionStorage.
+  // Category D (theme, banner dismissals, cafelytic_no_analytics,
+  // cw_estimate_cache_v1:*, sb-*-auth-token) is preserved.  Called by the
+  // logout button (in ui-shared.js) AFTER signOut() resolves, and also from
+  // the SIGNED_OUT auth handler below as defense-in-depth.
+  function clearLocalUserContent() {
+    USER_CONTENT_KEYS_EXACT.forEach(function (k) {
+      try {
+        localStorage.removeItem(k);
+      } catch (_) {}
+      try {
+        sessionStorage.removeItem(k);
+      } catch (_) {}
+    });
+    /** @param {Storage} store */
+    function sweepPrefix(store) {
+      var toRemove = [];
+      for (var j = 0; j < store.length; j++) {
+        var key = store.key(j);
+        if (!key) continue;
+        for (var p = 0; p < USER_CONTENT_KEYS_PREFIX.length; p++) {
+          var prefix = USER_CONTENT_KEYS_PREFIX[p];
+          if (prefix && key.indexOf(prefix) === 0) {
+            toRemove.push(key);
+            break;
+          }
+        }
+      }
+      toRemove.forEach(function (key) {
+        try {
+          store.removeItem(key);
+        } catch (_) {}
+      });
+    }
+    try {
+      sweepPrefix(localStorage);
+    } catch (_) {}
+    try {
+      sweepPrefix(sessionStorage);
+    } catch (_) {}
+    try {
+      // Dispatch on window to match the cw:cloud-data-changed convention
+      // used elsewhere in this file.
+      window.dispatchEvent(new Event("cw:storage-invalidated"));
+    } catch (_) {}
   }
 
   document.addEventListener("visibilitychange", function () {
@@ -901,8 +1017,27 @@
     window.supabaseClient.auth.onAuthStateChange(function (event, session) {
       if (event === "SIGNED_OUT") {
         unsubscribeFromCloudChanges();
+        // Defense-in-depth: covers session expiry, OAuth edge cases, or any
+        // SIGNED_OUT path that doesn't route through the logout button.
+        // Idempotent with the button's explicit clearLocalUserContent call.
+        clearLocalUserContent();
       } else if (event === "SIGNED_IN" && session && session.user) {
         subscribeToCloudChanges(session.user.id);
+        // Without this call, modal-based sign-ins succeed but the user's
+        // saved recipes/profiles don't appear until the next page navigation
+        // (which is when the existing login.html call site would have fired).
+        // TOKEN_REFRESHED reuses the same session and does NOT enter this
+        // branch — Supabase emits it as a distinct event — so we don't risk
+        // re-pulling on token rotation.
+        handleFirstLoginMerge()
+          .then(function () {
+            if (typeof window.dispatchEvent === "function") {
+              window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+            }
+          })
+          .catch(function (err) {
+            console.warn("[sync] post-signin merge failed:", err);
+          });
       }
     });
   }
@@ -913,6 +1048,8 @@
   window.pushAllToCloud = pushAllToCloud;
   window.pullFromCloud = pullFromCloud;
   window.handleFirstLoginMerge = handleFirstLoginMerge;
+  window.flushPendingSync = flushPendingSync;
+  window.clearLocalUserContent = clearLocalUserContent;
   window.realtimeSubscribedPromise = realtimeSubscribedPromise;
 
   // Kick off background sync. Expose the promise so tests (and any other

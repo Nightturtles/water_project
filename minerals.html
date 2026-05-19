@@ -142,6 +142,7 @@
   <script src="metrics.js"></script>
   <script src="library-data.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="login-modal.js"></script>
   <script>
     const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
     const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
@@ -301,6 +302,9 @@
     const stockListEl = document.getElementById("stock-concentrate-list");
     const stockAddBtn = document.getElementById("stock-add-new-btn");
     const stockNewForm = document.getElementById("stock-new-form");
+    if (typeof window.applyAuthGate === "function" && stockAddBtn) {
+      window.applyAuthGate(stockAddBtn, { reason: "save-stock" });
+    }
 
     // Article-recipe slugs reserved by the library so user-defined stocks
     // cannot shadow them. Auto-import from library rows lands in B3; this
@@ -875,6 +879,16 @@
         }
 
         if (action === "save-stock") {
+          // Mirror the new-save gate: applyAuthGate locks the "+ New stock"
+          // opener but the per-row "Save changes" button is rendered after
+          // an authenticated session pre-seeded the row, so a logout in the
+          // same tab can leave an unlocked button visible.
+          if (typeof window.isLoggedInSync === "function" && !window.isLoggedInSync()) {
+            if (typeof window.openLoginModal === "function") {
+              window.openLoginModal({ reason: "save-stock" });
+            }
+            return;
+          }
           if (!isStockDirty(slug)) return;
           const draft = stockDrafts[slug];
           const error = validateStockSpec(draft);
@@ -1209,6 +1223,15 @@
         }
 
         if (action === "new-save") {
+          // applyAuthGate locks the opener button, but openStockNewFormPrefilled()
+          // can render the form via library-import / make-stock paths, so guard
+          // the save entry point itself.
+          if (typeof window.isLoggedInSync === "function" && !window.isLoggedInSync()) {
+            if (typeof window.openLoginModal === "function") {
+              window.openLoginModal({ reason: "save-stock" });
+            }
+            return;
+          }
           const labelInput = stockNewForm.querySelector("#stock-new-label");
           const bottleInput = stockNewForm.querySelector("#stock-new-bottle-ml");
           const doseInput = stockNewForm.querySelector("#stock-new-dose");

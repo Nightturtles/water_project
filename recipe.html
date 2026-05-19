@@ -289,6 +289,7 @@
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="login-modal.js"></script>
   <script src="mineral-selector.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="estimate-water-ui.js"></script>
@@ -387,34 +388,34 @@
     const activeStockSpec = typeof getActiveStockSpec === "function" ? getActiveStockSpec(selectedConcentrates) : null;
 
     function loadRecipeMineralInputs() {
-      const parsed = safeParse(safeGetItem("cw_recipe_mineral_inputs"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_mineral_inputs"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
     function saveRecipeMineralInputs(values) {
-      safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_mineral_inputs", JSON.stringify(values || {}));
     }
 
     function loadRecipeConcentrateInputs() {
-      const parsed = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_concentrate_inputs"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
     function saveRecipeConcentrateInputs(values) {
-      safeSetItem("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
     }
 
     function loadRecipeStockGrams() {
-      const parsed = safeParse(safeGetItem("cw_recipe_stock_grams"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_stock_grams"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
     function saveRecipeStockGrams(values) {
-      safeSetItem("cw_recipe_stock_grams", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_stock_grams", JSON.stringify(values || {}));
     }
 
     function loadRecipeDispenseMode() {
-      const raw = safeGetItem("cw_recipe_dispense_mode");
+      const raw = _getTransient("cw_recipe_dispense_mode");
       if (raw === "manual" || raw === "stock") return raw;
       // Default: stock mode when a stock is enabled (matches likely intent of
       // the user enabling it in Settings); manual otherwise.
@@ -423,7 +424,7 @@
 
     function saveRecipeDispenseMode(mode) {
       if (mode !== "manual" && mode !== "stock") return;
-      safeSetItem("cw_recipe_dispense_mode", mode);
+      _setTransient("cw_recipe_dispense_mode", mode);
     }
 
     const recipeMineralInputs = loadRecipeMineralInputs();
@@ -960,6 +961,9 @@
     // --- Save Final Water Profile as Target Water Profile ---
     const recipeTargetNameInput = document.getElementById("recipe-target-name");
     const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
+    if (typeof window.applyAuthGate === "function" && recipeSaveTargetBtn) {
+      window.applyAuthGate(recipeSaveTargetBtn, { reason: "save-recipe" });
+    }
 
     function updateRecipeTargetNameError() {
       const errEl = document.getElementById("recipe-target-name-error");

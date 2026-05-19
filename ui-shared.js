@@ -177,32 +177,22 @@ function showConfirm(message, onYes) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
-// --- Current user id cache (avoids awaiting getUser() on every check) ---
-var _currentUserIdCache = null;
-var _currentUserIdFetch = null;
-
+// --- Current user id cache ---
+// Thin shim over the canonical cache in supabase-client.js
+// (window._cachedAuthUserId).  Kept as named functions for back-compat with
+// existing call sites and the window.* exports below.
 function primeCurrentUserId() {
-  if (typeof window.supabaseClient === "undefined") return Promise.resolve(null);
-  if (_currentUserIdCache) return Promise.resolve(_currentUserIdCache);
-  if (_currentUserIdFetch) return _currentUserIdFetch;
-  _currentUserIdFetch = window.supabaseClient.auth.getUser().then(function (res) {
-    _currentUserIdCache = res && res.data && res.data.user ? res.data.user.id : null;
-    _currentUserIdFetch = null;
-    return _currentUserIdCache;
-  }).catch(function () {
-    _currentUserIdFetch = null;
-    return null;
+  if (window._authStateResolved) return Promise.resolve(window._cachedAuthUserId);
+  return new Promise(function (resolve) {
+    document.addEventListener("cw:auth-state-resolved", function onResolved() {
+      document.removeEventListener("cw:auth-state-resolved", onResolved);
+      resolve(window._cachedAuthUserId);
+    });
   });
-  return _currentUserIdFetch;
 }
 
 function getCurrentUserIdSync() {
-  return _currentUserIdCache;
-}
-
-// Prime the cache on load so ownership checks elsewhere are synchronous.
-if (typeof window !== "undefined" && typeof window.supabaseClient !== "undefined") {
-  primeCurrentUserId();
+  return window._cachedAuthUserId || null;
 }
 
 // --- Creator ownership check ---
@@ -225,6 +215,50 @@ function isUserTheCreator(profile) {
 window.primeCurrentUserId = primeCurrentUserId;
 window.getCurrentUserIdSync = getCurrentUserIdSync;
 window.isUserTheCreator = isUserTheCreator;
+
+// --- Auth gate for save affordances ---
+// Visually locks an element when the user is anonymous and intercepts the
+// click (capture phase) to open the login modal instead of running the
+// existing save handler.  Aria-disabled is used rather than `disabled` so
+// the click event reaches our handler; bubble-phase listeners are stopped
+// via stopImmediatePropagation.  Listens to cw:auth-changed and
+// cw:auth-state-resolved so a sign-in mid-page unlocks affordances without
+// requiring a navigation.
+function applyAuthGate(el, opts) {
+  if (!el) return;
+  opts = opts || {};
+  var reason = opts.reason || "save";
+
+  function gateClickHandler(ev) {
+    if (typeof window.isLoggedInSync === "function" && window.isLoggedInSync()) return;
+    ev.preventDefault();
+    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+    else if (typeof ev.stopPropagation === "function") ev.stopPropagation();
+    if (typeof window.openLoginModal === "function") {
+      window.openLoginModal({ reason: reason });
+    }
+  }
+
+  function update() {
+    var loggedIn = typeof window.isLoggedInSync === "function" && window.isLoggedInSync();
+    if (loggedIn) {
+      el.classList.remove("auth-locked");
+      el.removeAttribute("aria-disabled");
+    } else {
+      el.classList.add("auth-locked");
+      el.setAttribute("aria-disabled", "true");
+      if (!el.dataset.authGateBound) {
+        el.addEventListener("click", gateClickHandler, true);
+        el.dataset.authGateBound = "1";
+      }
+    }
+  }
+
+  update();
+  document.addEventListener("cw:auth-changed", update);
+  document.addEventListener("cw:auth-state-resolved", update);
+}
+window.applyAuthGate = applyAuthGate;
 
 // --- Share to Recipe Library prompt (post-save dialog) ---
 var sharePromptCleanup = null;
@@ -571,7 +605,27 @@ async function _updateNavAuth(authWrap, currentPage) {
       logoutBtn.className = "nav-auth-btn";
       logoutBtn.textContent = "Log out";
       logoutBtn.addEventListener("click", async () => {
-        await signOut();
+        // Order matters to avoid the data-loss class of bug:
+        //   1. flush any debounced edit to cloud while the session still exists
+        //   2. sign out (Supabase clears the session, fires SIGNED_OUT)
+        //   3. wipe local user content (Categories A/B/C; D preserved)
+        //   4. navigate to a clean page
+        if (typeof window.flushPendingSync === "function") {
+          try { await window.flushPendingSync(); } catch (_) {}
+        }
+        // If signOut() throws (network blip, transient Supabase error), the
+        // auth token survives — wiping local state and redirecting in that
+        // case would leave the next page load authenticated, which defeats
+        // the purpose of logout. Bail loudly instead.
+        try {
+          await signOut();
+        } catch (err) {
+          console.warn("[auth] signOut failed:", err);
+          return;
+        }
+        if (typeof window.clearLocalUserContent === "function") {
+          window.clearLocalUserContent();
+        }
         window.location.href = "index.html";
       });
 

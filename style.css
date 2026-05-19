@@ -2599,6 +2599,13 @@ footer {
   font-weight: 600;
 }
 
+/* In dark mode --blue-50 collapses to --surface so the active tab loses its
+   highlight against the card.  --blue-100 (#1e3a5f) is the next step up and
+   reads as the same subtle "selected" shade that --blue-50 gives in light. */
+[data-theme="dark"] .login-mode-btn.active {
+  background: var(--blue-100);
+}
+
 .login-form .input-group {
   margin-bottom: 1rem;
 }
@@ -4238,4 +4245,77 @@ footer {
 
 .mineral-selector-manage-link:hover {
   text-decoration: underline;
+}
+
+/* === Auth gate (locked save affordances) === */
+.auth-locked {
+  opacity: 0.55;
+  position: relative;
+}
+.auth-locked::after {
+  content: " \1F512"; /* unicode lock */
+  font-size: 0.85em;
+  margin-left: 4px;
+  display: inline-block;
+}
+.auth-locked:hover {
+  opacity: 0.7;
+}
+
+/* === Login modal === */
+.login-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+body.login-modal-open {
+  overflow: hidden;
+}
+.login-modal-card {
+  /* Mirror .login-card so the modal reads identically to login.html.  The
+     theme tokens (--surface, --gray-200, --radius) switch automatically via
+     [data-theme="dark"] on <html>, so no media query is needed. */
+  background: var(--surface);
+  color: var(--gray-900);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  max-width: 28rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.login-modal-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0.25rem 0.5rem;
+}
+.login-modal-close:hover {
+  opacity: 0.7;
+}
+.login-modal-heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  text-align: center;
+}
+.login-modal-card .login-mode-toggle,
+.login-modal-card .login-form,
+.login-modal-card .login-divider,
+.login-modal-card .login-google-btn {
+  margin-left: 0;
+  margin-right: 0;
 }

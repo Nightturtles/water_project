@@ -26,6 +26,16 @@ function initSourceWaterSection(options) {
   const sourceSaveBtn = document.getElementById("source-save-btn");
   const sourceSaveChangesBtn = document.getElementById("source-save-changes-btn");
   const sourceSaveStatus = document.getElementById("source-save-status");
+
+  // Saving a named custom source profile is a Category B write (a named
+  // artifact tied to the user account).  Anonymous users still see the
+  // calculator and the save bar, but the buttons are locked and clicking
+  // them opens the login modal instead of writing to localStorage.
+  if (typeof window.applyAuthGate === "function") {
+    if (sourceSaveBtn) window.applyAuthGate(sourceSaveBtn, { reason: "save-profile" });
+    if (sourceSaveChangesBtn) window.applyAuthGate(sourceSaveChangesBtn, { reason: "save-profile" });
+    if (sourceEditModeBtn) window.applyAuthGate(sourceEditModeBtn, { reason: "save-profile" });
+  }
   const sourceAlkalinityInput = document.getElementById("src-alkalinity");
   const sourceBicarbonateInput = document.getElementById("src-bicarbonate");
 

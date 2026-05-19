@@ -37,6 +37,10 @@ function makeFakeStorage() {
 global.window = global;
 global.localStorage = makeFakeStorage();
 global.sessionStorage = makeFakeStorage();
+// Tests run on the "logged in" code path so transient storage helpers route
+// to localStorage.  Override per-test to exercise the anonymous path.
+global.isLoggedInSync = () => true;
+global._cachedAuthUserId = "test-user-id";
 
 require("./constants.js");
 const storage = require("./storage.js");
