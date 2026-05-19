@@ -5,9 +5,12 @@
 // the existing #src-* inputs so the rest of the source-water pipeline
 // (debouncedSave + cloud sync + onChanged) takes over.
 //
-// Allowlist lives only in the Edge Function's ESTIMATE_WATER_ALLOWLIST
-// env var. The client decides whether to render the UI by making a
-// lightweight {check: true} preflight call on init.
+// Auth model: feature is GA. The card renders for every page that hosts
+// it; applyAuthGate (ui-shared.js) visually locks the open button for
+// anonymous users and opens the login modal on click. The Edge Function
+// enforces JWT auth and a per-user daily quota of 5 actual Anthropic
+// calls via the increment_estimate_water_quota RPC. Cache hits stay
+// client-side (localStorage, 30-day TTL) and never count against quota.
 // ============================================
 
 (function () {
