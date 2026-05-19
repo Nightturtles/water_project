@@ -123,12 +123,12 @@
     // visually distinct from a real 0. Existing specs keep their saved
     // values verbatim so a user editing won't accidentally see a phantom
     // placeholder over their real config.
-    var bottleAttr = session.bottleMl > 0
-      ? 'value="' + session.bottleMl + '"'
-      : 'placeholder="e.g. 1000"';
-    var gramsAttr = session.gramsPerBottle > 0
-      ? 'value="' + session.gramsPerBottle + '"'
-      : 'placeholder="e.g. 50"';
+    var bottleAttr =
+      session.bottleMl > 0 ? 'value="' + session.bottleMl + '"' : 'placeholder="e.g. 1000"';
+    var gramsAttr =
+      session.gramsPerBottle > 0
+        ? 'value="' + session.gramsPerBottle + '"'
+        : 'placeholder="e.g. 50"';
 
     var hintHtml = isNew
       ? '<p class="hint diy-editor-hint">Tell the calculator how much ' +
@@ -138,26 +138,34 @@
         escapeHtml(mineralName) +
         " dissolved.</p>";
     var nameLine = mineralFormula
-      ? '<p class="diy-editor-mineral-line"><strong>' + escapeHtml(mineralName) + "</strong> <span class=\"mineral-formula\">" + escapeHtml(mineralFormula) + "</span></p>"
+      ? '<p class="diy-editor-mineral-line"><strong>' +
+        escapeHtml(mineralName) +
+        '</strong> <span class="mineral-formula">' +
+        escapeHtml(mineralFormula) +
+        "</span></p>"
       : '<p class="diy-editor-mineral-line"><strong>' + escapeHtml(mineralName) + "</strong></p>";
 
     formEl.innerHTML =
       nameLine +
       hintHtml +
       '<div class="concentrate-inputs">' +
-        '<div class="input-group">' +
-          '<label for="diy-editor-bottle-ml">Bottle mL</label>' +
-          '<input type="number" id="diy-editor-bottle-ml" min="0" step="1" ' + bottleAttr + ">" +
-        "</div>" +
-        '<div class="input-group">' +
-          '<label for="diy-editor-grams-per-bottle">Grams per bottle</label>' +
-          '<input type="number" id="diy-editor-grams-per-bottle" min="0" step="0.01" ' + gramsAttr + ">" +
-        "</div>" +
+      '<div class="input-group">' +
+      '<label for="diy-editor-bottle-ml">Bottle mL</label>' +
+      '<input type="number" id="diy-editor-bottle-ml" min="0" step="1" ' +
+      bottleAttr +
+      ">" +
+      "</div>" +
+      '<div class="input-group">' +
+      '<label for="diy-editor-grams-per-bottle">Grams per bottle</label>' +
+      '<input type="number" id="diy-editor-grams-per-bottle" min="0" step="0.01" ' +
+      gramsAttr +
+      ">" +
+      "</div>" +
       "</div>" +
       '<div class="concentrate-warning diy-editor-warning" hidden>You’ve reached the solubility limit for this mineral, try a lower concentration.</div>' +
       '<div class="stock-editor-actions">' +
-        '<button type="button" class="preset-btn primary" data-action="save">Save</button>' +
-        '<button type="button" class="preset-btn" data-action="cancel">Cancel</button>' +
+      '<button type="button" class="preset-btn primary" data-action="save">Save</button>' +
+      '<button type="button" class="preset-btn" data-action="cancel">Cancel</button>' +
       "</div>" +
       '<div class="stock-new-error diy-editor-error" hidden></div>';
 
@@ -192,8 +200,14 @@
     }
 
     var d = readDraft();
-    if (d.bottleMl <= 0) { showError("Bottle volume must be greater than 0."); return; }
-    if (d.gramsPerBottle <= 0) { showError("Grams per bottle must be greater than 0."); return; }
+    if (d.bottleMl <= 0) {
+      showError("Bottle volume must be greater than 0.");
+      return;
+    }
+    if (d.gramsPerBottle <= 0) {
+      showError("Grams per bottle must be greater than 0.");
+      return;
+    }
 
     var specs = loadDiyConcentrateSpecs();
     specs[session.mineralId] = { bottleMl: d.bottleMl, gramsPerBottle: d.gramsPerBottle };
@@ -211,11 +225,17 @@
     var onSaved = session.onSaved;
     var mineralId = session.mineralId;
     closeEditor();
-    window.dispatchEvent(new CustomEvent("cw:minerals-changed", {
-      detail: { scope: "concentrates", category: "diy", mineralId: mineralId },
-    }));
+    window.dispatchEvent(
+      new CustomEvent("cw:minerals-changed", {
+        detail: { scope: "concentrates", category: "diy", mineralId: mineralId },
+      }),
+    );
     if (typeof onSaved === "function") {
-      try { onSaved(mineralId); } catch (err) { console.error(err); }
+      try {
+        onSaved(mineralId);
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 

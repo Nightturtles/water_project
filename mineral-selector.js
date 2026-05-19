@@ -163,12 +163,9 @@
         var mineralId = concId.indexOf("diy:") === 0 ? concId.slice(4) : "";
         if (mineralId) {
           var specs =
-            typeof loadDiyConcentrateSpecs === "function"
-              ? loadDiyConcentrateSpecs()
-              : {};
+            typeof loadDiyConcentrateSpecs === "function" ? loadDiyConcentrateSpecs() : {};
           var spec = specs[mineralId];
-          var hasValidSpec =
-            spec && Number(spec.bottleMl) > 0 && Number(spec.gramsPerBottle) > 0;
+          var hasValidSpec = spec && Number(spec.bottleMl) > 0 && Number(spec.gramsPerBottle) > 0;
           if (!hasValidSpec) {
             checkbox.checked = false;
             var revertItem = checkbox.closest(".mineral-item");
@@ -176,7 +173,9 @@
             if (typeof window.openDiyEditor === "function") {
               window.openDiyEditor({
                 mineralId: mineralId,
-                onSaved: function () { rebuildConcentratesTab(); },
+                onSaved: function () {
+                  rebuildConcentratesTab();
+                },
               });
             }
             return;
@@ -194,16 +193,17 @@
     });
 
     list.addEventListener("click", function (e) {
-      var btn = e.target instanceof HTMLElement
-        ? e.target.closest(".mineral-selector-edit-btn")
-        : null;
+      var btn =
+        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-edit-btn") : null;
       if (!btn) return;
       e.preventDefault();
       e.stopPropagation();
       if (typeof window.openDiyEditor !== "function") return;
       window.openDiyEditor({
         mineralId: btn.dataset.mineralId,
-        onSaved: function () { rebuildConcentratesTab(); },
+        onSaved: function () {
+          rebuildConcentratesTab();
+        },
       });
     });
   }
@@ -214,8 +214,7 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent =
-      "Multi-mineral stocks. Only one can be active at a time.";
+    hint.textContent = "Multi-mineral stocks. Only one can be active at a time.";
     targetEl.appendChild(hint);
 
     var newBtn = document.createElement("button");
@@ -226,7 +225,9 @@
       if (typeof window.openStockEditor !== "function") return;
       window.openStockEditor({
         mode: "new",
-        onSaved: function () { rebuildConcentratesTab(); },
+        onSaved: function () {
+          rebuildConcentratesTab();
+        },
       });
     });
     if (typeof window.applyAuthGate === "function") {
@@ -331,9 +332,8 @@
     });
 
     list.addEventListener("click", function (e) {
-      var editBtn = e.target instanceof HTMLElement
-        ? e.target.closest(".mineral-selector-edit-btn")
-        : null;
+      var editBtn =
+        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-edit-btn") : null;
       if (editBtn) {
         e.preventDefault();
         e.stopPropagation();
@@ -341,13 +341,14 @@
         window.openStockEditor({
           mode: "edit",
           slug: editBtn.dataset.stockSlug,
-          onSaved: function () { rebuildConcentratesTab(); },
+          onSaved: function () {
+            rebuildConcentratesTab();
+          },
         });
         return;
       }
-      var delBtn = e.target instanceof HTMLElement
-        ? e.target.closest(".mineral-selector-delete-btn")
-        : null;
+      var delBtn =
+        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-delete-btn") : null;
       if (!delBtn) return;
       e.preventDefault();
       e.stopPropagation();
@@ -367,7 +368,10 @@
       };
       if (typeof showConfirm === "function") {
         showConfirm('Delete stock solution "' + delLabel + '"?', runDelete);
-      } else if (typeof window.confirm === "function" && window.confirm('Delete stock solution "' + delLabel + '"?')) {
+      } else if (
+        typeof window.confirm === "function" &&
+        window.confirm('Delete stock solution "' + delLabel + '"?')
+      ) {
         runDelete();
       }
     });

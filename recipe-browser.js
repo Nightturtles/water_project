@@ -906,8 +906,12 @@
         var f = recipe.stockFormula || {};
         var minerals = Array.isArray(f.minerals)
           ? f.minerals
-              .filter(function (m) { return m && typeof m === "object" && typeof m.mineralId === "string" && m.mineralId; })
-              .map(function (m) { return { mineralId: m.mineralId, grams: Number(m.grams) || 0 }; })
+              .filter(function (m) {
+                return m && typeof m === "object" && typeof m.mineralId === "string" && m.mineralId;
+              })
+              .map(function (m) {
+                return { mineralId: m.mineralId, grams: Number(m.grams) || 0 };
+              })
           : [];
         var recipeName = recipe.label || recipe.slug;
         window.openStockEditor({
@@ -922,7 +926,9 @@
             source: typeof f.source === "string" ? f.source : "",
           },
           autoEnable: true,
-          onSaved: function () { refetchAndRender(); },
+          onSaved: function () {
+            refetchAndRender();
+          },
         });
       },
       // Same shape as onAddStock but the formula is derived from the
@@ -931,8 +937,10 @@
       // click time so the editor opens with the current algorithm's output.
       onDeriveStock: function (recipe) {
         if (!recipe || !recipe.slug) return;
-        if (typeof window.openStockEditor !== "function" ||
-            typeof deriveStockFormulaFromTarget !== "function") {
+        if (
+          typeof window.openStockEditor !== "function" ||
+          typeof deriveStockFormulaFromTarget !== "function"
+        ) {
           window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
           return;
         }
@@ -945,12 +953,15 @@
             bottleMl: derived.bottleMl,
             doseGramsPerL: derived.doseGramsPerL,
             minerals: derived.minerals,
-            hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+            hint:
+              "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
             notes: derived.notes || [],
             deriveSlug: recipe.slug,
           },
           autoEnable: true,
-          onSaved: function () { refetchAndRender(); },
+          onSaved: function () {
+            refetchAndRender();
+          },
         });
       },
       onUseRecipe: function (recipe) {

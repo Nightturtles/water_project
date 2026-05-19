@@ -26,10 +26,18 @@
   // that would let users overwrite a library identity by importing then
   // re-saving with the same name.
   var RESERVED_LIBRARY_STOCK_SLUGS = [
-    "rao-perger", "dan-eils", "matt-perger", "rao-2013",
-    "melbourne-2013-wbc", "world-of-coffee-budapest",
-    "bh-simplified-sca-optimal", "bh-default", "bh-simplified-rao-2008",
-    "bh-simplified-hendon", "bh-hard", "bh-hard-af",
+    "rao-perger",
+    "dan-eils",
+    "matt-perger",
+    "rao-2013",
+    "melbourne-2013-wbc",
+    "world-of-coffee-budapest",
+    "bh-simplified-sca-optimal",
+    "bh-default",
+    "bh-simplified-rao-2008",
+    "bh-simplified-hendon",
+    "bh-hard",
+    "bh-hard-af",
   ];
 
   function escapeHtml(s) {
@@ -44,7 +52,9 @@
   function uniqueStockSlug(baseSlug, existingSlugs) {
     var base = baseSlug || "stock";
     var taken = new Set(existingSlugs);
-    RESERVED_LIBRARY_STOCK_SLUGS.forEach(function (s) { taken.add(s); });
+    RESERVED_LIBRARY_STOCK_SLUGS.forEach(function (s) {
+      taken.add(s);
+    });
     if (!taken.has(base)) return base;
     var i = 2;
     while (taken.has(base + "-" + i)) i++;
@@ -86,9 +96,7 @@
       if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, mid)) continue;
       var sel = mid === selectedMineralId ? " selected" : "";
       html +=
-        '<option value="' + mid + '"' + sel + ">" +
-        escapeHtml(MINERAL_DB[mid].name) +
-        "</option>";
+        '<option value="' + mid + '"' + sel + ">" + escapeHtml(MINERAL_DB[mid].name) + "</option>";
     }
     return html;
   }
@@ -150,15 +158,19 @@
       var entry = minerals[idx];
       var grams = Number.isFinite(Number(entry.grams)) ? Number(entry.grams) : 0;
       html +=
-        '<div class="stock-mineral-row" data-mineral-idx="' + idx + '">' +
-          '<select data-field="mineral-id">' +
-            buildMineralOptionsHtml(entry.mineralId) +
-          "</select>" +
-          '<div class="input-with-suffix">' +
-            '<input type="number" min="0" step="0.01" value="' + grams + '" data-field="mineral-grams" placeholder="grams">' +
-            '<span class="input-suffix" aria-hidden="true">g</span>' +
-          "</div>" +
-          '<button type="button" class="stock-mineral-remove" data-action="remove-mineral" aria-label="Remove mineral">×</button>' +
+        '<div class="stock-mineral-row" data-mineral-idx="' +
+        idx +
+        '">' +
+        '<select data-field="mineral-id">' +
+        buildMineralOptionsHtml(entry.mineralId) +
+        "</select>" +
+        '<div class="input-with-suffix">' +
+        '<input type="number" min="0" step="0.01" value="' +
+        grams +
+        '" data-field="mineral-grams" placeholder="grams">' +
+        '<span class="input-suffix" aria-hidden="true">g</span>' +
+        "</div>" +
+        '<button type="button" class="stock-mineral-remove" data-action="remove-mineral" aria-label="Remove mineral">×</button>' +
         "</div>";
     }
     return html;
@@ -172,47 +184,60 @@
 
   function renderForm() {
     var label = session.label != null ? String(session.label) : "";
-    var bottleMl = Number.isFinite(Number(session.bottleMl)) && Number(session.bottleMl) > 0
-      ? Number(session.bottleMl)
-      : 200;
-    var doseGramsPerL = Number.isFinite(Number(session.doseGramsPerL)) && Number(session.doseGramsPerL) > 0
-      ? Number(session.doseGramsPerL)
-      : 4;
+    var bottleMl =
+      Number.isFinite(Number(session.bottleMl)) && Number(session.bottleMl) > 0
+        ? Number(session.bottleMl)
+        : 200;
+    var doseGramsPerL =
+      Number.isFinite(Number(session.doseGramsPerL)) && Number(session.doseGramsPerL) > 0
+        ? Number(session.doseGramsPerL)
+        : 4;
     var hintHtml = session.hint
       ? '<p class="hint stock-derive-hint">' + escapeHtml(session.hint) + "</p>"
       : "";
-    var notesHtml = Array.isArray(session.notes) && session.notes.length
-      ? session.notes
-          .map(function (n) { return '<p class="hint stock-derive-note">' + escapeHtml(String(n)) + "</p>"; })
-          .join("")
-      : "";
+    var notesHtml =
+      Array.isArray(session.notes) && session.notes.length
+        ? session.notes
+            .map(function (n) {
+              return '<p class="hint stock-derive-note">' + escapeHtml(String(n)) + "</p>";
+            })
+            .join("")
+        : "";
 
     formEl.innerHTML =
       hintHtml +
       notesHtml +
       '<div class="input-group">' +
-        '<label for="stock-editor-label">Name</label>' +
-        '<input type="text" id="stock-editor-label" placeholder="My Stock" value="' + escapeHtml(label) + '">' +
+      '<label for="stock-editor-label">Name</label>' +
+      '<input type="text" id="stock-editor-label" placeholder="My Stock" value="' +
+      escapeHtml(label) +
+      '">' +
       "</div>" +
       '<div class="concentrate-inputs">' +
-        '<div class="input-group">' +
-          '<label for="stock-editor-bottle-ml">Bottle mL</label>' +
-          '<input type="number" id="stock-editor-bottle-ml" min="0" step="1" value="' + bottleMl + '">' +
-        "</div>" +
-        '<div class="input-group">' +
-          '<label for="stock-editor-dose">Dose g/L</label>' +
-          '<input type="number" id="stock-editor-dose" min="0" step="0.01" value="' + doseGramsPerL + '">' +
-        "</div>" +
+      '<div class="input-group">' +
+      '<label for="stock-editor-bottle-ml">Bottle mL</label>' +
+      '<input type="number" id="stock-editor-bottle-ml" min="0" step="1" value="' +
+      bottleMl +
+      '">' +
       "</div>" +
-      '<div class="stock-mineral-list stock-editor-mineral-list">' + buildMineralListHtml(session.minerals) + "</div>" +
+      '<div class="input-group">' +
+      '<label for="stock-editor-dose">Dose g/L</label>' +
+      '<input type="number" id="stock-editor-dose" min="0" step="0.01" value="' +
+      doseGramsPerL +
+      '">' +
+      "</div>" +
+      "</div>" +
+      '<div class="stock-mineral-list stock-editor-mineral-list">' +
+      buildMineralListHtml(session.minerals) +
+      "</div>" +
       '<button type="button" class="preset-btn stock-add-mineral-btn" data-action="add-mineral">+ Add mineral</button>' +
       '<div class="concentrate-warning stock-editor-warning" hidden></div>' +
       '<div class="stock-editor-actions">' +
-        '<button type="button" class="preset-btn primary" data-action="save">Save</button>' +
-        '<button type="button" class="preset-btn" data-action="cancel">Cancel</button>' +
-        (session.mode === "edit"
-          ? '<button type="button" class="preset-btn stock-editor-delete" data-action="delete">Delete</button>'
-          : "") +
+      '<button type="button" class="preset-btn primary" data-action="save">Save</button>' +
+      '<button type="button" class="preset-btn" data-action="cancel">Cancel</button>' +
+      (session.mode === "edit"
+        ? '<button type="button" class="preset-btn stock-editor-delete" data-action="delete">Delete</button>'
+        : "") +
       "</div>" +
       '<div class="stock-new-error stock-editor-error" hidden></div>';
 
@@ -241,7 +266,8 @@
     });
     warningEl.hidden = false;
     warningEl.textContent =
-      "Above solubility limit for " + names.join(", ") +
+      "Above solubility limit for " +
+      names.join(", ") +
       ". Try a larger bottle volume or fewer grams.";
   }
 
@@ -343,9 +369,18 @@
     }
 
     var draft = readDraftFromForm();
-    if (!draft.label) { showError("Please enter a name."); return; }
-    if (draft.bottleMl <= 0) { showError("Bottle volume must be greater than 0."); return; }
-    if (draft.doseGramsPerL <= 0) { showError("Dose must be greater than 0."); return; }
+    if (!draft.label) {
+      showError("Please enter a name.");
+      return;
+    }
+    if (draft.bottleMl <= 0) {
+      showError("Bottle volume must be greater than 0.");
+      return;
+    }
+    if (draft.doseGramsPerL <= 0) {
+      showError("Dose must be greater than 0.");
+      return;
+    }
     if (!draft.minerals || draft.minerals.length === 0) {
       showError("Add at least one mineral.");
       return;
@@ -412,11 +447,17 @@
     var savedSlug = finalSlug;
     var onSaved = session.onSaved;
     closeEditor();
-    window.dispatchEvent(new CustomEvent("cw:minerals-changed", {
-      detail: { scope: "concentrates", category: "stock", savedSlug: savedSlug },
-    }));
+    window.dispatchEvent(
+      new CustomEvent("cw:minerals-changed", {
+        detail: { scope: "concentrates", category: "stock", savedSlug: savedSlug },
+      }),
+    );
     if (typeof onSaved === "function") {
-      try { onSaved(savedSlug); } catch (err) { console.error(err); }
+      try {
+        onSaved(savedSlug);
+      } catch (err) {
+        console.error(err);
+      }
     }
   }
 
@@ -438,11 +479,17 @@
     showConfirm('Delete stock solution "' + label + '"?', function () {
       deleteStock(slug);
       closeEditor();
-      window.dispatchEvent(new CustomEvent("cw:minerals-changed", {
-        detail: { scope: "concentrates", category: "stock", deletedSlug: slug },
-      }));
+      window.dispatchEvent(
+        new CustomEvent("cw:minerals-changed", {
+          detail: { scope: "concentrates", category: "stock", deletedSlug: slug },
+        }),
+      );
       if (typeof onSaved === "function") {
-        try { onSaved(null); } catch (err) { console.error(err); }
+        try {
+          onSaved(null);
+        } catch (err) {
+          console.error(err);
+        }
       }
     });
   }
@@ -522,8 +569,7 @@
     }
 
     session = resolvedSession;
-    titleEl.textContent =
-      mode === "edit" ? "Edit stock solution" : "New stock solution";
+    titleEl.textContent = mode === "edit" ? "Edit stock solution" : "New stock solution";
 
     renderForm();
     // Attach handlers exactly once per overlay; renderForm() replaces the
