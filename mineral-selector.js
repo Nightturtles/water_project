@@ -104,15 +104,9 @@
     saveSelectedConcentrates(others.concat(brandIds));
   }
 
-  // Enforce at-most-one stock:* in selected concentrates (matches the
-  // "Only one stock can be active at a time" rule on minerals.html).
-  function writeActiveStockId(stockId) {
-    var others = loadSelectedConcentrates().filter(function (id) {
-      return typeof id === "string" && !id.startsWith("stock:");
-    });
-    if (stockId) others.push(stockId);
-    saveSelectedConcentrates(others);
-  }
+  // writeActiveStockId lives in storage.js (top-level export) so the
+  // stock-editor modal's autoEnable path and the selector's change handler
+  // share one helper. Keeping a local shim would silently desync the two.
 
   // ---- DIY subsection ----
 
@@ -121,7 +115,7 @@
     var hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent =
-      "Single-mineral solutions you've made at home. Configure bottle volume and grams per bottle in Settings.";
+      "Single-mineral solutions you've made at home. Tap the pencil to set bottle volume and grams per bottle.";
     targetEl.appendChild(hint);
 
     var list = document.createElement("div");
@@ -132,24 +126,85 @@
     for (var id in MINERAL_DB) {
       if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, id)) continue;
       var concId = "diy:" + id;
-      list.appendChild(buildMineralRow(id, MINERAL_DB[id], !!selectedSet[concId]));
+      var row = buildMineralRow(id, MINERAL_DB[id], !!selectedSet[concId]);
+      row.classList.add("has-edit-actions");
       // The row's checkbox value defaults to the mineral id; rewrite to the
       // diy: prefixed concentrate id so the save handler reads it directly.
-      var row = list.lastChild;
       var input = row.querySelector("input[type='checkbox']");
       if (input) input.value = concId;
+      // Pencil button sits outside the <label> so its click doesn't toggle
+      // the checkbox via implicit label association.
+      var actions = document.createElement("div");
+      actions.className = "mineral-selector-row-actions";
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "mineral-selector-edit-btn";
+      editBtn.setAttribute("aria-label", "Edit DIY concentrate");
+      editBtn.title = "Edit DIY concentrate";
+      editBtn.dataset.mineralId = id;
+      editBtn.innerHTML = "&#9998;";
+      actions.appendChild(editBtn);
+      row.appendChild(actions);
+      list.appendChild(row);
     }
     targetEl.appendChild(list);
 
     list.addEventListener("change", function (e) {
       if (!e.target || e.target.type !== "checkbox") return;
-      var item = e.target.closest(".mineral-item");
-      if (item) item.classList.toggle("selected", e.target.checked);
+      var checkbox = e.target;
+
+      // Enabling a DIY without a valid spec would silently dose 0 of that
+      // mineral. Intercept: revert the checkbox and open the editor so the
+      // user configures bottleMl + gramsPerBottle. The editor's save path
+      // both persists the spec AND adds the diy:* id to selected
+      // concentrates, then onSaved rebuilds the list with the row checked.
+      if (checkbox.checked) {
+        var concId = checkbox.value;
+        var mineralId = concId.indexOf("diy:") === 0 ? concId.slice(4) : "";
+        if (mineralId) {
+          var specs =
+            typeof loadDiyConcentrateSpecs === "function"
+              ? loadDiyConcentrateSpecs()
+              : {};
+          var spec = specs[mineralId];
+          var hasValidSpec =
+            spec && Number(spec.bottleMl) > 0 && Number(spec.gramsPerBottle) > 0;
+          if (!hasValidSpec) {
+            checkbox.checked = false;
+            var revertItem = checkbox.closest(".mineral-item");
+            if (revertItem) revertItem.classList.remove("selected");
+            if (typeof window.openDiyEditor === "function") {
+              window.openDiyEditor({
+                mineralId: mineralId,
+                onSaved: function () { rebuildConcentratesTab(); },
+              });
+            }
+            return;
+          }
+        }
+      }
+
+      var item = checkbox.closest(".mineral-item");
+      if (item) item.classList.toggle("selected", checkbox.checked);
       var checked = list.querySelectorAll("input[type='checkbox']:checked");
       var ids = [];
       for (var i = 0; i < checked.length; i++) ids.push(checked[i].value);
       writeDiyIds(ids);
       dispatchChanged({ scope: "concentrates", category: "diy", ids: ids });
+    });
+
+    list.addEventListener("click", function (e) {
+      var btn = e.target instanceof HTMLElement
+        ? e.target.closest(".mineral-selector-edit-btn")
+        : null;
+      if (!btn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof window.openDiyEditor !== "function") return;
+      window.openDiyEditor({
+        mineralId: btn.dataset.mineralId,
+        onSaved: function () { rebuildConcentratesTab(); },
+      });
     });
   }
 
@@ -160,8 +215,24 @@
     var hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent =
-      "Multi-mineral stocks. Only one can be active at a time. Create or edit stocks in Settings.";
+      "Multi-mineral stocks. Only one can be active at a time.";
     targetEl.appendChild(hint);
+
+    var newBtn = document.createElement("button");
+    newBtn.type = "button";
+    newBtn.className = "preset-btn mineral-selector-add-new-btn";
+    newBtn.textContent = "+ New stock solution";
+    newBtn.addEventListener("click", function () {
+      if (typeof window.openStockEditor !== "function") return;
+      window.openStockEditor({
+        mode: "new",
+        onSaved: function () { rebuildConcentratesTab(); },
+      });
+    });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(newBtn, { reason: "save-stock" });
+    }
+    targetEl.appendChild(newBtn);
 
     var specs = typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
     var stockIds = specs ? Object.keys(specs) : [];
@@ -169,7 +240,7 @@
     if (stockIds.length === 0) {
       var empty = document.createElement("p");
       empty.className = "hint mineral-selector-empty";
-      empty.textContent = "No stocks yet. Create one in Settings.";
+      empty.textContent = 'No stocks yet. Click "+ New stock solution" to add one.';
       targetEl.appendChild(empty);
       return;
     }
@@ -188,7 +259,7 @@
       var isActive = concId === activeId;
 
       var item = document.createElement("div");
-      item.className = "mineral-item" + (isActive ? " selected" : "");
+      item.className = "mineral-item has-edit-actions" + (isActive ? " selected" : "");
       var lbl = document.createElement("label");
       lbl.className = "mineral-label";
       var input = document.createElement("input");
@@ -216,6 +287,28 @@
       lbl.appendChild(input);
       lbl.appendChild(info);
       item.appendChild(lbl);
+
+      var actions = document.createElement("div");
+      actions.className = "mineral-selector-row-actions";
+      var editBtn = document.createElement("button");
+      editBtn.type = "button";
+      editBtn.className = "mineral-selector-edit-btn";
+      editBtn.setAttribute("aria-label", "Edit stock solution");
+      editBtn.title = "Edit stock solution";
+      editBtn.dataset.stockSlug = slug;
+      editBtn.innerHTML = "&#9998;";
+      actions.appendChild(editBtn);
+
+      var delBtn = document.createElement("button");
+      delBtn.type = "button";
+      delBtn.className = "mineral-selector-delete-btn";
+      delBtn.setAttribute("aria-label", "Delete stock solution");
+      delBtn.title = "Delete stock solution";
+      delBtn.dataset.stockSlug = slug;
+      delBtn.innerHTML = "&times;";
+      actions.appendChild(delBtn);
+      item.appendChild(actions);
+
       list.appendChild(item);
     }
     targetEl.appendChild(list);
@@ -230,11 +323,53 @@
       for (var i = 0; i < allInputs.length; i++) {
         var cb = allInputs[i];
         if (cb !== clicked) cb.checked = false;
-        var item = cb.closest(".mineral-item");
-        if (item) item.classList.toggle("selected", cb.checked);
+        var rowItem = cb.closest(".mineral-item");
+        if (rowItem) rowItem.classList.toggle("selected", cb.checked);
       }
       writeActiveStockId(nextActive);
       dispatchChanged({ scope: "concentrates", category: "stock", activeId: nextActive });
+    });
+
+    list.addEventListener("click", function (e) {
+      var editBtn = e.target instanceof HTMLElement
+        ? e.target.closest(".mineral-selector-edit-btn")
+        : null;
+      if (editBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (typeof window.openStockEditor !== "function") return;
+        window.openStockEditor({
+          mode: "edit",
+          slug: editBtn.dataset.stockSlug,
+          onSaved: function () { rebuildConcentratesTab(); },
+        });
+        return;
+      }
+      var delBtn = e.target instanceof HTMLElement
+        ? e.target.closest(".mineral-selector-delete-btn")
+        : null;
+      if (!delBtn) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var delSlug = delBtn.dataset.stockSlug;
+      var allSpecs = loadStockConcentrateSpecs();
+      var delLabel = (allSpecs[delSlug] && allSpecs[delSlug].label) || delSlug;
+      var runDelete = function () {
+        var cur = loadStockConcentrateSpecs();
+        delete cur[delSlug];
+        saveStockConcentrateSpecs(cur);
+        var remaining = loadSelectedConcentrates().filter(function (id) {
+          return id !== "stock:" + delSlug;
+        });
+        saveSelectedConcentrates(remaining);
+        rebuildConcentratesTab();
+        dispatchChanged({ scope: "concentrates", category: "stock", deletedSlug: delSlug });
+      };
+      if (typeof showConfirm === "function") {
+        showConfirm('Delete stock solution "' + delLabel + '"?', runDelete);
+      } else if (typeof window.confirm === "function" && window.confirm('Delete stock solution "' + delLabel + '"?')) {
+        runDelete();
+      }
     });
   }
 
@@ -518,7 +653,7 @@
     var manageLink = document.createElement("a");
     manageLink.className = "mineral-selector-manage-link";
     manageLink.href = "minerals.html";
-    manageLink.textContent = "Manage specs and create stocks in Settings →";
+    manageLink.textContent = "Open full Settings page →";
     concPanelEl.appendChild(manageLink);
 
     panels.appendChild(concPanelEl);

@@ -291,6 +291,8 @@
   <script src="ui-shared.js"></script>
   <script src="login-modal.js"></script>
   <script src="mineral-selector.js"></script>
+  <script src="stock-editor.js"></script>
+  <script src="diy-editor.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="estimate-water-ui.js"></script>
   <script>
@@ -1033,7 +1035,30 @@
     if (recipeMakeStockBtn) {
       recipeMakeStockBtn.addEventListener("click", () => {
         if (!lastSavedTargetSlug) return;
-        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+        if (typeof window.openStockEditor !== "function") {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+          return;
+        }
+        const profile =
+          typeof window.getTargetProfileByKey === "function"
+            ? window.getTargetProfileByKey(lastSavedTargetSlug)
+            : null;
+        if (!profile || typeof deriveStockFormulaFromTarget !== "function") return;
+        const derived = deriveStockFormulaFromTarget(profile);
+        const recipeName = profile.label || lastSavedTargetSlug;
+        window.openStockEditor({
+          mode: "new-derive",
+          prefill: {
+            label: recipeName,
+            bottleMl: derived.bottleMl,
+            doseGramsPerL: derived.doseGramsPerL,
+            minerals: derived.minerals,
+            hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+            notes: derived.notes || [],
+            deriveSlug: lastSavedTargetSlug,
+          },
+          autoEnable: true,
+        });
       });
     }
 
