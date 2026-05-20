@@ -330,6 +330,8 @@
   <script src="library-data.js"></script>
   <script src="library-picker.js"></script>
   <script src="mineral-selector.js"></script>
+  <script src="stock-editor.js"></script>
+  <script src="diy-editor.js"></script>
   <script>
     // --- Inline mineral selector (mount + in-tab re-render) ---
     if (typeof window.mountMineralSelector === "function") {
@@ -544,7 +546,39 @@
       tasteMakeStockBtn.addEventListener("click", () => {
         const key = getTasteActivePresetKey();
         if (!key || key === "custom") return;
-        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(key);
+        // Fall back to legacy hash navigation when any modal-flow dependency
+        // is missing so the CTA never becomes a dead click — the inline
+        // editor on minerals.html still handles the derive flow.
+        if (
+          typeof window.openStockEditor !== "function" ||
+          typeof deriveStockFormulaFromTarget !== "function"
+        ) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(key);
+          return;
+        }
+        const profile =
+          typeof window.getTargetProfileByKey === "function"
+            ? window.getTargetProfileByKey(key)
+            : null;
+        if (!profile) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(key);
+          return;
+        }
+        const derived = deriveStockFormulaFromTarget(profile);
+        const recipeName = profile.label || key;
+        window.openStockEditor({
+          mode: "new-derive",
+          prefill: {
+            label: recipeName,
+            bottleMl: derived.bottleMl,
+            doseGramsPerL: derived.doseGramsPerL,
+            minerals: derived.minerals,
+            hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+            notes: derived.notes || [],
+            deriveSlug: key,
+          },
+          autoEnable: true,
+        });
       });
     }
 

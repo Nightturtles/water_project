@@ -80,8 +80,19 @@ module.exports = tseslint.config(
       // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
       // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
       // load/saveSelectedConcentrates, load/saveLotusDropperType,
-      // loadStockConcentrateSpecs, getActiveStockId).
+      // loadStockConcentrateSpecs, getActiveStockId, writeActiveStockId).
       "mineral-selector.js",
+      // stock-editor: modal editor for stock concentrate solutions.
+      // Depends on globals from constants.js (MINERAL_DB,
+      // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
+      // (load/saveStockConcentrateSpecs, load/saveSelectedConcentrates,
+      // writeActiveStockId, slugify), plus showConfirm from ui-shared.js.
+      "stock-editor.js",
+      // diy-editor: modal editor for single-mineral DIY concentrate specs.
+      // Depends on globals from constants.js (MINERAL_DB,
+      // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
+      // (load/saveDiyConcentrateSpecs, load/saveSelectedConcentrates).
+      "diy-editor.js",
       // estimate-water-ui: "Estimate from my ZIP" feature. Classic script
       // depending on globals from constants.js (ION_FIELDS), supabase-client.js
       // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).

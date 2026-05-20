@@ -440,20 +440,51 @@ profileButtonsContainer.addEventListener("click", (e) => {
   activateProfile(btn.dataset.profile);
 });
 
-// "+ Make a stock" — hand off to minerals.html, which re-derives from the
-// saved target via deriveStockFormulaFromTarget and opens the stock editor
-// pre-filled. The slug round-trips through the hash; minerals.html falls
-// back to getTargetProfileByKey so private customs (cw_custom_target_profiles)
-// resolve too.
-//
-// updateMakeStockBtnVisibility already hides the button on unsaved edits, but
-// keep a defensive guard here in case a click race lands first (e.g. user
-// types, immediately clicks before the input listener fires).
+// "+ Make a stock" — open the stock-editor modal pre-filled with a formula
+// derived from the active target profile. Auto-enables the new stock so the
+// current recipe immediately dispenses from it (user intent: "make a stock
+// for this recipe"). updateMakeStockBtnVisibility hides the button on
+// unsaved edits; the guard below catches a click race (user types then
+// immediately clicks before the input listener fires).
 if (targetMakeStockBtn) {
   targetMakeStockBtn.addEventListener("click", () => {
     if (!currentProfile || currentProfile === "custom") return;
     if (hasUnsavedTargetChanges()) return;
-    window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
+    // Fall back to legacy hash navigation when any modal-flow dependency is
+    // missing — editor script not loaded, derivation helper absent, or
+    // profile lookup fails. The hash handler on minerals.html re-derives
+    // and opens its inline editor, so the user lands somewhere useful
+    // instead of clicking a dead button.
+    if (
+      typeof window.openStockEditor !== "function" ||
+      typeof deriveStockFormulaFromTarget !== "function"
+    ) {
+      window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
+      return;
+    }
+    const profile =
+      typeof window.getTargetProfileByKey === "function"
+        ? window.getTargetProfileByKey(currentProfile)
+        : null;
+    if (!profile) {
+      window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
+      return;
+    }
+    const derived = deriveStockFormulaFromTarget(profile);
+    const recipeName = profile.label || currentProfile;
+    window.openStockEditor({
+      mode: "new-derive",
+      prefill: {
+        label: recipeName,
+        bottleMl: derived.bottleMl,
+        doseGramsPerL: derived.doseGramsPerL,
+        minerals: derived.minerals,
+        hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+        notes: derived.notes || [],
+        deriveSlug: currentProfile,
+      },
+      autoEnable: true,
+    });
   });
 }
 

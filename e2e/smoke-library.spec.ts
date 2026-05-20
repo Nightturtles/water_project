@@ -240,15 +240,12 @@ test.describe("library.html — Wave D recipe browser", () => {
     const addBtn = card.locator(".rx-card-stock-add");
     await expect(addBtn).toBeVisible();
 
-    // Click navigates to minerals.html#stock-import=<slug> and opens the
-    // new-stock editor pre-filled with the library formula. tryHandleImportHash
-    // clears the hash via replaceState immediately, so waitForURL on the hash
-    // would race; assert on the form instead. Save is what writes the spec.
+    // Click opens the stock-editor modal in place (no navigation) pre-filled
+    // with the library formula. Save is what writes the spec.
     await addBtn.click();
-    await page.waitForURL("**/minerals.html**");
-    await expect(page.locator("#stock-new-form")).toBeVisible();
-    await expect(page.locator("#stock-new-label")).toHaveValue(/.+/);
-    await page.locator('#stock-new-form [data-action="new-save"]').click();
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    await expect(page.locator("#stock-editor-label")).toHaveValue(/.+/);
+    await page.locator('.stock-editor-form [data-action="save"]').click();
 
     // Spec writes through to localStorage with the expected shape.
     const spec = await page.evaluate((s) => {
@@ -298,14 +295,12 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(featured.locator(".rx-card-stock-add")).toBeVisible();
     await expect(featured.locator(".rx-card-stock-imported")).toHaveCount(0);
 
-    // Click the import button — navigates to the editor pre-filled with the
-    // library formula. Save writes the spec; navigating back flips the hero
-    // to the imported indicator. Hash gets cleared by tryHandleImportHash
-    // before we can assert on it; rely on the form-visible signal instead.
+    // Click the import button — opens the editor modal in place pre-filled
+    // with the library formula. Save writes the spec; navigating back flips
+    // the hero to the imported indicator.
     await featured.locator(".rx-card-stock-add").click();
-    await page.waitForURL("**/minerals.html**");
-    await expect(page.locator("#stock-new-form")).toBeVisible();
-    await page.locator('#stock-new-form [data-action="new-save"]').click();
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    await page.locator('.stock-editor-form [data-action="save"]').click();
 
     const spec = await page.evaluate(() => {
       const raw = localStorage.getItem("cw_stock_concentrate_specs");
@@ -361,20 +356,17 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(deriveBtn).toBeVisible();
     await expect(deriveBtn).toHaveText("+ Make a stock");
 
-    // Click navigates to minerals.html#stock-derive=<slug> and opens the
-    // new-stock editor pre-filled with the *derived* formula plus a hint
-    // banner. As with B3a, tryHandleDeriveHash clears the hash immediately,
-    // so assert on form visibility instead.
+    // Click opens the editor modal in place pre-filled with the *derived*
+    // formula plus a hint banner. The library page stays mounted underneath.
     await deriveBtn.click();
-    await page.waitForURL("**/minerals.html**");
-    const form = page.locator("#stock-new-form");
-    await expect(form).toBeVisible();
-    await expect(form.locator("#stock-new-label")).toHaveValue(/.+/);
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    const form = page.locator(".stock-editor-form");
+    await expect(form.locator("#stock-editor-label")).toHaveValue(/.+/);
     await expect(form.locator(".stock-derive-hint")).toContainText(/Auto-derived from/);
     // At least one mineral row should have been populated by the derivation.
     expect(await form.locator(".stock-mineral-row").count()).toBeGreaterThan(0);
 
-    await page.locator('#stock-new-form [data-action="new-save"]').click();
+    await form.locator('[data-action="save"]').click();
 
     // Spec persists with the "derived:<recipe-slug>" namespace so the
     // recipe card flips and a future re-derive affordance can find the
@@ -417,9 +409,12 @@ test.describe("library.html — Wave D recipe browser", () => {
       .first();
     const slug = await card.getAttribute("data-slug");
     await card.locator(".rx-card-stock-add").click();
-    await page.waitForURL("**/minerals.html**");
-    await expect(page.locator("#stock-new-form")).toBeVisible();
-    await page.locator('#stock-new-form [data-action="new-save"]').click();
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    await page.locator('.stock-editor-form [data-action="save"]').click();
+
+    // Reset-derived lives on the minerals.html settings page. Navigate there
+    // now that the spec has been written via the modal.
+    await page.goto("/minerals.html");
 
     // Capture the initial derived spec, then bump the underlying library
     // row's Ca target in-memory and re-derive. The library row is what
