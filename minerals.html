@@ -631,6 +631,7 @@
     function rerenderAuthGatedConcentrates() {
       renderDiyConcentrates();
       renderStockConcentrates();
+      renderBrandConcentrates();
     }
     document.addEventListener("cw:auth-changed", rerenderAuthGatedConcentrates);
     window.addEventListener("cw:cloud-data-changed", rerenderAuthGatedConcentrates);
@@ -1424,11 +1425,17 @@
     }
 
     const lotusListEl = document.getElementById("lotus-concentrate-list");
-    if (lotusListEl && typeof LOTUS_CONCENTRATE_IDS !== "undefined") {
+    function renderBrandConcentrates() {
+      if (!lotusListEl || typeof LOTUS_CONCENTRATE_IDS === "undefined") return;
+      // Read fresh each render (same reason as renderDiyConcentrates): the
+      // outer `selectedConcentrates` was captured pre-auth and is stale on
+      // signed-in hard refresh or cross-device cloud pulls.
+      const currentSelected = loadSelectedConcentrates();
+      lotusListEl.innerHTML = "";
       LOTUS_CONCENTRATE_IDS.forEach((concentrateId) => {
         const brand = BRAND_CONCENTRATES[concentrateId];
         if (!brand) return;
-        const checked = selectedConcentrates.includes(concentrateId);
+        const checked = currentSelected.includes(concentrateId);
         const div = document.createElement("div");
         div.className = "concentrate-item" + (checked ? " selected" : "");
         div.dataset.concentrateId = concentrateId;
@@ -1443,6 +1450,9 @@
         `;
         lotusListEl.appendChild(div);
       });
+    }
+    renderBrandConcentrates();
+    if (lotusListEl) {
       lotusListEl.addEventListener("change", (e) => {
         if (e.target.type !== "checkbox") return;
         const item = e.target.closest(".concentrate-item");
