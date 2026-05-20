@@ -224,10 +224,15 @@
     function renderDiyConcentrates() {
       if (!diyListEl) return;
       diyListEl.innerHTML = "";
+      // Read fresh each render so post-auth re-renders pick up the now-readable
+      // _getGated values. The outer `diySpecs` / `selectedConcentrates`
+      // captured at script load were `{}` / `[]` for the unresolved-auth paint.
+      const currentDiySpecs = loadDiyConcentrateSpecs();
+      const currentSelected = loadSelectedConcentrates();
       for (const [mineralId, mineral] of Object.entries(MINERAL_DB)) {
         const concentrateId = "diy:" + mineralId;
-        const checked = selectedConcentrates.includes(concentrateId);
-        const spec = diySpecs && diySpecs[mineralId] ? diySpecs[mineralId] : {};
+        const checked = currentSelected.includes(concentrateId);
+        const spec = currentDiySpecs && currentDiySpecs[mineralId] ? currentDiySpecs[mineralId] : {};
         const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
         const gramsPerBottle = Number.isFinite(Number(spec.gramsPerBottle)) ? Number(spec.gramsPerBottle) : 0;
 
@@ -616,6 +621,20 @@
     }
 
     renderStockConcentrates();
+
+    // Auth-gated sections (Stock + DIY concentrates) read from _getGated, which
+    // returns null until window._cachedAuthUserId is populated. The initial
+    // synchronous render happens before Supabase's getSession() resolves, so
+    // the lists paint empty and the storage.js module caches get poisoned with
+    // {}. Re-render once auth resolves (storage.js:1514 invalidates the caches
+    // on cw:auth-changed) and again on any cross-device cloud pull.
+    function rerenderAuthGatedConcentrates() {
+      renderDiyConcentrates();
+      renderStockConcentrates();
+      renderBrandConcentrates();
+    }
+    document.addEventListener("cw:auth-changed", rerenderAuthGatedConcentrates);
+    window.addEventListener("cw:cloud-data-changed", rerenderAuthGatedConcentrates);
 
     function updateStockSolubilityWarning(itemEl) {
       if (!itemEl) return;
@@ -1406,11 +1425,17 @@
     }
 
     const lotusListEl = document.getElementById("lotus-concentrate-list");
-    if (lotusListEl && typeof LOTUS_CONCENTRATE_IDS !== "undefined") {
+    function renderBrandConcentrates() {
+      if (!lotusListEl || typeof LOTUS_CONCENTRATE_IDS === "undefined") return;
+      // Read fresh each render (same reason as renderDiyConcentrates): the
+      // outer `selectedConcentrates` was captured pre-auth and is stale on
+      // signed-in hard refresh or cross-device cloud pulls.
+      const currentSelected = loadSelectedConcentrates();
+      lotusListEl.innerHTML = "";
       LOTUS_CONCENTRATE_IDS.forEach((concentrateId) => {
         const brand = BRAND_CONCENTRATES[concentrateId];
         if (!brand) return;
-        const checked = selectedConcentrates.includes(concentrateId);
+        const checked = currentSelected.includes(concentrateId);
         const div = document.createElement("div");
         div.className = "concentrate-item" + (checked ? " selected" : "");
         div.dataset.concentrateId = concentrateId;
@@ -1425,6 +1450,9 @@
         `;
         lotusListEl.appendChild(div);
       });
+    }
+    renderBrandConcentrates();
+    if (lotusListEl) {
       lotusListEl.addEventListener("change", (e) => {
         if (e.target.type !== "checkbox") return;
         const item = e.target.closest(".concentrate-item");
