@@ -768,24 +768,76 @@
     editBtn.className = "mineral-edit-link";
     editBtn.textContent = "Edit minerals";
 
+    function appendBadge(chip, label, className) {
+      var badge = document.createElement("span");
+      badge.className = className;
+      badge.textContent = label;
+      chip.appendChild(badge);
+    }
+
     function renderChips() {
       chips.innerHTML = "";
-      var ids = loadSelectedMinerals();
-      if (ids.length === 0) {
+      var mineralIds = loadSelectedMinerals();
+      var concentrateIds = loadSelectedConcentrates();
+
+      if (mineralIds.length === 0 && concentrateIds.length === 0) {
         var empty = document.createElement("span");
         empty.className = "mineral-chip mineral-chip--empty";
         empty.textContent = "No minerals selected";
         chips.appendChild(empty);
         return;
       }
-      for (var i = 0; i < ids.length; i++) {
-        var mineral = MINERAL_DB[ids[i]];
+
+      for (var i = 0; i < mineralIds.length; i++) {
+        var mineral = MINERAL_DB[mineralIds[i]];
         if (!mineral) continue;
         var chip = document.createElement("span");
         chip.className = "mineral-chip";
         chip.textContent = chipLabelFor(mineral);
         chip.title = mineral.name;
         chips.appendChild(chip);
+      }
+
+      var stockSpecs =
+        typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
+      var brandDb = typeof BRAND_CONCENTRATES !== "undefined" ? BRAND_CONCENTRATES : {};
+
+      for (var j = 0; j < concentrateIds.length; j++) {
+        var concId = concentrateIds[j];
+        if (typeof concId !== "string") continue;
+
+        if (concId.indexOf("diy:") === 0) {
+          var diyMineralId = concId.slice(4);
+          var diyMineral = MINERAL_DB[diyMineralId];
+          if (!diyMineral) continue;
+          var diyChip = document.createElement("span");
+          diyChip.className = "mineral-chip";
+          diyChip.textContent = chipLabelFor(diyMineral);
+          diyChip.title = "DIY: " + diyMineral.name;
+          appendBadge(diyChip, "DIY", "badge badge-concentrate");
+          chips.appendChild(diyChip);
+        } else if (concId.indexOf("stock:") === 0) {
+          var slug = concId.slice(6);
+          var spec = stockSpecs[slug];
+          if (!spec) continue;
+          var stockLabel = (spec && (spec.label || spec.name)) || slug;
+          var stockChip = document.createElement("span");
+          stockChip.className = "mineral-chip";
+          stockChip.textContent = stockLabel;
+          stockChip.title = "Stock: " + stockLabel;
+          appendBadge(stockChip, "Stock", "badge badge-concentrate");
+          chips.appendChild(stockChip);
+        } else if (concId.indexOf("brand:") === 0) {
+          var brand = brandDb[concId];
+          if (!brand) continue;
+          var brandChip = document.createElement("span");
+          brandChip.className = "mineral-chip";
+          brandChip.textContent = brand.name || concId;
+          var brandBadge = brandBadgeFor(concId);
+          brandChip.title = (brandBadge ? brandBadge.label + ": " : "") + (brand.name || concId);
+          if (brandBadge) appendBadge(brandChip, brandBadge.label, brandBadge.className);
+          chips.appendChild(brandChip);
+        }
       }
     }
 
