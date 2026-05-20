@@ -57,9 +57,7 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
     await expect(page.locator("#recipe-make-stock-btn")).toBeVisible();
   });
 
-  test("clicking the button navigates to minerals.html and opens the derived stock editor", async ({
-    page,
-  }) => {
+  test("clicking the button opens the derived stock editor modal in place", async ({ page }) => {
     await page.locator('button[data-preset="hard-tap"]').click();
     await page.locator("#recipe-target-name").fill("Smoke Navigate");
     await page.locator("#recipe-save-target-btn").click();
@@ -67,12 +65,12 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
 
     await page.locator("#recipe-make-stock-btn").click();
 
-    // tryHandleDeriveHash() in minerals.html consumes the hash via
-    // history.replaceState, so location.hash is empty after landing.
-    // Assert on the destination side: the auto-derived hint that the stock
-    // editor renders when seeded from a target profile.
-    await expect(page).toHaveURL(/\/minerals\.html$/);
-    await expect(page.locator("#stock-new-form")).toContainText(
+    // The editor now pops as a modal on the recipe page rather than
+    // navigating to minerals.html. Assert on the overlay + the auto-derived
+    // hint the editor renders when seeded from a target profile.
+    await expect(page).toHaveURL(/\/recipe\.html$/);
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    await expect(page.locator(".stock-editor-form")).toContainText(
       /Auto-derived from Smoke Navigate.*ion targets/,
     );
   });

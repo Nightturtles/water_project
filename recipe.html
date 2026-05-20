@@ -1035,7 +1035,13 @@
     if (recipeMakeStockBtn) {
       recipeMakeStockBtn.addEventListener("click", () => {
         if (!lastSavedTargetSlug) return;
-        if (typeof window.openStockEditor !== "function") {
+        // Fall back to legacy hash navigation when any modal-flow dependency
+        // is missing so the CTA never becomes a dead click — the inline
+        // editor on minerals.html still handles the derive flow.
+        if (
+          typeof window.openStockEditor !== "function" ||
+          typeof deriveStockFormulaFromTarget !== "function"
+        ) {
           window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
           return;
         }
@@ -1043,7 +1049,10 @@
           typeof window.getTargetProfileByKey === "function"
             ? window.getTargetProfileByKey(lastSavedTargetSlug)
             : null;
-        if (!profile || typeof deriveStockFormulaFromTarget !== "function") return;
+        if (!profile) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+          return;
+        }
         const derived = deriveStockFormulaFromTarget(profile);
         const recipeName = profile.label || lastSavedTargetSlug;
         window.openStockEditor({

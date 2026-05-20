@@ -450,9 +450,15 @@ if (targetMakeStockBtn) {
   targetMakeStockBtn.addEventListener("click", () => {
     if (!currentProfile || currentProfile === "custom") return;
     if (hasUnsavedTargetChanges()) return;
-    if (typeof window.openStockEditor !== "function") {
-      // Fallback to legacy navigation if the editor script isn't loaded —
-      // happens only if stock-editor.js is missing from the host page.
+    // Fall back to legacy hash navigation when any modal-flow dependency is
+    // missing — editor script not loaded, derivation helper absent, or
+    // profile lookup fails. The hash handler on minerals.html re-derives
+    // and opens its inline editor, so the user lands somewhere useful
+    // instead of clicking a dead button.
+    if (
+      typeof window.openStockEditor !== "function" ||
+      typeof deriveStockFormulaFromTarget !== "function"
+    ) {
       window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
       return;
     }
@@ -460,7 +466,10 @@ if (targetMakeStockBtn) {
       typeof window.getTargetProfileByKey === "function"
         ? window.getTargetProfileByKey(currentProfile)
         : null;
-    if (!profile || typeof deriveStockFormulaFromTarget !== "function") return;
+    if (!profile) {
+      window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
+      return;
+    }
     const derived = deriveStockFormulaFromTarget(profile);
     const recipeName = profile.label || currentProfile;
     window.openStockEditor({

@@ -470,10 +470,24 @@
     if (typeof showConfirm !== "function") {
       // showConfirm is defined in ui-shared.js; if missing, fall back to a
       // browser-native prompt rather than silently destroying user data.
+      // Mirror the showConfirm branch's post-delete steps so the underlying
+      // selector still rebuilds via cw:minerals-changed and a throwing
+      // onSaved callback can't break the modal close.
       if (!confirm('Delete stock solution "' + label + '"?')) return;
       deleteStock(slug);
       closeEditor();
-      if (typeof onSaved === "function") onSaved(null);
+      window.dispatchEvent(
+        new CustomEvent("cw:minerals-changed", {
+          detail: { scope: "concentrates", category: "stock", deletedSlug: slug },
+        }),
+      );
+      if (typeof onSaved === "function") {
+        try {
+          onSaved(null);
+        } catch (err) {
+          console.error(err);
+        }
+      }
       return;
     }
     showConfirm('Delete stock solution "' + label + '"?', function () {
