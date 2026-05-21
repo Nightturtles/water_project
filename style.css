@@ -294,8 +294,40 @@ body {
    Header
    ======================== */
 header {
+  position: relative;
   text-align: center;
   padding: 1.5rem 1rem 1rem;
+}
+
+/* Auto-save indicator (top-right of header). Listens for cw:save-status
+   events from sync.js; toggles via .visible + .status-* classes set by
+   initSaveStatusIndicator in ui-shared.js. */
+.save-status-indicator {
+  position: absolute;
+  top: 0.85rem;
+  right: 1rem;
+  font-size: 0.78rem;
+  font-weight: 500;
+  padding: 0.25rem 0.6rem;
+  border-radius: 0.35rem;
+  background: var(--gray-100);
+  color: var(--gray-700);
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.save-status-indicator.visible {
+  opacity: 1;
+}
+
+.save-status-indicator.status-saved {
+  color: var(--green-600);
+}
+
+.save-status-indicator.status-error {
+  color: var(--red-600);
 }
 
 header h1 {

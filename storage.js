@@ -465,6 +465,50 @@ function saveTargetPresetName(name) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
+// --- Target draft ions (per-slug WIP edits) ---
+// Before this key existed, editing a built-in target preset (sca, rao)
+// silently flipped the active selection to "custom" and synced the switch
+// to other devices. Now those edits go into a draft keyed by slug; the
+// active preset stays put, and a draft survives a reload / second device
+// so the user doesn't lose work.
+//
+// Shape: { "<slug>": { calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate } }
+
+/** @returns {Record<string, Record<string, number>>} */
+function loadTargetDraftIons() {
+  const parsed = safeParse(safeGetItem("cw_target_draft_ions"), {});
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+}
+
+/**
+ * @param {string} slug
+ * @param {Record<string, number>} ions
+ */
+function saveTargetDraftIons(slug, ions) {
+  if (!slug) return;
+  const drafts = loadTargetDraftIons();
+  drafts[slug] = ions;
+  safeSetItem("cw_target_draft_ions", JSON.stringify(drafts));
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+}
+
+/** @param {string} slug */
+function clearTargetDraftIons(slug) {
+  if (!slug) return;
+  const drafts = loadTargetDraftIons();
+  if (!Object.prototype.hasOwnProperty.call(drafts, slug)) return;
+  delete drafts[slug];
+  safeSetItem("cw_target_draft_ions", JSON.stringify(drafts));
+  if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+}
+
+/** @param {string} slug */
+function loadTargetDraftIonsFor(slug) {
+  if (!slug) return null;
+  const drafts = loadTargetDraftIons();
+  return drafts[slug] || null;
+}
+
 /**
  * @param {string} [brewMethod] "filter" or "espresso" (defaults to filter)
  */

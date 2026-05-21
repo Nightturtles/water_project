@@ -382,8 +382,43 @@ function activateProfile(profileName) {
     targetHCO3.value = profile.bicarbonate || 0;
     profileDesc.textContent = profile.description || "";
   }
+  // Overlay any persisted draft for this slug. Drafts are written by the
+  // target-input listener (see above) and survive reload + cross-device sync,
+  // so a user who tuned ions on their phone and reopened on their laptop sees
+  // the in-progress values, not the saved profile's clean values.
+  const draftIons = typeof loadTargetDraftIonsFor === "function"
+    ? loadTargetDraftIonsFor(profileName)
+    : null;
+  if (draftIons && typeof draftIons === "object") {
+    if (Number.isFinite(Number(draftIons.calcium))) targetCa.value = draftIons.calcium;
+    if (Number.isFinite(Number(draftIons.magnesium))) targetMg.value = draftIons.magnesium;
+    if (Number.isFinite(Number(draftIons.alkalinity))) targetAlk.value = draftIons.alkalinity;
+    if (Number.isFinite(Number(draftIons.potassium))) targetK.value = draftIons.potassium;
+    if (Number.isFinite(Number(draftIons.sodium))) targetNa.value = draftIons.sodium;
+    if (Number.isFinite(Number(draftIons.sulfate))) targetSO4.value = draftIons.sulfate;
+    if (Number.isFinite(Number(draftIons.chloride))) targetCl.value = draftIons.chloride;
+    if (Number.isFinite(Number(draftIons.bicarbonate))) targetHCO3.value = draftIons.bicarbonate;
+    if (NON_EDITABLE_TARGET_KEYS.includes(profileName)) {
+      // Mirror the non-editable branch of the input handler so the UI reflects
+      // the restored draft state on first paint.
+      const label = (profile && profile.label) ? profile.label : profileName;
+      profileDesc.textContent =
+        "Modified " + label + " - name and save to keep these values.";
+    }
+  }
   // Render profile state after input values are assigned so readonly tags are in sync.
   highlightProfile(profileName);
+  // After highlight, surface the right bar for any restored draft. highlightProfile
+  // hides both bars; if a draft is live, re-show the appropriate one.
+  if (draftIons && hasUnsavedTargetChanges()) {
+    if (NON_EDITABLE_TARGET_KEYS.includes(profileName)) {
+      targetSaveBar.style.display = "flex";
+    } else {
+      targetEditBar.style.display = "flex";
+      const label = (profile && profile.label) ? profile.label : profileName;
+      document.getElementById("target-edit-bar-label").textContent = "Editing: " + label;
+    }
+  }
   calculate();
 }
 
@@ -423,7 +458,21 @@ profileButtonsContainer.addEventListener("click", (e) => {
 
   const btn = e.target.closest(".profile-btn");
   if (!btn) return;
-  activateProfile(btn.dataset.profile);
+  const nextProfile = btn.dataset.profile;
+  // Warn before discarding in-progress edits. confirm() is the simplest
+  // first cut; a nicer dialog can replace this later. "library" is the
+  // picker pseudo-tile and shouldn't trigger the prompt — picking from the
+  // library doesn't switch the active preset.
+  if (
+    nextProfile !== currentProfile &&
+    nextProfile !== "library" &&
+    typeof hasUnsavedTargetChanges === "function" &&
+    hasUnsavedTargetChanges()
+  ) {
+    if (!window.confirm("Discard unsaved changes?")) return;
+    if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
+  }
+  activateProfile(nextProfile);
 });
 
 // "+ Make a stock" — hand off to minerals.html, which re-derives from the
@@ -443,20 +492,52 @@ if (targetMakeStockBtn) {
   });
 }
 
+// Snapshot the current target inputs as an ion object. Used by the draft-
+// persistence path below so an in-progress edit survives reload and a second
+// device. Mirrors the field set the calculator reads from elsewhere.
+function readCurrentTargetIons() {
+  return {
+    calcium: parseFloat(targetCa.value) || 0,
+    magnesium: parseFloat(targetMg.value) || 0,
+    alkalinity: parseFloat(targetAlk.value) || 0,
+    potassium: parseFloat(targetK.value) || 0,
+    sodium: parseFloat(targetNa.value) || 0,
+    sulfate: parseFloat(targetSO4.value) || 0,
+    chloride: parseFloat(targetCl.value) || 0,
+    bicarbonate: parseFloat(targetHCO3.value) || 0,
+  };
+}
+
 // --- Target input handling (Inefficiency 6: debounced) ---
 [targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach(input => {
   input.addEventListener("input", () => {
     renderTargetReadonlyTags();
     if (currentProfile !== "custom") {
-      if (NON_EDITABLE_TARGET_KEYS.includes(currentProfile)) {
-        currentProfile = "custom";
-        highlightProfile("custom");
-        saveTargetPresetName("custom");
-        profileDesc.textContent = "Enter your own target values above.";
+      const hasChanges = hasUnsavedTargetChanges();
+      const isNonEditable = NON_EDITABLE_TARGET_KEYS.includes(currentProfile);
+      // Persist edits as a per-slug draft so a reload / second-device session
+      // doesn't lose them. Previously NON_EDITABLE_TARGET_KEYS edits silently
+      // flipped currentProfile to "custom" and synced that switch — a
+      // cross-device surprise.
+      if (hasChanges) {
+        saveTargetDraftIons(currentProfile, readCurrentTargetIons());
       } else {
-        const showEdit = hasUnsavedTargetChanges();
-        targetEditBar.style.display = showEdit ? "flex" : "none";
-        if (showEdit) {
+        clearTargetDraftIons(currentProfile);
+      }
+      if (isNonEditable) {
+        // Built-in canonical recipes (SCA, Rao) can't be overwritten in place.
+        // Surface the "Save Profile" bar with a name input instead of the
+        // "Save Changes" edit bar, and tell the user via the description.
+        targetEditBar.style.display = "none";
+        targetSaveBar.style.display = hasChanges ? "flex" : "none";
+        const profile = getTargetProfileByKey(currentProfile);
+        const label = (profile && profile.label) ? profile.label : currentProfile;
+        profileDesc.textContent = hasChanges
+          ? "Modified " + label + " - name and save to keep these values."
+          : ((profile && profile.description) || "");
+      } else {
+        targetEditBar.style.display = hasChanges ? "flex" : "none";
+        if (hasChanges) {
           const profile = getTargetProfileByKey(currentProfile);
           document.getElementById("target-edit-bar-label").textContent =
             "Editing: " + (profile && profile.label ? profile.label : currentProfile);
@@ -522,6 +603,9 @@ function persistTargetProfileEdits() {
     showTargetSaveStatus("Storage full; could not save.", true);
     return { saved: false };
   }
+  // Save Changes committed the draft into the profile — drop the draft so a
+  // reload doesn't re-show stale "modified" UI.
+  if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
   targetEditBar.style.display = "none";
   if (typeof syncNow === "function") syncNow();
   return { saved: true, profile: profile, wasCreator: wasCreator };
@@ -622,6 +706,11 @@ targetSaveBtn.addEventListener("click", () => {
     showTargetSaveStatus("Storage full; could not save.", true);
     return;
   }
+
+  // The user named + saved a new profile from in-progress edits on the active
+  // preset (currentProfile). Clear that draft so revisiting the source preset
+  // shows its clean values rather than the now-committed edits.
+  if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
 
   renderProfileButtons();
   activateProfile(key);
