@@ -1156,7 +1156,7 @@ function updateSummaryMetrics(payload) {
     : "-";
   setDeltaText(
     document.getElementById("calc-delta-so4cl"),
-    so4ToCl == null || baselineRatio == null ? null : so4ToCl - baselineRatio,
+    !advancedMode || so4ToCl == null || baselineRatio == null ? null : so4ToCl - baselineRatio,
     {
       decimals: 2,
       metricName: "SO4:Cl ratio",

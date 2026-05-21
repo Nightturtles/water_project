@@ -44,15 +44,26 @@ module.exports = tseslint.config(
   // "unused" without being visible to ESLint.
   ...tseslint.configs.recommended,
 
-  // Classic-script JS files (the four @ts-check'd browser files).
+  // Classic-script browser JS files.
   // They load via <script> tag and rely on classic-script scope sharing:
   // `sync.js` calls `safeGetItem` defined in `storage.js`, etc. ESLint's
   // `no-undef` and `no-unused-vars` both get the wrong answer against that
   // structure — both flag correct code as broken because they can't see the
-  // cross-file references. `tsc --noEmit` (with globals.d.ts) already catches
-  // the real bugs those rules target, so we turn them off here and keep only
-  // the rules that catch things tsc can't: ==, implicit coercion, prefer-const,
-  // etc. This block comes AFTER tseslint.configs.recommended so its rule
+  // cross-file references, so we turn them off here.
+  //
+  // Safety nets:
+  // - Files under @ts-check AND listed in tsconfig.json `include`
+  //   (constants, metrics, storage, sync) get type-checked by `tsc --noEmit`
+  //   against globals.d.ts.
+  // - The remaining files (script.js, ui-shared.js, sentry-init.js,
+  //   analytics-init.js, recipe-browser.js, my-recipes-ui.js,
+  //   mineral-selector.js, stock-editor.js, diy-editor.js,
+  //   estimate-water-ui.js, login-modal.js) are NOT under @ts-check today —
+  //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
+  //   prefer-const, no-empty) are their only static safety net. Bringing them
+  //   under @ts-check is a separate cleanup tracked outside this PR.
+  //
+  // This block comes AFTER tseslint.configs.recommended so its rule
   // overrides win.
   {
     files: [

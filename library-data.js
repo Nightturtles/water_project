@@ -7,6 +7,7 @@
   "use strict";
 
   var publicRecipesCache = null;
+  var publicRecipesLoadPromise = null;
   // sessionStorage key for the cached catalog. Bump the suffix whenever a
   // schema/migration change would make the prior cache misleading — users
   // whose tab was open across the deploy rehydrate from sessionStorage
@@ -171,10 +172,18 @@
   function ensurePublicRecipesLoaded() {
     if (publicRecipesCache) return Promise.resolve(publicRecipesCache);
     if (typeof window.supabaseClient === "undefined") return Promise.resolve([]);
-    return fetchPublicRecipes(false).catch(function (e) {
-      console.warn("[library] lazy warmup failed:", e);
-      return publicRecipesCache || [];
-    });
+    // Dedupe concurrent callers (script.js + taste.html + recipe.html on a
+    // single page load) so they share one fetch instead of racing.
+    if (publicRecipesLoadPromise) return publicRecipesLoadPromise;
+    publicRecipesLoadPromise = fetchPublicRecipes(false)
+      .catch(function (e) {
+        console.warn("[library] lazy warmup failed:", e);
+        return publicRecipesCache || [];
+      })
+      .finally(function () {
+        publicRecipesLoadPromise = null;
+      });
+    return publicRecipesLoadPromise;
   }
 
   function invalidatePublicRecipesCache() {
