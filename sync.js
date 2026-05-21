@@ -168,7 +168,7 @@
     await new Promise(function (resolve) {
       function onResolved() {
         document.removeEventListener("cw:auth-state-resolved", onResolved);
-        resolve();
+        resolve(undefined);
       }
       document.addEventListener("cw:auth-state-resolved", onResolved);
     });
