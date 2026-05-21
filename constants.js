@@ -484,8 +484,11 @@ const LOTUS_CONCENTRATE_IDS = BRAND_CONCENTRATE_IDS.filter((id) => id.startsWith
 
 // --- Water-profile range bands by brew method ---
 // These bands drive evaluateWaterProfileRanges() in metrics.js.
-// Filter values preserve current behavior; espresso values allow lower
-// hardness/calcium profiles that are common in espresso-focused recipes.
+// Espresso bands diverge from filter in two directions:
+//  - Lower bounds are more permissive (zero-Ca/low-GH espresso recipes).
+//  - Upper KH and GH bounds are tighter than filter to flag the
+//    scale risk that espresso boilers face above ~70-100 ppm CaCO3
+//    alkalinity (Barista Hustle / ThirdWaveWater / EspressoAF guidance).
 const WATER_PROFILE_RANGE_BANDS = {
   filter: {
     tds: {
@@ -550,11 +553,11 @@ const WATER_PROFILE_RANGE_BANDS = {
     },
     kh: {
       preferredMin: 20,
-      preferredMax: 90,
+      preferredMax: 70,
       warnMin: 10,
-      warnMax: 130,
+      warnMax: 100,
       dangerMin: 5,
-      dangerMax: 200,
+      dangerMax: 150,
     },
     gh: {
       preferredMin: 15,
@@ -562,7 +565,7 @@ const WATER_PROFILE_RANGE_BANDS = {
       warnMin: 8,
       warnMax: 240,
       dangerMin: null,
-      dangerMax: 300,
+      dangerMax: 260,
     },
     calcium: {
       preferredMin: 0,

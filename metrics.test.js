@@ -192,6 +192,47 @@ describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
     });
     expect(invalidEval.findings).toEqual(filterEval.findings);
   });
+
+  test("high KH warns in filter mode but triggers danger in espresso mode (scale risk)", () => {
+    // KH ≈ 160 mg/L as CaCO3 (bicarbonate 195 × 0.8202).
+    // Filter dangerMax=200 / warnMax=130 → warn only.
+    // Espresso dangerMax=150 / warnMax=100 → danger (scale risk to boiler).
+    // Ca=35, Mg=5 keeps GH and ion findings out of the way.
+    const ions = { calcium: 35, magnesium: 5, bicarbonate: 195 };
+    const noSources = { alkalinitySources: [], calciumSource: null, magnesiumSource: null };
+    const filterEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...noSources,
+      brewMethod: "filter",
+    });
+    const espressoEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...noSources,
+      brewMethod: "espresso",
+    });
+    const filterKh = filterEval.findings.find((f) => /^KH is too high/.test(f.message));
+    const espressoKh = espressoEval.findings.find((f) => /^KH is too high/.test(f.message));
+    expect(filterKh?.severity).toBe("warn");
+    expect(espressoKh?.severity).toBe("danger");
+  });
+
+  test("high GH triggers danger in espresso but only warn in filter (scale risk)", () => {
+    // GH ≈ 277 mg/L as CaCO3 (Ca 70×2.497 + Mg 25×4.118).
+    // Filter dangerMax=300 / warnMax=250 → warn only.
+    // Espresso dangerMax=260 / warnMax=240 → danger.
+    const ions = { calcium: 70, magnesium: 25, bicarbonate: 48.77 };
+    const noSources = { alkalinitySources: [], calciumSource: null, magnesiumSource: null };
+    const filterEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...noSources,
+      brewMethod: "filter",
+    });
+    const espressoEval = metrics.evaluateWaterProfileRanges(ions, {
+      ...noSources,
+      brewMethod: "espresso",
+    });
+    const filterGh = filterEval.findings.find((f) => /^GH is too high/.test(f.message));
+    const espressoGh = espressoEval.findings.find((f) => /^GH is too high/.test(f.message));
+    expect(filterGh?.severity).toBe("warn");
+    expect(espressoGh?.severity).toBe("danger");
+  });
 });
 
 describe("MINERAL_DB integrity (constants.js sanity)", () => {
