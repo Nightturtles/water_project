@@ -544,10 +544,7 @@
       if (settings.drafts && typeof settings.drafts === "object") {
         var drafts = settings.drafts;
         if (drafts.recipe_mineral_inputs && typeof drafts.recipe_mineral_inputs === "object")
-          safeSetItem(
-            "cw_recipe_mineral_inputs",
-            JSON.stringify(drafts.recipe_mineral_inputs),
-          );
+          safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(drafts.recipe_mineral_inputs));
         if (
           drafts.recipe_concentrate_inputs &&
           typeof drafts.recipe_concentrate_inputs === "object"
