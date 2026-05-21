@@ -1049,18 +1049,17 @@
   }
 
   // --- Flush pending sync when navigating away ---
-  // Returns a promise that resolves when the inflight push settles.  Logout
-  // awaits this before calling signOut() so a debounced edit (made within
-  // SYNC_DEBOUNCE_MS of clicking Log out) reaches the cloud before the
-  // session is cleared.  Background callers (visibilitychange, pagehide) can
-  // ignore the return value.
+  // Returns a promise that resolves when the inflight push settles, and
+  // rejects if the push fails.  Logout awaits this before calling signOut()
+  // so a debounced edit (made within SYNC_DEBOUNCE_MS of clicking Log out)
+  // reaches the cloud before the session is cleared; if the push fails the
+  // caller MUST abort logout to avoid wiping unsynced edits.  Background
+  // callers (visibilitychange, pagehide) can ignore the rejection.
   function flushPendingSync() {
     if (syncTimer) {
       clearTimeout(syncTimer);
       syncTimer = undefined;
-      return pushAllToCloud().catch(function (err) {
-        console.warn("[sync] flush on leave failed:", err);
-      });
+      return pushAllToCloud();
     }
     return Promise.resolve();
   }
@@ -1112,13 +1111,21 @@
     } catch (_) {}
   }
 
+  // Background callers swallow flush failures; only the logout path (in
+  // ui-shared.js) treats a rejection as a signal to abort sign-out.
+  function flushPendingSyncQuiet() {
+    flushPendingSync().catch(function (err) {
+      console.warn("[sync] background flush failed:", err);
+    });
+  }
+
   document.addEventListener("visibilitychange", function () {
-    if (document.visibilityState === "hidden") flushPendingSync();
+    if (document.visibilityState === "hidden") flushPendingSyncQuiet();
   });
 
   function teardownOnLeave() {
     unsubscribeFromCloudChanges();
-    flushPendingSync();
+    flushPendingSyncQuiet();
   }
 
   window.addEventListener("beforeunload", teardownOnLeave);

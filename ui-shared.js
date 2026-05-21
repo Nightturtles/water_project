@@ -703,10 +703,18 @@ async function _updateNavAuth(authWrap, currentPage) {
         //   2. sign out (Supabase clears the session, fires SIGNED_OUT)
         //   3. wipe local user content (Categories A/B/C; D preserved)
         //   4. navigate to a clean page
+        // If the pending push fails, abort logout. Continuing would call
+        // signOut() and clearLocalUserContent() and silently drop the
+        // unsynced edit (e.g. a save made within SYNC_DEBOUNCE_MS of
+        // clicking Log out). Better to leave the user signed in so they
+        // can retry than to lose their data.
         if (typeof window.flushPendingSync === "function") {
           try {
             await window.flushPendingSync();
-          } catch (_) {}
+          } catch (err) {
+            console.warn("[auth] flushPendingSync failed; aborting logout:", err);
+            return;
+          }
         }
         // If signOut() throws (network blip, transient Supabase error), the
         // auth token survives — wiping local state and redirecting in that
