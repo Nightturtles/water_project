@@ -772,10 +772,45 @@ function showRecipesToaster() {
   });
 }
 
+// --- Save-status indicator (closes the "did my edit save?" loop) ---
+// Listens for cw:save-status events dispatched by sync.js. Three transitions:
+// "saving" (visible while a debounced push is queued or in-flight), "saved"
+// (briefly visible after success, then fades), "error" (sticky until the
+// next attempt succeeds). One element per page, optional — pages without the
+// element opt out.
+function initSaveStatusIndicator() {
+  const el = document.getElementById("save-status-indicator");
+  if (!el) return;
+  let hideTimer = null;
+
+  function setState(text, stateClass) {
+    clearTimeout(hideTimer);
+    el.textContent = text;
+    el.classList.remove("status-saving", "status-saved", "status-error");
+    if (stateClass) el.classList.add(stateClass);
+    el.classList.add("visible");
+  }
+
+  window.addEventListener("cw:save-status", (e) => {
+    const status = e.detail && e.detail.status;
+    if (status === "saving") {
+      setState("Saving…", "status-saving");
+    } else if (status === "saved") {
+      setState("Saved", "status-saved");
+      hideTimer = setTimeout(() => {
+        el.classList.remove("visible", "status-saved");
+      }, 2000);
+    } else if (status === "error") {
+      setState("Couldn't save - retrying", "status-error");
+    }
+  });
+}
+
 // --- Run shared UI setup on load ---
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
   applyMineralDisplayMode();
   initThemeListeners();
   showRecipesToaster();
+  initSaveStatusIndicator();
 });

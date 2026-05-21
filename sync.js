@@ -79,6 +79,7 @@
     "cw_recipe_concentrate_inputs",
     "cw_recipe_stock_grams",
     "cw_recipe_dispense_mode",
+    "cw_target_draft_ions",
     // Category B
     "cw_custom_profiles",
     "cw_custom_target_profiles",
@@ -115,6 +116,7 @@
     "cw_recipe_concentrate_inputs",
     "cw_recipe_stock_grams",
     "cw_recipe_dispense_mode",
+    "cw_target_draft_ions",
   ];
   var TRANSIENT_KEYS_PREFIX = ["cw_volume_"];
 
@@ -144,13 +146,34 @@
     );
   }
 
+  // --- Save-status broadcast (consumed by ui-shared.js's indicator) ---
+  // Fires three event kinds: "saving" the moment a write is queued (the local
+  // write has already happened by then), "saved" when the debounced push
+  // resolves (or immediately for logged-out users — pushAllToCloud early-
+  // returns and the .then still fires), and "error" if the push throws.
+  /** @param {string} status @param {unknown} [err] */
+  function dispatchSaveStatus(status, err) {
+    try {
+      if (typeof window === "undefined" || typeof window.dispatchEvent !== "function") return;
+      window.dispatchEvent(
+        new CustomEvent("cw:save-status", { detail: { status: status, error: err } }),
+      );
+    } catch (_) {}
+  }
+
   // --- Debounced sync trigger (called from storage.js save functions) ---
   function scheduleSyncToCloud() {
+    dispatchSaveStatus("saving");
     clearTimeout(syncTimer);
     syncTimer = setTimeout(function () {
-      pushAllToCloud().catch(function (err) {
-        console.warn("[sync] push failed:", err);
-      });
+      pushAllToCloud()
+        .then(function () {
+          dispatchSaveStatus("saved");
+        })
+        .catch(function (err) {
+          console.warn("[sync] push failed:", err);
+          dispatchSaveStatus("error", err);
+        });
     }, SYNC_DEBOUNCE_MS);
   }
 
@@ -158,9 +181,15 @@
   function syncNow() {
     clearTimeout(syncTimer);
     syncTimer = undefined;
-    return pushAllToCloud().catch(function (err) {
-      console.warn("[sync] immediate push failed:", err);
-    });
+    dispatchSaveStatus("saving");
+    return pushAllToCloud()
+      .then(function () {
+        dispatchSaveStatus("saved");
+      })
+      .catch(function (err) {
+        console.warn("[sync] immediate push failed:", err);
+        dispatchSaveStatus("error", err);
+      });
   }
 
   // --- Get currently logged-in user ID, or null ---
@@ -190,6 +219,31 @@
     return volumes;
   }
 
+  // --- Drafts payload (recipe builder WIP + target ion edits) ---
+  // Bundled into one jsonb column on user_settings (see the 20260520120000
+  // migration). These keys persist as a side-effect of typing into a form
+  // and used to be localStorage-only; bundling them here lets a user move
+  // between phone and laptop mid-edit without losing work.
+  function collectDrafts() {
+    /** @type {Record<string, unknown>} */
+    var drafts = {};
+    var mineralInputs = safeParse(safeGetItem("cw_recipe_mineral_inputs"), null);
+    if (mineralInputs && typeof mineralInputs === "object")
+      drafts.recipe_mineral_inputs = mineralInputs;
+    var concentrateInputs = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), null);
+    if (concentrateInputs && typeof concentrateInputs === "object")
+      drafts.recipe_concentrate_inputs = concentrateInputs;
+    var stockGrams = safeParse(safeGetItem("cw_recipe_stock_grams"), null);
+    if (stockGrams && typeof stockGrams === "object") drafts.recipe_stock_grams = stockGrams;
+    var dispenseMode = safeGetItem("cw_recipe_dispense_mode");
+    if (dispenseMode === "manual" || dispenseMode === "stock")
+      drafts.recipe_dispense_mode = dispenseMode;
+    var targetDraftIons = safeParse(safeGetItem("cw_target_draft_ions"), null);
+    if (targetDraftIons && typeof targetDraftIons === "object")
+      drafts.target_draft_ions = targetDraftIons;
+    return drafts;
+  }
+
   // Build the user_settings push payload from localStorage. Returns a fresh
   // object each call so callers can serialize/mutate freely.
   /** @param {string} userId @param {string} now */
@@ -207,6 +261,7 @@
       lotus_concentrate_units: loadLotusConcentrateUnits(),
       volume_preferences: collectVolumePreferences(),
       creator_display_name: loadCreatorDisplayName(),
+      drafts: collectDrafts(),
       updated_at: now,
     };
   }
@@ -548,6 +603,28 @@
       }
       if (settings.creator_display_name)
         safeSetItem("cw_creator_display_name", settings.creator_display_name);
+      // Drafts: restore each known key only if present. An empty/missing
+      // drafts blob shouldn't blow away the user's local in-progress edits —
+      // their local draft is the more recent write in that case.
+      if (settings.drafts && typeof settings.drafts === "object") {
+        var drafts = settings.drafts;
+        if (drafts.recipe_mineral_inputs && typeof drafts.recipe_mineral_inputs === "object")
+          safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(drafts.recipe_mineral_inputs));
+        if (
+          drafts.recipe_concentrate_inputs &&
+          typeof drafts.recipe_concentrate_inputs === "object"
+        )
+          safeSetItem(
+            "cw_recipe_concentrate_inputs",
+            JSON.stringify(drafts.recipe_concentrate_inputs),
+          );
+        if (drafts.recipe_stock_grams && typeof drafts.recipe_stock_grams === "object")
+          safeSetItem("cw_recipe_stock_grams", JSON.stringify(drafts.recipe_stock_grams));
+        if (drafts.recipe_dispense_mode === "manual" || drafts.recipe_dispense_mode === "stock")
+          safeSetItem("cw_recipe_dispense_mode", drafts.recipe_dispense_mode);
+        if (drafts.target_draft_ions && typeof drafts.target_draft_ions === "object")
+          safeSetItem("cw_target_draft_ions", JSON.stringify(drafts.target_draft_ions));
+      }
     }
 
     // Apply user_selections
