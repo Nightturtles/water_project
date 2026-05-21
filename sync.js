@@ -3,8 +3,8 @@
 // Sync — Cloud sync layer (localStorage-first)
 // ============================================
 // Strategy: localStorage is always the source of truth for reads.
-  // On write: localStorage is updated immediately, then a debounced push
-  // to Supabase fires shortly later if the user is logged in.
+// On write: localStorage is updated immediately, then a debounced push
+// to Supabase fires shortly later if the user is logged in.
 // On login: merge local and cloud data (see handleFirstLoginMerge).
 // On page load: if logged in, pull latest cloud data in the background.
 

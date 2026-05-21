@@ -34,9 +34,12 @@ function createStatusHandler(statusEl, options = {}) {
     statusEl.textContent = message;
     statusEl.classList.toggle("error", isError);
     statusEl.classList.add("visible");
-    timer = setTimeout(() => {
-      statusEl.classList.remove("visible", "error");
-    }, isError ? errorMs : successMs);
+    timer = setTimeout(
+      () => {
+        statusEl.classList.remove("visible", "error");
+      },
+      isError ? errorMs : successMs,
+    );
   };
 }
 
@@ -78,7 +81,7 @@ function initSourcePresetSelect(selectEl) {
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
   tagsEl.innerHTML = "";
-  const allZeros = ION_FIELDS.every(function(ion) {
+  const allZeros = ION_FIELDS.every(function (ion) {
     const value = Number(water && water[ion]);
     return !Number.isFinite(value) || value === 0;
   });
@@ -89,10 +92,12 @@ function renderSourceWaterTags(tagsEl, water) {
     tagsEl.appendChild(zeroTag);
     return;
   }
-  const nonZero = getVisibleIonFields().filter(function(ion) { return (water && water[ion]) > 0; });
+  const nonZero = getVisibleIonFields().filter(function (ion) {
+    return (water && water[ion]) > 0;
+  });
   const metrics = water ? calculateMetrics(water) : { kh: 0 };
   const alk = metrics.kh;
-  const alkRounded = (alk == null || alk !== alk) ? 0 : Math.round(alk);
+  const alkRounded = alk == null || alk !== alk ? 0 : Math.round(alk);
 
   if (nonZero.length === 0) {
     const tag = document.createElement("span");
@@ -107,7 +112,7 @@ function renderSourceWaterTags(tagsEl, water) {
     }
     return;
   }
-  nonZero.forEach(function(ion) {
+  nonZero.forEach(function (ion) {
     const tag = document.createElement("span");
     tag.className = "base-tag";
     tag.textContent = ION_LABELS[ion] + ": " + Number(water[ion]) + " mg/L";
@@ -151,10 +156,18 @@ function showConfirm(message, onYes) {
       previousFocus.focus();
     }
   }
-  function yesHandler() { close(); onYes(); }
-  function noHandler() { close(); }
+  function yesHandler() {
+    close();
+    onYes();
+  }
+  function noHandler() {
+    close();
+  }
   function keyHandler(e) {
-    if (e.key === "Escape") { noHandler(); return; }
+    if (e.key === "Escape") {
+      noHandler();
+      return;
+    }
     if (e.key === "Tab") {
       const focusable = [yesBtn, noBtn];
       const idx = focusable.indexOf(document.activeElement);
@@ -167,7 +180,9 @@ function showConfirm(message, onYes) {
       }
     }
   }
-  function overlayClickHandler(e) { if (e.target === overlay) noHandler(); }
+  function overlayClickHandler(e) {
+    if (e.target === overlay) noHandler();
+  }
 
   confirmCleanup = close;
 
@@ -362,7 +377,7 @@ async function showSharePrompt(profileKey) {
           .update({
             is_public: true,
             creator_display_name: displayName,
-            tags: profiles[profileKey] ? profiles[profileKey].tags : []
+            tags: profiles[profileKey] ? profiles[profileKey].tags : [],
           })
           .eq("user_id", user.id)
           .eq("slug", profileKey)
@@ -385,13 +400,21 @@ async function showSharePrompt(profileKey) {
     close();
   }
 
-  function noHandler() { close(); }
+  function noHandler() {
+    close();
+  }
 
   function keyHandler(e) {
-    if (e.key === "Escape") { noHandler(); return; }
-    if (e.key === "Enter" && document.activeElement === nameInput) { yesHandler(); return; }
+    if (e.key === "Escape") {
+      noHandler();
+      return;
+    }
+    if (e.key === "Enter" && document.activeElement === nameInput) {
+      yesHandler();
+      return;
+    }
     if (e.key === "Tab") {
-      var focusable = [nameInput, yesBtn, noBtn].filter(function(el) {
+      var focusable = [nameInput, yesBtn, noBtn].filter(function (el) {
         return el.offsetParent !== null;
       });
       var idx = focusable.indexOf(document.activeElement);
@@ -405,7 +428,9 @@ async function showSharePrompt(profileKey) {
     }
   }
 
-  function overlayClickHandler(e) { if (e.target === overlay) noHandler(); }
+  function overlayClickHandler(e) {
+    if (e.target === overlay) noHandler();
+  }
 
   sharePromptCleanup = close;
   yesBtn.addEventListener("click", yesHandler);
@@ -497,12 +522,18 @@ function setDeltaText(el, delta, options = {}) {
   }
   if (rounded > 0) {
     el.classList.add("positive");
-    el.setAttribute("aria-label", `${metricName} increased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`);
+    el.setAttribute(
+      "aria-label",
+      `${metricName} increased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`,
+    );
     return;
   }
   if (rounded < 0) {
     el.classList.add("negative");
-    el.setAttribute("aria-label", `${metricName} decreased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`);
+    el.setAttribute(
+      "aria-label",
+      `${metricName} decreased by ${Math.abs(rounded)}${unit} compared to ${baselineLabel}`,
+    );
     return;
   }
   el.setAttribute("aria-label", `${metricName} unchanged compared to ${baselineLabel}`);
@@ -569,14 +600,18 @@ function initThemeListeners() {
 function injectNav() {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
   const navItems = [
-    { type: "group", label: "Tools", children: [
-      { href: "index.html",  label: "Calculator" },
-      { href: "recipe.html", label: "Recipe Builder" },
-      { href: "taste.html",  label: "Taste Tuner" }
-    ]},
-    { type: "link", href: "library.html",  label: "Library" },
-    { type: "link", href: "start.html",    label: "Beginners Guide" },
-    { type: "link", href: "minerals.html", label: "Settings" }
+    {
+      type: "group",
+      label: "Tools",
+      children: [
+        { href: "index.html", label: "Calculator" },
+        { href: "recipe.html", label: "Recipe Builder" },
+        { href: "taste.html", label: "Taste Tuner" },
+      ],
+    },
+    { type: "link", href: "library.html", label: "Library" },
+    { type: "link", href: "start.html", label: "Beginners Guide" },
+    { type: "link", href: "minerals.html", label: "Settings" },
   ];
 
   const nav = document.createElement("nav");
@@ -590,9 +625,9 @@ function injectNav() {
   brand.setAttribute("aria-label", "Cafelytic home");
   brand.innerHTML =
     '<svg viewBox="0 0 28 28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '<rect width="28" height="28" rx="3" fill="var(--brand-tile-fill)" stroke="var(--brand-tile-stroke)" stroke-width="1.5"/>' +
-      '<text x="14" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-size="13" font-weight="500" fill="var(--brand-tile-ca)">Ca</text>' +
-    '</svg>' +
+    '<rect width="28" height="28" rx="3" fill="var(--brand-tile-fill)" stroke="var(--brand-tile-stroke)" stroke-width="1.5"/>' +
+    '<text x="14" y="18" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, \'Segoe UI\', sans-serif" font-size="13" font-weight="500" fill="var(--brand-tile-ca)">Ca</text>' +
+    "</svg>" +
     '<span class="nav-brand-wordmark"><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span></span>';
   nav.appendChild(brand);
 
@@ -602,13 +637,13 @@ function injectNav() {
   hamburger.className = "nav-hamburger";
   hamburger.setAttribute("aria-label", "Toggle menu");
   hamburger.setAttribute("aria-expanded", "false");
-  hamburger.innerHTML = '<span></span><span></span><span></span>';
+  hamburger.innerHTML = "<span></span><span></span><span></span>";
   nav.appendChild(hamburger);
 
   // Nav links
   const linksWrap = document.createElement("div");
   linksWrap.className = "nav-links";
-  navItems.forEach(item => {
+  navItems.forEach((item) => {
     if (item.type === "group") {
       const built = _buildNavGroup(item, currentPage);
       linksWrap.appendChild(built.wrap);
@@ -669,7 +704,9 @@ async function _updateNavAuth(authWrap, currentPage) {
         //   3. wipe local user content (Categories A/B/C; D preserved)
         //   4. navigate to a clean page
         if (typeof window.flushPendingSync === "function") {
-          try { await window.flushPendingSync(); } catch (_) {}
+          try {
+            await window.flushPendingSync();
+          } catch (_) {}
         }
         // If signOut() throws (network blip, transient Supabase error), the
         // auth token survives — wiping local state and redirecting in that
@@ -702,7 +739,7 @@ async function _updateNavAuth(authWrap, currentPage) {
 }
 
 function _buildNavGroup(group, currentPage) {
-  const isCurrentInGroup = group.children.some(c => c.href === currentPage);
+  const isCurrentInGroup = group.children.some((c) => c.href === currentPage);
 
   const wrap = document.createElement("div");
   wrap.className = "nav-group";
@@ -718,7 +755,7 @@ function _buildNavGroup(group, currentPage) {
   menu.className = "nav-group-menu";
   menu.hidden = true;
 
-  group.children.forEach(c => {
+  group.children.forEach((c) => {
     const a = document.createElement("a");
     a.href = c.href;
     a.textContent = c.label;
@@ -771,21 +808,29 @@ function updateRestoreSourceBar() {
 
 function findFallbackPreset(allPresets) {
   const keys = Object.keys(allPresets);
-  return keys.find(function(k) { return k !== "custom" && k !== "library"; }) || "custom";
+  return (
+    keys.find(function (k) {
+      return k !== "custom" && k !== "library";
+    }) || "custom"
+  );
 }
 
 // --- Safe radio selection (Bug 6) ---
 function selectRadioByValue(name, value) {
   const radios = document.querySelectorAll('input[name="' + CSS.escape(name) + '"]');
-  radios.forEach(function(el) { if (el.value === value) el.checked = true; });
+  radios.forEach(function (el) {
+    if (el.value === value) el.checked = true;
+  });
 }
 
 // --- Debounce helper (Inefficiency 6) ---
 function debounce(fn, ms) {
   let timer;
-  return function(...args) {
+  return function (...args) {
     clearTimeout(timer);
-    timer = setTimeout(() => { fn.apply(this, args); }, ms);
+    timer = setTimeout(() => {
+      fn.apply(this, args);
+    }, ms);
   };
 }
 
