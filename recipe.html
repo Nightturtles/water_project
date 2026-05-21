@@ -290,7 +290,10 @@
   <script src="sync.js"></script>
   <script src="metrics.js"></script>
   <script src="ui-shared.js"></script>
+  <script src="login-modal.js"></script>
   <script src="mineral-selector.js"></script>
+  <script src="stock-editor.js"></script>
+  <script src="diy-editor.js"></script>
   <script src="source-water-ui.js"></script>
   <script src="estimate-water-ui.js"></script>
   <script>
@@ -388,7 +391,7 @@
     const activeStockSpec = typeof getActiveStockSpec === "function" ? getActiveStockSpec(selectedConcentrates) : null;
 
     function loadRecipeMineralInputs() {
-      const parsed = safeParse(safeGetItem("cw_recipe_mineral_inputs"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_mineral_inputs"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
@@ -398,32 +401,32 @@
     // finishing on their laptop doesn't lose work - matching the auto-sync
     // pattern used by every other domain (settings, source water, etc.).
     function saveRecipeMineralInputs(values) {
-      safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_mineral_inputs", JSON.stringify(values || {}));
       if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
     }
 
     function loadRecipeConcentrateInputs() {
-      const parsed = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_concentrate_inputs"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
     function saveRecipeConcentrateInputs(values) {
-      safeSetItem("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_concentrate_inputs", JSON.stringify(values || {}));
       if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
     }
 
     function loadRecipeStockGrams() {
-      const parsed = safeParse(safeGetItem("cw_recipe_stock_grams"), {});
+      const parsed = safeParse(_getTransient("cw_recipe_stock_grams"), {});
       return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
     }
 
     function saveRecipeStockGrams(values) {
-      safeSetItem("cw_recipe_stock_grams", JSON.stringify(values || {}));
+      _setTransient("cw_recipe_stock_grams", JSON.stringify(values || {}));
       if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
     }
 
     function loadRecipeDispenseMode() {
-      const raw = safeGetItem("cw_recipe_dispense_mode");
+      const raw = _getTransient("cw_recipe_dispense_mode");
       if (raw === "manual" || raw === "stock") return raw;
       // Default: stock mode when a stock is enabled (matches likely intent of
       // the user enabling it in Settings); manual otherwise.
@@ -432,7 +435,7 @@
 
     function saveRecipeDispenseMode(mode) {
       if (mode !== "manual" && mode !== "stock") return;
-      safeSetItem("cw_recipe_dispense_mode", mode);
+      _setTransient("cw_recipe_dispense_mode", mode);
       if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
     }
 
@@ -970,6 +973,9 @@
     // --- Save Final Water Profile as Target Water Profile ---
     const recipeTargetNameInput = document.getElementById("recipe-target-name");
     const recipeSaveTargetBtn = document.getElementById("recipe-save-target-btn");
+    if (typeof window.applyAuthGate === "function" && recipeSaveTargetBtn) {
+      window.applyAuthGate(recipeSaveTargetBtn, { reason: "save-recipe" });
+    }
 
     function updateRecipeTargetNameError() {
       const errEl = document.getElementById("recipe-target-name-error");
@@ -1039,7 +1045,39 @@
     if (recipeMakeStockBtn) {
       recipeMakeStockBtn.addEventListener("click", () => {
         if (!lastSavedTargetSlug) return;
-        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+        // Fall back to legacy hash navigation when any modal-flow dependency
+        // is missing so the CTA never becomes a dead click — the inline
+        // editor on minerals.html still handles the derive flow.
+        if (
+          typeof window.openStockEditor !== "function" ||
+          typeof deriveStockFormulaFromTarget !== "function"
+        ) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+          return;
+        }
+        const profile =
+          typeof window.getTargetProfileByKey === "function"
+            ? window.getTargetProfileByKey(lastSavedTargetSlug)
+            : null;
+        if (!profile) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
+          return;
+        }
+        const derived = deriveStockFormulaFromTarget(profile);
+        const recipeName = profile.label || lastSavedTargetSlug;
+        window.openStockEditor({
+          mode: "new-derive",
+          prefill: {
+            label: recipeName,
+            bottleMl: derived.bottleMl,
+            doseGramsPerL: derived.doseGramsPerL,
+            minerals: derived.minerals,
+            hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+            notes: derived.notes || [],
+            deriveSlug: lastSavedTargetSlug,
+          },
+          autoEnable: true,
+        });
       });
     }
 

@@ -116,25 +116,30 @@ test.describe("recipe.html — Recipe Builder smoke (anonymous)", () => {
 
   test("source water per-ion edit on 'custom' preset persists across reload", async ({ page }) => {
     // Background: source-water-ui.js's per-ion input handler calls a 300ms
-    // debouncedSave (line ~260) that writes through to localStorage via
+    // debouncedSave (line ~260) that writes through to storage via
     // saveSourceWater. On reload, the page initializes inputs from
     // loadSourceWater (line ~333) AND THEN calls activateSourcePreset on the
     // last active preset (line ~347). For a non-"custom" preset, that second
     // call overwrites the inputs with the preset's canonical values, so
     // per-ion edits don't survive reload. For "custom", activateSourcePreset
     // returns early before touching inputs (line ~96-99), so debouncedSave's
-    // values stick. This test pins that round-trip behavior.
+    // values stick.
+    //
+    // Anonymous users now route transient writes (cw_source_water) to
+    // sessionStorage; sessionStorage survives page.reload() within the same
+    // tab, so the round-trip behavior is unchanged from the user's
+    // perspective — only the underlying store differs.
 
     // Switch to custom mode first so the post-reload init doesn't overwrite.
     await page.locator('#source-presets [data-preset="custom"]').click();
 
-    // Edit Calcium and wait for the 300ms debounce to flush to localStorage.
+    // Edit Calcium and wait for the 300ms debounce to flush to sessionStorage.
     await page.locator("#src-calcium").fill("15");
     await expect
       .poll(
         async () =>
           await page.evaluate(() => {
-            const raw = localStorage.getItem("cw_source_water");
+            const raw = sessionStorage.getItem("cw_source_water");
             return raw ? Number(JSON.parse(raw).calcium) : null;
           }),
         { timeout: 2000, intervals: [100, 200, 400] },

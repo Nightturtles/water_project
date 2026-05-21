@@ -33,6 +33,8 @@ function makeFakeStorage() {
 global.window = global;
 global.localStorage = makeFakeStorage();
 global.sessionStorage = makeFakeStorage();
+global.isLoggedInSync = () => true;
+global._cachedAuthUserId = "test-user-id";
 
 require("./constants.js");
 const storage = require("./storage.js");

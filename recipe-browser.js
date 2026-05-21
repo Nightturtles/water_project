@@ -239,6 +239,9 @@
           e.stopPropagation();
           if (handlers.onAddStock) handlers.onAddStock(recipe);
         });
+        if (typeof window.applyAuthGate === "function") {
+          window.applyAuthGate(addBtn, { reason: "save-stock" });
+        }
         stockActions.appendChild(addBtn);
       }
       container.appendChild(stockActions);
@@ -265,6 +268,9 @@
         "aria-label",
         "Generate a stock concentrate from this recipe's targets",
       );
+      if (typeof window.applyAuthGate === "function") {
+        window.applyAuthGate(deriveBtn, { reason: "save-stock" });
+      }
       deriveBtn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
@@ -458,6 +464,9 @@
       e.stopPropagation();
       handlers.onToggleSave(recipe);
     });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(bookmark, { reason: "bookmark" });
+    }
     header.appendChild(bookmark);
     card.appendChild(header);
 
@@ -614,6 +623,9 @@
       e.stopPropagation();
       handlers.onToggleSave(recipe);
     });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(bookmark, { reason: "bookmark" });
+    }
     section.appendChild(bookmark);
 
     section.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));
@@ -880,24 +892,77 @@
         // past ~200.
         render();
       },
-      // Hands off to minerals.html, which reads the slug from the hash,
-      // looks the recipe up via library-data, and opens the new-stock
-      // editor pre-filled with the recipe's hand-authored stockFormula.
-      // The user reviews/tweaks before saving — same UX shape as
-      // onDeriveStock below. On Save, the spec is keyed under recipe.slug
-      // so this card flips to "✓ In your pantry" on the next render.
+      // Opens the stock-editor modal pre-filled with the recipe's
+      // hand-authored stockFormula. The user reviews/tweaks before saving —
+      // same UX shape as onDeriveStock below. On Save, the spec is keyed
+      // under recipe.slug so this card flips to "✓ In your pantry" on the
+      // next render (refetchAndRender wired through onSaved).
       onAddStock: function (recipe) {
         if (!recipe || !recipe.slug) return;
-        window.location.href = "minerals.html#stock-import=" + encodeURIComponent(recipe.slug);
+        if (typeof window.openStockEditor !== "function") {
+          window.location.href = "minerals.html#stock-import=" + encodeURIComponent(recipe.slug);
+          return;
+        }
+        var f = recipe.stockFormula || {};
+        var minerals = Array.isArray(f.minerals)
+          ? f.minerals
+              .filter(function (m) {
+                return m && typeof m === "object" && typeof m.mineralId === "string" && m.mineralId;
+              })
+              .map(function (m) {
+                return { mineralId: m.mineralId, grams: Number(m.grams) || 0 };
+              })
+          : [];
+        var recipeName = recipe.label || recipe.slug;
+        window.openStockEditor({
+          mode: "new-import",
+          prefill: {
+            label: recipeName,
+            bottleMl: Number(f.bottleMl) || 0,
+            doseGramsPerL: Number(f.doseGramsPerL) || 0,
+            minerals: minerals,
+            hint: "Imported from " + recipeName + ": review and tweak before saving.",
+            importSlug: recipe.slug,
+            source: typeof f.source === "string" ? f.source : "",
+          },
+          autoEnable: true,
+          onSaved: function () {
+            refetchAndRender();
+          },
+        });
       },
-      // Same handoff shape as onAddStock, but minerals.html derives the
-      // formula from recipe ion targets via deriveStockFormulaFromTarget
-      // instead of reading a hand-authored stockFormula. Hash carries only
-      // the slug — derivation runs on the destination page so a future
-      // algorithm change doesn't leave stale handoffs.
+      // Same shape as onAddStock but the formula is derived from the
+      // recipe's ion targets via deriveStockFormulaFromTarget rather than
+      // copied from a hand-authored stockFormula. Derivation runs here at
+      // click time so the editor opens with the current algorithm's output.
       onDeriveStock: function (recipe) {
         if (!recipe || !recipe.slug) return;
-        window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
+        if (
+          typeof window.openStockEditor !== "function" ||
+          typeof deriveStockFormulaFromTarget !== "function"
+        ) {
+          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
+          return;
+        }
+        var derived = deriveStockFormulaFromTarget(recipe);
+        var recipeName = recipe.label || recipe.slug;
+        window.openStockEditor({
+          mode: "new-derive",
+          prefill: {
+            label: recipeName,
+            bottleMl: derived.bottleMl,
+            doseGramsPerL: derived.doseGramsPerL,
+            minerals: derived.minerals,
+            hint:
+              "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
+            notes: derived.notes || [],
+            deriveSlug: recipe.slug,
+          },
+          autoEnable: true,
+          onSaved: function () {
+            refetchAndRender();
+          },
+        });
       },
       onUseRecipe: function (recipe) {
         var params = new URLSearchParams();

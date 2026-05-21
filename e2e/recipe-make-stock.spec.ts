@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke for the Recipe Builder "+ Make a stock from this profile" follow-up
 // (see PRs #74 / #75 for the Calculator + Taste Tuner equivalents).
@@ -27,6 +28,9 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
     // page.addInitScript for cleanup: it re-fires on every navigation,
     // including the make-stock click that takes us to minerals.html, which
     // would wipe the just-saved profile out from under the destination.
+    // Save flows require auth (Category B writes are gated); stub the test
+    // user as logged in so the save buttons aren't locked.
+    await stubLoggedIn(page);
     await page.goto("/recipe.html");
   });
 
@@ -53,9 +57,7 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
     await expect(page.locator("#recipe-make-stock-btn")).toBeVisible();
   });
 
-  test("clicking the button navigates to minerals.html and opens the derived stock editor", async ({
-    page,
-  }) => {
+  test("clicking the button opens the derived stock editor modal in place", async ({ page }) => {
     await page.locator('button[data-preset="hard-tap"]').click();
     await page.locator("#recipe-target-name").fill("Smoke Navigate");
     await page.locator("#recipe-save-target-btn").click();
@@ -63,12 +65,12 @@ test.describe("recipe.html — + Make a stock follow-up after save", () => {
 
     await page.locator("#recipe-make-stock-btn").click();
 
-    // tryHandleDeriveHash() in minerals.html consumes the hash via
-    // history.replaceState, so location.hash is empty after landing.
-    // Assert on the destination side: the auto-derived hint that the stock
-    // editor renders when seeded from a target profile.
-    await expect(page).toHaveURL(/\/minerals\.html$/);
-    await expect(page.locator("#stock-new-form")).toContainText(
+    // The editor now pops as a modal on the recipe page rather than
+    // navigating to minerals.html. Assert on the overlay + the auto-derived
+    // hint the editor renders when seeded from a target profile.
+    await expect(page).toHaveURL(/\/recipe\.html$/);
+    await expect(page.locator(".stock-editor-overlay")).toBeVisible();
+    await expect(page.locator(".stock-editor-form")).toContainText(
       /Auto-derived from Smoke Navigate.*ion targets/,
     );
   });

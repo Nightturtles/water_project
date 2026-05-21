@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { stubLoggedIn } from "./_auth-stub";
 
 // Executable version of smoke-index.md. Intent matches the runbook — if the
 // runbook diverges, fix the spec first and update the runbook as docs.
@@ -64,6 +65,13 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
   test('"+ Make a stock" hides on the unnamed custom scratchpad and on unsaved edits', async ({
     page,
   }) => {
+    // Editing a saved target profile (the "Edit Profiles" toggle, line 92)
+    // is auth-gated; without a logged-in stub the button has aria-disabled
+    // set and Playwright's `.click()` waits forever on enabled-state.
+    // Re-navigate after stubbing so the gate releases on this page load.
+    await stubLoggedIn(page);
+    await page.goto("/");
+
     // The Calculator's third header button — surfaces the recipe-browser
     // derive flow on any saved target profile. Its visibility is gated by
     // updateMakeStockBtnVisibility(): hide for the "custom" scratchpad

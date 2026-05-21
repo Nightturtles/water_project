@@ -40,6 +40,8 @@ function makeFakeStorage() {
 global.window = global;
 global.localStorage = makeFakeStorage();
 global.sessionStorage = makeFakeStorage();
+global.isLoggedInSync = () => true;
+global._cachedAuthUserId = "test-user-id";
 
 // Load in browser order. constants.js populates TARGET_PRESETS etc. on
 // globalThis; storage.js does the same for its helpers; library-data.js

@@ -72,6 +72,59 @@ function safeRemoveItem(key) {
   } catch (e) {}
 }
 
+// --- Auth-aware storage helpers ---
+// Category A (transient) keys route to sessionStorage when the user is
+// anonymous so an unsigned-in visitor can navigate between pages within a
+// tab without losing in-progress calculator state — but nothing is persisted
+// across tabs or browser restarts.  When logged in, transient keys go to
+// localStorage and are cloud-synced via sync.js.
+//
+// _isLoggedInSync reads the canonical cache set up by supabase-client.js
+// (window._cachedAuthUserId / window.isLoggedInSync).  Until the initial
+// getSession() resolves, this returns false — pages render as anonymous,
+// then re-render when cw:auth-state-resolved fires.
+function _isLoggedInSync() {
+  return (
+    typeof window !== "undefined" &&
+    typeof window.isLoggedInSync === "function" &&
+    window.isLoggedInSync()
+  );
+}
+/** @param {string} key @returns {string | null} */
+function _getTransient(key) {
+  try {
+    return (_isLoggedInSync() ? localStorage : sessionStorage).getItem(key);
+  } catch (e) {
+    return null;
+  }
+}
+/** @param {string} key @param {string} value @returns {boolean} */
+function _setTransient(key, value) {
+  try {
+    (_isLoggedInSync() ? localStorage : sessionStorage).setItem(key, value);
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
+// Category B (named artifacts) and Category C (sync tracking).  These keys
+// only mean something for an authenticated account; for anonymous visitors
+// the read returns null and the write is a no-op.  This is the storage-layer
+// backstop — UI gating (applyAuthGate in ui-shared.js) handles the visible
+// "Sign in to save" affordance, but a callsite that slips past the UI gate
+// still cannot leak account data into local persistence.
+/** @param {string} key @returns {string | null} */
+function _getGated(key) {
+  if (!_isLoggedInSync()) return null;
+  return safeGetItem(key);
+}
+/** @param {string} key @param {string} value @returns {boolean} */
+function _setGated(key, value) {
+  if (!_isLoggedInSync()) return false;
+  return safeSetItem(key, value);
+}
+
 // --- JSON parse helper ---
 /**
  * @template T
@@ -92,7 +145,7 @@ function safeParse(json, fallback) {
 // --- Source water ---
 /** @param {SourceProfile} profile */
 function saveSourceWater(profile) {
-  const ok = safeSetItem("cw_source_water", JSON.stringify(profile));
+  const ok = _setTransient("cw_source_water", JSON.stringify(profile));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
@@ -107,29 +160,29 @@ function loadSourceWater() {
     chloride: 0,
     bicarbonate: 0,
   };
-  const parsed = safeParse(safeGetItem("cw_source_water"), fallback);
+  const parsed = safeParse(_getTransient("cw_source_water"), fallback);
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
 }
 
 /** @param {string} name */
 function saveSourcePresetName(name) {
-  safeSetItem("cw_source_preset", name);
+  _setTransient("cw_source_preset", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadSourcePresetName() {
-  return safeGetItem("cw_source_preset") || "distilled";
+  return _getTransient("cw_source_preset") || "distilled";
 }
 
 // --- Mineral display mode ---
 /** @param {string} mode */
 function saveMineralDisplayMode(mode) {
-  safeSetItem("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
+  _setTransient("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadMineralDisplayMode() {
-  return safeGetItem("cw_mineral_display_mode") === "advanced" ? "advanced" : "standard";
+  return _getTransient("cw_mineral_display_mode") === "advanced" ? "advanced" : "standard";
 }
 
 function isAdvancedMineralDisplayMode() {
@@ -149,7 +202,7 @@ function saveVolumePreference(pageKey, value, unit) {
     value: String(value ?? ""),
     unit: unit === "gallons" ? "gallons" : "liters",
   };
-  safeSetItem(key, JSON.stringify(payload));
+  _setTransient(key, JSON.stringify(payload));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -166,7 +219,7 @@ function loadVolumePreference(pageKey, defaults = {}) {
   };
   if (!pageKey) return fallback;
   const key = "cw_volume_" + pageKey;
-  const parsed = safeParse(safeGetItem(key), fallback);
+  const parsed = safeParse(_getTransient(key), fallback);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
   const value = String(parsed.value ?? fallback.value);
   const unit = parsed.unit === "gallons" ? "gallons" : "liters";
@@ -190,7 +243,7 @@ let customProfilesCache = null;
 /** @returns {Record<string, SourceProfile>} */
 function loadCustomProfiles() {
   if (customProfilesCache) return Object.assign({}, customProfilesCache);
-  const parsed = safeParse(safeGetItem("cw_custom_profiles"), {});
+  const parsed = safeParse(_getGated("cw_custom_profiles"), {});
   customProfilesCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customProfilesCache);
@@ -210,7 +263,7 @@ function saveCustomProfiles(profiles) {
     "cw_deleted_presets",
     invalidateSourcePresetsCache,
   );
-  const ok = safeSetItem("cw_custom_profiles", JSON.stringify(profiles));
+  const ok = _setGated("cw_custom_profiles", JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
@@ -256,7 +309,7 @@ function deleteCustomProfile(key) {
 // --- Deleted source preset tracking ---
 /** @returns {string[]} */
 function loadDeletedPresets() {
-  const parsed = safeParse(safeGetItem("cw_deleted_presets"), []);
+  const parsed = safeParse(_getGated("cw_deleted_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -265,7 +318,7 @@ function addDeletedPreset(key) {
   const deleted = loadDeletedPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
-    safeSetItem("cw_deleted_presets", JSON.stringify(deleted));
+    _setGated("cw_deleted_presets", JSON.stringify(deleted));
     invalidateSourcePresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -278,7 +331,7 @@ let customTargetProfilesCache = null;
 /** @returns {Record<string, TargetProfile>} */
 function loadCustomTargetProfiles() {
   if (customTargetProfilesCache) return Object.assign({}, customTargetProfilesCache);
-  const parsed = safeParse(safeGetItem("cw_custom_target_profiles"), {});
+  const parsed = safeParse(_getGated("cw_custom_target_profiles"), {});
   customTargetProfilesCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customTargetProfilesCache);
@@ -293,7 +346,7 @@ function saveCustomTargetProfiles(profiles) {
     "cw_deleted_target_presets",
     invalidateTargetPresetsCache,
   );
-  const ok = safeSetItem("cw_custom_target_profiles", JSON.stringify(profiles));
+  const ok = _setGated("cw_custom_target_profiles", JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
@@ -319,9 +372,18 @@ function migrateHendonSlug() {
   const FROM = "eaf-hendon-water";
   const TO = "bh-simplified-hendon";
 
+  // This migration runs once per page load before auth resolves, so it must
+  // touch the raw storage areas directly — the auth-routed helpers would
+  // return null on a cold signed-in load and the stale slug would survive
+  // long enough to get pushed back up on the next sync.
   if (safeGetItem("cw_target_preset") === FROM) {
     safeSetItem("cw_target_preset", TO);
   }
+  try {
+    if (sessionStorage.getItem("cw_target_preset") === FROM) {
+      sessionStorage.setItem("cw_target_preset", TO);
+    }
+  } catch (e) {}
 
   const added = safeParse(safeGetItem("cw_added_target_presets"), []);
   if (Array.isArray(added) && added.includes(FROM)) {
@@ -338,7 +400,7 @@ function migrateHendonSlug() {
 // --- Deleted target preset tracking (tombstones so deletions survive pull) ---
 /** @returns {string[]} */
 function loadDeletedTargetPresets() {
-  const parsed = safeParse(safeGetItem("cw_deleted_target_presets"), []);
+  const parsed = safeParse(_getGated("cw_deleted_target_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -347,7 +409,7 @@ function addDeletedTargetPreset(key) {
   const deleted = loadDeletedTargetPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
-    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
+    _setGated("cw_deleted_target_presets", JSON.stringify(deleted));
     invalidateTargetPresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -364,7 +426,7 @@ function removeDeletedTargetPreset(key) {
   const idx = deleted.indexOf(key);
   if (idx === -1) return;
   deleted.splice(idx, 1);
-  safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted));
+  _setGated("cw_deleted_target_presets", JSON.stringify(deleted));
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -385,7 +447,7 @@ function removeDeletedTargetPreset(key) {
 
 /** @returns {string[]} */
 function loadAddedTargetPresetsRaw() {
-  const parsed = safeParse(safeGetItem("cw_added_target_presets"), []);
+  const parsed = safeParse(_getGated("cw_added_target_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -400,7 +462,7 @@ function addAddedTargetPreset(key) {
   const added = loadAddedTargetPresets();
   if (!added.includes(key)) {
     added.push(key);
-    safeSetItem("cw_added_target_presets", JSON.stringify(added));
+    _setGated("cw_added_target_presets", JSON.stringify(added));
     invalidateTargetPresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -412,7 +474,7 @@ function removeAddedTargetPreset(key) {
   const idx = added.indexOf(key);
   if (idx === -1) return;
   added.splice(idx, 1);
-  safeSetItem("cw_added_target_presets", JSON.stringify(added));
+  _setGated("cw_added_target_presets", JSON.stringify(added));
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -461,7 +523,7 @@ function getExistingSourceProfileLabels() {
 // --- Target preset name ---
 /** @param {string} name */
 function saveTargetPresetName(name) {
-  safeSetItem("cw_target_preset", name);
+  _setTransient("cw_target_preset", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -476,7 +538,7 @@ function saveTargetPresetName(name) {
 
 /** @returns {Record<string, Record<string, number>>} */
 function loadTargetDraftIons() {
-  const parsed = safeParse(safeGetItem("cw_target_draft_ions"), {});
+  const parsed = safeParse(_getTransient("cw_target_draft_ions"), {});
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
@@ -488,7 +550,7 @@ function saveTargetDraftIons(slug, ions) {
   if (!slug) return;
   const drafts = loadTargetDraftIons();
   drafts[slug] = ions;
-  safeSetItem("cw_target_draft_ions", JSON.stringify(drafts));
+  _setTransient("cw_target_draft_ions", JSON.stringify(drafts));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -498,7 +560,7 @@ function clearTargetDraftIons(slug) {
   const drafts = loadTargetDraftIons();
   if (!Object.prototype.hasOwnProperty.call(drafts, slug)) return;
   delete drafts[slug];
-  safeSetItem("cw_target_draft_ions", JSON.stringify(drafts));
+  _setTransient("cw_target_draft_ions", JSON.stringify(drafts));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -524,7 +586,7 @@ function loadTargetPresetName(brewMethod) {
   // handlers never persist it, but devtools tampering or a future
   // regression could leave it stuck in storage; treat it as missing so a
   // bad value can't auto-open the picker on every page load.
-  const saved = safeGetItem("cw_target_preset");
+  const saved = _getTransient("cw_target_preset");
   if (saved && saved !== "library") return saved;
   return brewMethod === "espresso" ? "cafelytic-espresso" : "cafelytic-filter";
 }
@@ -540,12 +602,12 @@ function normalizeBrewMethod(method) {
 
 /** @param {string | null | undefined} method */
 function saveBrewMethod(method) {
-  safeSetItem("cw_brew_method", normalizeBrewMethod(method));
+  _setTransient("cw_brew_method", normalizeBrewMethod(method));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadBrewMethod() {
-  return normalizeBrewMethod(safeGetItem("cw_brew_method"));
+  return normalizeBrewMethod(_getTransient("cw_brew_method"));
 }
 
 // --- Lotus dropper preference ---
@@ -559,12 +621,12 @@ function normalizeLotusDropperType(type) {
 
 /** @param {string | null | undefined} type */
 function saveLotusDropperType(type) {
-  safeSetItem("cw_lotus_dropper_type", normalizeLotusDropperType(type));
+  _setTransient("cw_lotus_dropper_type", normalizeLotusDropperType(type));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadLotusDropperType() {
-  return normalizeLotusDropperType(safeGetItem("cw_lotus_dropper_type"));
+  return normalizeLotusDropperType(_getTransient("cw_lotus_dropper_type"));
 }
 
 function getLotusDropMl() {
@@ -585,17 +647,17 @@ function normalizeLotusConcentrateUnit(unit) {
 
 /** @param {string | null | undefined} unit */
 function saveLotusConcentrateUnit(unit) {
-  safeSetItem("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
+  _setTransient("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 function loadLotusConcentrateUnit() {
-  return normalizeLotusConcentrateUnit(safeGetItem("cw_lotus_concentrate_unit"));
+  return normalizeLotusConcentrateUnit(_getTransient("cw_lotus_concentrate_unit"));
 }
 
 /** @returns {Record<string, "ml" | "drops">} */
 function loadLotusConcentrateUnits() {
-  const parsed = safeParse(safeGetItem("cw_lotus_concentrate_units"), {});
+  const parsed = safeParse(_getTransient("cw_lotus_concentrate_units"), {});
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   /** @type {Record<string, "ml" | "drops">} */
   const normalized = {};
@@ -614,7 +676,7 @@ function saveLotusConcentrateUnits(units) {
       safeUnits[key] = normalizeLotusConcentrateUnit(units[key]);
     });
   }
-  safeSetItem("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
+  _setTransient("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -708,7 +770,7 @@ let selectedMineralsCache = null;
 
 /** @param {string[]} mineralIds */
 function saveSelectedMinerals(mineralIds) {
-  safeSetItem("cw_selected_minerals", JSON.stringify(mineralIds));
+  _setTransient("cw_selected_minerals", JSON.stringify(mineralIds));
   selectedMineralsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -716,7 +778,7 @@ function saveSelectedMinerals(mineralIds) {
 /** @returns {string[]} */
 function loadSelectedMinerals() {
   if (selectedMineralsCache) return selectedMineralsCache;
-  const parsed = safeParse(safeGetItem("cw_selected_minerals"), null);
+  const parsed = safeParse(_getTransient("cw_selected_minerals"), null);
   selectedMineralsCache = Array.isArray(parsed)
     ? parsed
     : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
@@ -733,7 +795,7 @@ let stockConcentrateSpecsCache = null;
 
 /** @param {string[]} concentrateIds */
 function saveSelectedConcentrates(concentrateIds) {
-  safeSetItem("cw_selected_concentrates", JSON.stringify(concentrateIds));
+  _setTransient("cw_selected_concentrates", JSON.stringify(concentrateIds));
   selectedConcentratesCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -741,7 +803,7 @@ function saveSelectedConcentrates(concentrateIds) {
 /** @returns {string[]} */
 function loadSelectedConcentrates() {
   if (selectedConcentratesCache) return selectedConcentratesCache;
-  const parsed = safeParse(safeGetItem("cw_selected_concentrates"), null);
+  const parsed = safeParse(_getTransient("cw_selected_concentrates"), null);
   selectedConcentratesCache = Array.isArray(parsed) ? parsed : [];
   return selectedConcentratesCache;
 }
@@ -758,7 +820,7 @@ function loadValidSelectedConcentrates() {
 
 /** @param {Record<string, DiyConcentrateSpec> | null | undefined} specs */
 function saveDiyConcentrateSpecs(specs) {
-  safeSetItem("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
+  _setGated("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -766,7 +828,7 @@ function saveDiyConcentrateSpecs(specs) {
 /** @returns {Record<string, DiyConcentrateSpec>} */
 function loadDiyConcentrateSpecs() {
   if (diyConcentrateSpecsCache) return Object.assign({}, diyConcentrateSpecsCache);
-  const parsed = safeParse(safeGetItem("cw_diy_concentrate_specs"), {});
+  const parsed = safeParse(_getGated("cw_diy_concentrate_specs"), {});
   diyConcentrateSpecsCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, diyConcentrateSpecsCache);
@@ -793,7 +855,7 @@ function parseDiyConcentrateId(concentrateId) {
 
 /** @param {Record<string, StockConcentrateSpec> | null | undefined} specs */
 function saveStockConcentrateSpecs(specs) {
-  safeSetItem("cw_stock_concentrate_specs", JSON.stringify(specs || {}));
+  _setGated("cw_stock_concentrate_specs", JSON.stringify(specs || {}));
   stockConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -801,7 +863,7 @@ function saveStockConcentrateSpecs(specs) {
 /** @returns {Record<string, StockConcentrateSpec>} */
 function loadStockConcentrateSpecs() {
   if (stockConcentrateSpecsCache) return Object.assign({}, stockConcentrateSpecsCache);
-  const parsed = safeParse(safeGetItem("cw_stock_concentrate_specs"), {});
+  const parsed = safeParse(_getGated("cw_stock_concentrate_specs"), {});
   stockConcentrateSpecsCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, stockConcentrateSpecsCache);
@@ -870,6 +932,23 @@ function getActiveStockId(concentrateIds) {
     if (typeof id === "string" && id.startsWith("stock:")) return id;
   }
   return null;
+}
+
+/**
+ * Enforces the single-stock-active rule when writing to cw_selected_concentrates:
+ * strips any existing "stock:*" entries and (if stockId is non-null) appends
+ * the given one. Pass null to clear the active stock. Mirrors the radio-like
+ * checkbox behavior in minerals.html's Stock Solutions section so any code
+ * path that activates a stock (selector toggle, new-stock save, auto-enable
+ * after derive/import) ends in the same canonical state.
+ * @param {string | null | undefined} stockId
+ */
+function writeActiveStockId(stockId) {
+  const others = loadSelectedConcentrates().filter(function (id) {
+    return typeof id !== "string" || !id.startsWith("stock:");
+  });
+  if (stockId) others.push(stockId);
+  saveSelectedConcentrates(others);
 }
 
 /**
@@ -1117,7 +1196,7 @@ function invalidateTargetPresetsCache() {
 // skip the migration.
 const STARTER_MIGRATION_KEY = "cw_starter_migration_applied";
 function ensureStarterBackfill() {
-  if (safeGetItem(STARTER_MIGRATION_KEY) === "1") return;
+  if (_getGated(STARTER_MIGRATION_KEY) === "1") return;
   const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
   if (!Array.isArray(library) || library.length === 0) return; // rerun when library arrives
   const hasPriorTombstones = loadDeletedTargetPresets().length > 0;
@@ -1136,10 +1215,10 @@ function ensureStarterBackfill() {
       seed.push(row.slug);
       seedSet.add(row.slug);
     }
-    safeSetItem("cw_added_target_presets", JSON.stringify(seed));
+    _setGated("cw_added_target_presets", JSON.stringify(seed));
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
-  safeSetItem(STARTER_MIGRATION_KEY, "1");
+  _setGated(STARTER_MIGRATION_KEY, "1");
 }
 
 /**
@@ -1377,7 +1456,7 @@ function restoreSourcePresetDefaults() {
   const preserved = loadDeletedPresets().filter(function (key) {
     return !SOURCE_PRESETS[key];
   });
-  safeSetItem("cw_deleted_presets", JSON.stringify(preserved));
+  _setGated("cw_deleted_presets", JSON.stringify(preserved));
   invalidateSourcePresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   const custom = loadCustomProfiles();
@@ -1403,12 +1482,12 @@ function saveThemePreference(mode) {
 
 // --- Creator display name (for recipe library publishing) ---
 function loadCreatorDisplayName() {
-  return safeGetItem("cw_creator_display_name") || "";
+  return _getGated("cw_creator_display_name") || "";
 }
 
 /** @param {string} name */
 function saveCreatorDisplayName(name) {
-  safeSetItem("cw_creator_display_name", name);
+  _setGated("cw_creator_display_name", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -1486,6 +1565,20 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
       window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
     }
   });
+
+  // Auth state flips and explicit cleanups invalidate every cached parse.
+  // A logout swaps the underlying store for transient keys (localStorage ->
+  // sessionStorage) and wipes user content; a login does the reverse and
+  // pulls cloud data into localStorage.  Either way, cached values from the
+  // pre-flip state are stale.
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("cw:auth-changed", function () {
+      if (typeof invalidateAllCaches === "function") invalidateAllCaches();
+    });
+    window.addEventListener("cw:storage-invalidated", function () {
+      if (typeof invalidateAllCaches === "function") invalidateAllCaches();
+    });
+  }
 }
 
 // --- Node/Vitest UMD shim (harmless in browsers) ---

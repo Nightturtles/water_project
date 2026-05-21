@@ -1228,6 +1228,119 @@ select:focus {
   color: var(--red-600);
 }
 
+/* Stock & DIY editor modals — stack above the mineral selector overlay
+   (z-index 200) so users can open the editor from inside the selector.
+   The combined-class selector beats the bare `.library-picker-overlay`
+   rule defined later in this file (same specificity otherwise = last
+   declaration wins). */
+.library-picker-overlay.stock-editor-overlay,
+.library-picker-overlay.diy-editor-overlay {
+  z-index: 210;
+}
+
+.stock-editor-dialog,
+.diy-editor-dialog {
+  max-width: 560px;
+  width: 92%;
+}
+
+.stock-editor-form,
+.diy-editor-form {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 0.25rem;
+}
+
+.stock-editor-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.stock-editor-delete {
+  margin-left: auto;
+  color: var(--red-600);
+  border-color: var(--gray-200);
+  background: transparent;
+}
+
+.stock-editor-delete:hover {
+  background: var(--gray-100);
+  color: var(--red-700, var(--red-600));
+}
+
+.diy-editor-mineral-line {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.diy-editor-mineral-line .mineral-formula {
+  font-size: 0.85rem;
+  color: var(--gray-600);
+  margin-left: 0.4rem;
+}
+
+.diy-editor-hint {
+  margin: 0;
+}
+
+/* Pencil edit button + delete (x) shown next to each stock/DIY row in the
+   mineral selector modal. Compact so they sit alongside the existing
+   checkbox label without stretching the row. */
+.mineral-selector-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.mineral-selector-edit-btn,
+.mineral-selector-delete-btn {
+  background: transparent;
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  width: 28px;
+  height: 28px;
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--gray-700);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mineral-selector-edit-btn:hover {
+  background: var(--gray-100);
+  color: var(--blue-600);
+}
+
+.mineral-selector-delete-btn:hover {
+  background: var(--gray-100);
+  color: var(--red-600);
+}
+
+.mineral-selector-add-new-btn {
+  align-self: flex-start;
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.mineral-item.has-edit-actions .mineral-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.mineral-item.has-edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 @media (max-width: 640px) {
   .lotus-dropper-toggle {
     width: 100%;
@@ -2629,6 +2742,13 @@ footer {
   background: var(--blue-50);
   color: var(--blue-700);
   font-weight: 600;
+}
+
+/* In dark mode --blue-50 collapses to --surface so the active tab loses its
+   highlight against the card.  --blue-100 (#1e3a5f) is the next step up and
+   reads as the same subtle "selected" shade that --blue-50 gives in light. */
+[data-theme="dark"] .login-mode-btn.active {
+  background: var(--blue-100);
 }
 
 .login-form .input-group {
@@ -4270,4 +4390,77 @@ footer {
 
 .mineral-selector-manage-link:hover {
   text-decoration: underline;
+}
+
+/* === Auth gate (locked save affordances) === */
+.auth-locked {
+  opacity: 0.55;
+  position: relative;
+}
+.auth-locked::after {
+  content: " \1F512"; /* unicode lock */
+  font-size: 0.85em;
+  margin-left: 4px;
+  display: inline-block;
+}
+.auth-locked:hover {
+  opacity: 0.7;
+}
+
+/* === Login modal === */
+.login-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+}
+body.login-modal-open {
+  overflow: hidden;
+}
+.login-modal-card {
+  /* Mirror .login-card so the modal reads identically to login.html.  The
+     theme tokens (--surface, --gray-200, --radius) switch automatically via
+     [data-theme="dark"] on <html>, so no media query is needed. */
+  background: var(--surface);
+  color: var(--gray-900);
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 1.75rem;
+  max-width: 28rem;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35);
+}
+.login-modal-close {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  font-size: 1.6rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0.25rem 0.5rem;
+}
+.login-modal-close:hover {
+  opacity: 0.7;
+}
+.login-modal-heading {
+  margin: 0 0 1rem;
+  font-size: 1.25rem;
+  text-align: center;
+}
+.login-modal-card .login-mode-toggle,
+.login-modal-card .login-form,
+.login-modal-card .login-divider,
+.login-modal-card .login-google-btn {
+  margin-left: 0;
+  margin-right: 0;
 }
