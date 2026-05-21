@@ -18,8 +18,6 @@ favicon.svg
 # Untyped root .js files NOT yet under @ts-check/ESLint. Out of scope for
 # this initial Prettier rollout; reformatting them would create noisy diffs
 # with no review benefit. Revisit when each file is brought into scope.
-script.js
-ui-shared.js
 source-water-ui.js
 library-data.js
 supabase-client.js

@@ -3,8 +3,8 @@
 // Sync — Cloud sync layer (localStorage-first)
 // ============================================
 // Strategy: localStorage is always the source of truth for reads.
-// On write: localStorage is updated immediately, then a debounced push
-// to Supabase fires 2 seconds later if the user is logged in.
+  // On write: localStorage is updated immediately, then a debounced push
+  // to Supabase fires shortly later if the user is logged in.
 // On login: merge local and cloud data (see handleFirstLoginMerge).
 // On page load: if logged in, pull latest cloud data in the background.
 
@@ -14,6 +14,8 @@
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   var syncTimer = undefined;
   var SYNC_DEBOUNCE_MS = 500;
+  /** @type {Promise<void> | null} */
+  var mergeInFlight = null;
 
   // Realtime channel state. One channel per logged-in user; null when
   // signed out or before initSync has run. The pull debounce coalesces
@@ -159,6 +161,17 @@
         new CustomEvent("cw:save-status", { detail: { status: status, error: err } }),
       );
     } catch (_) {}
+  }
+
+  async function waitForAuthStateResolved() {
+    if (window._authStateResolved) return;
+    await new Promise(function (resolve) {
+      function onResolved() {
+        document.removeEventListener("cw:auth-state-resolved", onResolved);
+        resolve();
+      }
+      document.addEventListener("cw:auth-state-resolved", onResolved);
+    });
   }
 
   // --- Debounced sync trigger (called from storage.js save functions) ---
@@ -346,15 +359,21 @@
           return u.promise;
         }),
       );
+      /** @type {unknown[]} */
+      var pushErrors = [];
       results.forEach(function (r, idx) {
         var u = upserts[idx];
         if (!u) return;
         if (r.error) {
           console.warn("[sync] " + u.table + " upsert failed:", r.error);
+          pushErrors.push(r.error);
         } else {
           safeSetItem(u.key, u.snapshot);
         }
       });
+      if (pushErrors.length > 0) {
+        throw new Error("[sync] failed to upsert one or more cloud rows");
+      }
     }
 
     await syncCustomProfiles(userId, now);
@@ -470,10 +489,13 @@
     if (deleteCalls.length > 0) {
       var delResults = await Promise.all(deleteCalls);
       var nextIdx = 0;
+      /** @type {unknown[]} */
+      var deleteErrors = [];
       if (deletedSourcesPending) {
         var srcDel = delResults[nextIdx++];
         if (srcDel && srcDel.error) {
           console.warn("[sync] tombstone delete failed:", srcDel.error);
+          deleteErrors.push(srcDel.error);
         } else {
           deletedSources.forEach(function (s) {
             delete lastSourceSnapshots[s];
@@ -484,11 +506,15 @@
         var tgtDel = delResults[nextIdx];
         if (tgtDel && tgtDel.error) {
           console.warn("[sync] tombstone delete failed:", tgtDel.error);
+          deleteErrors.push(tgtDel.error);
         } else {
           deletedTargets.forEach(function (s) {
             delete lastTargetSnapshots[s];
           });
         }
+      }
+      if (deleteErrors.length > 0) {
+        throw new Error("[sync] failed to delete one or more tombstoned rows");
       }
     }
 
@@ -515,6 +541,7 @@
         .upsert(sourceRows, { onConflict: "user_id,slug" });
       if (srcResult.error) {
         console.warn("[sync] source_profiles upsert failed:", srcResult.error);
+        throw srcResult.error;
       } else {
         sourceChanged.forEach(function (e) {
           lastSourceSnapshots[e.slug] = e.snapshot;
@@ -542,6 +569,7 @@
         .upsert(targetRows, { onConflict: "user_id,slug" });
       if (tgtResult.error) {
         console.warn("[sync] target_profiles upsert failed:", tgtResult.error);
+        throw tgtResult.error;
       } else {
         targetChanged.forEach(function (e) {
           lastTargetSnapshots[e.slug] = e.snapshot;
@@ -566,6 +594,13 @@
       window.supabaseClient.from("source_profiles").select("*").eq("user_id", userId),
       window.supabaseClient.from("target_profiles").select("*").eq("user_id", userId),
     ]);
+    var errored = results.find(function (r) {
+      return !!(r && r.error);
+    });
+    if (errored && errored.error) {
+      console.warn("[sync] pull failed:", errored.error);
+      throw errored.error;
+    }
 
     // Re-bind userId as `string` (not `string | null`) so the forEach
     // closures below can hand it to buildSourceRow/buildTargetRow without
@@ -865,37 +900,43 @@
   // local data has been customized. Skips the prompt on repeat logins
   // from the same device (tracked via cw_synced_user_id).
   async function handleFirstLoginMerge() {
-    var userId = await getLoggedInUserId();
-    if (!userId) return;
+    if (mergeInFlight) return mergeInFlight;
+    mergeInFlight = (async function () {
+      var userId = await getLoggedInUserId();
+      if (!userId) return;
 
-    // Already set up for this user on this device — just pull latest
-    var syncedUserId = safeGetItem("cw_synced_user_id");
-    if (syncedUserId === userId) {
-      pullFromCloud().catch(function (err) {
-        console.warn("[sync] background pull on re-login failed:", err);
-      });
-      return;
-    }
+      // Already set up for this user on this device — just pull latest
+      var syncedUserId = safeGetItem("cw_synced_user_id");
+      if (syncedUserId === userId) {
+        await pullFromCloud();
+        return;
+      }
 
-    var cloudExists = await hasCloudData(userId);
+      var cloudExists = await hasCloudData(userId);
 
-    if (!cloudExists) {
-      // Brand new user: push local data to initialize cloud
-      await pushAllToCloud();
-    } else if (isDefaultData()) {
-      // Returning user on a fresh device: pull cloud data down
-      await pullFromCloud();
-    } else {
-      // Both local and cloud have non-default data: ask the user
-      var choice = await showMergeDialog();
-      if (choice === "local") {
+      if (!cloudExists) {
+        // Brand new user: push local data to initialize cloud
         await pushAllToCloud();
       } else {
-        await pullFromCloud();
+        if (isDefaultData()) {
+          // Returning user on a fresh device: pull cloud data down
+          await pullFromCloud();
+        } else {
+          // Both local and cloud have non-default data: ask the user
+          var choice = await showMergeDialog();
+          if (choice === "local") {
+            await pushAllToCloud();
+          } else {
+            await pullFromCloud();
+          }
+        }
       }
-    }
 
-    safeSetItem("cw_synced_user_id", userId);
+      safeSetItem("cw_synced_user_id", userId);
+    })();
+    return mergeInFlight.finally(function () {
+      mergeInFlight = null;
+    });
   }
 
   // --- Realtime: subscribe to per-user table changes ---
@@ -993,14 +1034,14 @@
   // to pull-first to avoid cross-device data loss.)
   async function initSync() {
     try {
+      await waitForAuthStateResolved();
       var result = await window.supabaseClient.auth.getSession();
       if (!result.data || !result.data.session) return;
-      await pushAllToCloud().catch(function (err) {
-        console.warn("[sync] push on page load failed:", err);
-      });
-      await pullFromCloud().catch(function (err) {
-        console.warn("[sync] pull on page load failed:", err);
-      });
+      await pushAllToCloud();
+      await pullFromCloud();
+      if (typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+      }
       subscribeToCloudChanges(result.data.session.user.id);
     } catch (err) {
       console.warn("[sync] initSync failed:", err);

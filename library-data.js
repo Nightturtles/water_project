@@ -165,6 +165,18 @@
     return recipes;
   }
 
+  // Lazy warmup hook: page scripts call this once they actually need library
+  // data (picker open, rail visible, etc). Keeps non-library pages from paying
+  // an eager network cost during first paint.
+  function ensurePublicRecipesLoaded() {
+    if (publicRecipesCache) return Promise.resolve(publicRecipesCache);
+    if (typeof window.supabaseClient === "undefined") return Promise.resolve([]);
+    return fetchPublicRecipes(false).catch(function (e) {
+      console.warn("[library] lazy warmup failed:", e);
+      return publicRecipesCache || [];
+    });
+  }
+
   function invalidatePublicRecipesCache() {
     publicRecipesCache = null;
     try { sessionStorage.removeItem(CACHE_KEY); } catch (e) { /* ignore */ }
@@ -465,6 +477,7 @@
 
   // Expose on window
   window.fetchPublicRecipes = fetchPublicRecipes;
+  window.ensurePublicRecipesLoaded = ensurePublicRecipesLoaded;
   window.invalidatePublicRecipesCache = invalidatePublicRecipesCache;
   window.copyRecipeToMyProfiles = copyRecipeToMyProfiles;
   window.isRecipeInMyProfiles = isRecipeInMyProfiles;
@@ -485,6 +498,7 @@
   if (typeof module !== "undefined" && module.exports) {
     module.exports = {
       fetchPublicRecipes: fetchPublicRecipes,
+      ensurePublicRecipesLoaded: ensurePublicRecipesLoaded,
       invalidatePublicRecipesCache: invalidatePublicRecipesCache,
       copyRecipeToMyProfiles: copyRecipeToMyProfiles,
       isRecipeInMyProfiles: isRecipeInMyProfiles,
@@ -503,15 +517,6 @@
     };
   }
 
-  // Auto-fetch on load so pages that merge library into their preset rail
-  // (taste.html, index.html) don't need to each coordinate the fetch. Guarded
-  // on supabaseClient because library.html loads this file before any user is
-  // authenticated — the fetch will still work (is_public policy on RLS), but
-  // the client must exist. Non-blocking; fireLoadedCallbacks handles the
-  // re-render once rows arrive.
-  if (typeof window.supabaseClient !== "undefined") {
-    fetchPublicRecipes(false).catch(function (e) {
-      console.warn("[library] auto-fetch failed:", e);
-    });
-  }
+  // No eager auto-fetch here; callers warm this explicitly via
+  // ensurePublicRecipesLoaded() on pages where library data is actually needed.
 })();

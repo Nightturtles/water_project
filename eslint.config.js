@@ -25,8 +25,8 @@ module.exports = tseslint.config(
       // contain duplicate copies of project files from past sessions.
       ".claude/",
       // Root-level .js files NOT under @ts-check — out of scope for this PR.
-      "script.js",
-      "ui-shared.js",
+      // script.js is now linted.
+      // ui-shared.js is now linted.
       "source-water-ui.js",
       "library-data.js",
       "library-picker.js",
@@ -60,6 +60,8 @@ module.exports = tseslint.config(
       "metrics.js",
       "storage.js",
       "sync.js",
+      "script.js",
+      "ui-shared.js",
       // sentry-init.js follows the same classic-script pattern (loaded via
       // script tag before the Sentry CDN loader). Not under @ts-check yet,
       // but benefits from the same style rules.

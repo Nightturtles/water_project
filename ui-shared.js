@@ -216,6 +216,19 @@ window.primeCurrentUserId = primeCurrentUserId;
 window.getCurrentUserIdSync = getCurrentUserIdSync;
 window.isUserTheCreator = isUserTheCreator;
 
+function maybeOfferSharePrompt(profileKey, profile) {
+  if (!profileKey) return;
+  if (typeof showSharePrompt !== "function") return;
+  var current = profile;
+  if (!current && typeof loadCustomTargetProfiles === "function") {
+    var all = loadCustomTargetProfiles();
+    current = all && all[profileKey] ? all[profileKey] : null;
+  }
+  if (typeof isUserTheCreator === "function" && !isUserTheCreator(current)) return;
+  showSharePrompt(profileKey);
+}
+window.maybeOfferSharePrompt = maybeOfferSharePrompt;
+
 // --- Auth gate for save affordances ---
 // Visually locks an element when the user is anonymous and intercepts the
 // click (capture phase) to open the login modal instead of running the
@@ -400,6 +413,51 @@ async function showSharePrompt(profileKey) {
   document.addEventListener("keydown", keyHandler);
   overlay.addEventListener("click", overlayClickHandler);
 }
+
+function inferEffectiveSourcesFromMineralGrams(mineralGramsPerL, fallback) {
+  fallback = fallback || {};
+  var grams = mineralGramsPerL || {};
+  var caSource = null;
+  var mgSource = null;
+  var bestCaAdded = 0;
+  var bestMgAdded = 0;
+  Object.keys(grams).forEach(function (mineralId) {
+    var amount = Math.max(0, Number(grams[mineralId]) || 0);
+    if (!amount) return;
+    var mineral = typeof MINERAL_DB !== "undefined" ? MINERAL_DB[mineralId] : null;
+    if (!mineral || !mineral.ions) return;
+    var caAdded = amount * 1000 * (Number(mineral.ions.calcium) || 0);
+    var mgAdded = amount * 1000 * (Number(mineral.ions.magnesium) || 0);
+    if (caAdded > bestCaAdded) {
+      bestCaAdded = caAdded;
+      caSource = mineralId;
+    }
+    if (mgAdded > bestMgAdded) {
+      bestMgAdded = mgAdded;
+      mgSource = mineralId;
+    }
+  });
+  return {
+    calciumSource: caSource || fallback.calciumSource || null,
+    magnesiumSource: mgSource || fallback.magnesiumSource || null,
+  };
+}
+window.inferEffectiveSourcesFromMineralGrams = inferEffectiveSourcesFromMineralGrams;
+
+function onStorageKeysChanged(keys, handler) {
+  if (!Array.isArray(keys) || typeof handler !== "function") return function () {};
+  var keySet = new Set(keys.filter(Boolean));
+  function onStorage(e) {
+    if (!e || !e.key) return;
+    if (!keySet.has(e.key)) return;
+    handler(e);
+  }
+  window.addEventListener("storage", onStorage);
+  return function off() {
+    window.removeEventListener("storage", onStorage);
+  };
+}
+window.onStorageKeysChanged = onStorageKeysChanged;
 
 // --- Delta formatting ---
 function roundDelta(delta, decimals = 0) {
@@ -725,10 +783,9 @@ function selectRadioByValue(name, value) {
 // --- Debounce helper (Inefficiency 6) ---
 function debounce(fn, ms) {
   let timer;
-  return function() {
-    const context = this, args = arguments;
+  return function(...args) {
     clearTimeout(timer);
-    timer = setTimeout(function() { fn.apply(context, args); }, ms);
+    timer = setTimeout(() => { fn.apply(this, args); }, ms);
   };
 }
 

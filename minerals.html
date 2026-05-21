@@ -135,7 +135,7 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
   <script src="supabase-client.js"></script>
   <script src="constants.js"></script>
   <script src="storage.js"></script>
@@ -311,16 +311,6 @@
     if (typeof window.applyAuthGate === "function" && stockAddBtn) {
       window.applyAuthGate(stockAddBtn, { reason: "save-stock" });
     }
-
-    // Article-recipe slugs reserved by the library so user-defined stocks
-    // cannot shadow them. Auto-import from library rows lands in B3; this
-    // list is the conservative subset known at B2 ship time.
-    const RESERVED_LIBRARY_STOCK_SLUGS = [
-      "rao-perger", "dan-eils", "matt-perger", "rao-2013",
-      "melbourne-2013-wbc", "world-of-coffee-budapest",
-      "bh-simplified-sca-optimal", "bh-default", "bh-simplified-rao-2008",
-      "bh-simplified-hendon", "bh-hard", "bh-hard-af",
-    ];
 
     function escapeHtml(s) {
       return String(s)

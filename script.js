@@ -553,6 +553,20 @@ function readCurrentTargetIons() {
   };
 }
 
+function getCurrentTargetProfileForCalculations() {
+  const ions = readCurrentTargetIons();
+  return {
+    calcium: ions.calcium,
+    magnesium: ions.magnesium,
+    alkalinity: ions.alkalinity,
+    potassium: ions.potassium,
+    sodium: ions.sodium,
+    sulfate: ions.sulfate,
+    chloride: ions.chloride,
+    bicarbonate: ions.bicarbonate,
+  };
+}
+
 // --- Target input handling (Inefficiency 6: debounced) ---
 [targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach(input => {
   input.addEventListener("input", () => {
@@ -641,7 +655,6 @@ function persistTargetProfileEdits() {
     if (orig.tags) profile.tags = orig.tags;
     if ("creatorUserId" in orig) profile.creatorUserId = orig.creatorUserId;
   }
-  const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(orig || profile) : false;
   const profiles = loadCustomTargetProfiles();
   profiles[currentProfile] = profile;
   if (!saveCustomTargetProfiles(profiles)) {
@@ -653,13 +666,12 @@ function persistTargetProfileEdits() {
   if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
   targetEditBar.style.display = "none";
   if (typeof syncNow === "function") syncNow();
-  return { saved: true, profile: profile, wasCreator: wasCreator };
+  return { saved: true, profile: profile };
 }
 
 // Offer the share prompt after an edit-save, but only to the recipe's creator.
-function offerShareAfterEdit(profileKey, wasCreator) {
-  if (!wasCreator) return;
-  if (typeof showSharePrompt === "function") showSharePrompt(profileKey);
+function offerShareAfterEdit(profileKey, profile) {
+  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(profileKey, profile);
 }
 
 if (targetEditModeBtn) {
@@ -670,7 +682,7 @@ if (targetEditModeBtn) {
       const key = currentProfile;
       const result = persistTargetProfileEdits();
       if (!result.saved) return;  // storage error — stay in edit mode
-      offerShareAfterEdit(key, result.wasCreator);
+      offerShareAfterEdit(key, result.profile);
     }
     isTargetEditMode = !isTargetEditMode;
     renderProfileButtons();
@@ -685,7 +697,7 @@ targetSaveChangesBtn.addEventListener("click", () => {
     const result = persistTargetProfileEdits();
     if (!result.saved) return;
     renderProfileButtons();
-    offerShareAfterEdit(key, result.wasCreator);
+    offerShareAfterEdit(key, result.profile);
   });
 });
 
@@ -767,9 +779,7 @@ targetSaveBtn.addEventListener("click", () => {
   if (typeof syncNow === "function") syncNow();
 
   // Offer to share to Recipe Library (only if logged in)
-  if (typeof showSharePrompt === "function") {
-    showSharePrompt(key);
-  }
+  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profile);
 });
 
 const showTargetSaveStatus = createStatusHandler(targetSaveStatus);
@@ -892,7 +902,7 @@ function calculate() {
   const deltaMg = Math.max(0, rawDeltaMg);
   const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
 
-  const targetProfile = getTargetProfileByKey(currentProfile);
+  const targetProfile = getCurrentTargetProfileForCalculations();
   const { caSource, mgSource } = pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg);
 
   // Warn when source exceeds target or when we need a source but none is enabled
@@ -1259,6 +1269,9 @@ function refreshPresetRail() {
 if (typeof window.onLibraryDataLoaded === "function") {
   window.onLibraryDataLoaded(refreshPresetRail);
 }
+if (typeof window.ensurePublicRecipesLoaded === "function") {
+  window.ensurePublicRecipesLoaded();
+}
 // Cross-device sync: re-render when sync.js Realtime pull writes new data.
 window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 
@@ -1327,12 +1340,12 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 })();
 
 // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
-window.addEventListener("storage", function(e) {
-  if (e.key === "cw_selected_minerals" || e.key === "cw_selected_concentrates") {
+if (typeof onStorageKeysChanged === "function") {
+  onStorageKeysChanged(["cw_selected_minerals", "cw_selected_concentrates"], function () {
     renderResultItems();
     calculate();
-  }
-});
+  });
+}
 
 // --- Refresh on bfcache restore ---
 window.addEventListener("pageshow", (e) => {
