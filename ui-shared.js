@@ -81,17 +81,9 @@ function initSourcePresetSelect(selectEl) {
 function renderSourceWaterTags(tagsEl, water) {
   if (!tagsEl) return;
   tagsEl.innerHTML = "";
-  const allZeros = ION_FIELDS.every(function (ion) {
-    const value = Number(water && water[ion]);
-    return !Number.isFinite(value) || value === 0;
-  });
-  if (allZeros) {
-    const zeroTag = document.createElement("span");
-    zeroTag.className = "base-tag";
-    zeroTag.textContent = "All zeros";
-    tagsEl.appendChild(zeroTag);
-    return;
-  }
+  // Drive both the "All zeros" fallback and the per-ion tags from the same
+  // visible-ion set so standard mode (Ca/Mg only) never says "All zeros"
+  // for a profile that has hidden ions present (or vice versa).
   const nonZero = getVisibleIonFields().filter(function (ion) {
     return (water && water[ion]) > 0;
   });

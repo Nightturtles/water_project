@@ -988,6 +988,18 @@
     renderTastePresets(presetFromUrl);
     updateTasteModeUI();
 
+    // If the URL named a preset but the rail rendered a fallback (because
+    // the slug is a library row that hadn't lazy-loaded yet), remember the
+    // request so refreshTasteRail can activate it once the library arrives.
+    let pendingPresetFromUrl = null;
+    if (presetFromUrl) {
+      const activeAfterRender = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activatedKey = activeAfterRender ? activeAfterRender.dataset.preset : null;
+      if (activatedKey !== presetFromUrl) {
+        pendingPresetFromUrl = presetFromUrl;
+      }
+    }
+
     // When the public-recipes fetch resolves, the preset-rail cache is
     // invalidated by library-data.js. Re-render the taste preset rail so
     // Supabase library rows appear without requiring a page navigation.
@@ -997,7 +1009,14 @@
       const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
       const activeKey = activeBtn ? activeBtn.dataset.preset : null;
       const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
-      const preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      // A pending URL-named preset wins over the current activeKey only if
+      // the user hasn't manually picked something else since render — i.e.
+      // activeKey is still the fallback we landed on at init time.
+      let preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      if (pendingPresetFromUrl && merged[pendingPresetFromUrl]) {
+        preserveKey = pendingPresetFromUrl;
+        pendingPresetFromUrl = null;
+      }
       renderTastePresets(preserveKey, { resetSliders: false });
     }
     if (typeof window.onLibraryDataLoaded === "function") {

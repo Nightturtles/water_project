@@ -1334,9 +1334,16 @@ renderResultItems();
 renderProfileButtons();
 updateTargetModeUI();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
+// Saved slug may be a library row whose data hasn't lazy-loaded yet.
+// Falling back and persisting now would permanently overwrite the user's
+// last-selected library profile.  Defer the fallback's persistence until
+// refreshPresetRail() confirms the slug is truly missing after the
+// library load resolves.
+const initialSavedSlug = currentProfile;
+let initialFallbackSlug = null;
 if (!allTargetPresets[currentProfile]) {
-  currentProfile = findFallbackPreset(allTargetPresets);
-  saveTargetPresetName(currentProfile);
+  initialFallbackSlug = findFallbackPreset(allTargetPresets);
+  currentProfile = initialFallbackSlug;
 }
 activateProfile(currentProfile);
 
@@ -1348,6 +1355,20 @@ activateProfile(currentProfile);
 function refreshPresetRail() {
   renderProfileButtons();
   const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
+  // If we fell back at init because the saved slug looked unknown but
+  // it's actually a library row we hadn't loaded yet, and the user
+  // hasn't picked something else in the meantime, restore the saved slug.
+  if (
+    initialFallbackSlug &&
+    initialSavedSlug !== initialFallbackSlug &&
+    currentProfile === initialFallbackSlug &&
+    merged[initialSavedSlug]
+  ) {
+    currentProfile = initialSavedSlug;
+    initialFallbackSlug = null;
+    activateProfile(currentProfile);
+    return;
+  }
   if (!merged[currentProfile]) {
     currentProfile = findFallbackPreset(merged);
     saveTargetPresetName(currentProfile);

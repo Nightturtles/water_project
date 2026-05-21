@@ -1033,18 +1033,25 @@
   // another device.  (Before that fix, 9f89a2e had to reverse the order
   // to pull-first to avoid cross-device data loss.)
   async function initSync() {
+    /** @type {string | null} */
+    var userId = null;
     try {
       await waitForAuthStateResolved();
       var result = await window.supabaseClient.auth.getSession();
       if (!result.data || !result.data.session) return;
+      userId = result.data.session.user.id;
       await pushAllToCloud();
       await pullFromCloud();
       if (typeof window.dispatchEvent === "function") {
         window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
       }
-      subscribeToCloudChanges(result.data.session.user.id);
     } catch (err) {
       console.warn("[sync] initSync failed:", err);
+    } finally {
+      // Bind Realtime even if the initial push/pull failed so a transient
+      // network blip doesn't leave the tab without cloud updates for the
+      // rest of the session.
+      if (userId) subscribeToCloudChanges(userId);
     }
   }
 
