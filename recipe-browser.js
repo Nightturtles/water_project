@@ -448,8 +448,12 @@
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", "View " + (recipe.label || "recipe") + " details");
     card.addEventListener("click", function (e) {
-      // Inner buttons stopPropagation, so a bubbled click means the user clicked
-      // the card body itself.
+      // Skip clicks that originated on any interactive descendant — buttons
+      // stopPropagation, but anchors (rx-card-stock-settings) don't, and
+      // closest() is the defensive choice for any future inner controls too.
+      // Note: the card itself has role="button" so we exclude it from the hit.
+      var hit = e.target.closest && e.target.closest('button, a, [role="button"]');
+      if (hit && hit !== card) return;
       openRecipeDetailModal(recipe, handlers);
     });
     card.addEventListener("keydown", function (e) {
@@ -626,6 +630,10 @@
       e.preventDefault();
       e.stopPropagation();
       if (handlers.onToggleSave) handlers.onToggleSave(recipe);
+      // Re-render the modal body so the Save button icon / label / aria-pressed
+      // reflect the new saved state. Without this, the snapshot taken at
+      // open-time goes stale until the user closes and reopens the modal.
+      buildDetailBody(recipe, handlers);
     });
     if (typeof window.applyAuthGate === "function") {
       window.applyAuthGate(saveBtn, { reason: "bookmark" });
@@ -716,6 +724,10 @@
         addBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
+          // Close the detail modal before launching the stock editor so two
+          // overlays don't stack — the detail modal's document-level Escape /
+          // focus-trap would otherwise steal events from the child dialog.
+          closeRecipeDetailModal();
           if (handlers.onAddStock) handlers.onAddStock(recipe);
         });
         if (typeof window.applyAuthGate === "function") {
@@ -742,6 +754,9 @@
         deriveBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
+          // Same reasoning as the Add-to-stocks handler above: close first so
+          // the detail modal's focus-trap doesn't sit behind the stock editor.
+          closeRecipeDetailModal();
           if (handlers.onDeriveStock) handlers.onDeriveStock(recipe);
         });
         if (typeof window.applyAuthGate === "function") {
@@ -759,6 +774,9 @@
       editBtn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
+        // Close detail modal before opening the edit modal — see Add-to-stocks
+        // handler above for the focus-trap / Escape rationale.
+        closeRecipeDetailModal();
         if (handlers.onEditRecipe) handlers.onEditRecipe(recipe);
       });
       var unpublishBtn = el("button", "rx-card-owner-btn rx-card-owner-btn-danger", "Unpublish");
@@ -766,6 +784,8 @@
       unpublishBtn.addEventListener("click", function (e) {
         e.preventDefault();
         e.stopPropagation();
+        // Same as Edit: close before launching the unpublish confirm dialog.
+        closeRecipeDetailModal();
         if (handlers.onUnpublishRecipe) handlers.onUnpublishRecipe(recipe);
       });
       ownerGroup.appendChild(editBtn);
@@ -913,7 +933,12 @@
     section.setAttribute("role", "button");
     section.setAttribute("tabindex", "0");
     section.setAttribute("aria-label", "View " + (recipe.label || "recipe") + " details");
-    section.addEventListener("click", function () {
+    section.addEventListener("click", function (e) {
+      // Skip clicks that originated on any interactive descendant — same
+      // reasoning as the card click handler in createRecipeCard. The hero
+      // itself has role="button" so we exclude it from the hit.
+      var hit = e.target.closest && e.target.closest('button, a, [role="button"]');
+      if (hit && hit !== section) return;
       openRecipeDetailModal(recipe, handlers);
     });
     section.addEventListener("keydown", function (e) {
