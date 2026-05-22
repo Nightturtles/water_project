@@ -114,6 +114,25 @@ test.describe("recipe.html — Recipe Builder smoke (anonymous)", () => {
     await expect(page.getByRole("heading", { name: /^Final Water Profile$/ })).toBeVisible();
   });
 
+  test('"Edit minerals" button in the "Add Minerals" header opens the mineral picker modal', async ({
+    page,
+  }) => {
+    // The button replaced the standalone #mineral-selector-mount chip-strip
+    // widget on this page and lives inside the Add Minerals section header.
+    // It must always be visible (no gating) and wire through to
+    // window.openMineralSelectorModal exposed by mineral-selector.js.
+    // Regression guard for: a stale #mineral-selector-mount sneaking back
+    // in, or the openMineralSelectorModal global breaking so the click
+    // becomes a dead button.
+    const btn = page.locator("#edit-minerals-btn");
+    await expect(btn).toBeVisible();
+    await expect(btn).toHaveText("Edit minerals");
+    await expect(page.locator("#mineral-selector-mount")).toHaveCount(0);
+
+    await btn.click();
+    await expect(page.locator("#mineral-selector-modal-overlay")).toBeVisible();
+  });
+
   test("source water per-ion edit on 'custom' preset persists across reload", async ({ page }) => {
     // Background: source-water-ui.js's per-ion input handler calls a 300ms
     // debouncedSave (line ~260) that writes through to storage via

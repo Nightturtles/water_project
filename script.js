@@ -32,7 +32,6 @@ const targetProfileNameInput = document.getElementById("target-profile-name");
 const targetSaveBtn = document.getElementById("target-save-btn");
 const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
 const targetSaveStatus = document.getElementById("target-save-status");
-const targetMakeStockBtn = document.getElementById("target-make-stock-btn");
 
 // Gate the named-target-profile save affordances when the user is anonymous.
 // Capture-phase click handler intercepts before the bubble-phase save logic
@@ -45,7 +44,6 @@ if (typeof window.applyAuthGate === "function") {
   if (targetEditModeBtn) window.applyAuthGate(targetEditModeBtn, { reason: "save-recipe" });
   if (targetSaveBtn) window.applyAuthGate(targetSaveBtn, { reason: "save-recipe" });
   if (targetSaveChangesBtn) window.applyAuthGate(targetSaveChangesBtn, { reason: "save-recipe" });
-  if (targetMakeStockBtn) window.applyAuthGate(targetMakeStockBtn, { reason: "save-stock" });
 }
 
 let lastCalculatedIons = null;
@@ -336,31 +334,6 @@ function highlightProfile(profileName) {
   targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
   targetEditBar.style.display = "none";
   updateTargetModeUI();
-  updateMakeStockBtnVisibility();
-}
-
-// "+ Make a stock" surfaces the recipe-browser entry point on the Calculator
-// page so users can derive a stock from any saved target profile — including
-// private customs (cw_custom_target_profiles) that never appear on library.html.
-// Hides when:
-//   - the active profile is the unnamed "custom" scratchpad (no slug to hand
-//     off to minerals.html)
-//   - every primary ion is zero (distilled / RO target — nothing to derive)
-//   - the user has unsaved edits on a saved profile (handoff carries only the
-//     slug, so minerals.html would re-derive from stale persisted data —
-//     surfacing the action while it would silently produce the wrong stock
-//     is worse than hiding it until the user saves)
-// Match recipe-browser.js's hasDerivableIonProfile, but read from the live
-// target inputs so visibility tracks edits, and use target-alkalinity (the
-// input the user actually sees and edits) rather than target-bicarbonate
-// (hidden, not updated by the live flow).
-function updateMakeStockBtnVisibility() {
-  if (!targetMakeStockBtn) return;
-  const hasSlug = currentProfile && currentProfile !== "custom";
-  const ions = [targetCa, targetMg, targetK, targetNa, targetAlk];
-  const hasIons = ions.some((el) => (parseFloat(el && el.value) || 0) > 0);
-  const isSaved = !hasUnsavedTargetChanges();
-  targetMakeStockBtn.style.display = hasSlug && hasIons && isSaved ? "" : "none";
 }
 
 function activateProfile(profileName) {
@@ -499,54 +472,6 @@ profileButtonsContainer.addEventListener("click", (e) => {
   activateProfile(nextProfile);
 });
 
-// "+ Make a stock" — open the stock-editor modal pre-filled with a formula
-// derived from the active target profile. Auto-enables the new stock so the
-// current recipe immediately dispenses from it (user intent: "make a stock
-// for this recipe"). updateMakeStockBtnVisibility hides the button on
-// unsaved edits; the guard below catches a click race (user types then
-// immediately clicks before the input listener fires).
-if (targetMakeStockBtn) {
-  targetMakeStockBtn.addEventListener("click", () => {
-    if (!currentProfile || currentProfile === "custom") return;
-    if (hasUnsavedTargetChanges()) return;
-    // Fall back to legacy hash navigation when any modal-flow dependency is
-    // missing — editor script not loaded, derivation helper absent, or
-    // profile lookup fails. The hash handler on minerals.html re-derives
-    // and opens its inline editor, so the user lands somewhere useful
-    // instead of clicking a dead button.
-    if (
-      typeof window.openStockEditor !== "function" ||
-      typeof deriveStockFormulaFromTarget !== "function"
-    ) {
-      window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
-      return;
-    }
-    const profile =
-      typeof window.getTargetProfileByKey === "function"
-        ? window.getTargetProfileByKey(currentProfile)
-        : null;
-    if (!profile) {
-      window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(currentProfile);
-      return;
-    }
-    const derived = deriveStockFormulaFromTarget(profile);
-    const recipeName = profile.label || currentProfile;
-    window.openStockEditor({
-      mode: "new-derive",
-      prefill: {
-        label: recipeName,
-        bottleMl: derived.bottleMl,
-        doseGramsPerL: derived.doseGramsPerL,
-        minerals: derived.minerals,
-        hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
-        notes: derived.notes || [],
-        deriveSlug: currentProfile,
-      },
-      autoEnable: true,
-    });
-  });
-}
-
 // Snapshot the current target inputs as an ion object. Used by the draft-
 // persistence path below so an in-progress edit survives reload and a second
 // device. Mirrors the field set the calculator reads from elsewhere.
@@ -613,7 +538,6 @@ function getCurrentTargetProfileForCalculations() {
         }
       }
     }
-    updateMakeStockBtnVisibility();
     debouncedCalculate();
   });
 });

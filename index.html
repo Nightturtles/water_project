@@ -35,11 +35,12 @@
       </div>
       <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
       <div class="source-presets" id="source-presets">
-        <!-- Populated by JS -->
+        <!-- Populated by JS. The estimate button is preserved here across re-renders;
+             see renderSourcePresetButtons in source-water-ui.js. -->
+        <button type="button" id="estimate-open-btn" class="preset-btn" data-action="estimate" hidden>Estimate from my ZIP</button>
       </div>
       <!-- BEGIN estimate-water (allowlisted; see estimate-water-ui.js) -->
       <div id="estimate-water-card" class="estimate-water-card" hidden>
-        <button type="button" id="estimate-open-btn" class="preset-btn">Estimate from my ZIP</button>
         <div id="estimate-form" class="estimate-water-form" hidden>
           <label for="estimate-zip" class="visually-hidden">ZIP code (5 digits)</label>
           <input type="text" id="estimate-zip" placeholder="ZIP (5 digits)" inputmode="numeric" maxlength="5" autocomplete="postal-code">
@@ -231,14 +232,11 @@
       </p>
     </section>
 
-    <!-- Inline mineral selector (chips + modal). -->
-    <div id="mineral-selector-mount"></div>
-
     <!-- Results -->
     <section class="card results-card">
       <div class="section-header-actions">
         <h2>Add to Your Water</h2>
-        <button type="button" id="target-make-stock-btn" class="preset-btn profile-make-stock" style="display:none;" aria-label="Generate a stock concentrate from this recipe's targets">+ Make a stock</button>
+        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit minerals</button>
       </div>
       <p class="hint" id="results-hint">Using distilled/RO water as your base, add these mineral salts:</p>
       <div class="results" id="results-container">
@@ -396,13 +394,19 @@
   <script src="estimate-water-ui.js"></script>
   <script src="script.js"></script>
   <script>
-    // --- Inline mineral selector (mount + in-tab re-render) ---
-    if (typeof window.mountMineralSelector === "function") {
-      window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
-    }
+    // --- Edit minerals button (opens the mineral picker modal) ---
+    (function () {
+      var btn = document.getElementById("edit-minerals-btn");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        if (typeof window.openMineralSelectorModal === "function") {
+          window.openMineralSelectorModal();
+        }
+      });
+    })();
     // The cross-tab storage listener in script.js calls renderResultItems +
     // calculate when cw_selected_minerals changes; mirror that for in-tab
-    // edits made via the inline widget. (Both functions are exposed by
+    // edits made via the picker modal. (Both functions are exposed by
     // script.js; only the welcome modal lives in its own IIFE.)
     window.addEventListener("cw:minerals-changed", function () {
       if (typeof renderResultItems === "function") renderResultItems();
