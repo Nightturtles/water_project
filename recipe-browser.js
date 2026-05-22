@@ -207,7 +207,7 @@
 
   // Shared DIY-stock UI block — used by both createRecipeCard (regular card)
   // and createFeaturedHero (featured hero). Renders the formula text plus an
-  // import sub-action that flips between "+ Add to my stocks" (when the
+  // import sub-action that flips between "+ Create Concentrate" (when the
   // library slug isn't yet in cw_stock_concentrate_specs) and "✓ In your
   // pantry" + a Settings link (when it is). Single source of truth so the
   // two surfaces can't drift — CodeRabbit flagged the prior duplication on
@@ -217,10 +217,10 @@
     var stockText = formatStockFormula(recipe.stockFormula);
 
     if (stockText) {
-      // Hand-authored formula (Coffee ad Astra rows): existing "+ Add to my
-      // stocks" path is canonical and preserved verbatim.
+      // Hand-authored formula (Coffee ad Astra rows): existing
+      // "+ Create Concentrate" adoption path is canonical and preserved verbatim.
       var stockRow = el("div", "rx-card-stock");
-      stockRow.appendChild(el("span", "rx-card-stock-label", "DIY stock"));
+      stockRow.appendChild(el("span", "rx-card-stock-label", "Recipe concentrate"));
       stockRow.appendChild(el("span", "rx-card-stock-formula", stockText));
       container.appendChild(stockRow);
 
@@ -232,9 +232,9 @@
         stockActions.appendChild(importedLabel);
         stockActions.appendChild(settingsLink);
       } else {
-        var addBtn = el("button", "rx-card-stock-add", "+ Add to my stocks");
+        var addBtn = el("button", "rx-card-stock-add", "+ Create Concentrate");
         addBtn.type = "button";
-        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        addBtn.setAttribute("aria-label", "Add this recipe's concentrate to your pantry");
         addBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
@@ -263,12 +263,9 @@
       deriveActions.appendChild(derivedLabel);
       deriveActions.appendChild(derivedSettings);
     } else {
-      var deriveBtn = el("button", "rx-card-stock-add", "+ Make a stock");
+      var deriveBtn = el("button", "rx-card-stock-add", "+ Create Concentrate");
       deriveBtn.type = "button";
-      deriveBtn.setAttribute(
-        "aria-label",
-        "Generate a stock concentrate from this recipe's targets",
-      );
+      deriveBtn.setAttribute("aria-label", "Create a concentrate from this recipe's targets");
       if (typeof window.applyAuthGate === "function") {
         window.applyAuthGate(deriveBtn, { reason: "save-stock" });
       }
@@ -282,7 +279,7 @@
     container.appendChild(deriveActions);
   }
 
-  // Cards offer "+ Make a stock" only when at least one of the load-bearing
+  // Cards offer "+ Create Concentrate" only when at least one of the load-bearing
   // ions (Ca/Mg/K/Na/HCO3) is non-zero. Distilled / RO / all-zero rows have
   // no minerals to derive — skip rendering the action at all rather than
   // showing a button that produces an empty editor.
@@ -498,7 +495,7 @@
       card.appendChild(el("p", "rx-card-desc", recipe.description));
     }
 
-    // DIY stock formula + import sub-action. Single source of truth in
+    // Recipe-concentrate formula + import sub-action. Single source of truth in
     // appendStockUi so the regular card and the featured hero can't drift.
     appendStockUi(card, recipe, handlers);
 
@@ -670,11 +667,11 @@
     mineralSection.appendChild(mineralGrid);
     detailScroll.appendChild(mineralSection);
 
-    // DIY stock (only when present)
+    // Recipe concentrate (only when present)
     var stockText = formatStockFormula(recipe.stockFormula);
     if (stockText) {
       var stockSection = el("div", "rx-detail-section");
-      stockSection.appendChild(el("div", "rx-detail-section-label", "DIY stock"));
+      stockSection.appendChild(el("div", "rx-detail-section-label", "Recipe concentrate"));
       var stockBox = el("div", "rx-detail-stock");
       stockBox.appendChild(document.createTextNode(stockText));
       var srcParts = [];
@@ -718,9 +715,9 @@
         importedWrap.appendChild(settingsLink);
         actions.appendChild(importedWrap);
       } else {
-        var addBtn = el("button", "preset-btn", "+ Add to my stocks");
+        var addBtn = el("button", "preset-btn", "+ Create Concentrate");
         addBtn.type = "button";
-        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        addBtn.setAttribute("aria-label", "Add this recipe's concentrate to your pantry");
         addBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
@@ -745,12 +742,9 @@
         derivedWrap.appendChild(derivedSettings);
         actions.appendChild(derivedWrap);
       } else {
-        var deriveBtn = el("button", "preset-btn", "+ Make a stock");
+        var deriveBtn = el("button", "preset-btn", "+ Create Concentrate");
         deriveBtn.type = "button";
-        deriveBtn.setAttribute(
-          "aria-label",
-          "Generate a stock concentrate from this recipe's targets",
-        );
+        deriveBtn.setAttribute("aria-label", "Create a concentrate from this recipe's targets");
         deriveBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
@@ -990,7 +984,7 @@
       section.appendChild(el("p", "rx-featured-desc", recipe.description));
     }
 
-    // DIY stock formula + import sub-action — shared with createRecipeCard
+    // Recipe-concentrate formula + import sub-action — shared with createRecipeCard
     // via appendStockUi. Hero-scoped CSS overrides scale typography for the
     // larger hero context (see .rx-featured-hero .rx-card-stock-*).
     appendStockUi(section, recipe, handlers);
@@ -1220,7 +1214,7 @@
       },
       // Derived-stock pantry membership — true if a previously-saved spec
       // carries createdFrom: "derived:<slug>" matching this recipe. Lets the
-      // "+ Make a stock" CTA flip to "✓ In your pantry" on re-renders, the
+      // "+ Create Concentrate" CTA flip to "✓ In your pantry" on re-renders, the
       // same way isStockImported does for the hand-authored Ad Astra path.
       isStockDerived: function (recipe) {
         if (!recipe || !recipe.slug) return false;

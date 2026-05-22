@@ -62,7 +62,7 @@
       // rows are only in the rail if the user has explicitly added them from
       // library.html. The actual filter lives in storage.getAllTargetPresets.
       isStarter: row.isStarter != null ? !!row.isStarter : !!row.is_starter,
-      // Multi-mineral DIY stock formula (Coffee ad Astra recipes; later
+      // Multi-mineral concentrate formula (Coffee ad Astra recipes; later
       // user-defined stocks too). Shape: { bottleMl, doseGramsPerL, minerals:
       // [{mineralId, grams}], source, via }. NULL on most library rows; the
       // library card optionally renders it when present.

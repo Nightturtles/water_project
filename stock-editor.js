@@ -3,10 +3,10 @@
 //
 // Exposes window.openStockEditor({ mode, slug?, prefill?, autoEnable?, onSaved? })
 // for four entry points:
-//   - "+ New stock solution" inside the mineral selector modal
-//   - Edit pencil on each stock row inside the mineral selector
-//   - "+ Make a stock" button on calculator / recipe / taste pages
-//   - "+ Add to my stocks" / "+ Make a stock" on library recipe cards
+//   - "+ Create Concentrate" inside the mineral selector modal
+//   - Edit pencil on each recipe-concentrate row inside the mineral selector
+//   - "+ Create Concentrate" on library recipe cards (both states:
+//     adopting an authored stock formula and deriving one from recipe targets)
 //
 // Renders an overlay above any open dialog (z-index 210) and reuses the
 // library-picker-dialog CSS chrome. All save logic mirrors the inline editor
@@ -118,7 +118,7 @@
     titleEl = document.createElement("h2");
     titleEl.id = "stock-editor-title";
     titleEl.className = "library-picker-title";
-    titleEl.textContent = "Stock solution";
+    titleEl.textContent = "Recipe concentrate";
     dialogEl.appendChild(titleEl);
 
     formEl = document.createElement("div");
@@ -189,7 +189,7 @@
       notesHtml +
       '<div class="input-group">' +
       '<label for="stock-editor-label">Name</label>' +
-      '<input type="text" id="stock-editor-label" placeholder="My Stock" value="' +
+      '<input type="text" id="stock-editor-label" placeholder="My Concentrate" value="' +
       escapeHtml(label) +
       '">' +
       "</div>" +
@@ -453,7 +453,7 @@
       // Mirror the showConfirm branch's post-delete steps so the underlying
       // selector still rebuilds via cw:minerals-changed and a throwing
       // onSaved callback can't break the modal close.
-      if (!confirm('Delete stock solution "' + label + '"?')) return;
+      if (!confirm('Delete recipe concentrate "' + label + '"?')) return;
       deleteStock(slug);
       closeEditor();
       window.dispatchEvent(
@@ -470,7 +470,7 @@
       }
       return;
     }
-    showConfirm('Delete stock solution "' + label + '"?', function () {
+    showConfirm('Delete recipe concentrate "' + label + '"?', function () {
       deleteStock(slug);
       closeEditor();
       window.dispatchEvent(
@@ -563,7 +563,7 @@
     }
 
     session = resolvedSession;
-    titleEl.textContent = mode === "edit" ? "Edit stock solution" : "New stock solution";
+    titleEl.textContent = mode === "edit" ? "Edit recipe concentrate" : "New recipe concentrate";
 
     renderForm();
     // Attach handlers exactly once per overlay; renderForm() replaces the

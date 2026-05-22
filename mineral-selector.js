@@ -115,7 +115,7 @@
     var hint = document.createElement("p");
     hint.className = "hint";
     hint.textContent =
-      "Single-mineral solutions you've made at home. Tap the pencil to set bottle volume and grams per bottle.";
+      "Single-mineral concentrates you've made at home. Tap the pencil to set bottle volume and grams per bottle.";
     targetEl.appendChild(hint);
 
     var list = document.createElement("div");
@@ -139,8 +139,8 @@
       var editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "mineral-selector-edit-btn";
-      editBtn.setAttribute("aria-label", "Edit DIY concentrate");
-      editBtn.title = "Edit DIY concentrate";
+      editBtn.setAttribute("aria-label", "Edit mineral concentrate");
+      editBtn.title = "Edit mineral concentrate";
       editBtn.dataset.mineralId = id;
       editBtn.innerHTML = "&#9998;";
       actions.appendChild(editBtn);
@@ -214,13 +214,13 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Multi-mineral stocks. Only one can be active at a time.";
+    hint.textContent = "Multi-mineral concentrates. Only one can be active at a time.";
     targetEl.appendChild(hint);
 
     var newBtn = document.createElement("button");
     newBtn.type = "button";
     newBtn.className = "preset-btn mineral-selector-add-new-btn";
-    newBtn.textContent = "+ New stock solution";
+    newBtn.textContent = "+ Create Concentrate";
     newBtn.addEventListener("click", function () {
       if (typeof window.openStockEditor !== "function") return;
       window.openStockEditor({
@@ -241,7 +241,7 @@
     if (stockIds.length === 0) {
       var empty = document.createElement("p");
       empty.className = "hint mineral-selector-empty";
-      empty.textContent = 'No stocks yet. Click "+ New stock solution" to add one.';
+      empty.textContent = 'No recipe concentrates yet. Click "+ Create Concentrate" to add one.';
       targetEl.appendChild(empty);
       return;
     }
@@ -294,8 +294,8 @@
       var editBtn = document.createElement("button");
       editBtn.type = "button";
       editBtn.className = "mineral-selector-edit-btn";
-      editBtn.setAttribute("aria-label", "Edit stock solution");
-      editBtn.title = "Edit stock solution";
+      editBtn.setAttribute("aria-label", "Edit recipe concentrate");
+      editBtn.title = "Edit recipe concentrate";
       editBtn.dataset.stockSlug = slug;
       editBtn.innerHTML = "&#9998;";
       actions.appendChild(editBtn);
@@ -303,8 +303,8 @@
       var delBtn = document.createElement("button");
       delBtn.type = "button";
       delBtn.className = "mineral-selector-delete-btn";
-      delBtn.setAttribute("aria-label", "Delete stock solution");
-      delBtn.title = "Delete stock solution";
+      delBtn.setAttribute("aria-label", "Delete recipe concentrate");
+      delBtn.title = "Delete recipe concentrate";
       delBtn.dataset.stockSlug = slug;
       delBtn.innerHTML = "&times;";
       actions.appendChild(delBtn);
@@ -367,10 +367,10 @@
         dispatchChanged({ scope: "concentrates", category: "stock", deletedSlug: delSlug });
       };
       if (typeof showConfirm === "function") {
-        showConfirm('Delete stock solution "' + delLabel + '"?', runDelete);
+        showConfirm('Delete recipe concentrate "' + delLabel + '"?', runDelete);
       } else if (
         typeof window.confirm === "function" &&
-        window.confirm('Delete stock solution "' + delLabel + '"?')
+        window.confirm('Delete recipe concentrate "' + delLabel + '"?')
       ) {
         runDelete();
       }
@@ -642,11 +642,11 @@
     concPanelEl.setAttribute("role", "tabpanel");
     concPanelEl.setAttribute("aria-labelledby", "mineral-selector-tab-concentrates");
 
-    var diyWrap = makeCollapsibleSubsection("DIY Concentrates");
+    var diyWrap = makeCollapsibleSubsection("Mineral Concentrates");
     concDiyContentEl = diyWrap.content;
     concPanelEl.appendChild(diyWrap.section);
 
-    var stockWrap = makeCollapsibleSubsection("Stock Solutions");
+    var stockWrap = makeCollapsibleSubsection("Recipe Concentrates");
     concStockContentEl = stockWrap.content;
     concPanelEl.appendChild(stockWrap.section);
 
