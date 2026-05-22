@@ -2432,7 +2432,8 @@ footer {
   }
 
   .section-header-actions .profile-edit-toggle,
-  .section-header-actions .profile-make-stock {
+  .section-header-actions .profile-make-stock,
+  .section-header-actions #edit-minerals-btn {
     width: auto;
     flex: 0 0 auto;
     min-height: 2rem;
@@ -2605,7 +2606,8 @@ footer {
 
 @media (max-width: 350px) {
   .section-header-actions .profile-edit-toggle,
-  .section-header-actions .profile-make-stock {
+  .section-header-actions .profile-make-stock,
+  .section-header-actions #edit-minerals-btn {
     width: auto;
     flex: 0 0 auto;
     min-height: 2rem;
@@ -4082,12 +4084,6 @@ footer {
   align-items: center;
   gap: 0.4rem;
   margin: 0;
-  /* The absolutely-positioned bookmark star (top: 1rem; right: 1rem; ~32px
-     wide) overlaps the eyebrow's vertical band. Reserve star real estate on
-     the eyebrow's right so a longer eyebrow string can never crowd the
-     star. The header / title row sits below the star vertically so no
-     padding is needed there. */
-  padding-right: 2.5rem;
   font-size: 0.7rem;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -4138,13 +4134,14 @@ footer {
 }
 
 .rx-featured-bookmark {
-  /* Pinned to the hero's top-right corner so it reads as the primary
-     selection affordance even though the eyebrow + title push it out of
-     the normal flex flow. .rx-featured-hero sets position: relative so
-     this coord system is the hero box. */
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
+  /* Flex sibling of .rx-featured-title-col inside .rx-featured-header.
+     flex-shrink: 0 keeps it at its natural width while the title column
+     (flex: 1; min-width: 0) absorbs wrapping; align-self: flex-start pins
+     it to the top of the header row no matter how many lines the title
+     wraps to. (Was position: absolute; .auth-locked's position: relative
+     would override it at equal specificity later in the cascade.) */
+  flex-shrink: 0;
+  align-self: flex-start;
   background: none;
   border: none;
   font-size: 1.6rem;
