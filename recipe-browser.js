@@ -960,12 +960,12 @@
       titleCol.appendChild(el("p", "rx-featured-source", "by " + recipe.creatorDisplayName));
     }
     header.appendChild(titleCol);
-    section.appendChild(header);
 
-    // Bookmark is pinned to the hero's top-right corner via CSS (position:
-    // absolute), so DOM placement only matters for tab order — keep it
-    // adjacent to the title in flow so screen readers announce title →
-    // save in a sensible sequence.
+    // Bookmark sits as the title's flex sibling so the title-col absorbs
+    // wrapping and the bookmark stays anchored at the header's top-right.
+    // (Earlier this was position:absolute on the hero, but .auth-locked
+    // sets position:relative at equal specificity later in the cascade,
+    // which collapsed the bookmark back into flow when logged out.)
     var saved = handlers.isSaved && handlers.isSaved(recipe);
     var bookmark = el("button", "rx-featured-bookmark");
     bookmark.type = "button";
@@ -981,7 +981,8 @@
     if (typeof window.applyAuthGate === "function") {
       window.applyAuthGate(bookmark, { reason: "bookmark" });
     }
-    section.appendChild(bookmark);
+    header.appendChild(bookmark);
+    section.appendChild(header);
 
     section.appendChild(createMineralTriplet(recipe, "rx-featured-mineral-triplet"));
 
