@@ -265,10 +265,7 @@
     } else {
       var deriveBtn = el("button", "rx-card-stock-add", "+ Create Concentrate");
       deriveBtn.type = "button";
-      deriveBtn.setAttribute(
-        "aria-label",
-        "Create a concentrate from this recipe's targets",
-      );
+      deriveBtn.setAttribute("aria-label", "Create a concentrate from this recipe's targets");
       if (typeof window.applyAuthGate === "function") {
         window.applyAuthGate(deriveBtn, { reason: "save-stock" });
       }
@@ -747,10 +744,7 @@
       } else {
         var deriveBtn = el("button", "preset-btn", "+ Create Concentrate");
         deriveBtn.type = "button";
-        deriveBtn.setAttribute(
-          "aria-label",
-          "Create a concentrate from this recipe's targets",
-        );
+        deriveBtn.setAttribute("aria-label", "Create a concentrate from this recipe's targets");
         deriveBtn.addEventListener("click", function (e) {
           e.preventDefault();
           e.stopPropagation();
