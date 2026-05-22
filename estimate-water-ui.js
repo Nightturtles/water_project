@@ -400,6 +400,7 @@
     // bypasses the gate, the function 401s without a valid JWT and enforces
     // the per-user daily cap via the increment_estimate_water_quota RPC.
     card.hidden = false;
+    openBtn.hidden = false;
     if (typeof window.applyAuthGate === "function") {
       window.applyAuthGate(openBtn, { reason: "estimate-water" });
     }

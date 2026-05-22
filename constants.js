@@ -147,7 +147,7 @@ const ION_LABELS = {
 const SOURCE_CATEGORY_ORDER = ["pure", "generic", "bottled", "saved"];
 const SOURCE_CATEGORY_LABELS = {
   pure: "Distilled / RO",
-  generic: "Generic Tap",
+  generic: "Tap Water",
   bottled: "Bottled Water",
   saved: "Saved Profiles",
 };

@@ -127,6 +127,11 @@ function initSourceWaterSection(options) {
   }
 
   function renderSourcePresetButtons() {
+    // Preserve the estimate-open button across re-renders so its click +
+    // auth-gate listeners (bound once in estimate-water-ui.js) survive. We hold
+    // the node reference, wipe the container, then re-append after the generic
+    // category buttons below.
+    const estimateBtn = sourcePresetsContainer.querySelector("#estimate-open-btn");
     sourcePresetsContainer.innerHTML = "";
     const allPresets = getAllPresets();
 
@@ -174,6 +179,7 @@ function initSourceWaterSection(options) {
       sourcePresetsContainer.appendChild(btn);
     }
 
+    let estimateAppended = false;
     for (const cat of renderOrder) {
       const entries = buckets[cat];
       if (!entries || entries.length === 0) continue;
@@ -183,6 +189,17 @@ function initSourceWaterSection(options) {
       heading.textContent = labelText;
       sourcePresetsContainer.appendChild(heading);
       for (const [key, preset] of entries) appendButton(key, preset);
+      if (estimateBtn && cat === "generic") {
+        sourcePresetsContainer.appendChild(estimateBtn);
+        estimateAppended = true;
+      }
+    }
+    // Fallback when the generic bucket is empty (e.g. all generic presets
+    // were deleted by the user). Without this the captured node would be
+    // dropped along with the original innerHTML wipe, losing the bound
+    // click + auth-gate listeners.
+    if (estimateBtn && !estimateAppended) {
+      sourcePresetsContainer.appendChild(estimateBtn);
     }
     for (const [key, preset] of customEntries) appendButton(key, preset);
 
