@@ -28,12 +28,11 @@
       </div>
       <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
       <div class="source-presets" id="source-presets">
-        <!-- Populated by JS. The estimate button is preserved here across re-renders;
-             see renderSourcePresetButtons in source-water-ui.js. -->
-        <button type="button" id="estimate-open-btn" class="preset-btn" data-action="estimate" hidden>Estimate from my ZIP</button>
+        <!-- Populated by JS -->
       </div>
       <!-- BEGIN estimate-water (allowlisted; see estimate-water-ui.js) -->
       <div id="estimate-water-card" class="estimate-water-card" hidden>
+        <button type="button" id="estimate-open-btn" class="preset-btn">Estimate from my ZIP</button>
         <div id="estimate-form" class="estimate-water-form" hidden>
           <label for="estimate-zip" class="visually-hidden">ZIP code (5 digits)</label>
           <input type="text" id="estimate-zip" placeholder="ZIP (5 digits)" inputmode="numeric" maxlength="5" autocomplete="postal-code">
