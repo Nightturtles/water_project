@@ -728,6 +728,7 @@ select:focus {
 .profile-btn[data-profile="library"],
 .preset-btn[data-preset="custom"],
 .preset-btn[data-preset="library"],
+.preset-btn[data-action="estimate"],
 .taste-preset-btn[data-preset="custom"],
 .taste-preset-btn[data-preset="library"] {
   border-style: dashed;
@@ -740,6 +741,7 @@ select:focus {
 .profile-btn[data-profile="library"]:hover,
 .preset-btn[data-preset="custom"]:hover,
 .preset-btn[data-preset="library"]:hover,
+.preset-btn[data-action="estimate"]:hover,
 .taste-preset-btn[data-preset="custom"]:hover,
 .taste-preset-btn[data-preset="library"]:hover {
   background: var(--blue-50);
