@@ -35,4 +35,4 @@ See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full
 | Library browse/edit/import/owner flows | [smoke-library.spec.ts](smoke-library.spec.ts) | — | Library page and ownership workflows (spec-only today) |
 | Settings page minerals/concentrates/stock editor flows | [smoke-minerals.spec.ts](smoke-minerals.spec.ts) | — | Settings behaviors and stock workflows (spec-only today) |
 | Estimate-from-ZIP flow | [smoke-estimate-water.spec.ts](smoke-estimate-water.spec.ts) | — | Estimate Water UI and related guards (spec-only today) |
-| Recipe-to-stock handoff | [recipe-make-stock.spec.ts](recipe-make-stock.spec.ts) | — | `+ Make a stock` flow from recipe/calculator into stock editor (spec-only today) |
+| Recipe-to-concentrate handoff | [recipe-make-stock.spec.ts](recipe-make-stock.spec.ts) | — | `+ Create Concentrate` flow from recipe/calculator into the concentrate editor (spec-only today) |

@@ -70,7 +70,7 @@
     titleEl = document.createElement("h2");
     titleEl.id = "diy-editor-title";
     titleEl.className = "library-picker-title";
-    titleEl.textContent = "DIY concentrate";
+    titleEl.textContent = "Mineral concentrate";
     dialogEl.appendChild(titleEl);
 
     formEl = document.createElement("div");

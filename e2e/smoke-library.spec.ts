@@ -47,7 +47,7 @@ test.describe("library.html — Wave D recipe browser", () => {
       consoleErrors.push(err.message);
     });
 
-    // Bookmark / "Add to my stocks" / "+ Make a stock" flows write Category B
+    // Bookmark / "+ Create Concentrate" flows (both the adopt-formula and derive-from-targets variants) write Category B
     // keys (cw_custom_target_profiles, cw_stock_concentrate_specs, etc.) and
     // those are gated behind sign-in.  Stub a logged-in session so the gated
     // writes go through.
@@ -215,7 +215,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     }
   });
 
-  test('"Add to my stocks" button imports a library stock formula (B3a)', async ({ page }) => {
+  test('"+ Create Concentrate" button imports a library stock formula (B3a)', async ({ page }) => {
     // Hermetic run — clear any prior stock specs so the card renders the
     // active button rather than the "In your pantry" indicator.
     await page.evaluate(() => {
@@ -226,11 +226,12 @@ test.describe("library.html — Wave D recipe browser", () => {
     await page.reload();
 
     // Find the first card whose recipe has a hand-authored stockFormula —
-    // those render .rx-card-stock-formula plus the "+ Add to my stocks"
-    // button. Recipes without a formula now render "+ Make a stock" with
-    // the same .rx-card-stock-add class but a different (derive-and-prefill)
-    // action; not what this test exercises. The Coffee ad Astra tray seeded
-    // 12 stockFormula rows so at least one card matches.
+    // those render .rx-card-stock-formula plus the "+ Create Concentrate"
+    // (adoption) button. Recipes without a formula render the same
+    // "+ Create Concentrate" label on the same .rx-card-stock-add class
+    // but resolve to a different (derive-and-prefill) action; not what
+    // this test exercises. The Coffee ad Astra tray seeded 12 stockFormula
+    // rows so at least one card matches.
     const card = page
       .locator(".rx-recipe-card", { has: page.locator(".rx-card-stock-formula") })
       .first();
@@ -269,7 +270,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     );
   });
 
-  test('featured hero renders DIY stock + "Add to my stocks" button when a stock-bearing recipe is featured (B3a-hero)', async ({
+  test('featured hero renders recipe-concentrate formula + "+ Create Concentrate" button when a stock-bearing recipe is featured (B3a-hero)', async ({
     page,
   }) => {
     // Default FEATURED_PICKS doesn't promote any of the 12 Coffee ad Astra
@@ -328,7 +329,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     );
   });
 
-  test('"+ Make a stock" derives a stock formula from a recipe without stockFormula (B3b)', async ({
+  test('"+ Create Concentrate" derives a stock formula from a recipe without stockFormula (B3b)', async ({
     page,
   }) => {
     // Hermetic — wipe any prior pantry state so the card renders the derive
@@ -354,7 +355,7 @@ test.describe("library.html — Wave D recipe browser", () => {
 
     const deriveBtn = card.locator(".rx-card-stock-add");
     await expect(deriveBtn).toBeVisible();
-    await expect(deriveBtn).toHaveText("+ Make a stock");
+    await expect(deriveBtn).toHaveText("+ Create Concentrate");
 
     // Click opens the editor modal in place pre-filled with the *derived*
     // formula plus a hint banner. The library page stays mounted underneath.
@@ -383,7 +384,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     expect(Array.isArray(spec.minerals)).toBe(true);
     expect(spec.minerals.length).toBeGreaterThan(0);
 
-    // Back on the library page, the same card flips from "+ Make a stock"
+    // Back on the library page, the same card flips from "+ Create Concentrate"
     // to "✓ In your pantry" via isStockDerived.
     await page.goto("/library.html");
     const derivedCard = page.locator(`.rx-recipe-card[data-slug="${slug}"]`).first();

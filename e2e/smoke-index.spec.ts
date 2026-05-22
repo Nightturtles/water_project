@@ -64,7 +64,7 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
   test('"Edit minerals" button in the "Add to Your Water" header opens the mineral picker modal', async ({
     page,
   }) => {
-    // The button replaced the legacy "+ Make a stock" affordance in the
+    // The button replaced a legacy stock-creation affordance (formerly "+ Make a stock") in the
     // section header. It must always be visible (no visibility gating) and
     // wire through to window.openMineralSelectorModal exposed by
     // mineral-selector.js. Regression guard for: someone re-introducing a

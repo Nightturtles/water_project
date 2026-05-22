@@ -938,7 +938,7 @@ function getActiveStockId(concentrateIds) {
  * Enforces the single-stock-active rule when writing to cw_selected_concentrates:
  * strips any existing "stock:*" entries and (if stockId is non-null) appends
  * the given one. Pass null to clear the active stock. Mirrors the radio-like
- * checkbox behavior in minerals.html's Stock Solutions section so any code
+ * checkbox behavior in minerals.html's Recipe Concentrates section so any code
  * path that activates a stock (selector toggle, new-stock save, auto-enable
  * after derive/import) ends in the same canonical state.
  * @param {string | null | undefined} stockId

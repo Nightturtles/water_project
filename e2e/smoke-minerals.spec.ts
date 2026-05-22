@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { stubLoggedIn } from "./_auth-stub";
 
-// Smoke for minerals.html (Settings) Stock Solutions section.
+// Smoke for minerals.html (Settings) Recipe Concentrates section.
 //
 // Covers the single-stock-active rule (PR #60 contract enforced in B2-fix).
 // The Settings UI used to allow multiple stock checkboxes to be checked at
@@ -10,7 +10,7 @@ import { stubLoggedIn } from "./_auth-stub";
 // silent desync — fixed by making the checkboxes radio-like (checking one
 // auto-unchecks any other) plus a normalize-on-render pass for legacy state.
 
-test.describe("minerals.html — Stock Solutions single-stock-active rule", () => {
+test.describe("minerals.html — Recipe Concentrates single-active rule", () => {
   const consoleErrors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
