@@ -127,6 +127,11 @@ function initSourceWaterSection(options) {
   }
 
   function renderSourcePresetButtons() {
+    // Preserve the estimate-open button across re-renders so its click +
+    // auth-gate listeners (bound once in estimate-water-ui.js) survive. We hold
+    // the node reference, wipe the container, then re-append after the generic
+    // category buttons below.
+    const estimateBtn = sourcePresetsContainer.querySelector("#estimate-open-btn");
     sourcePresetsContainer.innerHTML = "";
     const allPresets = getAllPresets();
 
@@ -183,6 +188,9 @@ function initSourceWaterSection(options) {
       heading.textContent = labelText;
       sourcePresetsContainer.appendChild(heading);
       for (const [key, preset] of entries) appendButton(key, preset);
+      if (estimateBtn && cat === "generic") {
+        sourcePresetsContainer.appendChild(estimateBtn);
+      }
     }
     for (const [key, preset] of customEntries) appendButton(key, preset);
 
