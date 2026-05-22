@@ -98,15 +98,17 @@ async function dismissWelcomeModal(page: Page): Promise<void> {
 }
 
 test.describe("estimate-water UI", () => {
-  test("anonymous users see the card with the button locked", async ({ page }) => {
+  test("anonymous users see the button locked in the source-water rail", async ({ page }) => {
     await stubLogin(page, false);
     const { invocations } = await stubFunctions(page, defaultStubHandler);
     await page.goto("/");
     await dismissWelcomeModal(page);
 
-    // Card renders (GA: visible to everyone) but the open button is locked.
-    await expect(page.locator("#estimate-water-card")).toBeVisible();
+    // The open button now lives inside #source-presets alongside the preset
+    // buttons; the card only wraps the form/status/result and stays collapsed
+    // until the user opens the form.
     const openBtn = page.locator("#estimate-open-btn");
+    await expect(openBtn).toBeVisible();
     await expect(openBtn).toHaveAttribute("aria-disabled", "true");
     await expect(openBtn).toHaveClass(/auth-locked/);
 
@@ -126,9 +128,8 @@ test.describe("estimate-water UI", () => {
       await page.goto(path);
       await dismissWelcomeModal(page);
 
-      const card = page.locator("#estimate-water-card");
-      await expect(card).toBeVisible();
       const openBtn = page.locator("#estimate-open-btn");
+      await expect(openBtn).toBeVisible();
       await expect(openBtn).not.toHaveAttribute("aria-disabled", "true");
 
       await openBtn.click();
@@ -156,9 +157,13 @@ test.describe("estimate-water UI", () => {
 
     await page.goto("/");
     await dismissWelcomeModal(page);
-    await expect(page.locator("#estimate-water-card")).toBeVisible();
+    // The button is visible at load; the wrapping card only becomes visible
+    // once the user opens the form (it contains nothing else with rendered
+    // height until then).
+    await expect(page.locator("#estimate-open-btn")).toBeVisible();
 
     await page.locator("#estimate-open-btn").click();
+    await expect(page.locator("#estimate-water-card")).toBeVisible();
     await expect(page.locator("#estimate-form")).toBeVisible();
     await page.locator("#estimate-cancel-btn").click();
     await expect(page.locator("#estimate-form")).toBeHidden();
