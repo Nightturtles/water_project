@@ -142,12 +142,12 @@
       </div>
     </section>
 
-    <!-- Inline mineral selector (chips + modal). -->
-    <div id="mineral-selector-mount"></div>
-
     <!-- Mineral Additions -->
     <section class="card">
-      <h2>Add Minerals</h2>
+      <div class="section-header-actions">
+        <h2>Add Minerals</h2>
+        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit minerals</button>
+      </div>
       <p class="hint" id="mineral-inputs-hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
       <div class="brew-method-toggle dispense-mode-toggle" id="dispense-mode-toggle" style="display:none;">
         <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="manual">Manual minerals</button>
@@ -165,7 +165,6 @@
     <section class="card results-card">
       <div class="section-header-actions">
         <h2>Final Water Profile</h2>
-        <button type="button" id="recipe-make-stock-btn" class="preset-btn profile-make-stock" style="display:none;" aria-label="Generate a stock concentrate from this saved profile">+ Make a stock</button>
       </div>
       <p class="hint">Total PPM including your base water + mineral additions:</p>
 
@@ -297,10 +296,16 @@
   <script src="source-water-ui.js"></script>
   <script src="estimate-water-ui.js"></script>
   <script>
-    // --- Inline mineral selector (mount + reload-on-change) ---
-    if (typeof window.mountMineralSelector === "function") {
-      window.mountMineralSelector(document.getElementById("mineral-selector-mount"));
-    }
+    // --- Edit minerals button (opens the mineral picker modal) + reload-on-change ---
+    (function () {
+      const btn = document.getElementById("edit-minerals-btn");
+      if (!btn) return;
+      btn.addEventListener("click", function () {
+        if (typeof window.openMineralSelectorModal === "function") {
+          window.openMineralSelectorModal();
+        }
+      });
+    })();
     // recipe.html snapshots selectedMinerals into a top-level const at load
     // time and has no per-row rebuild, so we reload to pick up changes. But
     // if the inline-selector modal is open we'd close it mid-multi-toggle —
@@ -353,12 +358,10 @@
     // Slug of the most-recently-saved Final Water Profile. Cleared on any user
     // input so the displayed profile and the saved slug never drift apart.
     let lastSavedTargetSlug = null;
-    const recipeMakeStockBtn = document.getElementById("recipe-make-stock-btn");
     const recipeSaveStatus = document.getElementById("recipe-save-status");
     function clearLastSavedTargetState() {
       if (lastSavedTargetSlug === null && (!recipeSaveStatus || !recipeSaveStatus.textContent)) return;
       lastSavedTargetSlug = null;
-      if (recipeMakeStockBtn) recipeMakeStockBtn.style.display = "none";
       if (recipeSaveStatus) {
         recipeSaveStatus.textContent = "";
         recipeSaveStatus.classList.remove("visible", "error");
@@ -1041,7 +1044,6 @@
       showRecipeSaveStatus("Saved! Use it as a target on the Calculator.", false);
 
       lastSavedTargetSlug = key;
-      if (recipeMakeStockBtn) recipeMakeStockBtn.style.display = "";
 
       // Sync immediately so the save persists even if the user navigates away
       if (typeof syncNow === "function") syncNow();
@@ -1049,45 +1051,6 @@
       // Offer to share to Recipe Library (only if logged in)
       if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profiles[key]);
     });
-
-    if (recipeMakeStockBtn) {
-      recipeMakeStockBtn.addEventListener("click", () => {
-        if (!lastSavedTargetSlug) return;
-        // Fall back to legacy hash navigation when any modal-flow dependency
-        // is missing so the CTA never becomes a dead click — the inline
-        // editor on minerals.html still handles the derive flow.
-        if (
-          typeof window.openStockEditor !== "function" ||
-          typeof deriveStockFormulaFromTarget !== "function"
-        ) {
-          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
-          return;
-        }
-        const profile =
-          typeof window.getTargetProfileByKey === "function"
-            ? window.getTargetProfileByKey(lastSavedTargetSlug)
-            : null;
-        if (!profile) {
-          window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(lastSavedTargetSlug);
-          return;
-        }
-        const derived = deriveStockFormulaFromTarget(profile);
-        const recipeName = profile.label || lastSavedTargetSlug;
-        window.openStockEditor({
-          mode: "new-derive",
-          prefill: {
-            label: recipeName,
-            bottleMl: derived.bottleMl,
-            doseGramsPerL: derived.doseGramsPerL,
-            minerals: derived.minerals,
-            hint: "Auto-derived from " + recipeName + "'s ion targets: review and tweak before saving.",
-            notes: derived.notes || [],
-            deriveSlug: lastSavedTargetSlug,
-          },
-          autoEnable: true,
-        });
-      });
-    }
 
     // --- Initial calculation ---
     recalculate();

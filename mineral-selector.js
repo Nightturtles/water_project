@@ -854,4 +854,5 @@
   }
 
   window.mountMineralSelector = mountMineralSelector;
+  window.openMineralSelectorModal = openModal;
 })();

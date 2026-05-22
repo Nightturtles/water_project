@@ -1,5 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { stubLoggedIn } from "./_auth-stub";
 
 // Executable version of smoke-index.md. Intent matches the runbook — if the
 // runbook diverges, fix the spec first and update the runbook as docs.
@@ -62,24 +61,15 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('"+ Make a stock" hides on the unnamed custom scratchpad and on unsaved edits', async ({
+  test('"Edit minerals" button in the "Add to Your Water" header opens the mineral picker modal', async ({
     page,
   }) => {
-    // Editing a saved target profile (the "Edit Profiles" toggle, line 92)
-    // is auth-gated; without a logged-in stub the button has aria-disabled
-    // set and Playwright's `.click()` waits forever on enabled-state.
-    // Re-navigate after stubbing so the gate releases on this page load.
-    await stubLoggedIn(page);
-    await page.goto("/");
-
-    // The Calculator's third header button — surfaces the recipe-browser
-    // derive flow on any saved target profile. Its visibility is gated by
-    // updateMakeStockBtnVisibility(): hide for the "custom" scratchpad
-    // (no slug to hand off), hide when every primary ion is zero (RO),
-    // and hide while the user has unsaved edits to a saved profile (those
-    // would silently re-derive from stale persisted data on minerals.html,
-    // which CodeRabbit caught on the original PR).
-    const btn = page.locator("#target-make-stock-btn");
+    // The button replaced the legacy "+ Make a stock" affordance in the
+    // section header. It must always be visible (no visibility gating) and
+    // wire through to window.openMineralSelectorModal exposed by
+    // mineral-selector.js. Regression guard for: someone re-introducing a
+    // standalone #mineral-selector-mount, or breaking the openMineralSelectorModal
+    // global so the click becomes a dead button.
 
     // Welcome modal intercepts pointer events on a fresh visit. Dismiss it
     // before interacting with anything underneath.
@@ -89,29 +79,17 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
       await expect(page.locator("#welcome-modal-overlay")).toBeHidden();
     }
 
-    // Activate a saved library preset with non-zero ions. cafelytic-filter
-    // is a is_starter=true row so it's always in the default rail.
-    await page.locator('#profile-buttons [data-profile="cafelytic-filter"]').click();
+    const btn = page.locator("#edit-minerals-btn");
     await expect(btn).toBeVisible();
+    await expect(btn).toHaveText("Edit minerals");
 
-    // The ion inputs are hidden outside edit mode (updateTargetModeUI in
-    // script.js). Click "Edit Profiles" to expose them — the production flow
-    // to edit a saved profile in place.
-    await page.locator("#target-edit-mode-btn").click();
-    const ca = page.locator("#target-calcium");
-    await expect(ca).toBeVisible();
+    // No standalone #mineral-selector-mount widget on this page anymore —
+    // the section-header button is the only entry point.
+    await expect(page.locator("#mineral-selector-mount")).toHaveCount(0);
 
-    // Editing Ca diverges from saved values → hasUnsavedTargetChanges() flips
-    // true → button hides. Reverting brings it back.
-    const saved = await ca.inputValue();
-    await ca.fill("99");
-    await expect(btn).toBeHidden();
-    await ca.fill(saved);
-    await expect(btn).toBeVisible();
-
-    // Switching to the unnamed "custom" scratchpad (no slug) hides the button.
-    await page.locator('#profile-buttons [data-profile="custom"]').click();
-    await expect(btn).toBeHidden();
+    await btn.click();
+    await expect(page.locator("#mineral-selector-modal-overlay")).toBeVisible();
+    expect(consoleErrors).toEqual([]);
   });
 
   test("step 5: FOUC guard — data-theme resolved to light|dark on documentElement", async ({
