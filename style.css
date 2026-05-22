@@ -3730,6 +3730,223 @@ footer {
   flex-shrink: 0;
 }
 
+/* Clickable card affordance — whole card opens the detail modal. The inner
+   bookmark / owner / stock buttons stopPropagation so they still work on
+   their own. */
+.rx-recipe-card[role="button"],
+.rx-featured-hero[role="button"] {
+  cursor: pointer;
+}
+.rx-recipe-card[role="button"]:focus-visible,
+.rx-featured-hero[role="button"]:focus-visible {
+  outline: 2px solid var(--blue-600);
+  outline-offset: 2px;
+}
+
+/* ---- Recipe detail modal ---- */
+
+.rx-detail-dialog {
+  max-width: 580px;
+  padding: 1.5rem;
+  padding-top: 1.5rem;
+}
+
+.rx-detail-scroll {
+  overflow-y: auto;
+  flex: 1;
+  padding-right: 0.5rem;
+  margin-right: -0.5rem;
+}
+
+.rx-detail-header {
+  padding-right: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.rx-detail-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+  margin: 0 0 0.35rem;
+}
+
+.rx-detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.rx-detail-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--gray-900);
+  line-height: 1.25;
+}
+
+.rx-detail-save {
+  flex-shrink: 0;
+  background: none;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  line-height: 1;
+  color: var(--gray-500);
+  cursor: pointer;
+  padding: 0.35rem 0.55rem;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.rx-detail-save:hover {
+  color: var(--blue-600);
+  background: var(--blue-50);
+  border-color: var(--blue-100);
+}
+
+.rx-detail-save.is-active {
+  color: var(--blue-600);
+  border-color: var(--blue-100);
+}
+
+.rx-detail-save-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.rx-detail-byline {
+  margin: 0.3rem 0 0;
+  font-size: 0.85rem;
+  color: var(--gray-600);
+}
+
+.rx-detail-section {
+  margin-bottom: 1.1rem;
+}
+
+.rx-detail-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gray-500);
+  margin-bottom: 0.4rem;
+}
+
+.rx-detail-desc {
+  margin: 0;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--gray-800);
+  white-space: pre-wrap;
+}
+
+.rx-detail-minerals {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.5rem;
+}
+
+.rx-detail-mineral {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.rx-detail-mineral-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+}
+
+.rx-detail-mineral-value {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+.rx-detail-stock {
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-100);
+  font-size: 0.85rem;
+  color: var(--gray-800);
+  line-height: 1.45;
+}
+
+.rx-detail-stock-source {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--gray-600);
+}
+
+.rx-detail-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+
+.rx-detail-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.rx-detail-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  font-size: 0.78rem;
+  color: var(--gray-600);
+}
+
+.rx-detail-meta-line {
+  white-space: nowrap;
+}
+
+.rx-detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--gray-200);
+  flex-wrap: wrap;
+}
+
+.rx-detail-owner-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.rx-detail-stock-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+@media (max-width: 540px) {
+  .rx-detail-minerals {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 /* ---- Tray carousel (D4) ---- */
 
 .rx-carousel-section {

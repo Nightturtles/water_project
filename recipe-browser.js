@@ -162,18 +162,19 @@
     return node;
   }
 
-  function formatMethodRoast(recipe) {
+  function formatMethod(recipe) {
     var method = recipe.brewMethod || "filter";
-    var methodLabel = method === "all" ? "filter · espresso" : method;
+    return method === "all" ? "filter · espresso" : method;
+  }
 
+  function formatRoast(recipe) {
     var roasts = Array.isArray(recipe.roast) ? recipe.roast : [];
-    var roastLabel;
-    if (roasts.length === 0 || roasts.indexOf("all") !== -1) {
-      roastLabel = "any roast";
-    } else {
-      roastLabel = roasts.join(", ");
-    }
-    return methodLabel + " · " + roastLabel;
+    if (roasts.length === 0 || roasts.indexOf("all") !== -1) return "any roast";
+    return roasts.join(", ");
+  }
+
+  function formatMethodRoast(recipe) {
+    return formatMethod(recipe) + " · " + formatRoast(recipe);
   }
 
   // Compact label for a MINERAL_DB id used in stock-formula chips. Falls back
@@ -443,6 +444,21 @@
   function createRecipeCard(recipe, handlers) {
     var card = el("article", "rx-recipe-card");
     card.dataset.slug = recipe.slug || "";
+    card.setAttribute("role", "button");
+    card.setAttribute("tabindex", "0");
+    card.setAttribute("aria-label", "View " + (recipe.label || "recipe") + " details");
+    card.addEventListener("click", function (e) {
+      // Inner buttons stopPropagation, so a bubbled click means the user clicked
+      // the card body itself.
+      openRecipeDetailModal(recipe, handlers);
+    });
+    card.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      // Don't hijack Space/Enter when the focus is on an inner control.
+      if (e.target !== card) return;
+      e.preventDefault();
+      openRecipeDetailModal(recipe, handlers);
+    });
 
     // Header: title + source + bookmark
     var header = el("div", "rx-card-header");
@@ -519,6 +535,308 @@
     return card;
   }
 
+  // --- Recipe detail modal -----------------------------------------------
+
+  // Singleton overlay state. Open/close are reentrant — clicking a second
+  // card while the modal is up just re-renders the body for the new recipe.
+  var detailOverlay = null;
+  var detailDialog = null;
+  var detailCloseBtn = null;
+  var detailScroll = null;
+  var detailPreviousFocus = null;
+  var detailKeyHandler = null;
+  var detailOverlayClickHandler = null;
+
+  function ensureDetailOverlay() {
+    if (detailOverlay) return;
+    detailOverlay = document.createElement("div");
+    detailOverlay.className = "library-picker-overlay rx-detail-overlay";
+    detailOverlay.style.display = "none";
+
+    detailDialog = document.createElement("div");
+    detailDialog.className = "library-picker-dialog rx-detail-dialog";
+    detailDialog.setAttribute("role", "dialog");
+    detailDialog.setAttribute("aria-modal", "true");
+    detailDialog.setAttribute("aria-labelledby", "rx-detail-title");
+
+    detailCloseBtn = document.createElement("button");
+    detailCloseBtn.type = "button";
+    detailCloseBtn.className = "library-picker-close";
+    detailCloseBtn.setAttribute("aria-label", "Close");
+    detailCloseBtn.textContent = "×";
+    detailDialog.appendChild(detailCloseBtn);
+
+    detailScroll = document.createElement("div");
+    detailScroll.className = "rx-detail-scroll";
+    detailDialog.appendChild(detailScroll);
+
+    detailOverlay.appendChild(detailDialog);
+    document.body.appendChild(detailOverlay);
+  }
+
+  // Mineral grid order. Includes all 8 ions, vs. the card's compact Ca/Mg/Alk
+  // triplet. ALK is the calculated/derived value users tune to; the explicit
+  // HCO3 is shown alongside for completeness.
+  var DETAIL_MINERAL_FIELDS = [
+    { field: "calcium", label: "Ca" },
+    { field: "magnesium", label: "Mg" },
+    { field: "alkalinity", label: "Alk" },
+    { field: "sodium", label: "Na" },
+    { field: "potassium", label: "K" },
+    { field: "sulfate", label: "SO₄" },
+    { field: "chloride", label: "Cl" },
+    { field: "bicarbonate", label: "HCO₃" },
+  ];
+
+  function titleCaseCategory(cat) {
+    if (!cat) return "";
+    return String(cat)
+      .split("-")
+      .map(function (s) {
+        return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+      })
+      .join(" ");
+  }
+
+  function buildDetailBody(recipe, handlers) {
+    detailScroll.innerHTML = "";
+
+    // Header: eyebrow + (title + Save) + byline
+    var header = el("div", "rx-detail-header");
+
+    var eyebrowText = titleCaseCategory(recipe.category);
+    if (eyebrowText) header.appendChild(el("p", "rx-detail-eyebrow", eyebrowText));
+
+    var titleRow = el("div", "rx-detail-title-row");
+    var title = el("h2", "rx-detail-title", recipe.label || "");
+    title.id = "rx-detail-title";
+    titleRow.appendChild(title);
+
+    var saved = handlers.isSaved && handlers.isSaved(recipe);
+    var saveBtn = el("button", "rx-detail-save");
+    saveBtn.type = "button";
+    saveBtn.setAttribute("aria-label", saved ? "Unsave recipe" : "Save recipe");
+    saveBtn.setAttribute("aria-pressed", saved ? "true" : "false");
+    if (saved) saveBtn.classList.add("is-active");
+    var saveIcon = el("span", "rx-detail-save-icon", saved ? "★" : "☆");
+    var saveLabel = el("span", "rx-detail-save-label", saved ? "Saved" : "Save");
+    saveBtn.appendChild(saveIcon);
+    saveBtn.appendChild(saveLabel);
+    saveBtn.addEventListener("click", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (handlers.onToggleSave) handlers.onToggleSave(recipe);
+    });
+    if (typeof window.applyAuthGate === "function") {
+      window.applyAuthGate(saveBtn, { reason: "bookmark" });
+    }
+    titleRow.appendChild(saveBtn);
+
+    header.appendChild(titleRow);
+
+    if (recipe.creatorDisplayName) {
+      header.appendChild(el("p", "rx-detail-byline", "by " + recipe.creatorDisplayName));
+    }
+
+    detailScroll.appendChild(header);
+
+    // Description
+    if (recipe.description) {
+      var descSection = el("div", "rx-detail-section");
+      descSection.appendChild(el("div", "rx-detail-section-label", "Description"));
+      descSection.appendChild(el("p", "rx-detail-desc", recipe.description));
+      detailScroll.appendChild(descSection);
+    }
+
+    // Mineral profile (all 8 ions)
+    var mineralSection = el("div", "rx-detail-section");
+    mineralSection.appendChild(el("div", "rx-detail-section-label", "Mineral profile (ppm)"));
+    var mineralGrid = el("div", "rx-detail-minerals");
+    DETAIL_MINERAL_FIELDS.forEach(function (pair) {
+      var item = el("div", "rx-detail-mineral");
+      item.appendChild(el("span", "rx-detail-mineral-label", pair.label));
+      var val = recipe[pair.field];
+      item.appendChild(el("span", "rx-detail-mineral-value", val != null ? String(val) : "-"));
+      mineralGrid.appendChild(item);
+    });
+    mineralSection.appendChild(mineralGrid);
+    detailScroll.appendChild(mineralSection);
+
+    // DIY stock (only when present)
+    var stockText = formatStockFormula(recipe.stockFormula);
+    if (stockText) {
+      var stockSection = el("div", "rx-detail-section");
+      stockSection.appendChild(el("div", "rx-detail-section-label", "DIY stock"));
+      var stockBox = el("div", "rx-detail-stock");
+      stockBox.appendChild(document.createTextNode(stockText));
+      var srcParts = [];
+      if (recipe.stockFormula.source) srcParts.push("Source: " + recipe.stockFormula.source);
+      if (recipe.stockFormula.via) srcParts.push("via " + recipe.stockFormula.via);
+      if (srcParts.length) {
+        stockBox.appendChild(el("span", "rx-detail-stock-source", srcParts.join(" · ")));
+      }
+      stockSection.appendChild(stockBox);
+      detailScroll.appendChild(stockSection);
+    }
+
+    // Footer: flavor tags (left) + stacked method/roast (right)
+    var footer = el("div", "rx-detail-footer");
+    var tagList = el("div", "rx-detail-tags");
+    visibleChipTags(recipe.tags).forEach(function (tag) {
+      tagList.appendChild(el("span", "rx-card-tag", tag));
+    });
+    footer.appendChild(tagList);
+
+    var meta = el("div", "rx-detail-meta");
+    meta.appendChild(el("span", "rx-detail-meta-line", formatMethod(recipe)));
+    meta.appendChild(el("span", "rx-detail-meta-line", formatRoast(recipe)));
+    footer.appendChild(meta);
+    detailScroll.appendChild(footer);
+
+    // Bottom actions: stock action (left) + owner actions (right)
+    var actions = el("div", "rx-detail-actions");
+    var hasAnyAction = false;
+
+    if (
+      recipe.stockFormula &&
+      Array.isArray(recipe.stockFormula.minerals) &&
+      recipe.stockFormula.minerals.length
+    ) {
+      if (handlers.imported) {
+        var importedWrap = el("div", "rx-detail-stock-status");
+        importedWrap.appendChild(el("span", "rx-card-stock-imported", "✓ In your pantry"));
+        var settingsLink = el("a", "rx-card-stock-settings", "Settings");
+        settingsLink.href = "minerals.html#stock-concentrates-summary";
+        importedWrap.appendChild(settingsLink);
+        actions.appendChild(importedWrap);
+      } else {
+        var addBtn = el("button", "preset-btn", "+ Add to my stocks");
+        addBtn.type = "button";
+        addBtn.setAttribute("aria-label", "Add this stock formula to your pantry");
+        addBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (handlers.onAddStock) handlers.onAddStock(recipe);
+        });
+        if (typeof window.applyAuthGate === "function") {
+          window.applyAuthGate(addBtn, { reason: "save-stock" });
+        }
+        actions.appendChild(addBtn);
+      }
+      hasAnyAction = true;
+    } else if (hasDerivableIonProfile(recipe)) {
+      if (handlers.derived) {
+        var derivedWrap = el("div", "rx-detail-stock-status");
+        derivedWrap.appendChild(el("span", "rx-card-stock-imported", "✓ In your pantry"));
+        var derivedSettings = el("a", "rx-card-stock-settings", "Settings");
+        derivedSettings.href = "minerals.html#stock-concentrates-summary";
+        derivedWrap.appendChild(derivedSettings);
+        actions.appendChild(derivedWrap);
+      } else {
+        var deriveBtn = el("button", "preset-btn", "+ Make a stock");
+        deriveBtn.type = "button";
+        deriveBtn.setAttribute(
+          "aria-label",
+          "Generate a stock concentrate from this recipe's targets",
+        );
+        deriveBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          if (handlers.onDeriveStock) handlers.onDeriveStock(recipe);
+        });
+        if (typeof window.applyAuthGate === "function") {
+          window.applyAuthGate(deriveBtn, { reason: "save-stock" });
+        }
+        actions.appendChild(deriveBtn);
+      }
+      hasAnyAction = true;
+    }
+
+    if (handlers.isOwner && handlers.isOwner(recipe)) {
+      var ownerGroup = el("div", "rx-detail-owner-actions");
+      var editBtn = el("button", "rx-card-owner-btn", "Edit");
+      editBtn.type = "button";
+      editBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (handlers.onEditRecipe) handlers.onEditRecipe(recipe);
+      });
+      var unpublishBtn = el("button", "rx-card-owner-btn rx-card-owner-btn-danger", "Unpublish");
+      unpublishBtn.type = "button";
+      unpublishBtn.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (handlers.onUnpublishRecipe) handlers.onUnpublishRecipe(recipe);
+      });
+      ownerGroup.appendChild(editBtn);
+      ownerGroup.appendChild(unpublishBtn);
+      actions.appendChild(ownerGroup);
+      hasAnyAction = true;
+    }
+
+    if (hasAnyAction) detailScroll.appendChild(actions);
+  }
+
+  function openRecipeDetailModal(recipe, handlers) {
+    if (!recipe) return;
+    ensureDetailOverlay();
+    buildDetailBody(recipe, handlers || {});
+
+    detailPreviousFocus = document.activeElement;
+    detailOverlay.style.display = "";
+
+    detailOverlayClickHandler = function (e) {
+      if (e.target === detailOverlay) closeRecipeDetailModal();
+    };
+    detailOverlay.addEventListener("click", detailOverlayClickHandler);
+    detailCloseBtn.addEventListener("click", closeRecipeDetailModal);
+
+    detailKeyHandler = function (e) {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        closeRecipeDetailModal();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      var raw = detailOverlay.querySelectorAll(
+        "button:not([disabled]), [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+      );
+      var focusables = [];
+      for (var i = 0; i < raw.length; i++) {
+        if (raw[i].offsetParent !== null) focusables.push(raw[i]);
+      }
+      if (focusables.length === 0) return;
+      var first = focusables[0];
+      var last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", detailKeyHandler, true);
+
+    if (detailCloseBtn && detailCloseBtn.focus) detailCloseBtn.focus();
+  }
+
+  function closeRecipeDetailModal() {
+    if (!detailOverlay) return;
+    detailOverlay.style.display = "none";
+    if (detailOverlayClickHandler) {
+      detailOverlay.removeEventListener("click", detailOverlayClickHandler);
+      detailOverlayClickHandler = null;
+    }
+    if (detailCloseBtn) detailCloseBtn.removeEventListener("click", closeRecipeDetailModal);
+    if (detailKeyHandler) {
+      document.removeEventListener("keydown", detailKeyHandler, true);
+      detailKeyHandler = null;
+    }
+    if (detailPreviousFocus && detailPreviousFocus.focus) detailPreviousFocus.focus();
+    detailPreviousFocus = null;
+  }
+
   function createTrayCarousel(title, subtitle, recipes, handlers) {
     if (!recipes || recipes.length === 0) return null;
 
@@ -592,6 +910,18 @@
     var section = el("section", "rx-featured-hero");
     section.dataset.tray = "featured";
     if (recipe.slug) section.dataset.slug = recipe.slug;
+    section.setAttribute("role", "button");
+    section.setAttribute("tabindex", "0");
+    section.setAttribute("aria-label", "View " + (recipe.label || "recipe") + " details");
+    section.addEventListener("click", function () {
+      openRecipeDetailModal(recipe, handlers);
+    });
+    section.addEventListener("keydown", function (e) {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      if (e.target !== section) return;
+      e.preventDefault();
+      openRecipeDetailModal(recipe, handlers);
+    });
 
     var eyebrow = el("p", "rx-featured-eyebrow");
     eyebrow.appendChild(el("span", "rx-featured-star", "\u2605"));
