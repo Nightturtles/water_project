@@ -102,6 +102,22 @@ const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
   "sodium-chloride": 360,
 };
 
+// Library-recipe slugs reserved so user-defined stocks can't shadow them.
+const RESERVED_LIBRARY_STOCK_SLUGS = [
+  "rao-perger",
+  "dan-eils",
+  "matt-perger",
+  "rao-2013",
+  "melbourne-2013-wbc",
+  "world-of-coffee-budapest",
+  "bh-simplified-sca-optimal",
+  "bh-default",
+  "bh-simplified-rao-2008",
+  "bh-simplified-hendon",
+  "bh-hard",
+  "bh-hard-af",
+];
+
 // --- Shared ion field list and labels ---
 const ION_FIELDS = [
   "calcium",
@@ -611,6 +627,7 @@ if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     MINERAL_DB,
     MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+    RESERVED_LIBRARY_STOCK_SLUGS,
     ION_FIELDS,
     ION_LABELS,
     SOURCE_PRESETS,

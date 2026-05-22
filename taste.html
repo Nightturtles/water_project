@@ -320,7 +320,7 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
   <script src="supabase-client.js"></script>
   <script src="constants.js"></script>
   <script src="storage.js"></script>
@@ -740,11 +740,21 @@
 
       const rangeWarningsEl = document.getElementById("taste-range-warnings");
       if (rangeWarningsEl) {
+        const inferredSources =
+          typeof inferEffectiveSourcesFromMineralGrams === "function"
+            ? inferEffectiveSourcesFromMineralGrams({}, {
+                calciumSource: getEffectiveCalciumSource(),
+                magnesiumSource: getEffectiveMagnesiumSource(),
+              })
+            : {
+                calciumSource: getEffectiveCalciumSource(),
+                magnesiumSource: getEffectiveMagnesiumSource(),
+              };
         const evaluation = evaluateWaterProfileRanges(adjusted, {
           includeAdvanced: isAdvancedMineralDisplayMode(),
           alkalinitySources: getEffectiveAlkalinitySources(),
-          calciumSource: getEffectiveCalciumSource(),
-          magnesiumSource: getEffectiveMagnesiumSource(),
+          calciumSource: inferredSources.calciumSource,
+          magnesiumSource: inferredSources.magnesiumSource,
           brewMethod: activeBrewMethod
         });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
@@ -895,7 +905,6 @@
         if (existing.creatorDisplayName) profile.creatorDisplayName = existing.creatorDisplayName;
         if (existing.tags) profile.tags = existing.tags;
         if ("creatorUserId" in existing) profile.creatorUserId = existing.creatorUserId;
-        const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(existing) : false;
         profiles[targetKey] = profile;
         if (!saveCustomTargetProfiles(profiles)) {
           showCurrentSaveStatus("Storage full; could not save.", true);
@@ -904,7 +913,7 @@
         renderTastePresets(targetKey);
         showCurrentSaveStatus("Profile updated.", false);
         if (typeof syncNow === "function") syncNow();
-        if (wasCreator && typeof showSharePrompt === "function") showSharePrompt(targetKey);
+        if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(targetKey, profile);
       });
     });
 
@@ -979,6 +988,18 @@
     renderTastePresets(presetFromUrl);
     updateTasteModeUI();
 
+    // If the URL named a preset but the rail rendered a fallback (because
+    // the slug is a library row that hadn't lazy-loaded yet), remember the
+    // request so refreshTasteRail can activate it once the library arrives.
+    let pendingPresetFromUrl = null;
+    if (presetFromUrl) {
+      const activeAfterRender = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activatedKey = activeAfterRender ? activeAfterRender.dataset.preset : null;
+      if (activatedKey !== presetFromUrl) {
+        pendingPresetFromUrl = presetFromUrl;
+      }
+    }
+
     // When the public-recipes fetch resolves, the preset-rail cache is
     // invalidated by library-data.js. Re-render the taste preset rail so
     // Supabase library rows appear without requiring a page navigation.
@@ -988,11 +1009,21 @@
       const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
       const activeKey = activeBtn ? activeBtn.dataset.preset : null;
       const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
-      const preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      // A pending URL-named preset wins over the current activeKey only if
+      // the user hasn't manually picked something else since render — i.e.
+      // activeKey is still the fallback we landed on at init time.
+      let preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      if (pendingPresetFromUrl && merged[pendingPresetFromUrl]) {
+        preserveKey = pendingPresetFromUrl;
+        pendingPresetFromUrl = null;
+      }
       renderTastePresets(preserveKey, { resetSliders: false });
     }
     if (typeof window.onLibraryDataLoaded === "function") {
       window.onLibraryDataLoaded(refreshTasteRail);
+    }
+    if (typeof window.ensurePublicRecipesLoaded === "function") {
+      window.ensurePublicRecipesLoaded();
     }
     // Cross-device sync: re-render when sync.js Realtime pull writes new data.
     window.addEventListener("cw:cloud-data-changed", refreshTasteRail);

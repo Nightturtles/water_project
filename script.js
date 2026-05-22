@@ -54,7 +54,10 @@ let isTargetEditMode = false;
 // --- Debounced calculate (Inefficiency 6) ---
 const debouncedCalculate = debounce(calculate, 120);
 
-const savedVolume = loadVolumePreference("calculator", { value: volumeInput.value, unit: volumeUnit.value });
+const savedVolume = loadVolumePreference("calculator", {
+  value: volumeInput.value,
+  unit: volumeUnit.value,
+});
 volumeInput.value = savedVolume.value;
 volumeUnit.value = savedVolume.unit;
 
@@ -70,7 +73,7 @@ function updateSourceHintLabel(presetName) {
 
 const sourceSection = initSourceWaterSection({
   onChanged: calculate,
-  onActivated: updateSourceHintLabel
+  onActivated: updateSourceHintLabel,
 });
 
 if (typeof initEstimateWaterUI === "function") {
@@ -82,7 +85,8 @@ if (typeof initEstimateWaterUI === "function") {
 function renderResultItems() {
   const alkalinitySources = getEffectiveAlkalinitySources();
   if (alkalinitySources.length === 0) {
-    resultsContainer.innerHTML = '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
+    resultsContainer.innerHTML =
+      '<p class="hint error">You need to select an alkalinity source in <a href="minerals.html">Settings</a></p>';
     lastCalculatedIons = null;
     updateSummaryMetrics({});
     return;
@@ -117,7 +121,7 @@ function renderResultItems() {
     const candidates = [
       ...mgSourceIds.map((id, i) => ({ mineralId: id, order: 0 + i * 0.1 })),
       ...bufferIds.map((id, i) => ({ mineralId: id, order: 1 + i * 0.1 })),
-      ...caSourceIds.map((id, i) => ({ mineralId: id, order: 2 + i * 0.1 }))
+      ...caSourceIds.map((id, i) => ({ mineralId: id, order: 2 + i * 0.1 })),
     ].filter((x) => x && x.mineralId);
 
     for (const c of candidates) {
@@ -186,9 +190,12 @@ function renderResultItems() {
     }
 
     const mineralId = item.kind === "concentrate" ? item.mineralId : item.id;
-    const mineral = item.kind === "concentrate" && typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[item.id]
-      ? { name: BRAND_CONCENTRATES[item.id].name, formula: BRAND_CONCENTRATES[item.id].formula }
-      : MINERAL_DB[mineralId];
+    const mineral =
+      item.kind === "concentrate" &&
+      typeof BRAND_CONCENTRATES !== "undefined" &&
+      BRAND_CONCENTRATES[item.id]
+        ? { name: BRAND_CONCENTRATES[item.id].name, formula: BRAND_CONCENTRATES[item.id].formula }
+        : MINERAL_DB[mineralId];
     if (!mineral) continue;
     const div = document.createElement("div");
     div.className = "result-item";
@@ -284,17 +291,17 @@ function renderTargetReadonlyTags() {
   const tags = [
     ["Ca", Math.round(ca), "mg/L"],
     ["Mg", Math.round(mg), "mg/L"],
-    ["Alkalinity", Math.round(alk), "mg/L as CaCO3"]
+    ["Alkalinity", Math.round(alk), "mg/L as CaCO3"],
   ];
   if (isAdvancedMineralDisplayMode()) {
     tags.push(
       ["K", Math.round(parseFloat(targetK.value) || 0), "mg/L"],
       ["Na", Math.round(parseFloat(targetNa.value) || 0), "mg/L"],
       ["SO\u2084", Math.round(parseFloat(targetSO4.value) || 0), "mg/L"],
-      ["Cl", Math.round(parseFloat(targetCl.value) || 0), "mg/L"]
+      ["Cl", Math.round(parseFloat(targetCl.value) || 0), "mg/L"],
     );
   }
-  tags.forEach(function(t) {
+  tags.forEach(function (t) {
     const span = document.createElement("span");
     span.className = "base-tag";
     span.textContent = t[0] + ": " + t[1] + " " + t[2];
@@ -321,7 +328,9 @@ function updateTargetModeUI() {
 }
 
 function highlightProfile(profileName) {
-  profileButtonsContainer.querySelectorAll(".profile-btn").forEach(b => b.classList.remove("active"));
+  profileButtonsContainer
+    .querySelectorAll(".profile-btn")
+    .forEach((b) => b.classList.remove("active"));
   const btn = profileButtonsContainer.querySelector(`[data-profile="${CSS.escape(profileName)}"]`);
   if (btn) btn.classList.add("active");
   targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
@@ -400,9 +409,8 @@ function activateProfile(profileName) {
   // target-input listener (see above) and survive reload + cross-device sync,
   // so a user who tuned ions on their phone and reopened on their laptop sees
   // the in-progress values, not the saved profile's clean values.
-  const draftIons = typeof loadTargetDraftIonsFor === "function"
-    ? loadTargetDraftIonsFor(profileName)
-    : null;
+  const draftIons =
+    typeof loadTargetDraftIonsFor === "function" ? loadTargetDraftIonsFor(profileName) : null;
   if (draftIons && typeof draftIons === "object") {
     if (Number.isFinite(Number(draftIons.calcium))) targetCa.value = draftIons.calcium;
     if (Number.isFinite(Number(draftIons.magnesium))) targetMg.value = draftIons.magnesium;
@@ -415,9 +423,8 @@ function activateProfile(profileName) {
     if (NON_EDITABLE_TARGET_KEYS.includes(profileName)) {
       // Mirror the non-editable branch of the input handler so the UI reflects
       // the restored draft state on first paint.
-      const label = (profile && profile.label) ? profile.label : profileName;
-      profileDesc.textContent =
-        "Modified " + label + " - name and save to keep these values.";
+      const label = profile && profile.label ? profile.label : profileName;
+      profileDesc.textContent = "Modified " + label + " - name and save to keep these values.";
     }
   }
   // Render profile state after input values are assigned so readonly tags are in sync.
@@ -429,7 +436,7 @@ function activateProfile(profileName) {
       targetSaveBar.style.display = "flex";
     } else {
       targetEditBar.style.display = "flex";
-      const label = (profile && profile.label) ? profile.label : profileName;
+      const label = profile && profile.label ? profile.label : profileName;
       document.getElementById("target-edit-bar-label").textContent = "Editing: " + label;
     }
   }
@@ -440,15 +447,18 @@ function hasUnsavedTargetChanges() {
   if (currentProfile === "custom") return false;
   const profile = getTargetProfileByKey(currentProfile);
   if (!profile) return false;
-  const changed = (parseFloat(targetCa.value) || 0) !== (profile.calcium || 0) ||
-         (parseFloat(targetMg.value) || 0) !== (profile.magnesium || 0) ||
-         (parseFloat(targetAlk.value) || 0) !== (profile.alkalinity || 0);
+  const changed =
+    (parseFloat(targetCa.value) || 0) !== (profile.calcium || 0) ||
+    (parseFloat(targetMg.value) || 0) !== (profile.magnesium || 0) ||
+    (parseFloat(targetAlk.value) || 0) !== (profile.alkalinity || 0);
   if (changed) return true;
   if (isAdvancedMineralDisplayMode()) {
-    return (parseFloat(targetK.value) || 0) !== (profile.potassium || 0) ||
-           (parseFloat(targetNa.value) || 0) !== (profile.sodium || 0) ||
-           (parseFloat(targetSO4.value) || 0) !== (profile.sulfate || 0) ||
-           (parseFloat(targetCl.value) || 0) !== (profile.chloride || 0);
+    return (
+      (parseFloat(targetK.value) || 0) !== (profile.potassium || 0) ||
+      (parseFloat(targetNa.value) || 0) !== (profile.sodium || 0) ||
+      (parseFloat(targetSO4.value) || 0) !== (profile.sulfate || 0) ||
+      (parseFloat(targetCl.value) || 0) !== (profile.chloride || 0)
+    );
   }
   return false;
 }
@@ -553,8 +563,22 @@ function readCurrentTargetIons() {
   };
 }
 
+function getCurrentTargetProfileForCalculations() {
+  const ions = readCurrentTargetIons();
+  return {
+    calcium: ions.calcium,
+    magnesium: ions.magnesium,
+    alkalinity: ions.alkalinity,
+    potassium: ions.potassium,
+    sodium: ions.sodium,
+    sulfate: ions.sulfate,
+    chloride: ions.chloride,
+    bicarbonate: ions.bicarbonate,
+  };
+}
+
 // --- Target input handling (Inefficiency 6: debounced) ---
-[targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach(input => {
+[targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach((input) => {
   input.addEventListener("input", () => {
     renderTargetReadonlyTags();
     if (currentProfile !== "custom") {
@@ -576,10 +600,10 @@ function readCurrentTargetIons() {
         targetEditBar.style.display = "none";
         targetSaveBar.style.display = hasChanges ? "flex" : "none";
         const profile = getTargetProfileByKey(currentProfile);
-        const label = (profile && profile.label) ? profile.label : currentProfile;
+        const label = profile && profile.label ? profile.label : currentProfile;
         profileDesc.textContent = hasChanges
           ? "Modified " + label + " - name and save to keep these values."
-          : ((profile && profile.description) || "");
+          : (profile && profile.description) || "";
       } else {
         targetEditBar.style.display = hasChanges ? "flex" : "none";
         if (hasChanges) {
@@ -603,7 +627,7 @@ function persistTargetProfileEdits() {
   const existing = allProfiles[currentProfile];
   if (!existing) return { saved: false };
   const orig = getTargetProfileByKey(currentProfile);
-  const hasExplicitIons = orig && ION_FIELDS.every(ion => Number.isFinite(Number(orig[ion])));
+  const hasExplicitIons = orig && ION_FIELDS.every((ion) => Number.isFinite(Number(orig[ion])));
   let profile;
   if (hasExplicitIons) {
     const editIons = {
@@ -613,11 +637,11 @@ function persistTargetProfileEdits() {
       sodium: parseFloat(targetNa.value) || 0,
       sulfate: parseFloat(targetSO4.value) || 0,
       chloride: parseFloat(targetCl.value) || 0,
-      bicarbonate: parseFloat(targetHCO3.value) || 0
+      bicarbonate: parseFloat(targetHCO3.value) || 0,
     };
     profile = buildStoredTargetProfile(existing.label, editIons, existing.description || "", {
       alkalinity: parseFloat(targetAlk.value) || 0,
-      brewMethod: activeBrewMethod
+      brewMethod: activeBrewMethod,
     });
   } else {
     profile = {
@@ -631,7 +655,7 @@ function persistTargetProfileEdits() {
       chloride: parseFloat(targetCl.value) || 0,
       bicarbonate: parseFloat(targetHCO3.value) || 0,
       description: existing.description || "",
-      brewMethod: activeBrewMethod
+      brewMethod: activeBrewMethod,
     };
   }
   // Preserve library sharing / attribution fields from the original profile.
@@ -641,7 +665,6 @@ function persistTargetProfileEdits() {
     if (orig.tags) profile.tags = orig.tags;
     if ("creatorUserId" in orig) profile.creatorUserId = orig.creatorUserId;
   }
-  const wasCreator = typeof isUserTheCreator === "function" ? isUserTheCreator(orig || profile) : false;
   const profiles = loadCustomTargetProfiles();
   profiles[currentProfile] = profile;
   if (!saveCustomTargetProfiles(profiles)) {
@@ -653,13 +676,12 @@ function persistTargetProfileEdits() {
   if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
   targetEditBar.style.display = "none";
   if (typeof syncNow === "function") syncNow();
-  return { saved: true, profile: profile, wasCreator: wasCreator };
+  return { saved: true, profile: profile };
 }
 
 // Offer the share prompt after an edit-save, but only to the recipe's creator.
-function offerShareAfterEdit(profileKey, wasCreator) {
-  if (!wasCreator) return;
-  if (typeof showSharePrompt === "function") showSharePrompt(profileKey);
+function offerShareAfterEdit(profileKey, profile) {
+  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(profileKey, profile);
 }
 
 if (targetEditModeBtn) {
@@ -669,8 +691,8 @@ if (targetEditModeBtn) {
     if (isTargetEditMode && hasUnsavedTargetChanges()) {
       const key = currentProfile;
       const result = persistTargetProfileEdits();
-      if (!result.saved) return;  // storage error — stay in edit mode
-      offerShareAfterEdit(key, result.wasCreator);
+      if (!result.saved) return; // storage error — stay in edit mode
+      offerShareAfterEdit(key, result.profile);
     }
     isTargetEditMode = !isTargetEditMode;
     renderProfileButtons();
@@ -685,7 +707,7 @@ targetSaveChangesBtn.addEventListener("click", () => {
     const result = persistTargetProfileEdits();
     if (!result.saved) return;
     renderProfileButtons();
-    offerShareAfterEdit(key, result.wasCreator);
+    offerShareAfterEdit(key, result.profile);
   });
 });
 
@@ -739,11 +761,11 @@ targetSaveBtn.addEventListener("click", () => {
     sodium: parseFloat(targetNa.value) || 0,
     sulfate: parseFloat(targetSO4.value) || 0,
     chloride: parseFloat(targetCl.value) || 0,
-    bicarbonate: parseFloat(targetHCO3.value) || 0
+    bicarbonate: parseFloat(targetHCO3.value) || 0,
   };
   var profile = buildStoredTargetProfile(name, targetIons, "", {
     alkalinity: parseFloat(targetAlk.value) || 0,
-    brewMethod: activeBrewMethod
+    brewMethod: activeBrewMethod,
   });
 
   profiles[key] = profile;
@@ -767,9 +789,7 @@ targetSaveBtn.addEventListener("click", () => {
   if (typeof syncNow === "function") syncNow();
 
   // Offer to share to Recipe Library (only if logged in)
-  if (typeof showSharePrompt === "function") {
-    showSharePrompt(key);
-  }
+  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profile);
 });
 
 const showTargetSaveStatus = createStatusHandler(targetSaveStatus);
@@ -807,9 +827,15 @@ function calculate() {
     if (warningsEl) warningsEl.textContent = "";
     lastCalculatedIons = null;
     const zeroValues = {};
-    alkSources.forEach(id => { zeroValues[id] = 0; });
-    mgSourceIds.forEach(id => { zeroValues[id] = 0; });
-    caSourceIds.forEach(id => { zeroValues[id] = 0; });
+    alkSources.forEach((id) => {
+      zeroValues[id] = 0;
+    });
+    mgSourceIds.forEach((id) => {
+      zeroValues[id] = 0;
+    });
+    caSourceIds.forEach((id) => {
+      zeroValues[id] = 0;
+    });
     updateResultValues(zeroValues);
     if (activeStockIdEarly) updateStockValues({ [activeStockIdEarly]: 0 });
     updateSummaryMetrics({});
@@ -852,9 +878,18 @@ function calculate() {
     updateStockValues({ [activeStockIdEarly]: totalStockGrams });
 
     const stockWarnings = [];
-    if (rawDeltaCa < 0) stockWarnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
-    if (rawDeltaMg < 0) stockWarnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
-    if (rawDeltaAlk < 0) stockWarnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`);
+    if (rawDeltaCa < 0)
+      stockWarnings.push(
+        `Your source water already exceeds the target for Calcium (${sourceWater.calcium || 0} vs ${targetCaMgL} mg/L).`,
+      );
+    if (rawDeltaMg < 0)
+      stockWarnings.push(
+        `Your source water already exceeds the target for Magnesium (${sourceWater.magnesium || 0} vs ${targetMgMgL} mg/L).`,
+      );
+    if (rawDeltaAlk < 0)
+      stockWarnings.push(
+        `Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`,
+      );
     if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
 
     const stockAddedIons = calculateIonPPMs(stockMineralGramsPerL);
@@ -892,7 +927,7 @@ function calculate() {
   const deltaMg = Math.max(0, rawDeltaMg);
   const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
 
-  const targetProfile = getTargetProfileByKey(currentProfile);
+  const targetProfile = getCurrentTargetProfileForCalculations();
   const { caSource, mgSource } = pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg);
 
   // Warn when source exceeds target or when we need a source but none is enabled
@@ -908,36 +943,64 @@ function calculate() {
     if (selectedMinerals.includes(mineralId)) conflictMineralIds.add(mineralId);
   });
   if (conflictMineralIds.size > 0) {
-    warnings.push("You’ve selected both the normal and concentrate version of a mineral. We will default to using the concentrate.");
+    warnings.push(
+      "You’ve selected both the normal and concentrate version of a mineral. We will default to using the concentrate.",
+    );
   }
-  if (rawDeltaCa < 0) warnings.push(`Your source water already exceeds the target for Calcium (${(sourceWater.calcium || 0)} vs ${targetCaMgL} mg/L).`);
-  if (rawDeltaMg < 0) warnings.push(`Your source water already exceeds the target for Magnesium (${(sourceWater.magnesium || 0)} vs ${targetMgMgL} mg/L).`);
-  if (rawDeltaAlk < 0) warnings.push(`Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`);
-  if (!hasMgSource && deltaMg > 0) warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
-  if (!hasCaSource && deltaCa > 0) warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
+  if (rawDeltaCa < 0)
+    warnings.push(
+      `Your source water already exceeds the target for Calcium (${sourceWater.calcium || 0} vs ${targetCaMgL} mg/L).`,
+    );
+  if (rawDeltaMg < 0)
+    warnings.push(
+      `Your source water already exceeds the target for Magnesium (${sourceWater.magnesium || 0} vs ${targetMgMgL} mg/L).`,
+    );
+  if (rawDeltaAlk < 0)
+    warnings.push(
+      `Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`,
+    );
+  if (!hasMgSource && deltaMg > 0)
+    warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
+  if (!hasCaSource && deltaCa > 0)
+    warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
 
   // Compute salt dosing (per L) using auto-selected sources
-  const mgFraction = mgSource ? (MINERAL_DB[mgSource]?.ions?.magnesium || 0) : 0;
-  const caFraction = caSource ? (MINERAL_DB[caSource]?.ions?.calcium || 0) : 0;
-  const mgSaltPerL = mgFraction > 0 ? (deltaMg / mgFraction) / 1000 : 0;
-  const caSaltPerL = caFraction > 0 ? (deltaCa / caFraction) / 1000 : 0;
+  const mgFraction = mgSource ? MINERAL_DB[mgSource]?.ions?.magnesium || 0 : 0;
+  const caFraction = caSource ? MINERAL_DB[caSource]?.ions?.calcium || 0 : 0;
+  const mgSaltPerL = mgFraction > 0 ? deltaMg / mgFraction / 1000 : 0;
+  const caSaltPerL = caFraction > 0 ? deltaCa / caFraction / 1000 : 0;
 
   // Alkalinity: one source or split between baking soda and potassium bicarbonate
-  const alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile);
+  const alkAllocation = splitAlkalinityDelta(
+    alkalinitySources,
+    deltaAlkAsCaCO3,
+    sourceWater,
+    targetProfile,
+  );
   const bufferGramsPerL = {};
   if (alkAllocation["baking-soda"] != null && alkAllocation["baking-soda"] > 0) {
     bufferGramsPerL["baking-soda"] = (alkAllocation["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
   }
-  if (alkAllocation["potassium-bicarbonate"] != null && alkAllocation["potassium-bicarbonate"] > 0) {
-    bufferGramsPerL["potassium-bicarbonate"] = (alkAllocation["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
+  if (
+    alkAllocation["potassium-bicarbonate"] != null &&
+    alkAllocation["potassium-bicarbonate"] > 0
+  ) {
+    bufferGramsPerL["potassium-bicarbonate"] =
+      (alkAllocation["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
   }
 
   // Warn when both alkalinity sources are enabled but the split is entirely one-sided
   if (alkalinitySources.length === 2 && deltaAlkAsCaCO3 > 0) {
-    const usedSources = Object.keys(alkAllocation).filter(function(k) { return alkAllocation[k] > 0; });
+    const usedSources = Object.keys(alkAllocation).filter(function (k) {
+      return alkAllocation[k] > 0;
+    });
     if (usedSources.length === 1) {
       const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
-      warnings.push("Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split: using only " + usedName + ".");
+      warnings.push(
+        "Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split: using only " +
+          usedName +
+          ".",
+      );
     }
   }
 
@@ -953,11 +1016,17 @@ function calculate() {
   if (caSource) resultValues[caSource] = caSaltTotal;
   const mgSourceIds = getEffectiveMagnesiumSources();
   const caSourceIds = getEffectiveCalciumSources();
-  mgSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
-  caSourceIds.forEach((id) => { if (resultValues[id] == null) resultValues[id] = 0; });
+  mgSourceIds.forEach((id) => {
+    if (resultValues[id] == null) resultValues[id] = 0;
+  });
+  caSourceIds.forEach((id) => {
+    if (resultValues[id] == null) resultValues[id] = 0;
+  });
 
   const displayMineralGrams = { ...resultValues };
-  conflictMineralIds.forEach((mineralId) => { displayMineralGrams[mineralId] = 0; });
+  conflictMineralIds.forEach((mineralId) => {
+    displayMineralGrams[mineralId] = 0;
+  });
   updateResultValues(displayMineralGrams);
 
   const concentrateValues = {};
@@ -968,7 +1037,8 @@ function calculate() {
     const gramsPerMl = getConcentrateGramsPerMl(cid);
     if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
       concentrateValues[cid] = 0;
-      if (grams > 0) warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
+      if (grams > 0)
+        warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
       return;
     }
     concentrateValues[cid] = Math.max(0, grams / gramsPerMl);
@@ -1018,7 +1088,7 @@ function calculate() {
     alkalinitySources: alkalinitySourcesForRange,
     calciumSource: caSource,
     magnesiumSource: mgSource,
-    brewMethod: activeBrewMethod
+    brewMethod: activeBrewMethod,
   });
 }
 
@@ -1037,39 +1107,62 @@ function updateSummaryMetrics(payload) {
   document.getElementById("calc-gh").textContent = Number.isFinite(gh) ? Math.round(gh) : 0;
   document.getElementById("calc-kh").textContent = Number.isFinite(kh) ? Math.round(kh) : 0;
   document.getElementById("calc-tds").textContent = Number.isFinite(tds) ? Math.round(tds) : 0;
-  setDeltaText(document.getElementById("calc-delta-gh"), baselineMetrics ? gh - baselineMetrics.gh : null, {
-    metricName: "GH",
-    unit: "mg/L as CaCO3",
-    baselineLabel: "source water"
-  });
-  setDeltaText(document.getElementById("calc-delta-kh"), baselineMetrics ? kh - baselineMetrics.kh : null, {
-    metricName: "KH",
-    unit: "mg/L as CaCO3",
-    baselineLabel: "source water"
-  });
-  setDeltaText(document.getElementById("calc-delta-tds"), baselineMetrics ? tds - baselineMetrics.tds : null, {
-    metricName: "TDS",
-    unit: "mg/L",
-    baselineLabel: "source water"
-  });
+  setDeltaText(
+    document.getElementById("calc-delta-gh"),
+    baselineMetrics ? gh - baselineMetrics.gh : null,
+    {
+      metricName: "GH",
+      unit: "mg/L as CaCO3",
+      baselineLabel: "source water",
+    },
+  );
+  setDeltaText(
+    document.getElementById("calc-delta-kh"),
+    baselineMetrics ? kh - baselineMetrics.kh : null,
+    {
+      metricName: "KH",
+      unit: "mg/L as CaCO3",
+      baselineLabel: "source water",
+    },
+  );
+  setDeltaText(
+    document.getElementById("calc-delta-tds"),
+    baselineMetrics ? tds - baselineMetrics.tds : null,
+    {
+      metricName: "TDS",
+      unit: "mg/L",
+      baselineLabel: "source water",
+    },
+  );
   ION_FIELDS.forEach((ion) => {
     const el = document.getElementById("calc-" + ion);
     if (!el) return;
     const v = ions[ion];
     el.textContent = Number.isFinite(v) ? Math.round(v) : 0;
-    setDeltaText(document.getElementById("calc-delta-" + ion), baselineIons ? v - (baselineIons[ion] || 0) : null, {
-      metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
-      unit: "mg/L",
-      baselineLabel: "source water"
-    });
+    setDeltaText(
+      document.getElementById("calc-delta-" + ion),
+      baselineIons ? v - (baselineIons[ion] || 0) : null,
+      {
+        metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
+        unit: "mg/L",
+        baselineLabel: "source water",
+      },
+    );
   });
-  document.getElementById("calc-so4cl").textContent =
-    advancedMode ? (so4ToCl == null ? "-" : so4ToCl.toFixed(2)) : "-";
-  setDeltaText(document.getElementById("calc-delta-so4cl"), (so4ToCl == null || baselineRatio == null) ? null : (so4ToCl - baselineRatio), {
-    decimals: 2,
-    metricName: "SO4:Cl ratio",
-    baselineLabel: "source water"
-  });
+  document.getElementById("calc-so4cl").textContent = advancedMode
+    ? so4ToCl == null
+      ? "-"
+      : so4ToCl.toFixed(2)
+    : "-";
+  setDeltaText(
+    document.getElementById("calc-delta-so4cl"),
+    !advancedMode || so4ToCl == null || baselineRatio == null ? null : so4ToCl - baselineRatio,
+    {
+      decimals: 2,
+      metricName: "SO4:Cl ratio",
+      baselineLabel: "source water",
+    },
+  );
 
   const rangeWarningsEl = document.getElementById("calc-range-warnings");
   if (rangeWarningsEl) {
@@ -1085,7 +1178,7 @@ function updateSummaryMetrics(payload) {
         alkalinitySources,
         calciumSource,
         magnesiumSource,
-        brewMethod
+        brewMethod,
       });
       renderRangeGuidance(rangeWarningsEl, evaluation.findings);
     } else {
@@ -1129,7 +1222,7 @@ function formatLotusConcentrateValue(ml, unit) {
     return ml.toFixed(3);
   }
   const dropMl = getLotusDropMl();
-  const drops = (Number.isFinite(dropMl) && dropMl > 0) ? Math.round(ml / dropMl) : 0;
+  const drops = Number.isFinite(dropMl) && dropMl > 0 ? Math.round(ml / dropMl) : 0;
   return String(drops);
 }
 
@@ -1142,7 +1235,10 @@ function updateResultValues(valuesByMineral) {
       const nameEl = item.querySelector(".result-name");
       const name = nameEl ? nameEl.textContent : MINERAL_DB[mineralId]?.name || mineralId;
       if (grams > 0) {
-        item.setAttribute("aria-label", name + ", " + formatGrams(grams) + ", auto-selected for this recipe");
+        item.setAttribute(
+          "aria-label",
+          name + ", " + formatGrams(grams) + ", auto-selected for this recipe",
+        );
       } else {
         item.removeAttribute("aria-label");
       }
@@ -1194,7 +1290,9 @@ function formatStockResultDetail(spec) {
 
 function updateConcentrateValues(valuesByConcentrate) {
   for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
-    const item = resultsContainer.querySelector(`[data-concentrate="${CSS.escape(concentrateId)}"]`);
+    const item = resultsContainer.querySelector(
+      `[data-concentrate="${CSS.escape(concentrateId)}"]`,
+    );
     if (!item) continue;
     const valEl = item.querySelector(".result-value");
     const isLotus = concentrateId.startsWith("brand:lotus:");
@@ -1205,7 +1303,7 @@ function updateConcentrateValues(valuesByConcentrate) {
     if (ml > 0) {
       const nameEl = item.querySelector(".result-name");
       const name = nameEl ? nameEl.textContent : concentrateId;
-      const ariaValue = isLotus ? (displayValue + " " + unit) : displayValue;
+      const ariaValue = isLotus ? displayValue + " " + unit : displayValue;
       item.setAttribute("aria-label", name + ", " + ariaValue);
     } else {
       item.removeAttribute("aria-label");
@@ -1236,9 +1334,16 @@ renderResultItems();
 renderProfileButtons();
 updateTargetModeUI();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
+// Saved slug may be a library row whose data hasn't lazy-loaded yet.
+// Falling back and persisting now would permanently overwrite the user's
+// last-selected library profile.  Defer the fallback's persistence until
+// refreshPresetRail() confirms the slug is truly missing after the
+// library load resolves.
+const initialSavedSlug = currentProfile;
+let initialFallbackSlug = null;
 if (!allTargetPresets[currentProfile]) {
-  currentProfile = findFallbackPreset(allTargetPresets);
-  saveTargetPresetName(currentProfile);
+  initialFallbackSlug = findFallbackPreset(allTargetPresets);
+  currentProfile = initialFallbackSlug;
 }
 activateProfile(currentProfile);
 
@@ -1250,6 +1355,20 @@ activateProfile(currentProfile);
 function refreshPresetRail() {
   renderProfileButtons();
   const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
+  // If we fell back at init because the saved slug looked unknown but
+  // it's actually a library row we hadn't loaded yet, and the user
+  // hasn't picked something else in the meantime, restore the saved slug.
+  if (
+    initialFallbackSlug &&
+    initialSavedSlug !== initialFallbackSlug &&
+    currentProfile === initialFallbackSlug &&
+    merged[initialSavedSlug]
+  ) {
+    currentProfile = initialSavedSlug;
+    initialFallbackSlug = null;
+    activateProfile(currentProfile);
+    return;
+  }
   if (!merged[currentProfile]) {
     currentProfile = findFallbackPreset(merged);
     saveTargetPresetName(currentProfile);
@@ -1258,6 +1377,9 @@ function refreshPresetRail() {
 }
 if (typeof window.onLibraryDataLoaded === "function") {
   window.onLibraryDataLoaded(refreshPresetRail);
+}
+if (typeof window.ensurePublicRecipesLoaded === "function") {
+  window.ensurePublicRecipesLoaded();
 }
 // Cross-device sync: re-render when sync.js Realtime pull writes new data.
 window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
@@ -1274,7 +1396,9 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
   function getFocusReturnTarget() {
     const main = document.querySelector("main");
     if (!main) return null;
-    const focusable = main.querySelector("button, [href], input, select, textarea, [tabindex]:not([tabindex=\"-1\"])");
+    const focusable = main.querySelector(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
     return focusable || null;
   }
 
@@ -1300,7 +1424,7 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
     document.body.classList.add("welcome-modal-open");
     closeBtn.focus();
 
-    keyHandler = function(e) {
+    keyHandler = function (e) {
       if (e.key === "Escape") {
         closeWelcomeModal();
         return;
@@ -1327,12 +1451,12 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 })();
 
 // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
-window.addEventListener("storage", function(e) {
-  if (e.key === "cw_selected_minerals" || e.key === "cw_selected_concentrates") {
+if (typeof onStorageKeysChanged === "function") {
+  onStorageKeysChanged(["cw_selected_minerals", "cw_selected_concentrates"], function () {
     renderResultItems();
     calculate();
-  }
-});
+  });
+}
 
 // --- Refresh on bfcache restore ---
 window.addEventListener("pageshow", (e) => {

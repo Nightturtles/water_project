@@ -20,26 +20,6 @@
 (function () {
   "use strict";
 
-  // Library-recipe slugs reserved so user-defined stocks can't shadow them.
-  // Mirrors the list in minerals.html — keep in sync. Adding here is harmless
-  // (false positives uniqueify with a "-2" suffix); omitting is a latent bug
-  // that would let users overwrite a library identity by importing then
-  // re-saving with the same name.
-  var RESERVED_LIBRARY_STOCK_SLUGS = [
-    "rao-perger",
-    "dan-eils",
-    "matt-perger",
-    "rao-2013",
-    "melbourne-2013-wbc",
-    "world-of-coffee-budapest",
-    "bh-simplified-sca-optimal",
-    "bh-default",
-    "bh-simplified-rao-2008",
-    "bh-simplified-hendon",
-    "bh-hard",
-    "bh-hard-af",
-  ];
-
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")

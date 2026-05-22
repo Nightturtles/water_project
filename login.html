@@ -65,7 +65,7 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
   <script src="supabase-client.js"></script>
   <script src="constants.js"></script>
   <script src="storage.js"></script>
@@ -143,10 +143,6 @@
 
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
-      console.log('Form submit fired, mode:', mode);
-      console.log('signUpWithEmail available:', typeof window.signUpWithEmail);
-      console.log('signInWithEmail available:', typeof window.signInWithEmail);
-      console.log('supabaseClient available:', typeof window.supabaseClient);
       const email = emailInput.value.trim();
       const password = passwordInput.value;
       if (!email || (mode !== 'forgot' && !password)) {
@@ -157,16 +153,11 @@
       clearMessages();
       try {
         if (mode === 'signin') {
-          console.log('Calling signInWithEmail...');
-          const { data, error } = await window.signInWithEmail(email, password);
-          console.log('signIn response:', data, error);
+          const { error } = await window.signInWithEmail(email, password);
           if (error) { showError(error.message); return; }
-          if (typeof handleFirstLoginMerge === 'function') await handleFirstLoginMerge();
           window.location.href = 'index.html';
         } else if (mode === 'signup') {
-          console.log('Calling signUpWithEmail...');
-          const { data, error } = await window.signUpWithEmail(email, password);
-          console.log('signUp response:', data, error);
+          const { error } = await window.signUpWithEmail(email, password);
           if (error) { showError(error.message); return; }
           setMode('signin');
           showSuccess('Check your email to confirm your account, then sign in.');

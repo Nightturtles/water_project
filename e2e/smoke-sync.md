@@ -98,4 +98,4 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 ## Known limits
 
 - This runbook does *not* cover the anonymous-to-signed-in migration path. Add a dedicated runbook for that flow if we ship changes there.
-- Recipe-library operations (share, unshare, copy) are out of scope — those belong in `smoke-library.md` if/when we add it.
+- Recipe-library operations (share, unshare, copy) are out of scope for this runbook; see [`smoke-library.spec.ts`](smoke-library.spec.ts) for those checks.

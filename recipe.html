@@ -283,7 +283,7 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
   <script src="supabase-client.js"></script>
   <script src="constants.js"></script>
   <script src="storage.js"></script>
@@ -959,11 +959,21 @@
 
       const rangeWarningsEl = document.getElementById("recipe-range-warnings");
       if (rangeWarningsEl) {
+        const inferredSources =
+          typeof inferEffectiveSourcesFromMineralGrams === "function"
+            ? inferEffectiveSourcesFromMineralGrams(mineralGramsPerLiter, {
+                calciumSource: getEffectiveCalciumSource(),
+                magnesiumSource: getEffectiveMagnesiumSource(),
+              })
+            : {
+                calciumSource: getEffectiveCalciumSource(),
+                magnesiumSource: getEffectiveMagnesiumSource(),
+              };
         const evaluation = evaluateWaterProfileRanges(totalIons, {
           includeAdvanced: isAdvancedMineralDisplayMode(),
           alkalinitySources: getEffectiveAlkalinitySources(),
-          calciumSource: getEffectiveCalciumSource(),
-          magnesiumSource: getEffectiveMagnesiumSource(),
+          calciumSource: inferredSources.calciumSource,
+          magnesiumSource: inferredSources.magnesiumSource,
           brewMethod: activeBrewMethod
         });
         renderRangeGuidance(rangeWarningsEl, evaluation.findings);
@@ -1037,9 +1047,7 @@
       if (typeof syncNow === "function") syncNow();
 
       // Offer to share to Recipe Library (only if logged in)
-      if (typeof showSharePrompt === "function") {
-        showSharePrompt(key);
-      }
+      if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profiles[key]);
     });
 
     if (recipeMakeStockBtn) {
@@ -1089,16 +1097,19 @@
     // in the Settings tab (cw_stock_concentrate_specs) or stock-grams written
     // by another recipe-builder tab wouldn't propagate here until navigation,
     // leaving stale formulas / dispensed grams on screen. ---
-    window.addEventListener("storage", function(e) {
-      if (
-        e.key === "cw_selected_minerals" ||
-        e.key === "cw_selected_concentrates" ||
-        e.key === "cw_stock_concentrate_specs" ||
-        e.key === "cw_recipe_stock_grams"
-      ) {
-        location.reload();
-      }
-    });
+    if (typeof onStorageKeysChanged === "function") {
+      onStorageKeysChanged(
+        [
+          "cw_selected_minerals",
+          "cw_selected_concentrates",
+          "cw_stock_concentrate_specs",
+          "cw_recipe_stock_grams",
+        ],
+        function () {
+          location.reload();
+        },
+      );
+    }
 
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {

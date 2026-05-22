@@ -8,7 +8,7 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 
 ## Stack
 
-- **Frontend**: vanilla JS, no framework, no bundler. ~1,800 LOC spread across root-level `.js` files loaded via `<script>` tags in document order.
+- **Frontend**: vanilla JS, no framework, no bundler. Root-level `.js` files loaded via `<script>` tags in document order.
 - **Backend**: Supabase (Postgres + Auth). Client loaded from CDN via `supabase-client.js`; migrations in `supabase/migrations/`.
 - **Deploy**: push to `main` → GitHub Pages serves the raw files. No build step (yet — see Phase 3 below).
 - **Dev server**: `npx http-server . -c-1`, wired as the `dev` config in `.claude/launch.json` (port 8080).
@@ -17,10 +17,10 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 
 | Area | Files |
 |---|---|
-| Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html` |
+| Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html`, `start.html`, `reset-password.html` |
 | Data | `storage.js` (localStorage + sync hooks), `sync.js` (Supabase push/pull), `supabase-client.js`, `library-data.js` |
 | Calc | `metrics.js`, `constants.js` |
-| UI | `script.js`, `ui-shared.js`, `source-water-ui.js`, `recipe-browser.js`, `theme-init.js` |
+| UI | `script.js`, `ui-shared.js`, `source-water-ui.js`, `recipe-browser.js`, `my-recipes-ui.js`, `library-picker.js`, `stock-editor.js`, `diy-editor.js`, `estimate-water-ui.js`, `theme-init.js` |
 | Styles | `style.css` |
 | Tooling | `.coderabbit.yaml`, `sentry-init.js`, `SENTRY_SETUP.md`, `e2e/` |
 
@@ -30,7 +30,7 @@ A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-syntheti
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.
-- **Phase 3** — Vite + TypeScript strict + Vitest. Not started. Gate on a concrete motivating bug/refactor.
+- **Phase 3** — Vite + TypeScript strict bundling. **Partially started**: Vitest + Playwright + incremental `@ts-check`/ESLint are already in repo; full bundler/module migration is still pending.
 
 ## Verifying changes
 
@@ -38,7 +38,7 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 
 | Change | Tool | Notes |
 |---|---|---|
-| Pure-JS logic (calc, storage serialization) | `node --check <file>` + read the diff carefully | No test runner yet (Phase 3). |
+| Pure-JS logic (calc, storage serialization) | `npm test` + targeted `node --check <file>` when useful | Vitest is available and should be the default first check. |
 | Rendering a single page, single flow | **Claude Preview MCP** (`preview_start` → `dev`, then `preview_eval` / `preview_snapshot` / `preview_console_logs`) | Fast, sandboxed to localhost. First-line default. |
 | Multi-page flows, multi-context sync, creator-gated branches | **Playwright MCP** (`mcp__playwright__*`) | Run a runbook from [e2e/](e2e/README.md). Slower, but supports multiple contexts (two-device sync scenarios). |
 | Production-only issue (e.g. Sentry wiring, CDN deploy) | `curl` the live URL, then check Sentry Feed | Claude Preview can't navigate off localhost. |

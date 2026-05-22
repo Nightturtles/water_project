@@ -32,3 +32,7 @@ See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full
 | index.html golden path + Sentry wiring + FOUC guard | [smoke-index.spec.ts](smoke-index.spec.ts) | [smoke-index.md](smoke-index.md) | Spec is the source of truth; runbook mirrors it as prose |
 | Recipe Builder source-water persist + creator-gated share prompt (Calculator) | [smoke-recipe.spec.ts](smoke-recipe.spec.ts) | [smoke-recipe.md](smoke-recipe.md) | Anonymous tests run for everyone; signed-in `share-prompt` suite requires `.env.test` credentials (skipped without). Spec is the source of truth |
 | Multi-device sync scenarios | [smoke-sync.spec.ts](smoke-sync.spec.ts) | [smoke-sync.md](smoke-sync.md) | Spec is the codified subset (Steps 1, 2, 4, 7, 9 — storage-layer driver); runbook is the full UI walk. Needs two contexts + a test account |
+| Library browse/edit/import/owner flows | [smoke-library.spec.ts](smoke-library.spec.ts) | — | Library page and ownership workflows (spec-only today) |
+| Settings page minerals/concentrates/stock editor flows | [smoke-minerals.spec.ts](smoke-minerals.spec.ts) | — | Settings behaviors and stock workflows (spec-only today) |
+| Estimate-from-ZIP flow | [smoke-estimate-water.spec.ts](smoke-estimate-water.spec.ts) | — | Estimate Water UI and related guards (spec-only today) |
+| Recipe-to-stock handoff | [recipe-make-stock.spec.ts](recipe-make-stock.spec.ts) | — | `+ Make a stock` flow from recipe/calculator into stock editor (spec-only today) |
