@@ -1196,6 +1196,29 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     x = solveNNLS(A, b);
   }
 
+  // Snap each concentrate's solved dose to its prescribed doseGramsPerL when
+  // the relative deviation is ≤ this tolerance. Recipe Concentrates derived
+  // from a target via deriveStockFormulaFromTarget have salt grams rounded
+  // to 0.1g; that rounding shifts the squared-error optimum away from the
+  // prescribed dose by a few percent even when the concentrate is dosed at
+  // the recipe it was made for. Snapping accepts sub-2-mg/L-per-ion residual
+  // increases in exchange for matching the user's mental model that
+  // "concentrate dosed at its prescribed amount = the recipe it was made
+  // for". Significant target mismatches (deviation > tolerance) still flow
+  // through the solver unaltered.
+  const SNAP_TOLERANCE_REL = 0.05;
+  concentrateOrder.forEach((id, k) => {
+    const entry = entries.find((e) => e && e.id === id);
+    if (!entry || !entry.spec) return;
+    const prescribed = Number(entry.spec.doseGramsPerL) || 0;
+    if (prescribed <= 0) return;
+    const solved = x[k] || 0;
+    if (solved <= 0) return;
+    if (Math.abs(solved - prescribed) / prescribed <= SNAP_TOLERANCE_REL) {
+      x[k] = prescribed;
+    }
+  });
+
   /** @type {Record<string, number>} */
   const concentrateGramsPerL = {};
   /** @type {Record<string, number>} */

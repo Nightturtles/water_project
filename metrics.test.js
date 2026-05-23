@@ -624,6 +624,56 @@ describe("solveCalculatorDosing", () => {
     expect(result.mineralGramsPerL["calcium-chloride"]).toBeGreaterThanOrEqual(0);
   });
 
+  test("snaps to prescribed dose when within 5% — handles derive-formula rounding", () => {
+    // deriveStockFormulaFromTarget rounds salt grams to 0.1g; for a small
+    // target like Cafelytic Filter (Ca=4, Mg=10, K=8.65, Cl=34.05, HCO3=13.18)
+    // the rounded concentrate at its prescribed 4 g/L dose overshoots Cl by
+    // ~2 mg/L and undershoots Ca by ~0.18 mg/L. Without snapping, the solver
+    // picks ~3.82 g/L to minimize squared error. With snapping, ~3.82 falls
+    // within 5% of 4 → snaps to exactly 4 g/L (the prescribed dose).
+    const target = {
+      calcium: 4,
+      magnesium: 10,
+      potassium: 8.65,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 34.05,
+      bicarbonate: 13.18,
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(target, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: derived.minerals,
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      target,
+      [{ id: "stock:cafelytic-filter", spec }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:cafelytic-filter"]).toBe(4);
+  });
+
+  test("does NOT snap when solver picks a dose significantly off prescribed", () => {
+    // Two-mineral concentrate scaled at unit bottleMl/doseGramsPerL. Target
+    // has 5× more Ca than the concentrate provides at prescribed dose, so
+    // the solver picks ~5 g/L, which is far above the 1 g/L prescribed and
+    // outside the snap tolerance. Snap stays inactive.
+    const spec = unitCaConcentrate();
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 1363, chloride: 2413 }, // 5× the unit concentrate's per-g/L delivery
+      [{ id: "stock:test", spec }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:test"]).toBeGreaterThan(2);
+    expect(result.concentrateGramsPerL["stock:test"]).not.toBe(1);
+  });
+
   test("identifies the largest residual ion", () => {
     // No dosing options; residual = target. Largest residual is whichever
     // ion has the biggest target value.
