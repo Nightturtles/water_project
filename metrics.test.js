@@ -658,6 +658,55 @@ describe("solveCalculatorDosing", () => {
     expect(result.concentrateGramsPerL["stock:cafelytic-filter"]).toBe(4);
   });
 
+  test("snaps to prescribed when multiple concentrates are enabled but one dominates", () => {
+    // Multi-concentrate case from user feedback: with Cafelytic Filter
+    // target + Cafelytic Filter Recipe Concentrate + two unrelated
+    // concentrates also enabled, NNLS finds a marginally-better fit by
+    // using tiny doses of the unrelated concentrates, which pulls the
+    // dominant Filter concentrate's dose down to ~3.70 g/L (7.5% off
+    // prescribed 4 g/L). The snap should still recognize Filter as
+    // operating at its prescribed dose and zero out the noise.
+    const filterTarget = {
+      calcium: 4,
+      magnesium: 10,
+      potassium: 8.65,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 34.05,
+      bicarbonate: 13.18,
+    };
+    const filterDerived = metrics.deriveStockFormulaFromTarget(filterTarget, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const espressoTarget = {
+      calcium: 13,
+      magnesium: 5.5,
+      potassium: 22.8,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 36.6,
+      bicarbonate: 34.8,
+    };
+    const espressoDerived = metrics.deriveStockFormulaFromTarget(espressoTarget, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const entries = [
+      {
+        id: "stock:filter",
+        spec: { bottleMl: 200, doseGramsPerL: 4, minerals: filterDerived.minerals },
+      },
+      {
+        id: "stock:espresso",
+        spec: { bottleMl: 200, doseGramsPerL: 4, minerals: espressoDerived.minerals },
+      },
+    ];
+    const result = metrics.solveCalculatorDosing(distilled, filterTarget, entries, []);
+    expect(result.concentrateGramsPerL["stock:filter"]).toBe(4);
+    expect(result.concentrateGramsPerL["stock:espresso"]).toBe(0);
+  });
+
   test("does NOT snap when solver picks a dose significantly off prescribed", () => {
     // Two-mineral concentrate scaled at unit bottleMl/doseGramsPerL. Target
     // has 5× more Ca than the concentrate provides at prescribed dose, so

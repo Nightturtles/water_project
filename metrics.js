@@ -1196,17 +1196,46 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     x = solveNNLS(A, b);
   }
 
-  // Snap each concentrate's solved dose to its prescribed doseGramsPerL when
-  // the relative deviation is ≤ this tolerance. Recipe Concentrates derived
-  // from a target via deriveStockFormulaFromTarget have salt grams rounded
-  // to 0.1g; that rounding shifts the squared-error optimum away from the
-  // prescribed dose by a few percent even when the concentrate is dosed at
-  // the recipe it was made for. Snapping accepts sub-2-mg/L-per-ion residual
-  // increases in exchange for matching the user's mental model that
-  // "concentrate dosed at its prescribed amount = the recipe it was made
-  // for". Significant target mismatches (deviation > tolerance) still flow
-  // through the solver unaltered.
-  const SNAP_TOLERANCE_REL = 0.05;
+  // Snap pass: clean up two artifacts of NNLS on derived-from-target
+  // concentrates.
+  //
+  // 1. Recipe Concentrates derived via deriveStockFormulaFromTarget have salt
+  //    grams rounded to 0.1g, which shifts the squared-error optimum away
+  //    from the prescribed dose by a few percent even when the concentrate
+  //    is dosed at the recipe it was made for. When ONE concentrate is
+  //    enabled this looks like "dose returned is 3.82 instead of 4"; when
+  //    MULTIPLE concentrates are enabled the solver finds a marginally-better
+  //    fit by using tiny doses of secondary concentrates, which pulls the
+  //    dominant concentrate further off prescribed (e.g. to 3.70). Both
+  //    cases are mathematically optimal but UX-wrong — the concentrate was
+  //    designed for the recipe.
+  //
+  // 2. After snapping the dominant concentrate(s) to prescribed, very small
+  //    "noise" doses on other concentrates (well below their prescribed
+  //    amounts) should round to zero rather than render as "<0.01 g" hints
+  //    that mislead the user into thinking the side concentrates are part
+  //    of the recipe.
+  //
+  // The two passes are ordered: first zero out the tiny noise doses, then
+  // snap the remaining doses to prescribed when close. This way the
+  // dominant concentrate's snap doesn't have to fight the noise's
+  // contribution to the residual.
+  const SNAP_PRESCRIBED_REL = 0.1; // ≤10% from prescribed → snap to prescribed
+  const SNAP_ZERO_REL = 0.1; // <10% of prescribed → snap to 0 (noise)
+
+  // Pass 1: zero-snap.
+  concentrateOrder.forEach((id, k) => {
+    const entry = entries.find((e) => e && e.id === id);
+    if (!entry || !entry.spec) return;
+    const prescribed = Number(entry.spec.doseGramsPerL) || 0;
+    if (prescribed <= 0) return;
+    const solved = x[k] || 0;
+    if (solved > 0 && solved / prescribed < SNAP_ZERO_REL) {
+      x[k] = 0;
+    }
+  });
+
+  // Pass 2: snap-to-prescribed.
   concentrateOrder.forEach((id, k) => {
     const entry = entries.find((e) => e && e.id === id);
     if (!entry || !entry.spec) return;
@@ -1214,7 +1243,7 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     if (prescribed <= 0) return;
     const solved = x[k] || 0;
     if (solved <= 0) return;
-    if (Math.abs(solved - prescribed) / prescribed <= SNAP_TOLERANCE_REL) {
+    if (Math.abs(solved - prescribed) / prescribed <= SNAP_PRESCRIBED_REL) {
       x[k] = prescribed;
     }
   });
