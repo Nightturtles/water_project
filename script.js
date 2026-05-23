@@ -1489,8 +1489,15 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 //      true after the event fires; check it synchronously and trigger
 //      one refresh right now if so.
 //
-// All paths are idempotent — re-rendering on already-rendered state is fine.
+// Always invalidate cached storage parses before refreshing. The first
+// renderResultItems() at line 1430 ran while anonymous and populated
+// loadStockConcentrateSpecs's memoized cache with {}. storage.js's own
+// cw:auth-changed listener invalidates caches, but it's only effective for
+// paths that traverse cw:auth-changed — not the sync check below, and not
+// cw:auth-state-resolved. Invalidating here unconditionally means every
+// refresh reads through to live storage, picking up auth-gated specs.
 function refreshCalculatorResultsForGatedReads() {
+  if (typeof invalidateAllCaches === "function") invalidateAllCaches();
   renderResultItems();
   calculate();
 }
