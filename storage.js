@@ -919,28 +919,64 @@ function getStockMineralIds(spec) {
 }
 
 /**
- * Returns the first "stock:<slug>" id in `concentrateIds`, or null if none
- * is enabled. v1 single-stock-active rule: the calculator and recipe builder
- * both dispense from this one stock and ignore any others. Centralized here
- * so future multi-stock work touches one helper instead of three call sites.
+ * Returns every "stock:<slug>" id in `concentrateIds`, preserving order.
+ * Multi-Recipe-Concentrate (PR #v2-B3): a recipe can have any number of
+ * Recipe Concentrates active simultaneously; the calculator and recipe
+ * builder both sum their contributions. Filters non-strings and
+ * non-"stock:" prefixes defensively.
+ * @param {unknown} concentrateIds
+ * @returns {string[]}
+ */
+function getActiveStockIds(concentrateIds) {
+  if (!Array.isArray(concentrateIds)) return [];
+  /** @type {string[]} */
+  const out = [];
+  for (const id of concentrateIds) {
+    if (typeof id === "string" && id.startsWith("stock:")) out.push(id);
+  }
+  return out;
+}
+
+/**
+ * Singular shim — returns the first active "stock:<slug>" id, or null. Kept
+ * for the small number of call sites that legitimately want a representative
+ * id (e.g. legacy code paths still being migrated). New code should use
+ * getActiveStockIds and iterate.
  * @param {unknown} concentrateIds
  * @returns {string | null}
  */
 function getActiveStockId(concentrateIds) {
-  if (!Array.isArray(concentrateIds)) return null;
-  for (const id of concentrateIds) {
-    if (typeof id === "string" && id.startsWith("stock:")) return id;
-  }
-  return null;
+  return getActiveStockIds(concentrateIds)[0] || null;
 }
 
 /**
- * Enforces the single-stock-active rule when writing to cw_selected_concentrates:
- * strips any existing "stock:*" entries and (if stockId is non-null) appends
- * the given one. Pass null to clear the active stock. Mirrors the radio-like
- * checkbox behavior in minerals.html's Recipe Concentrates section so any code
- * path that activates a stock (selector toggle, new-stock save, auto-enable
- * after derive/import) ends in the same canonical state.
+ * Toggle a single "stock:<slug>" id in cw_selected_concentrates without
+ * disturbing other active stocks. The new canonical write helper now that
+ * multiple Recipe Concentrates can be active at once. Pass enabled=false to
+ * remove. Idempotent: enabling an already-enabled stock or disabling a
+ * not-enabled stock is a no-op (no localStorage write, no sync trigger).
+ * @param {string} stockId — must start with "stock:"
+ * @param {boolean} enabled
+ */
+function setStockEnabled(stockId, enabled) {
+  if (typeof stockId !== "string" || !stockId.startsWith("stock:")) return;
+  const ids = loadSelectedConcentrates();
+  const already = ids.indexOf(stockId) !== -1;
+  if (enabled && already) return;
+  if (!enabled && !already) return;
+  if (enabled) {
+    saveSelectedConcentrates(ids.concat([stockId]));
+  } else {
+    saveSelectedConcentrates(ids.filter((id) => id !== stockId));
+  }
+}
+
+/**
+ * Deprecated v1 single-active write helper. Strips every other "stock:*" id
+ * before adding `stockId`. Kept as a compatibility shim for any external
+ * caller that hasn't migrated; new code should use setStockEnabled. Pass
+ * null to clear all active stocks.
+ * @deprecated use setStockEnabled instead
  * @param {string | null | undefined} stockId
  */
 function writeActiveStockId(stockId) {
@@ -952,15 +988,32 @@ function writeActiveStockId(stockId) {
 }
 
 /**
- * Convenience wrapper around getActiveStockId + getStockSpec — returns the
- * resolved spec for the first enabled stock, or null if none enabled or the
- * spec was deleted (orphan id).
+ * Resolves every active "stock:<slug>" id to its spec via getStockSpec.
+ * Filters out orphan ids (where the spec was deleted but the selection still
+ * references it) so callers get a clean list of usable specs each paired
+ * with its id. Preserves the order of getActiveStockIds.
+ * @param {unknown} concentrateIds
+ * @returns {Array<{ id: string, spec: StockConcentrateSpec }>}
+ */
+function getActiveStockSpecs(concentrateIds) {
+  /** @type {Array<{ id: string, spec: StockConcentrateSpec }>} */
+  const out = [];
+  for (const id of getActiveStockIds(concentrateIds)) {
+    const spec = getStockSpec(id);
+    if (spec) out.push({ id, spec });
+  }
+  return out;
+}
+
+/**
+ * Singular shim — returns the first resolved active stock spec, or null.
+ * New code should use getActiveStockSpecs and iterate.
  * @param {unknown} concentrateIds
  * @returns {StockConcentrateSpec | null}
  */
 function getActiveStockSpec(concentrateIds) {
-  const id = getActiveStockId(concentrateIds);
-  return id ? getStockSpec(id) : null;
+  const first = getActiveStockSpecs(concentrateIds)[0];
+  return first ? first.spec : null;
 }
 
 /**
@@ -1614,7 +1667,10 @@ if (typeof module !== "undefined" && module.exports) {
     getStockSpec,
     getStockMineralIds,
     getActiveStockId,
+    getActiveStockIds,
     getActiveStockSpec,
+    getActiveStockSpecs,
+    setStockEnabled,
     computeStockMineralGramsPerL,
     importLibraryStockToPantry,
     loadSelectedConcentrates,

@@ -104,7 +104,7 @@
     saveSelectedConcentrates(others.concat(brandIds));
   }
 
-  // writeActiveStockId lives in storage.js (top-level export) so the
+  // setStockEnabled lives in storage.js (top-level export) so the
   // stock-editor modal's autoEnable path and the selector's change handler
   // share one helper. Keeping a local shim would silently desync the two.
 
@@ -214,7 +214,8 @@
     targetEl.innerHTML = "";
     var hint = document.createElement("p");
     hint.className = "hint";
-    hint.textContent = "Multi-mineral concentrates. Only one can be active at a time.";
+    hint.textContent =
+      "Multi-mineral concentrates. Enable any number; the recipe builder and calculator sum each enabled concentrate's contribution.";
     targetEl.appendChild(hint);
 
     var newBtn = document.createElement("button");
@@ -247,7 +248,9 @@
     }
 
     var selected = loadSelectedConcentrates();
-    var activeId = typeof getActiveStockId === "function" ? getActiveStockId(selected) : null;
+    var activeIds = typeof getActiveStockIds === "function" ? getActiveStockIds(selected) : [];
+    var activeIdSet = {};
+    for (var k = 0; k < activeIds.length; k++) activeIdSet[activeIds[k]] = true;
 
     var list = document.createElement("div");
     list.className = "mineral-list mineral-selector-sublist";
@@ -257,7 +260,7 @@
       var concId = "stock:" + slug;
       var spec = specs[slug] || {};
       var label = (spec && (spec.label || spec.name)) || slug;
-      var isActive = concId === activeId;
+      var isActive = !!activeIdSet[concId];
 
       var item = document.createElement("div");
       item.className = "mineral-item has-edit-actions" + (isActive ? " selected" : "");
@@ -317,18 +320,18 @@
     list.addEventListener("change", function (e) {
       if (!e.target || e.target.type !== "checkbox") return;
       var clicked = e.target;
-      var nextActive = clicked.checked ? clicked.value : null;
-      // Enforce at-most-one: uncheck all others, mark only the clicked one
-      // (when checked) as selected in the DOM.
-      var allInputs = list.querySelectorAll("input[type='checkbox']");
-      for (var i = 0; i < allInputs.length; i++) {
-        var cb = allInputs[i];
-        if (cb !== clicked) cb.checked = false;
-        var rowItem = cb.closest(".mineral-item");
-        if (rowItem) rowItem.classList.toggle("selected", cb.checked);
-      }
-      writeActiveStockId(nextActive);
-      dispatchChanged({ scope: "concentrates", category: "stock", activeId: nextActive });
+      // Multi-Recipe-Concentrate: each checkbox toggles its own stock
+      // independently. Update only this row's selected class; other rows
+      // keep their state.
+      var rowItem = clicked.closest(".mineral-item");
+      if (rowItem) rowItem.classList.toggle("selected", clicked.checked);
+      setStockEnabled(clicked.value, clicked.checked);
+      dispatchChanged({
+        scope: "concentrates",
+        category: "stock",
+        toggledId: clicked.value,
+        enabled: clicked.checked,
+      });
     });
 
     list.addEventListener("click", function (e) {

@@ -421,7 +421,9 @@
     saveStockConcentrateSpecs(specs);
 
     if (session.autoEnable) {
-      writeActiveStockId("stock:" + finalSlug);
+      // Multi-Recipe-Concentrate: enabling a newly-created stock is additive;
+      // any other stocks the user had enabled stay enabled.
+      setStockEnabled("stock:" + finalSlug, true);
     }
 
     var savedSlug = finalSlug;

@@ -50,7 +50,7 @@
       <button type="button" class="card-collapsible-summary" id="stock-concentrates-summary" aria-expanded="true" aria-controls="stock-concentrates-content">
         <span class="card-collapsible-title">Recipe Concentrates</span>
       </button>
-      <p class="hint">Multi-mineral concentrates: dissolve several salts into one bottle, then dose by grams of concentrate per liter of brew water. Only one concentrate can be active at a time; selecting another switches the calculator over.</p>
+      <p class="hint">Multi-mineral concentrates: dissolve several salts into one bottle, then dose by grams of concentrate per liter of brew water. Enable any number; each will appear in the recipe builder and the calculator sums their contributions.</p>
       <div class="card-collapsible-content" id="stock-concentrates-content">
         <div class="stock-new-form" id="stock-new-form" hidden>
           <!-- Populated by JS when an editor is opened via "+ Create Concentrate" in this modal or on a library recipe card. -->
@@ -537,66 +537,20 @@
       return div;
     }
 
-    // Single-stock-active rule (PR #60): the calculator and recipe builder
-    // dispense from the FIRST stock:* id in cw_selected_concentrates and ignore
-    // any others. This Settings UI used to allow multiple stock checkboxes to
-    // be checked at once, which silently desynced from the calculator. Two
-    // mitigations:
-    //   1. Normalize on render — if pre-rule state has multiple stock:* ids,
-    //      keep just the first (matches getActiveStockId resolution).
-    //   2. Make the checkboxes radio-like — checking one auto-unchecks any
-    //      currently-checked stock (see the change handler below).
-    // updateStockLockState adds a visual cue (the .stock-other-active class)
-    // to non-active stocks when one is active, so users see at a glance which
-    // stock is dispensing.
-    function normalizeStockSelectionForSingleActive() {
-      const ids = loadSelectedConcentrates();
-      const stockIds = ids.filter(
-        (id) => typeof id === "string" && id.startsWith("stock:"),
-      );
-      if (stockIds.length <= 1) return;
-      const nonStock = ids.filter(
-        (id) => typeof id !== "string" || !id.startsWith("stock:"),
-      );
-      saveSelectedConcentrates(nonStock.concat([stockIds[0]]));
-    }
-
+    // Multi-Recipe-Concentrate: any number of stocks can be enabled
+    // simultaneously, and the calculator / recipe builder sum each enabled
+    // stock's contribution. Was single-active in v1 (radio-like checkboxes,
+    // .stock-other-active muting); both behaviors were removed in v2.
+    // updateStockLockState is retained as a hook for any future visual state
+    // tied to which stocks are enabled — currently a no-op.
     function updateStockLockState() {
-      if (!stockListEl) return;
-      const selected = loadSelectedConcentrates();
-      const items = stockListEl.querySelectorAll(".stock-concentrate-item");
-      let activeSlug = null;
-      for (const id of selected) {
-        if (typeof id === "string" && id.startsWith("stock:")) {
-          activeSlug = id.slice(6);
-          break;
-        }
-      }
-      // Guard against stale state — if the active slug doesn't correspond to a
-      // rendered row (e.g. user deleted the spec while the id lingered in
-      // cw_selected_concentrates, or cross-device sync brought in an unknown
-      // slug), treat it as "no active stock" so we don't incorrectly mute every
-      // visible row.
-      if (activeSlug) {
-        let found = false;
-        items.forEach((item) => {
-          if (item.dataset.stockSlug === activeSlug) found = true;
-        });
-        if (!found) activeSlug = null;
-      }
-      items.forEach((item) => {
-        const slug = item.dataset.stockSlug;
-        if (activeSlug && slug !== activeSlug) {
-          item.classList.add("stock-other-active");
-        } else {
-          item.classList.remove("stock-other-active");
-        }
-      });
+      // Intentionally empty: every enabled stock is now active in its own
+      // right; no row should be muted relative to another. Kept for future
+      // extension and so the existing call sites don't need refactoring.
     }
 
     function renderStockConcentrates() {
       if (!stockListEl) return;
-      normalizeStockSelectionForSingleActive();
       stockListEl.innerHTML = "";
       const specs = loadStockConcentrateSpecs();
       const slugs = Object.keys(specs);
@@ -661,30 +615,11 @@
         if (target.type === "checkbox" && target.closest(".concentrate-label")) {
           const item = target.closest(".stock-concentrate-item");
           if (!item) return;
-          // Single-stock-active rule: when the user checks a stock, uncheck
-          // any other currently-checked stock so the saved selection always
-          // contains at most one stock:* id (matches getActiveStockId in
-          // storage.js). Unchecking is unconstrained.
-          if (target.checked) {
-            stockListEl
-              .querySelectorAll('.stock-concentrate-item input[type="checkbox"]:checked')
-              .forEach((cb) => {
-                if (cb !== target) {
-                  cb.checked = false;
-                  const otherItem = cb.closest(".stock-concentrate-item");
-                  if (otherItem) otherItem.classList.remove("selected");
-                }
-              });
-          }
+          // Multi-Recipe-Concentrate: each checkbox toggles its own stock
+          // independently. The recipe builder and calculator sum every
+          // enabled stock's contribution.
           item.classList.toggle("selected", target.checked);
-          const checked = stockListEl.querySelectorAll(
-            '.stock-concentrate-item input[type="checkbox"]:checked',
-          );
-          const stockIds = Array.from(checked).map((cb) => cb.value);
-          const existing = loadSelectedConcentrates().filter(
-            (id) => typeof id === "string" && !id.startsWith("stock:"),
-          );
-          saveSelectedConcentrates(existing.concat(stockIds));
+          setStockEnabled(target.value, target.checked);
           updateStockLockState();
           showSaved();
           return;

@@ -93,23 +93,24 @@ function renderResultItems() {
   const selectedMinerals = loadSelectedMinerals();
   const selectedConcentrates = loadValidSelectedConcentrates();
 
-  // Active stock: dispenses a fixed-ratio multi-mineral mix at a prescribed
-  // dose. v1 rule is single-stock-per-recipe and stock-only output — when an
-  // enabled stock is found, suppress every per-mineral / single-mineral
-  // concentrate row so the user sees just the stock dispensing line. Mixed
-  // stock + supplemental dosing is deferred to a follow-up; revisit if users
-  // ask for it.
-  const activeStockId = getActiveStockId(selectedConcentrates);
-  const activeStockSpec = getActiveStockSpec(selectedConcentrates);
+  // Active Recipe Concentrates: each dispenses a fixed-ratio multi-mineral mix
+  // at its prescribed dose. When any are enabled, the calculator suppresses
+  // per-mineral / single-mineral concentrate rows and shows one row per
+  // enabled concentrate; their ion contributions are summed. Mixed
+  // concentrate + supplemental dosing is deferred to PR 3; revisit if users
+  // ask for gap-fill suggestions.
+  const activeStockEntries = getActiveStockSpecs(selectedConcentrates);
 
   const toShow = [];
-  if (activeStockSpec) {
-    toShow.push({
-      kind: "stock",
-      id: activeStockId,
-      label: activeStockSpec.label || activeStockId,
-      spec: activeStockSpec,
-      order: -1,
+  if (activeStockEntries.length > 0) {
+    activeStockEntries.forEach((entry, idx) => {
+      toShow.push({
+        kind: "stock",
+        id: entry.id,
+        label: entry.spec.label || entry.id,
+        spec: entry.spec,
+        order: -1 + idx * 0.001,
+      });
     });
   } else {
     const mgSourceIds = getEffectiveMagnesiumSources();
@@ -171,7 +172,7 @@ function renderResultItems() {
       nameSpan.textContent = item.label;
       const stockBadge = document.createElement("span");
       stockBadge.className = "badge badge-concentrate";
-      stockBadge.textContent = "STOCK";
+      stockBadge.textContent = "CONCENTRATE";
       nameSpan.appendChild(stockBadge);
       const detailSpan = document.createElement("span");
       detailSpan.className = "result-detail";
@@ -740,8 +741,7 @@ function calculate() {
   }
 
   const selectedConcentratesEarly = loadValidSelectedConcentrates();
-  const activeStockIdEarly = getActiveStockId(selectedConcentratesEarly);
-  const activeStockSpecEarly = getActiveStockSpec(selectedConcentratesEarly);
+  const activeStockEntriesEarly = getActiveStockSpecs(selectedConcentratesEarly);
 
   // Guard against divide-by-zero / nonsense volume
   if (!volumeL || volumeL <= 0) {
@@ -761,7 +761,11 @@ function calculate() {
       zeroValues[id] = 0;
     });
     updateResultValues(zeroValues);
-    if (activeStockIdEarly) updateStockValues({ [activeStockIdEarly]: 0 });
+    if (activeStockEntriesEarly.length > 0) {
+      const zeroStockValues = {};
+      for (const { id } of activeStockEntriesEarly) zeroStockValues[id] = 0;
+      updateStockValues(zeroStockValues);
+    }
     updateSummaryMetrics({});
     return;
   }
@@ -790,16 +794,25 @@ function calculate() {
   const rawDeltaMg = targetMgMgL - (sourceWater.magnesium || 0);
   const rawDeltaAlk = targetAlkAsCaCO3 - sourceAlkAsCaCO3;
 
-  // Active stock: bypass the per-mineral picker entirely. The stock dispenses
-  // a fixed-ratio mix at a prescribed dose; we forward-compute resulting ions
-  // and let the user compare to target visually. Source-exceeds-target
-  // warnings still apply because the user can't reduce ion concentrations by
-  // dosing more stock.
-  if (activeStockSpecEarly) {
-    const stockMineralGramsPerL = computeStockMineralGramsPerL(activeStockSpecEarly);
-    const dosePerL = Number(activeStockSpecEarly.doseGramsPerL) || 0;
-    const totalStockGrams = dosePerL * volumeL;
-    updateStockValues({ [activeStockIdEarly]: totalStockGrams });
+  // Active Recipe Concentrates: bypass the per-mineral picker entirely. Each
+  // concentrate dispenses a fixed-ratio mix at its prescribed dose; we
+  // forward-compute the summed ion contribution and let the user compare to
+  // target visually. Source-exceeds-target warnings still apply because the
+  // user can't reduce ion concentrations by dosing more concentrate.
+  if (activeStockEntriesEarly.length > 0) {
+    /** @type {Record<string, number>} */
+    const combinedStockMineralGramsPerL = {};
+    /** @type {Record<string, number>} */
+    const stockTotalsByStockId = {};
+    for (const { id, spec } of activeStockEntriesEarly) {
+      const perL = computeStockMineralGramsPerL(spec);
+      for (const mid of Object.keys(perL)) {
+        combinedStockMineralGramsPerL[mid] = (combinedStockMineralGramsPerL[mid] || 0) + perL[mid];
+      }
+      const dosePerL = Number(spec.doseGramsPerL) || 0;
+      stockTotalsByStockId[id] = dosePerL * volumeL;
+    }
+    updateStockValues(stockTotalsByStockId);
 
     const stockWarnings = [];
     if (rawDeltaCa < 0)
@@ -816,7 +829,7 @@ function calculate() {
       );
     if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
 
-    const stockAddedIons = calculateIonPPMs(stockMineralGramsPerL);
+    const stockAddedIons = calculateIonPPMs(combinedStockMineralGramsPerL);
     const stockFinalIons = {};
     ION_FIELDS.forEach((ion) => {
       stockFinalIons[ion] = (sourceWater[ion] || 0) + (stockAddedIons[ion] || 0);

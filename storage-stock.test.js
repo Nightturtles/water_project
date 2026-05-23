@@ -51,6 +51,11 @@ const {
   saveSelectedConcentrates,
   getAvailableMineralIds,
   invalidateAllCaches,
+  getActiveStockId,
+  getActiveStockIds,
+  getActiveStockSpec,
+  getActiveStockSpecs,
+  setStockEnabled,
 } = storage;
 
 function resetState() {
@@ -551,5 +556,111 @@ describe("getAvailableMineralIds — stock concentrate enumeration", () => {
     expect(() => getAvailableMineralIds()).not.toThrow();
     const ids = getAvailableMineralIds();
     expect(Array.isArray(ids)).toBe(true);
+  });
+});
+
+describe("getActiveStockIds / getActiveStockSpecs (multi-active)", () => {
+  test("returns all stock:* ids in declaration order", () => {
+    expect(
+      getActiveStockIds(["diy:calcium-chloride", "stock:rao", "brand:lotus:1", "stock:eils"]),
+    ).toEqual(["stock:rao", "stock:eils"]);
+  });
+
+  test("returns [] for non-array or non-stock inputs", () => {
+    expect(getActiveStockIds(null)).toEqual([]);
+    expect(getActiveStockIds(undefined)).toEqual([]);
+    expect(getActiveStockIds("stock:rao")).toEqual([]);
+    expect(getActiveStockIds(["diy:calcium-chloride", "brand:lotus:1"])).toEqual([]);
+  });
+
+  test("singular shim getActiveStockId returns first element or null", () => {
+    expect(getActiveStockId(["stock:rao", "stock:eils"])).toBe("stock:rao");
+    expect(getActiveStockId(["diy:calcium-chloride"])).toBe(null);
+    expect(getActiveStockId([])).toBe(null);
+  });
+
+  test("getActiveStockSpecs resolves each stock id to its spec, preserving order", () => {
+    saveStockConcentrateSpecs({
+      rao: {
+        label: "Rao",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+      },
+      eils: {
+        label: "Eils",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "calcium-chloride", grams: 3 }],
+      },
+    });
+    const resolved = getActiveStockSpecs(["stock:rao", "stock:eils"]);
+    expect(resolved.map((r) => r.id)).toEqual(["stock:rao", "stock:eils"]);
+    expect(resolved.map((r) => r.spec.label)).toEqual(["Rao", "Eils"]);
+  });
+
+  test("getActiveStockSpecs filters orphan ids (spec missing)", () => {
+    saveStockConcentrateSpecs({
+      rao: {
+        label: "Rao",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+      },
+    });
+    const resolved = getActiveStockSpecs(["stock:rao", "stock:deleted"]);
+    expect(resolved.map((r) => r.id)).toEqual(["stock:rao"]);
+  });
+
+  test("singular shim getActiveStockSpec returns first resolved spec or null", () => {
+    saveStockConcentrateSpecs({
+      rao: {
+        label: "Rao",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+      },
+    });
+    expect(getActiveStockSpec(["stock:rao"])).toEqual(expect.objectContaining({ label: "Rao" }));
+    expect(getActiveStockSpec(["stock:deleted"])).toBe(null);
+    expect(getActiveStockSpec([])).toBe(null);
+  });
+});
+
+describe("setStockEnabled", () => {
+  test("enables a stock without touching other selections", () => {
+    saveSelectedConcentrates(["diy:calcium-chloride", "stock:rao"]);
+    setStockEnabled("stock:eils", true);
+    expect(loadSelectedConcentrates()).toEqual(
+      expect.arrayContaining(["diy:calcium-chloride", "stock:rao", "stock:eils"]),
+    );
+  });
+
+  test("disables a single stock without touching other selections", () => {
+    saveSelectedConcentrates(["diy:calcium-chloride", "stock:rao", "stock:eils"]);
+    setStockEnabled("stock:rao", false);
+    expect(loadSelectedConcentrates().sort()).toEqual(
+      ["diy:calcium-chloride", "stock:eils"].sort(),
+    );
+  });
+
+  test("is idempotent — enabling an already-enabled stock is a no-op", () => {
+    saveSelectedConcentrates(["stock:rao"]);
+    setStockEnabled("stock:rao", true);
+    expect(loadSelectedConcentrates()).toEqual(["stock:rao"]);
+  });
+
+  test("is idempotent — disabling a not-enabled stock is a no-op", () => {
+    saveSelectedConcentrates(["stock:rao"]);
+    setStockEnabled("stock:eils", false);
+    expect(loadSelectedConcentrates()).toEqual(["stock:rao"]);
+  });
+
+  test("rejects non-stock ids defensively", () => {
+    saveSelectedConcentrates(["diy:calcium-chloride"]);
+    setStockEnabled("diy:calcium-chloride", false);
+    expect(loadSelectedConcentrates()).toEqual(["diy:calcium-chloride"]);
+    setStockEnabled("rao", true);
+    expect(loadSelectedConcentrates()).toEqual(["diy:calcium-chloride"]);
   });
 });
