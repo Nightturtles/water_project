@@ -1467,20 +1467,29 @@ if (typeof window.ensurePublicRecipesLoaded === "function") {
 window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 
 // Stock concentrate specs are auth-gated via storage.js's _getGated helper.
-// renderResultItems() runs once on initial page load, before supabase-client.js
-// has resolved getSession() — at that point _isLoggedInSync() returns false,
-// loadStockConcentrateSpecs() returns {}, and getActiveStockSpecs returns []
-// even when the user has stocks enabled. The calculator then falls into the
-// non-stock branch and renders individual mineral rows instead of stock +
-// supplements rows. The Edit Minerals modal showing stocks correctly is a
-// red herring — that modal re-renders on cw:auth-changed; the calculator's
-// result rows used to listen only to cw_selected_concentrates storage events,
-// so deselecting/reselecting a stock fixed it but a plain refresh did not.
+// renderResultItems() runs once on initial page load synchronously, before
+// supabase-client.js has resolved getSession() — at that point
+// _isLoggedInSync() returns false, loadStockConcentrateSpecs() returns {},
+// and getActiveStockSpecs returns [] even when the user has stocks enabled.
+// The calculator then falls into the non-stock branch and renders individual
+// mineral rows instead of stock + supplements rows.
 //
-// Listen for both the one-shot auth-resolved event (initial getSession()
-// settles) and the recurring auth-changed event (sign-in/out, token refresh)
-// plus cloud-data-changed (Realtime push from another device). All three
-// are idempotent — re-rendering on already-rendered state is fine.
+// Two cases to handle:
+//
+//  (a) Auth resolves AFTER this script finishes — we want to re-render when
+//      the events fire. cw:auth-state-resolved is the one-shot signal that
+//      the initial getSession() settled; cw:auth-changed covers later
+//      sign-in/out and token refresh; cw:cloud-data-changed catches Realtime
+//      pushes from another device.
+//
+//  (b) Auth was already resolved BEFORE this script finished (cached
+//      session, fast getSession). The events fired before we could attach
+//      listeners, so the addEventListener calls below would silently
+//      not re-render. supabase-client.js sets window._authStateResolved =
+//      true after the event fires; check it synchronously and trigger
+//      one refresh right now if so.
+//
+// All paths are idempotent — re-rendering on already-rendered state is fine.
 function refreshCalculatorResultsForGatedReads() {
   renderResultItems();
   calculate();
@@ -1488,6 +1497,9 @@ function refreshCalculatorResultsForGatedReads() {
 document.addEventListener("cw:auth-state-resolved", refreshCalculatorResultsForGatedReads);
 document.addEventListener("cw:auth-changed", refreshCalculatorResultsForGatedReads);
 window.addEventListener("cw:cloud-data-changed", refreshCalculatorResultsForGatedReads);
+if (window._authStateResolved) {
+  refreshCalculatorResultsForGatedReads();
+}
 
 // --- Welcome modal (one-time, Calculator page only) ---
 (function initWelcomeModal() {
