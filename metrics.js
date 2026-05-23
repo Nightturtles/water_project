@@ -879,6 +879,359 @@ function getRecipeOverLimitMineralIds(mineralGramsPerLiter) {
   return out;
 }
 
+// ============================================
+// NNLS inverse solver — used by the calculator
+// ============================================
+// Given an over-determined system Ax = b (more ions than dosing variables, or
+// dosing variables that can't satisfy every ion exactly), find the
+// non-negative x that minimizes ||Ax - b||². Used to pick optimal doses of
+// the user's enabled Recipe Concentrates and mineral salts to fit a target
+// ion profile.
+//
+// Implementation: active-set NNLS via repeated unconstrained least squares
+// with negative-variable pruning. Not strictly Lawson-Hanson, but converges
+// to the NNLS solution for the small (≤10 variables, 7 equations)
+// well-conditioned systems that the calculator generates. The math sequence:
+//   1. Solve A·x = b on the active set (currently-positive variables) via
+//      the normal equations AᵀA·x = Aᵀb with Gaussian elimination.
+//   2. If any solved x is < 0, drop those variables from the active set and
+//      re-solve.
+//   3. Repeat until every solved x ≥ 0.
+//
+// For up to ~10 variables this terminates in a handful of iterations.
+
+/**
+ * Transpose an m×n matrix to n×m.
+ * @param {number[][]} A
+ * @returns {number[][]}
+ */
+function _matTranspose(A) {
+  if (!A || A.length === 0) return [];
+  const m = A.length;
+  const firstRow = A[0];
+  const n = firstRow ? firstRow.length : 0;
+  /** @type {number[][]} */
+  const out = [];
+  for (let j = 0; j < n; j++) {
+    /** @type {number[]} */
+    const row = [];
+    for (let i = 0; i < m; i++) {
+      const ai = A[i];
+      row.push((ai && ai[j]) || 0);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Multiply matrix A (m×n) by matrix B (n×p), returning an m×p matrix.
+ * @param {number[][]} A
+ * @param {number[][]} B
+ * @returns {number[][]}
+ */
+function _matMul(A, B) {
+  const m = A.length;
+  const n = A[0]?.length || 0;
+  const p = B[0]?.length || 0;
+  /** @type {number[][]} */
+  const out = [];
+  for (let i = 0; i < m; i++) {
+    const rowA = A[i];
+    /** @type {number[]} */
+    const row = new Array(p).fill(0);
+    if (!rowA) {
+      out.push(row);
+      continue;
+    }
+    for (let k = 0; k < n; k++) {
+      const aik = rowA[k] || 0;
+      if (aik === 0) continue;
+      const rowB = B[k];
+      if (!rowB) continue;
+      for (let j = 0; j < p; j++) row[j] = (row[j] || 0) + aik * (rowB[j] || 0);
+    }
+    out.push(row);
+  }
+  return out;
+}
+
+/**
+ * Multiply matrix A (m×n) by vector x (n), returning a vector of length m.
+ * @param {number[][]} A
+ * @param {number[]} x
+ * @returns {number[]}
+ */
+function _matVec(A, x) {
+  const m = A.length;
+  const n = A[0]?.length || 0;
+  /** @type {number[]} */
+  const out = new Array(m).fill(0);
+  for (let i = 0; i < m; i++) {
+    const row = A[i];
+    if (!row) continue;
+    let s = 0;
+    for (let j = 0; j < n; j++) s += (row[j] || 0) * (x[j] || 0);
+    out[i] = s;
+  }
+  return out;
+}
+
+/**
+ * Solve an n×n linear system Mx = c via Gaussian elimination with partial
+ * pivoting. Returns null if the system is singular (no unique solution).
+ * Mutates copies of M and c; the inputs are not modified.
+ * @param {number[][]} M
+ * @param {number[]} c
+ * @returns {number[] | null}
+ */
+function _solveLinear(M, c) {
+  const n = M.length;
+  if (n === 0) return [];
+  // Build augmented matrix [M | c] working copies. Defensive about undefined
+  // entries even though callers pass dense matrices — TS strict-index-access
+  // can't prove that from inside.
+  /** @type {number[][]} */
+  const aug = M.map((row, i) => (row || []).concat([c[i] || 0]));
+  for (let col = 0; col < n; col++) {
+    // Pivot on the row with the largest absolute value in this column.
+    let pivot = col;
+    for (let row = col + 1; row < n; row++) {
+      const augRow = aug[row];
+      const augPivot = aug[pivot];
+      const a = (augRow && augRow[col]) || 0;
+      const p = (augPivot && augPivot[col]) || 0;
+      if (Math.abs(a) > Math.abs(p)) pivot = row;
+    }
+    const augPivotRow = aug[pivot];
+    const pivotVal = (augPivotRow && augPivotRow[col]) || 0;
+    if (Math.abs(pivotVal) < 1e-12) return null; // Singular
+    if (pivot !== col) {
+      const tmp = aug[col] || [];
+      const pRow = aug[pivot] || [];
+      aug[col] = pRow;
+      aug[pivot] = tmp;
+    }
+    // Eliminate below the pivot.
+    const colRow = aug[col];
+    if (!colRow) continue;
+    const colDiag = colRow[col] || 0;
+    if (colDiag === 0) continue;
+    for (let row = col + 1; row < n; row++) {
+      const rowVec = aug[row];
+      if (!rowVec) continue;
+      const factor = (rowVec[col] || 0) / colDiag;
+      if (factor === 0) continue;
+      for (let k = col; k <= n; k++) {
+        rowVec[k] = (rowVec[k] || 0) - factor * (colRow[k] || 0);
+      }
+    }
+  }
+  // Back-substitute.
+  /** @type {number[]} */
+  const x = new Array(n).fill(0);
+  for (let row = n - 1; row >= 0; row--) {
+    const augRow = aug[row];
+    if (!augRow) continue;
+    let s = augRow[n] || 0;
+    for (let col = row + 1; col < n; col++) s -= (augRow[col] || 0) * (x[col] || 0);
+    const diag = augRow[row] || 0;
+    x[row] = diag === 0 ? 0 : s / diag;
+  }
+  return x;
+}
+
+/**
+ * Non-negative least squares. Find x ≥ 0 minimizing ||A·x - b||².
+ *
+ * Active-set algorithm: start with all variables active, solve the
+ * unconstrained problem on the active set, drop any variable whose solved
+ * value is negative (clamp to 0), and re-solve. Converges in O(n) iterations
+ * for the small problems the calculator generates.
+ *
+ * @param {number[][]} A — m×n matrix
+ * @param {number[]} b — m-vector
+ * @returns {number[]} x — n-vector, all entries ≥ 0
+ */
+function solveNNLS(A, b) {
+  if (!A || A.length === 0) return [];
+  const n = A[0]?.length || 0;
+  if (n === 0) return [];
+
+  /** @type {Set<number>} */
+  const active = new Set();
+  for (let j = 0; j < n; j++) active.add(j);
+
+  /** @type {number[]} */
+  const x = new Array(n).fill(0);
+
+  // Cap iterations defensively — convergence is fast for well-posed
+  // problems but a malformed input shouldn't hang the UI.
+  for (let iter = 0; iter < 100; iter++) {
+    const activeIdx = [...active].sort((a, b) => a - b);
+    if (activeIdx.length === 0) break;
+
+    // Build A_active: m × |active| by picking columns.
+    /** @type {number[][]} */
+    const A_active = A.map((row) => activeIdx.map((j) => (row && row[j]) || 0));
+    const At = _matTranspose(A_active);
+    const AtA = _matMul(At, A_active);
+    const Atb = _matVec(At, b);
+    const solved = _solveLinear(AtA, Atb);
+    if (solved === null) {
+      // Singular normal equations — drop the last variable and retry.
+      const lastIdx = activeIdx[activeIdx.length - 1];
+      if (lastIdx === undefined) break;
+      active.delete(lastIdx);
+      x[lastIdx] = 0;
+      continue;
+    }
+
+    // Check for negative components in the solved active-set values.
+    let droppedAny = false;
+    for (let i = 0; i < activeIdx.length; i++) {
+      if ((solved[i] || 0) < 0) {
+        const idx = activeIdx[i];
+        if (idx === undefined) continue;
+        active.delete(idx);
+        x[idx] = 0;
+        droppedAny = true;
+      }
+    }
+
+    if (!droppedAny) {
+      for (let i = 0; i < activeIdx.length; i++) {
+        const idx = activeIdx[i];
+        if (idx === undefined) continue;
+        x[idx] = Math.max(0, solved[i] || 0);
+      }
+      return x;
+    }
+  }
+  return x;
+}
+
+/**
+ * Inverse-solve dosing for the calculator's stock-active branch: given the
+ * source water, target ion profile, list of enabled Recipe Concentrate
+ * specs, and list of enabled mineral salt ids, find the per-source dose that
+ * minimizes squared error against the target.
+ *
+ * For each Recipe Concentrate, the column of A is its per-gram ion
+ * contribution at unit dose (i.e. 1 g/L of the concentrate). For each
+ * mineral salt, the column is its per-gram ion contribution. b is
+ * target − sourceWater per ion. Solver units are grams per liter of brew
+ * water; multiply by volumeL outside to get displayed amounts.
+ *
+ * @param {IonMap | null | undefined} sourceWater
+ * @param {Partial<Record<IonName, number | null | undefined>> | null | undefined} target
+ * @param {Array<{ id: string, spec: StockConcentrateSpec }>} concentrateEntries
+ * @param {string[]} mineralIds
+ * @returns {{
+ *   concentrateGramsPerL: Record<string, number>,
+ *   mineralGramsPerL: Record<string, number>,
+ *   residualIons: Record<IonName, number>,
+ *   maxResidualIon: { ion: IonName, residual: number } | null,
+ * }}
+ */
+function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralIds) {
+  const entries = Array.isArray(concentrateEntries) ? concentrateEntries : [];
+  const mins = Array.isArray(mineralIds) ? mineralIds : [];
+
+  // b = target - source per ion, in row order matching ION_FIELDS.
+  /** @type {number[]} */
+  const b = [];
+  ION_FIELDS.forEach((ion) => {
+    const tgt = target && target[ion] != null ? Number(target[ion]) : 0;
+    const src = sourceWater && sourceWater[ion] != null ? Number(sourceWater[ion]) : 0;
+    b.push(Number.isFinite(tgt) && Number.isFinite(src) ? tgt - src : 0);
+  });
+
+  // Columns of A: each concentrate's ion contribution per gram-per-liter,
+  // then each mineral's ion contribution per gram-per-liter.
+  /** @type {number[][]} */
+  const A = ION_FIELDS.map(() => []);
+
+  /** @type {string[]} */
+  const concentrateOrder = [];
+  for (const entry of entries) {
+    if (!entry || !entry.spec) continue;
+    // computeStockMineralGramsPerL returns per-liter grams of each mineral
+    // when dispensing at the prescribed dose. To get the column "ions per
+    // gram-per-liter of CONCENTRATE", normalize by doseGramsPerL.
+    const dosePerL = Number(entry.spec.doseGramsPerL) || 0;
+    if (dosePerL <= 0) continue;
+    const perLAtPrescribed = computeStockMineralGramsPerL(entry.spec);
+    /** @type {Record<string, number>} */
+    const perGramOfConcentrate = {};
+    for (const [mid, g] of Object.entries(perLAtPrescribed)) {
+      perGramOfConcentrate[mid] = g / dosePerL;
+    }
+    const ions = calculateIonPPMs(perGramOfConcentrate);
+    ION_FIELDS.forEach((ion, i) => {
+      const col = A[i];
+      if (col) col.push(ions[ion] || 0);
+    });
+    concentrateOrder.push(entry.id);
+  }
+
+  /** @type {string[]} */
+  const mineralOrder = [];
+  for (const mid of mins) {
+    if (!MINERAL_DB[mid]) continue;
+    // calculateIonPPMs takes g/L; pass 1 to get the per-(gram-per-liter)
+    // ion contribution.
+    const ions = calculateIonPPMs({ [mid]: 1 });
+    ION_FIELDS.forEach((ion, i) => {
+      const col = A[i];
+      if (col) col.push(ions[ion] || 0);
+    });
+    mineralOrder.push(mid);
+  }
+
+  // Skip the solve when there are no variables; downstream just sees zeros.
+  /** @type {number[]} */
+  let x = [];
+  if (concentrateOrder.length + mineralOrder.length > 0) {
+    x = solveNNLS(A, b);
+  }
+
+  /** @type {Record<string, number>} */
+  const concentrateGramsPerL = {};
+  /** @type {Record<string, number>} */
+  const mineralGramsPerL = {};
+  concentrateOrder.forEach((id, k) => {
+    concentrateGramsPerL[id] = Math.max(0, x[k] || 0);
+  });
+  mineralOrder.forEach((id, k) => {
+    mineralGramsPerL[id] = Math.max(0, x[concentrateOrder.length + k] || 0);
+  });
+
+  // Residual diagnostic: what ions are still under-/over-target after the
+  // solver picks the best non-negative combination.
+  const Ax = _matVec(A, x);
+  /** @type {Record<string, number>} */
+  const residualIons = {};
+  /** @type {{ ion: IonName, residual: number } | null} */
+  let maxResidualIon = null;
+  ION_FIELDS.forEach((ion, i) => {
+    const bi = b[i] || 0;
+    const axi = Ax[i] || 0;
+    const resid = bi - axi; // > 0 means under-target; < 0 means over-target.
+    residualIons[ion] = resid;
+    if (maxResidualIon === null || Math.abs(resid) > Math.abs(maxResidualIon.residual)) {
+      maxResidualIon = { ion, residual: resid };
+    }
+  });
+
+  return {
+    concentrateGramsPerL,
+    mineralGramsPerL,
+    residualIons,
+    maxResidualIon,
+  };
+}
+
 // --- Node/Vitest UMD shim (harmless in browsers) ---
 // See constants.js for the pattern. Assumes constants.js has already loaded
 // and populated globalThis (both in browser script-scope and in tests that
@@ -896,5 +1249,7 @@ if (typeof module !== "undefined" && module.exports) {
     computeFullProfile,
     buildStoredTargetProfile,
     getRecipeOverLimitMineralIds,
+    solveNNLS,
+    solveCalculatorDosing,
   };
 }

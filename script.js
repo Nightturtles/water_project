@@ -205,6 +205,17 @@ function renderResultItems() {
       detailSpan.textContent = formatStockResultDetail(item.spec);
       resultInfo.appendChild(nameSpan);
       resultInfo.appendChild(detailSpan);
+      // Inverse solver picks a dose that may differ from the spec's
+      // prescribed dose. Show "prescribed: X g/L" so the user can compare —
+      // volume-independent, so no need to update on volume change.
+      const dosePerL = Number(item.spec && item.spec.doseGramsPerL) || 0;
+      if (dosePerL > 0) {
+        const prescribedSpan = document.createElement("span");
+        prescribedSpan.className = "result-prescribed";
+        prescribedSpan.textContent =
+          "prescribed: " + (Math.round(dosePerL * 100) / 100).toString() + " g/L";
+        resultInfo.appendChild(prescribedSpan);
+      }
       div.appendChild(resultInfo);
       const valueSpan = document.createElement("span");
       valueSpan.className = "result-value";
@@ -829,139 +840,76 @@ function calculate() {
   const rawDeltaMg = targetMgMgL - (sourceWater.magnesium || 0);
   const rawDeltaAlk = targetAlkAsCaCO3 - sourceAlkAsCaCO3;
 
-  // Active Recipe Concentrates: each dispenses a fixed-ratio mix at its
-  // prescribed dose. Forward-compute the summed ion contribution. If the
-  // source + concentrate combination already meets the target on each ion,
-  // render concentrate-only output (today's behavior). If any ion still has a
-  // residual delta vs target, gap-fill via the same Ca/Mg/Alk picker the
-  // non-stock branch uses, render supplement rows beneath the concentrate
-  // rows, and roll those contributions into the Final Water Profile.
+  // Active Recipe Concentrates: solve for the dose of each enabled
+  // concentrate AND each enabled mineral salt that minimizes squared error
+  // against the target ion profile. NNLS picks non-negative doses; the
+  // resulting residual tells us whether the target is reachable with the
+  // user's selected sources, and which ion has the worst gap if not.
+  // Replaces the v1 (and PR 3) "fixed prescribed dose + post-hoc gap-fill"
+  // logic with an inverse-solve that scales the concentrate itself.
   if (activeStockEntriesEarly.length > 0) {
-    /** @type {Record<string, number>} */
-    const combinedStockMineralGramsPerL = {};
+    const stockTargetProfile = getCurrentTargetProfileForCalculations();
+    const supplementMineralIds = [
+      ...getEffectiveMagnesiumSources(),
+      ...getEffectiveCalciumSources(),
+      ...getEffectiveAlkalinitySources(),
+    ];
+    const solve = solveCalculatorDosing(
+      sourceWater,
+      stockTargetProfile,
+      activeStockEntriesEarly,
+      supplementMineralIds,
+    );
+
     /** @type {Record<string, number>} */
     const stockTotalsByStockId = {};
-    for (const { id, spec } of activeStockEntriesEarly) {
-      const perL = computeStockMineralGramsPerL(spec);
-      for (const mid of Object.keys(perL)) {
-        combinedStockMineralGramsPerL[mid] = (combinedStockMineralGramsPerL[mid] || 0) + perL[mid];
-      }
-      const dosePerL = Number(spec.doseGramsPerL) || 0;
-      stockTotalsByStockId[id] = dosePerL * volumeL;
+    for (const { id } of activeStockEntriesEarly) {
+      stockTotalsByStockId[id] = (solve.concentrateGramsPerL[id] || 0) * volumeL;
     }
     updateStockValues(stockTotalsByStockId);
 
-    const stockAddedIons = calculateIonPPMs(combinedStockMineralGramsPerL);
-    const stockAddedAlkAsCaCO3 = (stockAddedIons.bicarbonate || 0) * HCO3_TO_CACO3;
-
-    // Residual deltas vs target after the concentrate contributes. Negative
-    // values mean source + concentrate already overshoots — the user can't
-    // unwind that by dosing more, so warn rather than gap-fill.
-    const residualCaRaw = targetCaMgL - (sourceWater.calcium || 0) - (stockAddedIons.calcium || 0);
-    const residualMgRaw =
-      targetMgMgL - (sourceWater.magnesium || 0) - (stockAddedIons.magnesium || 0);
-    const residualAlkRaw = targetAlkAsCaCO3 - sourceAlkAsCaCO3 - stockAddedAlkAsCaCO3;
-    const residualCa = Math.max(0, residualCaRaw);
-    const residualMg = Math.max(0, residualMgRaw);
-    const residualAlk = Math.max(0, residualAlkRaw);
-
     const stockWarnings = [];
-    // Combined source + concentrate overshoot. Phrased to make clear that the
-    // concentrate's fixed dose is what closed the gap and the user can't undo
-    // that here — same intent as the v1 source-only warning, generalized.
-    if (residualCaRaw < 0) {
-      const combined = Math.round((sourceWater.calcium || 0) + (stockAddedIons.calcium || 0));
-      stockWarnings.push(
-        `Source water + Recipe Concentrate already exceed the target for Calcium (${combined} vs ${targetCaMgL} mg/L).`,
-      );
-    }
-    if (residualMgRaw < 0) {
-      const combined = Math.round((sourceWater.magnesium || 0) + (stockAddedIons.magnesium || 0));
-      stockWarnings.push(
-        `Source water + Recipe Concentrate already exceed the target for Magnesium (${combined} vs ${targetMgMgL} mg/L).`,
-      );
-    }
-    if (residualAlkRaw < 0) {
-      const combined = Math.round(sourceAlkAsCaCO3 + stockAddedAlkAsCaCO3);
-      stockWarnings.push(
-        `Source water + Recipe Concentrate already exceed the target for Alkalinity (${combined} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`,
-      );
+    // Infeasibility diagnostic — surface when the solver couldn't get within
+    // tolerance on the worst-residual ion. Suggest the canonical source
+    // mineral for that ion so the user knows what to enable in Settings.
+    // Tolerance of 5 mg/L on any single ion is well above NNLS numerical
+    // noise; under that, the gap is functionally negligible.
+    const INFEASIBLE_TOLERANCE_MGPL = 5;
+    const maxResid = solve.maxResidualIon;
+    let infeasibilityMessage = "";
+    if (maxResid && Math.abs(maxResid.residual) > INFEASIBLE_TOLERANCE_MGPL) {
+      const ionLabel = maxResid.ion.charAt(0).toUpperCase() + maxResid.ion.slice(1);
+      const gap = Math.round(Math.abs(maxResid.residual));
+      const direction = maxResid.residual > 0 ? "below" : "above";
+      const SUGGEST_FOR_ION = {
+        calcium: "a Calcium source (Calcium Chloride or Gypsum)",
+        magnesium: "a Magnesium source (Epsom Salt or Magnesium Chloride)",
+        bicarbonate: "an Alkalinity source (Baking Soda or Potassium Bicarbonate)",
+        sodium: "Baking Soda",
+        potassium: "Potassium Bicarbonate",
+        sulfate: "Epsom Salt or Gypsum",
+        chloride: "Calcium Chloride or Magnesium Chloride",
+      };
+      const suggestion = SUGGEST_FOR_ION[maxResid.ion] || "additional mineral sources";
+      infeasibilityMessage =
+        `Your selected sources can't get within ${gap} mg/L of the target on ${ionLabel} ` +
+        `(${direction} target). Enable ${suggestion} in Settings to close the gap.`;
     }
 
-    // Gap-fill picker. Only runs when at least one ion has positive residual;
-    // a recipe whose concentrate fully covers the target keeps today's
-    // concentrate-only output (zero supplement rows rendered with values).
-    const hasAnyResidual = residualCa > 0 || residualMg > 0 || residualAlk > 0;
-    const supplementMineralGramsPerL = {};
+    // Supplement rows: each enabled mineral source gets its solved dose, or
+    // 0 when the solver didn't pick it. Mirrors the non-stock branch's
+    // convention of zero-filling unchosen candidates.
     /** @type {Record<string, number>} */
     const supplementResultValues = {};
-    let suppCaSource = null;
-    let suppMgSource = null;
-    if (hasAnyResidual) {
-      const stockTargetProfile = getCurrentTargetProfileForCalculations();
-      const picked = pickBestCaMgSources(sourceWater, stockTargetProfile, residualCa, residualMg);
-      suppCaSource = picked.caSource;
-      suppMgSource = picked.mgSource;
-      const suppMgFraction = suppMgSource ? MINERAL_DB[suppMgSource]?.ions?.magnesium || 0 : 0;
-      const suppCaFraction = suppCaSource ? MINERAL_DB[suppCaSource]?.ions?.calcium || 0 : 0;
-      const suppMgSaltPerL = suppMgFraction > 0 ? residualMg / suppMgFraction / 1000 : 0;
-      const suppCaSaltPerL = suppCaFraction > 0 ? residualCa / suppCaFraction / 1000 : 0;
-
-      const suppAlkAlloc = splitAlkalinityDelta(
-        getEffectiveAlkalinitySources(),
-        residualAlk,
-        sourceWater,
-        stockTargetProfile,
-      );
-      const suppBufferGramsPerL = {};
-      if (suppAlkAlloc["baking-soda"] != null && suppAlkAlloc["baking-soda"] > 0) {
-        suppBufferGramsPerL["baking-soda"] =
-          (suppAlkAlloc["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
-      }
-      if (
-        suppAlkAlloc["potassium-bicarbonate"] != null &&
-        suppAlkAlloc["potassium-bicarbonate"] > 0
-      ) {
-        suppBufferGramsPerL["potassium-bicarbonate"] =
-          (suppAlkAlloc["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
-      }
-
-      if (suppMgSource && suppMgSaltPerL > 0) {
-        supplementMineralGramsPerL[suppMgSource] = suppMgSaltPerL;
-        supplementResultValues[suppMgSource] = suppMgSaltPerL * volumeL;
-      }
-      if (suppCaSource && suppCaSaltPerL > 0) {
-        supplementMineralGramsPerL[suppCaSource] = suppCaSaltPerL;
-        supplementResultValues[suppCaSource] = suppCaSaltPerL * volumeL;
-      }
-      for (const [id, gPerL] of Object.entries(suppBufferGramsPerL)) {
-        if (gPerL > 0) {
-          supplementMineralGramsPerL[id] = gPerL;
-          supplementResultValues[id] = gPerL * volumeL;
-        }
-      }
-    }
-
-    // Always zero-fill the supplement rows so any row rendered in the
-    // "Supplements" section reads "0.00 g" when no gap-fill is needed,
-    // matching the non-stock branch's convention of showing all candidates.
-    const supplementMgSourceIds = getEffectiveMagnesiumSources();
-    const supplementCaSourceIds = getEffectiveCalciumSources();
-    supplementMgSourceIds.forEach((id) => {
-      if (supplementResultValues[id] == null) supplementResultValues[id] = 0;
-    });
-    supplementCaSourceIds.forEach((id) => {
-      if (supplementResultValues[id] == null) supplementResultValues[id] = 0;
-    });
-    getEffectiveAlkalinitySources().forEach((id) => {
-      if (supplementResultValues[id] == null) supplementResultValues[id] = 0;
+    supplementMineralIds.forEach((id) => {
+      supplementResultValues[id] = (solve.mineralGramsPerL[id] || 0) * volumeL;
     });
 
     updateResultValues(supplementResultValues);
     // Mineral Concentrates: same conversion as the non-stock branch.
+    /** @type {Record<string, number>} */
     const suppConcentrateValues = {};
-    const selectedConcentratesForSupplements = selectedConcentratesEarly;
-    selectedConcentratesForSupplements.forEach((cid) => {
+    selectedConcentratesEarly.forEach((cid) => {
       const mineralId = getConcentrateMineralId(cid);
       if (!mineralId) return;
       const grams =
@@ -979,15 +927,29 @@ function calculate() {
       suppConcentrateValues[cid] = Math.max(0, grams / gramsPerMl);
     });
     updateConcentrateValues(suppConcentrateValues);
+    updateRecipeInfeasibilityBanner(infeasibilityMessage);
     if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
 
-    // Final ion profile: source + concentrate contribution + supplement
-    // contribution. The summary metrics now reflect any gap-fill the user
-    // sees in the supplement rows.
+    // Final ion profile: source + solver-picked doses (concentrates and
+    // supplement minerals). Summary metrics reflect what the user will
+    // actually dose with the solver's recommendation.
     /** @type {Record<string, number>} */
-    const totalMineralGramsPerL = { ...combinedStockMineralGramsPerL };
-    for (const [mid, gPerL] of Object.entries(supplementMineralGramsPerL)) {
-      totalMineralGramsPerL[mid] = (totalMineralGramsPerL[mid] || 0) + gPerL;
+    const totalMineralGramsPerL = {};
+    for (const { id, spec } of activeStockEntriesEarly) {
+      const xPerL = solve.concentrateGramsPerL[id] || 0;
+      if (xPerL <= 0) continue;
+      const dosePerL = Number(spec.doseGramsPerL) || 0;
+      if (dosePerL <= 0) continue;
+      const perGramOfConcentrate = computeStockMineralGramsPerL(spec);
+      for (const mid of Object.keys(perGramOfConcentrate)) {
+        totalMineralGramsPerL[mid] =
+          (totalMineralGramsPerL[mid] || 0) + (perGramOfConcentrate[mid] / dosePerL) * xPerL;
+      }
+    }
+    for (const [mid, gPerL] of Object.entries(solve.mineralGramsPerL)) {
+      if (gPerL > 0) {
+        totalMineralGramsPerL[mid] = (totalMineralGramsPerL[mid] || 0) + gPerL;
+      }
     }
     const totalAddedIons = calculateIonPPMs(totalMineralGramsPerL);
     const stockFinalIons = {};
@@ -1013,8 +975,17 @@ function calculate() {
       baselineRatio: stockBaselineRatio,
       advancedMode: isAdvancedMineralDisplayMode(),
       alkalinitySources: getEffectiveAlkalinitySources(),
-      calciumSource: suppCaSource || getEffectiveCalciumSource(),
-      magnesiumSource: suppMgSource || getEffectiveMagnesiumSource(),
+      // Pick the solver's first-chosen Ca/Mg source as the canonical source
+      // for the summary metrics; falls back to the user's effective default
+      // when the solver picked none (concentrate-only case).
+      calciumSource:
+        Object.keys(solve.mineralGramsPerL).find(
+          (id) => solve.mineralGramsPerL[id] > 0 && getEffectiveCalciumSources().includes(id),
+        ) || getEffectiveCalciumSource(),
+      magnesiumSource:
+        Object.keys(solve.mineralGramsPerL).find(
+          (id) => solve.mineralGramsPerL[id] > 0 && getEffectiveMagnesiumSources().includes(id),
+        ) || getEffectiveMagnesiumSource(),
       brewMethod: activeBrewMethod,
     });
     return;
@@ -1321,6 +1292,20 @@ function formatLotusConcentrateValue(ml, unit) {
   const dropMl = getLotusDropMl();
   const drops = Number.isFinite(dropMl) && dropMl > 0 ? Math.round(ml / dropMl) : 0;
   return String(drops);
+}
+
+// Show or hide the inverse-solver's infeasibility diagnostic banner above
+// the result rows. Empty message hides the banner.
+function updateRecipeInfeasibilityBanner(message) {
+  const el = document.getElementById("recipe-infeasibility-banner");
+  if (!el) return;
+  if (!message) {
+    el.textContent = "";
+    el.hidden = true;
+    return;
+  }
+  el.textContent = message;
+  el.hidden = false;
 }
 
 function updateResultValues(valuesByMineral) {

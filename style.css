@@ -830,6 +830,33 @@ select:focus {
   color: var(--gray-500);
 }
 
+/* Small "prescribed: X g/L" annotation on a Recipe Concentrate result row,
+   shown when the inverse solver picks a dose for comparison. Sits beneath
+   the composition detail; same muted style as .result-detail. */
+.result-prescribed {
+  margin-top: 0.15rem;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+  font-style: italic;
+}
+
+/* Inverse-solver infeasibility diagnostic — shown above the result rows
+   when the user's selected Recipe Concentrates + mineral sources can't
+   get within tolerance of the target on at least one ion. */
+.recipe-infeasibility-banner {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--orange-600);
+  background: var(--orange-bg);
+}
+
+.recipe-infeasibility-banner[hidden] {
+  display: none;
+}
+
 .result-info {
   flex: 1;
   display: flex;
