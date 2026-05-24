@@ -4,13 +4,13 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 
 ## What this is
 
-[cafelytic.com](https://cafelytic.com) — a coffee water / brew recipe calculator. Vanilla JS, multi-page, no bundler. Deployed as a plain GitHub Pages static site from `main`.
+[cafelytic.com](https://cafelytic.com) — a coffee water / brew recipe calculator. Vanilla JS, multi-page, mid-migration to a Vite-bundled build. Deployed to GitHub Pages via a GitHub Actions workflow on every push to `main`.
 
 ## Stack
 
 - **Frontend**: vanilla JS, no framework, no bundler. Root-level `.js` files loaded via `<script>` tags in document order.
 - **Backend**: Supabase (Postgres + Auth). Client loaded from CDN via `supabase-client.js`; migrations in `supabase/migrations/`.
-- **Deploy**: push to `main` → GitHub Pages serves the raw files. No build step (yet — see Phase 3 below).
+- **Deploy**: push to `main` → GitHub Actions runs the `deploy` job in [.github/workflows/ci.yml](.github/workflows/ci.yml), which builds `dist/` via Vite and publishes to Pages. Pages source must be set to "GitHub Actions" in repo settings (one-time setup, done in PR (c)).
 - **Dev server**: `npx http-server . -c-1`, wired as the `dev` config in `.claude/launch.json` (port 8080).
 
 ## File map
@@ -30,7 +30,7 @@ A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-syntheti
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.
-- **Phase 3** — Vite + TypeScript strict bundling. **Partially started**: Vitest + Playwright + incremental `@ts-check`/ESLint are already in repo; full bundler/module migration is still pending.
+- **Phase 3** — Vite + TypeScript strict bundling. **In progress**: Vitest + Playwright + incremental `@ts-check`/ESLint, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), and the Pages deploy cutover (PR c) have all landed. Still pending: moving sources into `src/lib/` and switching HTML to `<script type="module">`.
 
 ## Verifying changes
 
