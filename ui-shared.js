@@ -893,8 +893,26 @@ function initSaveStatusIndicator() {
     el.classList.add("visible");
   }
 
+  // Page-init code paths (e.g. recipe.html writing back normalized concentrate
+  // inputs) call scheduleSyncToCloud before the user has done anything, which
+  // flashes "Saving…/Saved" on load. Gate the visible toast on first real
+  // interaction so the indicator only surfaces for user-driven saves. Errors
+  // are not gated — a genuine init-time push failure should still be visible.
+  let userHasInteracted = false;
+  const interactionEvents = ["pointerdown", "keydown", "touchstart", "input", "change"];
+  function markInteracted() {
+    userHasInteracted = true;
+    interactionEvents.forEach(function (ev) {
+      document.removeEventListener(ev, markInteracted, true);
+    });
+  }
+  interactionEvents.forEach(function (ev) {
+    document.addEventListener(ev, markInteracted, true);
+  });
+
   window.addEventListener("cw:save-status", (e) => {
     const status = e.detail && e.detail.status;
+    if (!userHasInteracted && (status === "saving" || status === "saved")) return;
     if (status === "saving") {
       setState("Saving…", "status-saving");
     } else if (status === "saved") {
