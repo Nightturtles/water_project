@@ -369,7 +369,11 @@ function initSourceWaterSection(options) {
   updateSourceProfileNameError();
   const allSourcePresets = getAllPresets();
   if (!allSourcePresets[activeSourcePreset]) {
-    activeSourcePreset = Object.keys(allSourcePresets).find(function(k) { return k !== "custom"; }) || "custom";
+    // Stale preset key (preset removed from defaults, or never existed).
+    // Fall back to "custom" so the values already loaded into the inputs
+    // from cw_source_water above are preserved instead of being clobbered
+    // by another preset's values when activateSourcePreset runs.
+    activeSourcePreset = "custom";
   }
   activateSourcePreset(activeSourcePreset);
 
