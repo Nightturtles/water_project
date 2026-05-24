@@ -135,16 +135,19 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
-  <script src="supabase-client.js"></script>
-  <script src="constants.js"></script>
-  <script src="storage.js"></script>
-  <script src="sync.js"></script>
-  <script src="metrics.js"></script>
-  <script src="library-data.js"></script>
-  <script src="ui-shared.js"></script>
-  <script src="login-modal.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
+  <script defer src="supabase-client.js"></script>
+  <script defer src="constants.js"></script>
+  <script type="module" src="/src/lib/legacy-globals.ts"></script>
+  <script defer src="metrics.js"></script>
+  <script defer src="library-data.js"></script>
+  <script defer src="ui-shared.js"></script>
+  <script defer src="login-modal.js"></script>
   <script>
+    // Body wrapped in DOMContentLoaded so the deferred classic scripts above
+    // (constants/metrics/etc.) and the legacy-globals.ts module bridge have
+    // populated their globals on window before any top-level calls below run.
+    document.addEventListener("DOMContentLoaded", function () {
     const mineralDisplayModeInputs = document.querySelectorAll('input[name="mineral-display-mode"]');
     const showSaveStatus = createStatusHandler(document.getElementById("save-status"));
 
@@ -1460,6 +1463,7 @@
     // --- Refresh on bfcache restore ---
     window.addEventListener("pageshow", (e) => {
       if (e.persisted) location.reload();
+    });
     });
   </script>
 </body>

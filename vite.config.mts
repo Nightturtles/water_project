@@ -45,7 +45,18 @@ export default defineConfig({
           // classic <script src="foo.js"> tags alone but does NOT copy foo.js
           // into dist/. This plugin closes that gap. Negative globs exclude
           // tooling/test files that must not ship.
-          src: ["*.js", "!vite.config.*", "!vitest.config.*", "!eslint.config.*", "!*.test.js"],
+          // storage.js and sync.js were moved under src/lib/*.ts and are now
+          // bundled via the legacy-globals.ts module entry; the explicit
+          // exclusions here document that root-level copies must never ship.
+          src: [
+            "*.js",
+            "!vite.config.*",
+            "!vitest.config.*",
+            "!eslint.config.*",
+            "!*.test.js",
+            "!storage.js",
+            "!sync.js",
+          ],
           dest: ".",
         },
         { src: "favicon.svg", dest: "." },

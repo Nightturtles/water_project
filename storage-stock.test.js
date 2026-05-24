@@ -11,35 +11,11 @@
 //   * getAvailableMineralIds — enumerates minerals from selectedMinerals,
 //     diy:* concentrates, AND every mineral inside enabled stock:* concentrates.
 //
-// Load order mirrors the browser: constants.js first (populates globalThis),
-// then storage.js (adds its globals + module exports).
-
-function makeFakeStorage() {
-  let store = {};
-  return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
-      store[k] = String(v);
-    },
-    removeItem: (k) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
-    },
-  };
-}
-
-global.window = global;
-global.localStorage = makeFakeStorage();
-global.sessionStorage = makeFakeStorage();
-global.isLoggedInSync = () => true;
-global._cachedAuthUserId = "test-user-id";
+// Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
+// vitest.setup.js so this file can use ES `import` directly.
 
 require("./constants.js");
-const storage = require("./storage.js");
-
-const {
+import {
   loadStockConcentrateSpecs,
   saveStockConcentrateSpecs,
   parseStockConcentrateId,
@@ -51,7 +27,7 @@ const {
   saveSelectedConcentrates,
   getAvailableMineralIds,
   invalidateAllCaches,
-} = storage;
+} from "./src/lib/storage";
 
 function resetState() {
   global.localStorage.clear();

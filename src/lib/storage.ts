@@ -1,63 +1,71 @@
-// @ts-check
 // ============================================
 // Storage — localStorage helpers and caches
 // ============================================
 // Cross-file globals (scheduleSyncToCloud, supabaseClient, TARGET_PRESETS, etc.)
 // are declared in globals.d.ts.
 
-/**
- * @typedef {Object} SourceProfile
- * @property {string} [label]
- * @property {string} [category] - Picker grouping bucket (e.g. "pure", "generic", "bottled", "saved"). Set on built-ins in constants.js; user-saved profiles omit it and fall under "saved" in the picker.
- * @property {number} [calcium]
- * @property {number} [magnesium]
- * @property {number} [potassium]
- * @property {number} [sodium]
- * @property {number} [sulfate]
- * @property {number} [chloride]
- * @property {number} [bicarbonate]
- *
- * @typedef {Object} DiyConcentrateSpec
- * @property {number} [bottleMl]
- * @property {number} [gramsPerBottle]
- *
- * @typedef {Object} StockMineralEntry
- * @property {string} mineralId   - Key in MINERAL_DB (e.g. "epsom-salt").
- * @property {number} grams       - Grams of this salt dissolved in the stock bottle.
- *
- * @typedef {Object} StockConcentrateSpec
- * @property {string} [label]              - User-facing name (e.g. "Rao/Perger").
- * @property {number} [bottleMl]           - Bottle volume the minerals are dissolved in.
- * @property {number} [doseGramsPerL]      - Grams of stock per liter of brew water.
- * @property {StockMineralEntry[]} [minerals]
- * @property {string} [createdFrom]        - Optional back-reference (e.g. "library:rao-perger").
- * @property {string} [source]             - Optional attribution carried from the library row (e.g. "Rao & Perger").
- *
- * @typedef {Object} ValidateNameOptions
- * @property {boolean} [allowEmpty]
- * @property {string} [emptyMessage]
- * @property {string} [invalidMessage]
- * @property {string} [reservedMessage]
- * @property {string} [duplicateMessage]
- * @property {string[] | Set<string>} [builtinKeys]
- * @property {string[] | Set<string>} [existingKeys]
- * @property {string[] | Set<string>} [existingLabels]
- *
- * @typedef {| { ok: true, key: string, name: string, empty?: boolean }
- *           | { ok: false, code: "empty" | "invalid" | "reserved" | "duplicate", message: string }} ValidateNameResult
- */
+interface SourceProfile {
+  label?: string;
+  // Picker grouping bucket (e.g. "pure", "generic", "bottled", "saved"). Set
+  // on built-ins in constants.js; user-saved profiles omit it and fall under
+  // "saved" in the picker.
+  category?: string;
+  calcium?: number;
+  magnesium?: number;
+  potassium?: number;
+  sodium?: number;
+  sulfate?: number;
+  chloride?: number;
+  bicarbonate?: number;
+}
+
+interface DiyConcentrateSpec {
+  bottleMl?: number;
+  gramsPerBottle?: number;
+}
+
+interface StockMineralEntry {
+  mineralId: string;
+  grams: number;
+}
+
+interface StockConcentrateSpec {
+  label?: string;
+  bottleMl?: number;
+  doseGramsPerL?: number;
+  minerals?: StockMineralEntry[];
+  createdFrom?: string;
+  source?: string;
+}
+
+interface ValidateNameOptions {
+  allowEmpty?: boolean;
+  emptyMessage?: string;
+  invalidMessage?: string;
+  reservedMessage?: string;
+  duplicateMessage?: string;
+  builtinKeys?: string[] | Set<string>;
+  existingKeys?: string[] | Set<string>;
+  existingLabels?: string[] | Set<string>;
+}
+
+type ValidateNameResult =
+  | { ok: true; key: string; name: string; empty?: boolean }
+  | {
+      ok: false;
+      code: "empty" | "invalid" | "reserved" | "duplicate";
+      message: string;
+    };
 
 // --- Safe localStorage wrappers (Bug 4) ---
-/** @param {string} key @returns {string | null} */
-function safeGetItem(key) {
+export function safeGetItem(key: string): string | null {
   try {
     return localStorage.getItem(key);
   } catch (e) {
     return null;
   }
 }
-/** @param {string} key @param {string} value @returns {boolean} */
-function safeSetItem(key, value) {
+export function safeSetItem(key: string, value: string): boolean {
   try {
     localStorage.setItem(key, value);
     return true;
@@ -65,8 +73,7 @@ function safeSetItem(key, value) {
     return false;
   }
 }
-/** @param {string} key */
-function safeRemoveItem(key) {
+export function safeRemoveItem(key: string): void {
   try {
     localStorage.removeItem(key);
   } catch (e) {}
@@ -83,23 +90,25 @@ function safeRemoveItem(key) {
 // (window._cachedAuthUserId / window.isLoggedInSync).  Until the initial
 // getSession() resolves, this returns false — pages render as anonymous,
 // then re-render when cw:auth-state-resolved fires.
-function _isLoggedInSync() {
+function _isLoggedInSync(): boolean {
   return (
     typeof window !== "undefined" &&
     typeof window.isLoggedInSync === "function" &&
     window.isLoggedInSync()
   );
 }
-/** @param {string} key @returns {string | null} */
-function _getTransient(key) {
+// _getTransient / _setTransient / _getGated / _setGated are underscore-named
+// to signal "internal-ish", but recipe.html, mineral-selector.js, and a few
+// others reach them via classic-script global scope. They're exported here
+// (and pushed onto window via the footer below) to preserve that surface.
+export function _getTransient(key: string): string | null {
   try {
     return (_isLoggedInSync() ? localStorage : sessionStorage).getItem(key);
   } catch (e) {
     return null;
   }
 }
-/** @param {string} key @param {string} value @returns {boolean} */
-function _setTransient(key, value) {
+export function _setTransient(key: string, value: string): boolean {
   try {
     (_isLoggedInSync() ? localStorage : sessionStorage).setItem(key, value);
     return true;
@@ -114,25 +123,17 @@ function _setTransient(key, value) {
 // backstop — UI gating (applyAuthGate in ui-shared.js) handles the visible
 // "Sign in to save" affordance, but a callsite that slips past the UI gate
 // still cannot leak account data into local persistence.
-/** @param {string} key @returns {string | null} */
-function _getGated(key) {
+export function _getGated(key: string): string | null {
   if (!_isLoggedInSync()) return null;
   return safeGetItem(key);
 }
-/** @param {string} key @param {string} value @returns {boolean} */
-function _setGated(key, value) {
+export function _setGated(key: string, value: string): boolean {
   if (!_isLoggedInSync()) return false;
   return safeSetItem(key, value);
 }
 
 // --- JSON parse helper ---
-/**
- * @template T
- * @param {string | null} json
- * @param {T} fallback
- * @returns {any | T}
- */
-function safeParse(json, fallback) {
+export function safeParse<T>(json: string | null, fallback: T): any | T {
   if (!json) return fallback;
   try {
     const parsed = JSON.parse(json);
@@ -143,14 +144,13 @@ function safeParse(json, fallback) {
 }
 
 // --- Source water ---
-/** @param {SourceProfile} profile */
-function saveSourceWater(profile) {
+export function saveSourceWater(profile: SourceProfile): boolean {
   const ok = _setTransient("cw_source_water", JSON.stringify(profile));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
 
-function loadSourceWater() {
+export function loadSourceWater() {
   const fallback = {
     calcium: 0,
     magnesium: 0,
@@ -164,38 +164,35 @@ function loadSourceWater() {
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
 }
 
-/** @param {string} name */
-function saveSourcePresetName(name) {
+export function saveSourcePresetName(name: string): void {
   _setTransient("cw_source_preset", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadSourcePresetName() {
+export function loadSourcePresetName(): string {
   return _getTransient("cw_source_preset") || "distilled";
 }
 
 // --- Mineral display mode ---
-/** @param {string} mode */
-function saveMineralDisplayMode(mode) {
+export function saveMineralDisplayMode(mode: string): void {
   _setTransient("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadMineralDisplayMode() {
+export function loadMineralDisplayMode(): "standard" | "advanced" {
   return _getTransient("cw_mineral_display_mode") === "advanced" ? "advanced" : "standard";
 }
 
-function isAdvancedMineralDisplayMode() {
+export function isAdvancedMineralDisplayMode(): boolean {
   return loadMineralDisplayMode() === "advanced";
 }
 
 // --- Volume preference ---
-/**
- * @param {string} pageKey
- * @param {number | string | null | undefined} value
- * @param {string | null | undefined} unit
- */
-function saveVolumePreference(pageKey, value, unit) {
+export function saveVolumePreference(
+  pageKey: string,
+  value: number | string | null | undefined,
+  unit: string | null | undefined,
+): void {
   if (!pageKey) return;
   const key = "cw_volume_" + pageKey;
   const payload = {
@@ -206,14 +203,11 @@ function saveVolumePreference(pageKey, value, unit) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/**
- * @param {string} pageKey
- * @param {{ value?: number | string, unit?: string }} [defaults]
- * @returns {{ value: string, unit: "gallons" | "liters" }}
- */
-function loadVolumePreference(pageKey, defaults = {}) {
-  /** @type {{ value: string, unit: "gallons" | "liters" }} */
-  const fallback = {
+export function loadVolumePreference(
+  pageKey: string,
+  defaults: { value?: number | string; unit?: string } = {},
+): { value: string; unit: "gallons" | "liters" } {
+  const fallback: { value: string; unit: "gallons" | "liters" } = {
     value: String(defaults.value ?? "1"),
     unit: defaults.unit === "gallons" ? "gallons" : "liters",
   };
@@ -222,13 +216,12 @@ function loadVolumePreference(pageKey, defaults = {}) {
   const parsed = safeParse(_getTransient(key), fallback);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
   const value = String(parsed.value ?? fallback.value);
-  const unit = parsed.unit === "gallons" ? "gallons" : "liters";
+  const unit: "gallons" | "liters" = parsed.unit === "gallons" ? "gallons" : "liters";
   return { value, unit };
 }
 
 // --- Slugify ---
-/** @param {string} name */
-function slugify(name) {
+export function slugify(name: string): string {
   return name
     .toLowerCase()
     .trim()
@@ -237,11 +230,9 @@ function slugify(name) {
 }
 
 // --- Custom source profiles + cache ---
-/** @type {Record<string, SourceProfile> | null} */
-let customProfilesCache = null;
+let customProfilesCache: Record<string, SourceProfile> | null = null;
 
-/** @returns {Record<string, SourceProfile>} */
-function loadCustomProfiles() {
+export function loadCustomProfiles(): Record<string, SourceProfile> {
   if (customProfilesCache) return Object.assign({}, customProfilesCache);
   const parsed = safeParse(_getGated("cw_custom_profiles"), {});
   customProfilesCache =
@@ -249,8 +240,7 @@ function loadCustomProfiles() {
   return Object.assign({}, customProfilesCache);
 }
 
-/** @param {Record<string, SourceProfile>} profiles */
-function saveCustomProfiles(profiles) {
+export function saveCustomProfiles(profiles: Record<string, SourceProfile>): boolean {
   // If a slug is being added that was previously tombstoned, lift the
   // tombstone — the user's explicit save is unambiguous intent. This must
   // happen at save time, not in sync, so we don't conflate "user re-saved"
@@ -274,14 +264,13 @@ function saveCustomProfiles(profiles) {
 // any matching tombstones. Inlines the tombstone-array mutation rather than
 // calling addDeletedTargetPreset/removeDeletedTargetPreset so source and
 // target sides share one code path.
-/**
- * @param {Record<string, unknown>} newProfiles
- * @param {Record<string, unknown> | null} oldCache
- * @param {() => string[]} loadFn
- * @param {string} storageKey
- * @param {() => void} invalidateFn
- */
-function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storageKey, invalidateFn) {
+function liftTombstonesForNewlyAddedSlugs(
+  newProfiles: Record<string, unknown>,
+  oldCache: Record<string, unknown> | null,
+  loadFn: () => string[],
+  storageKey: string,
+  invalidateFn: () => void,
+): void {
   const tombstones = loadFn();
   if (tombstones.length === 0) return;
   const oldProfiles = oldCache || {};
@@ -289,7 +278,7 @@ function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storage
     return !Object.prototype.hasOwnProperty.call(oldProfiles, slug);
   });
   if (newSlugs.length === 0) return;
-  const filtered = tombstones.filter(function (/** @type {string} */ slug) {
+  const filtered = tombstones.filter(function (slug: string) {
     return newSlugs.indexOf(slug) === -1;
   });
   if (filtered.length !== tombstones.length) {
@@ -298,8 +287,7 @@ function liftTombstonesForNewlyAddedSlugs(newProfiles, oldCache, loadFn, storage
   }
 }
 
-/** @param {string} key */
-function deleteCustomProfile(key) {
+export function deleteCustomProfile(key: string): void {
   const profiles = loadCustomProfiles();
   delete profiles[key];
   saveCustomProfiles(profiles);
@@ -307,14 +295,12 @@ function deleteCustomProfile(key) {
 }
 
 // --- Deleted source preset tracking ---
-/** @returns {string[]} */
-function loadDeletedPresets() {
+export function loadDeletedPresets(): string[] {
   const parsed = safeParse(_getGated("cw_deleted_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
-/** @param {string} key */
-function addDeletedPreset(key) {
+export function addDeletedPreset(key: string): void {
   const deleted = loadDeletedPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
@@ -325,11 +311,9 @@ function addDeletedPreset(key) {
 }
 
 // --- Custom target profiles + cache ---
-/** @type {Record<string, TargetProfile> | null} */
-let customTargetProfilesCache = null;
+let customTargetProfilesCache: Record<string, TargetProfile> | null = null;
 
-/** @returns {Record<string, TargetProfile>} */
-function loadCustomTargetProfiles() {
+export function loadCustomTargetProfiles(): Record<string, TargetProfile> {
   if (customTargetProfilesCache) return Object.assign({}, customTargetProfilesCache);
   const parsed = safeParse(_getGated("cw_custom_target_profiles"), {});
   customTargetProfilesCache =
@@ -337,8 +321,7 @@ function loadCustomTargetProfiles() {
   return Object.assign({}, customTargetProfilesCache);
 }
 
-/** @param {Record<string, TargetProfile>} profiles */
-function saveCustomTargetProfiles(profiles) {
+export function saveCustomTargetProfiles(profiles: Record<string, TargetProfile>): boolean {
   liftTombstonesForNewlyAddedSlugs(
     profiles,
     customTargetProfilesCache,
@@ -353,8 +336,7 @@ function saveCustomTargetProfiles(profiles) {
   return ok;
 }
 
-/** @param {string} key */
-function deleteCustomTargetProfile(key) {
+export function deleteCustomTargetProfile(key: string): void {
   const profiles = loadCustomTargetProfiles();
   delete profiles[key];
   saveCustomTargetProfiles(profiles);
@@ -368,7 +350,7 @@ function deleteCustomTargetProfile(key) {
 // 'eaf-hendon-water' reference back to the server after the migration runs.
 // Idempotent — safe to re-run. Can be dropped once nobody can plausibly have
 // stale state (~3 months from the migration date).
-function migrateHendonSlug() {
+export function migrateHendonSlug(): void {
   const FROM = "eaf-hendon-water";
   const TO = "bh-simplified-hendon";
 
@@ -398,14 +380,12 @@ function migrateHendonSlug() {
 }
 
 // --- Deleted target preset tracking (tombstones so deletions survive pull) ---
-/** @returns {string[]} */
-function loadDeletedTargetPresets() {
+export function loadDeletedTargetPresets(): string[] {
   const parsed = safeParse(_getGated("cw_deleted_target_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
-/** @param {string} key */
-function addDeletedTargetPreset(key) {
+export function addDeletedTargetPreset(key: string): void {
   const deleted = loadDeletedTargetPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
@@ -420,8 +400,7 @@ function addDeletedTargetPreset(key) {
 // user clicks Add on a canonical library row whose slug is tombstoned, we
 // lift the tombstone rather than creating a suffixed custom-profile copy, so
 // the built-in returns at its canonical slug.
-/** @param {string} key */
-function removeDeletedTargetPreset(key) {
+export function removeDeletedTargetPreset(key: string): void {
   const deleted = loadDeletedTargetPresets();
   const idx = deleted.indexOf(key);
   if (idx === -1) return;
@@ -445,20 +424,17 @@ function removeDeletedTargetPreset(key) {
 // pre-011 catalog preserved — library-data.js reads this list directly for
 // save-state and copy logic.
 
-/** @returns {string[]} */
-function loadAddedTargetPresetsRaw() {
+function loadAddedTargetPresetsRaw(): string[] {
   const parsed = safeParse(_getGated("cw_added_target_presets"), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
-/** @returns {string[]} */
-function loadAddedTargetPresets() {
+export function loadAddedTargetPresets(): string[] {
   if (typeof ensureStarterBackfill === "function") ensureStarterBackfill();
   return loadAddedTargetPresetsRaw();
 }
 
-/** @param {string} key */
-function addAddedTargetPreset(key) {
+export function addAddedTargetPreset(key: string): void {
   const added = loadAddedTargetPresets();
   if (!added.includes(key)) {
     added.push(key);
@@ -468,8 +444,7 @@ function addAddedTargetPreset(key) {
   }
 }
 
-/** @param {string} key */
-function removeAddedTargetPreset(key) {
+export function removeAddedTargetPreset(key: string): void {
   const added = loadAddedTargetPresets();
   const idx = added.indexOf(key);
   if (idx === -1) return;
@@ -486,9 +461,9 @@ function removeAddedTargetPreset(key) {
 // here (via the sync cache from library-data.js) to keep the duplicate-name
 // guard comprehensive — a user shouldn't be able to name a custom profile
 // "Simple and Sweet" and shadow the Supabase row of the same label.
-function getExistingTargetProfileLabels() {
+export function getExistingTargetProfileLabels(): Set<string> {
   const custom = loadCustomTargetProfiles();
-  const labels = new Set();
+  const labels = new Set<string>();
   for (const key of BUILTIN_TARGET_KEYS) {
     if (BUILTIN_TARGET_LABELS[key]) {
       labels.add(BUILTIN_TARGET_LABELS[key].trim().toLowerCase());
@@ -509,9 +484,9 @@ function getExistingTargetProfileLabels() {
   return labels;
 }
 
-function getExistingSourceProfileLabels() {
+export function getExistingSourceProfileLabels(): Set<string> {
   const allPresets = getAllPresets();
-  const labels = new Set();
+  const labels = new Set<string>();
   for (const profile of Object.values(allPresets)) {
     if (profile && profile.label) {
       labels.add(profile.label.trim().toLowerCase());
@@ -521,8 +496,7 @@ function getExistingSourceProfileLabels() {
 }
 
 // --- Target preset name ---
-/** @param {string} name */
-function saveTargetPresetName(name) {
+export function saveTargetPresetName(name: string): void {
   _setTransient("cw_target_preset", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -536,17 +510,12 @@ function saveTargetPresetName(name) {
 //
 // Shape: { "<slug>": { calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate } }
 
-/** @returns {Record<string, Record<string, number>>} */
-function loadTargetDraftIons() {
+export function loadTargetDraftIons(): Record<string, Record<string, number>> {
   const parsed = safeParse(_getTransient("cw_target_draft_ions"), {});
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
-/**
- * @param {string} slug
- * @param {Record<string, number>} ions
- */
-function saveTargetDraftIons(slug, ions) {
+export function saveTargetDraftIons(slug: string, ions: Record<string, number>): void {
   if (!slug) return;
   const drafts = loadTargetDraftIons();
   drafts[slug] = ions;
@@ -554,8 +523,7 @@ function saveTargetDraftIons(slug, ions) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @param {string} slug */
-function clearTargetDraftIons(slug) {
+export function clearTargetDraftIons(slug: string): void {
   if (!slug) return;
   const drafts = loadTargetDraftIons();
   if (!Object.prototype.hasOwnProperty.call(drafts, slug)) return;
@@ -564,17 +532,16 @@ function clearTargetDraftIons(slug) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @param {string} slug */
-function loadTargetDraftIonsFor(slug) {
+export function loadTargetDraftIonsFor(slug: string): Record<string, number> | null {
   if (!slug) return null;
   const drafts = loadTargetDraftIons();
   return drafts[slug] || null;
 }
 
 /**
- * @param {string} [brewMethod] "filter" or "espresso" (defaults to filter)
+ * @param brewMethod "filter" or "espresso" (defaults to filter)
  */
-function loadTargetPresetName(brewMethod) {
+export function loadTargetPresetName(brewMethod?: string): string {
   // Saved preset (any brew mode) wins. For new users with no saved preset,
   // pick the canonical Cafelytic default matching the caller's active brew
   // mode: cafelytic-filter (filter) or cafelytic-espresso (espresso). This
@@ -592,44 +559,34 @@ function loadTargetPresetName(brewMethod) {
 }
 
 // --- Brew method preference ---
-/**
- * @param {string | null | undefined} method
- * @returns {"espresso" | "filter"}
- */
-function normalizeBrewMethod(method) {
+export function normalizeBrewMethod(method: string | null | undefined): "espresso" | "filter" {
   return method === "espresso" ? "espresso" : "filter";
 }
 
-/** @param {string | null | undefined} method */
-function saveBrewMethod(method) {
+export function saveBrewMethod(method: string | null | undefined): void {
   _setTransient("cw_brew_method", normalizeBrewMethod(method));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadBrewMethod() {
+export function loadBrewMethod(): "espresso" | "filter" {
   return normalizeBrewMethod(_getTransient("cw_brew_method"));
 }
 
 // --- Lotus dropper preference ---
-/**
- * @param {string | null | undefined} type
- * @returns {"straight" | "round"}
- */
-function normalizeLotusDropperType(type) {
+export function normalizeLotusDropperType(type: string | null | undefined): "straight" | "round" {
   return type === "straight" ? "straight" : "round";
 }
 
-/** @param {string | null | undefined} type */
-function saveLotusDropperType(type) {
+export function saveLotusDropperType(type: string | null | undefined): void {
   _setTransient("cw_lotus_dropper_type", normalizeLotusDropperType(type));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadLotusDropperType() {
+export function loadLotusDropperType(): "straight" | "round" {
   return normalizeLotusDropperType(_getTransient("cw_lotus_dropper_type"));
 }
 
-function getLotusDropMl() {
+export function getLotusDropMl(): number {
   const selectedType = loadLotusDropperType();
   const selectedMl = LOTUS_DROPPER_ML && Number(LOTUS_DROPPER_ML[selectedType]);
   if (Number.isFinite(selectedMl) && selectedMl > 0) return selectedMl;
@@ -637,40 +594,33 @@ function getLotusDropMl() {
   return Number.isFinite(fallbackMl) && fallbackMl > 0 ? fallbackMl : 0.0716;
 }
 
-/**
- * @param {string | null | undefined} unit
- * @returns {"ml" | "drops"}
- */
-function normalizeLotusConcentrateUnit(unit) {
+export function normalizeLotusConcentrateUnit(unit: string | null | undefined): "ml" | "drops" {
   return unit === "ml" ? "ml" : "drops";
 }
 
-/** @param {string | null | undefined} unit */
-function saveLotusConcentrateUnit(unit) {
+export function saveLotusConcentrateUnit(unit: string | null | undefined): void {
   _setTransient("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-function loadLotusConcentrateUnit() {
+export function loadLotusConcentrateUnit(): "ml" | "drops" {
   return normalizeLotusConcentrateUnit(_getTransient("cw_lotus_concentrate_unit"));
 }
 
-/** @returns {Record<string, "ml" | "drops">} */
-function loadLotusConcentrateUnits() {
+export function loadLotusConcentrateUnits(): Record<string, "ml" | "drops"> {
   const parsed = safeParse(_getTransient("cw_lotus_concentrate_units"), {});
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-  /** @type {Record<string, "ml" | "drops">} */
-  const normalized = {};
+  const normalized: Record<string, "ml" | "drops"> = {};
   Object.keys(parsed).forEach((key) => {
     normalized[key] = normalizeLotusConcentrateUnit(parsed[key]);
   });
   return normalized;
 }
 
-/** @param {Record<string, string | null | undefined> | null | undefined} units */
-function saveLotusConcentrateUnits(units) {
-  /** @type {Record<string, "ml" | "drops">} */
-  const safeUnits = {};
+export function saveLotusConcentrateUnits(
+  units: Record<string, string | null | undefined> | null | undefined,
+): void {
+  const safeUnits: Record<string, "ml" | "drops"> = {};
   if (units && typeof units === "object" && !Array.isArray(units)) {
     Object.keys(units).forEach((key) => {
       safeUnits[key] = normalizeLotusConcentrateUnit(units[key]);
@@ -680,18 +630,18 @@ function saveLotusConcentrateUnits(units) {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @param {string | null | undefined} concentrateId */
-function loadLotusConcentrateUnitFor(concentrateId) {
+export function loadLotusConcentrateUnitFor(
+  concentrateId: string | null | undefined,
+): "ml" | "drops" {
   const units = loadLotusConcentrateUnits();
   if (concentrateId && units[concentrateId]) return units[concentrateId];
   return "drops";
 }
 
-/**
- * @param {string | null | undefined} concentrateId
- * @param {string | null | undefined} unit
- */
-function saveLotusConcentrateUnitFor(concentrateId, unit) {
+export function saveLotusConcentrateUnitFor(
+  concentrateId: string | null | undefined,
+  unit: string | null | undefined,
+): void {
   if (!concentrateId) return;
   const units = loadLotusConcentrateUnits();
   units[concentrateId] = normalizeLotusConcentrateUnit(unit);
@@ -699,7 +649,7 @@ function saveLotusConcentrateUnitFor(concentrateId, unit) {
 }
 
 // --- Invalidate all caches (called by sync.js after pulling cloud data) ---
-function invalidateAllCaches() {
+export function invalidateAllCaches(): void {
   customProfilesCache = null;
   customTargetProfilesCache = null;
   selectedMineralsCache = null;
@@ -711,19 +661,16 @@ function invalidateAllCaches() {
 }
 
 // --- Source presets aggregation + cache ---
-/** @type {Record<string, SourceProfile> | null} */
-let sourcePresetsCache = null;
-function invalidateSourcePresetsCache() {
+let sourcePresetsCache: Record<string, SourceProfile> | null = null;
+export function invalidateSourcePresetsCache(): void {
   sourcePresetsCache = null;
 }
 
-/** @returns {Record<string, SourceProfile>} */
-function getAllPresets() {
+export function getAllPresets(): Record<string, SourceProfile> {
   if (sourcePresetsCache) return sourcePresetsCache;
   const custom = loadCustomProfiles();
   const deleted = loadDeletedPresets();
-  /** @type {Record<string, SourceProfile>} */
-  const result = {};
+  const result: Record<string, SourceProfile> = {};
   for (const [key, value] of Object.entries(SOURCE_PRESETS)) {
     if (key === "custom") {
       for (const [ck, cv] of Object.entries(custom)) {
@@ -731,7 +678,7 @@ function getAllPresets() {
           result[ck] = cv;
         }
       }
-      result[key] = /** @type {SourceProfile} */ (value);
+      result[key] = value as SourceProfile;
       continue;
     }
     if (deleted.includes(key)) continue;
@@ -743,40 +690,36 @@ function getAllPresets() {
       // original heading (e.g. an edited "evian" still renders as Bottled).
       result[key] = override.category
         ? override
-        : Object.assign({}, override, { category: value && value.category });
+        : Object.assign({}, override, { category: value && (value as SourceProfile).category });
     } else {
-      result[key] = /** @type {SourceProfile} */ (value);
+      result[key] = value as SourceProfile;
     }
   }
   sourcePresetsCache = result;
   return sourcePresetsCache;
 }
 
-/** @param {string} presetName */
-function getSourceWaterByPreset(presetName) {
+export function getSourceWaterByPreset(presetName: string) {
   if (presetName === "custom") {
     return loadSourceWater();
   }
   const customProfiles = loadCustomProfiles();
   const preset = customProfiles[presetName] || SOURCE_PRESETS[presetName];
   if (!preset) return loadSourceWater();
-  const { label, ...ions } = preset;
+  const { label: _label, ...ions } = preset;
   return ions;
 }
 
 // --- Selected minerals + cache ---
-/** @type {string[] | null} */
-let selectedMineralsCache = null;
+let selectedMineralsCache: string[] | null = null;
 
-/** @param {string[]} mineralIds */
-function saveSelectedMinerals(mineralIds) {
+export function saveSelectedMinerals(mineralIds: string[]): void {
   _setTransient("cw_selected_minerals", JSON.stringify(mineralIds));
   selectedMineralsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @returns {string[]} */
-function loadSelectedMinerals() {
+export function loadSelectedMinerals(): string[] {
   if (selectedMineralsCache) return selectedMineralsCache;
   const parsed = safeParse(_getTransient("cw_selected_minerals"), null);
   selectedMineralsCache = Array.isArray(parsed)
@@ -786,22 +729,17 @@ function loadSelectedMinerals() {
 }
 
 // --- Selected concentrates + DIY specs ---
-/** @type {string[] | null} */
-let selectedConcentratesCache = null;
-/** @type {Record<string, DiyConcentrateSpec> | null} */
-let diyConcentrateSpecsCache = null;
-/** @type {Record<string, StockConcentrateSpec> | null} */
-let stockConcentrateSpecsCache = null;
+let selectedConcentratesCache: string[] | null = null;
+let diyConcentrateSpecsCache: Record<string, DiyConcentrateSpec> | null = null;
+let stockConcentrateSpecsCache: Record<string, StockConcentrateSpec> | null = null;
 
-/** @param {string[]} concentrateIds */
-function saveSelectedConcentrates(concentrateIds) {
+export function saveSelectedConcentrates(concentrateIds: string[]): void {
   _setTransient("cw_selected_concentrates", JSON.stringify(concentrateIds));
   selectedConcentratesCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @returns {string[]} */
-function loadSelectedConcentrates() {
+export function loadSelectedConcentrates(): string[] {
   if (selectedConcentratesCache) return selectedConcentratesCache;
   const parsed = safeParse(_getTransient("cw_selected_concentrates"), null);
   selectedConcentratesCache = Array.isArray(parsed) ? parsed : [];
@@ -809,7 +747,7 @@ function loadSelectedConcentrates() {
 }
 
 /** Returns only valid concentrate IDs (diy:, brand:, or stock: prefixed) from the selected concentrates list. */
-function loadValidSelectedConcentrates() {
+export function loadValidSelectedConcentrates(): string[] {
   return loadSelectedConcentrates().filter(function (id) {
     return (
       typeof id === "string" &&
@@ -818,15 +756,15 @@ function loadValidSelectedConcentrates() {
   });
 }
 
-/** @param {Record<string, DiyConcentrateSpec> | null | undefined} specs */
-function saveDiyConcentrateSpecs(specs) {
+export function saveDiyConcentrateSpecs(
+  specs: Record<string, DiyConcentrateSpec> | null | undefined,
+): void {
   _setGated("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @returns {Record<string, DiyConcentrateSpec>} */
-function loadDiyConcentrateSpecs() {
+export function loadDiyConcentrateSpecs(): Record<string, DiyConcentrateSpec> {
   if (diyConcentrateSpecsCache) return Object.assign({}, diyConcentrateSpecsCache);
   const parsed = safeParse(_getGated("cw_diy_concentrate_specs"), {});
   diyConcentrateSpecsCache =
@@ -834,11 +772,7 @@ function loadDiyConcentrateSpecs() {
   return Object.assign({}, diyConcentrateSpecsCache);
 }
 
-/**
- * @param {unknown} concentrateId
- * @returns {string | null}
- */
-function parseDiyConcentrateId(concentrateId) {
+export function parseDiyConcentrateId(concentrateId: unknown): string | null {
   if (typeof concentrateId !== "string") return null;
   if (!concentrateId.startsWith("diy:")) return null;
   const mineralId = concentrateId.slice(4);
@@ -853,15 +787,15 @@ function parseDiyConcentrateId(concentrateId) {
 // these arrives in B2; calculator dispensing in B3. Adding the storage
 // primitives now keeps each phase shippable independently.
 
-/** @param {Record<string, StockConcentrateSpec> | null | undefined} specs */
-function saveStockConcentrateSpecs(specs) {
+export function saveStockConcentrateSpecs(
+  specs: Record<string, StockConcentrateSpec> | null | undefined,
+): void {
   _setGated("cw_stock_concentrate_specs", JSON.stringify(specs || {}));
   stockConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-/** @returns {Record<string, StockConcentrateSpec>} */
-function loadStockConcentrateSpecs() {
+export function loadStockConcentrateSpecs(): Record<string, StockConcentrateSpec> {
   if (stockConcentrateSpecsCache) return Object.assign({}, stockConcentrateSpecsCache);
   const parsed = safeParse(_getGated("cw_stock_concentrate_specs"), {});
   stockConcentrateSpecsCache =
@@ -869,12 +803,8 @@ function loadStockConcentrateSpecs() {
   return Object.assign({}, stockConcentrateSpecsCache);
 }
 
-/**
- * Extracts the slug from a "stock:<slug>" concentrate id.
- * @param {unknown} concentrateId
- * @returns {string | null}
- */
-function parseStockConcentrateId(concentrateId) {
+/** Extracts the slug from a "stock:<slug>" concentrate id. */
+export function parseStockConcentrateId(concentrateId: unknown): string | null {
   if (typeof concentrateId !== "string") return null;
   if (!concentrateId.startsWith("stock:")) return null;
   const slug = concentrateId.slice(6);
@@ -884,10 +814,8 @@ function parseStockConcentrateId(concentrateId) {
 /**
  * Returns the full StockConcentrateSpec for a "stock:<slug>" id, or null if
  * not found / not a stock id.
- * @param {unknown} concentrateId
- * @returns {StockConcentrateSpec | null}
  */
-function getStockSpec(concentrateId) {
+export function getStockSpec(concentrateId: unknown): StockConcentrateSpec | null {
   const slug = parseStockConcentrateId(concentrateId);
   if (!slug) return null;
   const specs = loadStockConcentrateSpecs();
@@ -899,12 +827,10 @@ function getStockSpec(concentrateId) {
  * mineralId is normalized; duplicates collapse. Used by getAvailableMineralIds
  * so the calculator's mineral-source pickers see every mineral the user can
  * dose via an enabled stock.
- * @param {StockConcentrateSpec | null | undefined} spec
- * @returns {string[]}
  */
-function getStockMineralIds(spec) {
+export function getStockMineralIds(spec: StockConcentrateSpec | null | undefined): string[] {
   if (!spec || !Array.isArray(spec.minerals)) return [];
-  const out = new Set();
+  const out = new Set<string>();
   for (const entry of spec.minerals) {
     if (
       entry &&
@@ -923,10 +849,8 @@ function getStockMineralIds(spec) {
  * is enabled. v1 single-stock-active rule: the calculator and recipe builder
  * both dispense from this one stock and ignore any others. Centralized here
  * so future multi-stock work touches one helper instead of three call sites.
- * @param {unknown} concentrateIds
- * @returns {string | null}
  */
-function getActiveStockId(concentrateIds) {
+export function getActiveStockId(concentrateIds: unknown): string | null {
   if (!Array.isArray(concentrateIds)) return null;
   for (const id of concentrateIds) {
     if (typeof id === "string" && id.startsWith("stock:")) return id;
@@ -941,9 +865,8 @@ function getActiveStockId(concentrateIds) {
  * checkbox behavior in minerals.html's Recipe Concentrates section so any code
  * path that activates a stock (selector toggle, new-stock save, auto-enable
  * after derive/import) ends in the same canonical state.
- * @param {string | null | undefined} stockId
  */
-function writeActiveStockId(stockId) {
+export function writeActiveStockId(stockId: string | null | undefined): void {
   const others = loadSelectedConcentrates().filter(function (id) {
     return typeof id !== "string" || !id.startsWith("stock:");
   });
@@ -955,10 +878,8 @@ function writeActiveStockId(stockId) {
  * Convenience wrapper around getActiveStockId + getStockSpec — returns the
  * resolved spec for the first enabled stock, or null if none enabled or the
  * spec was deleted (orphan id).
- * @param {unknown} concentrateIds
- * @returns {StockConcentrateSpec | null}
  */
-function getActiveStockSpec(concentrateIds) {
+export function getActiveStockSpec(concentrateIds: unknown): StockConcentrateSpec | null {
   const id = getActiveStockId(concentrateIds);
   return id ? getStockSpec(id) : null;
 }
@@ -970,12 +891,11 @@ function getActiveStockSpec(concentrateIds) {
  * stock — same convention as scripts/compute-coffee-ad-astra-ions.cjs).
  * Returns {} for malformed specs (zero/missing bottleMl or doseGramsPerL,
  * non-array minerals, etc.).
- * @param {StockConcentrateSpec | null | undefined} spec
- * @returns {Record<string, number>}
  */
-function computeStockMineralGramsPerL(spec) {
-  /** @type {Record<string, number>} */
-  const out = {};
+export function computeStockMineralGramsPerL(
+  spec: StockConcentrateSpec | null | undefined,
+): Record<string, number> {
+  const out: Record<string, number> = {};
   if (!spec || !Array.isArray(spec.minerals)) return out;
   const bottleMl = Number(spec.bottleMl);
   const doseGramsPerL = Number(spec.doseGramsPerL);
@@ -1010,11 +930,10 @@ function computeStockMineralGramsPerL(spec) {
  * can review/tweak before saving. Retained as the canonical "recreate library
  * spec from a recipe" helper for storage-stock.test.js coverage and a planned
  * "Reset to library values" affordance.
- *
- * @param {{ slug?: unknown, label?: unknown, stockFormula?: any } | null | undefined} recipe
- * @returns {{ status: "imported" | "already-present" | "invalid", slug: string | null }}
  */
-function importLibraryStockToPantry(recipe) {
+export function importLibraryStockToPantry(
+  recipe: { slug?: unknown; label?: unknown; stockFormula?: any } | null | undefined,
+): { status: "imported" | "already-present" | "invalid"; slug: string | null } {
   if (!recipe || typeof recipe !== "object") return { status: "invalid", slug: null };
   const slug = typeof recipe.slug === "string" ? recipe.slug : "";
   const formula = recipe.stockFormula;
@@ -1024,8 +943,7 @@ function importLibraryStockToPantry(recipe) {
   const specs = loadStockConcentrateSpecs();
   if (specs[slug]) return { status: "already-present", slug };
 
-  /** @type {StockMineralEntry[]} */
-  const minerals = [];
+  const minerals: StockMineralEntry[] = [];
   for (const m of formula.minerals) {
     if (!m || typeof m !== "object" || typeof m.mineralId !== "string" || !m.mineralId) continue;
     minerals.push({ mineralId: m.mineralId, grams: Number(m.grams) || 0 });
@@ -1036,8 +954,7 @@ function importLibraryStockToPantry(recipe) {
   // persist a dead-on-arrival entry.
   if (minerals.length === 0) return { status: "invalid", slug: null };
 
-  /** @type {StockConcentrateSpec} */
-  const spec = {
+  const spec: StockConcentrateSpec = {
     label: typeof recipe.label === "string" && recipe.label ? recipe.label : slug,
     bottleMl: Number(formula.bottleMl) || 0,
     doseGramsPerL: Number(formula.doseGramsPerL) || 0,
@@ -1054,18 +971,15 @@ function importLibraryStockToPantry(recipe) {
 /**
  * Returns the MINERAL_DB id that this concentrate contributes (for ion math).
  * DIY: mineral id; brand: mapped mineralId; else null.
- * @param {unknown} concentrateId
- * @returns {string | null}
  */
-function getConcentrateMineralId(concentrateId) {
+export function getConcentrateMineralId(concentrateId: unknown): string | null {
   if (typeof concentrateId !== "string") return null;
   if (concentrateId.startsWith("diy:")) return parseDiyConcentrateId(concentrateId);
   const brand = typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId];
   return brand ? brand.mineralId : null;
 }
 
-/** @param {string | null | undefined} mineralId */
-function getDiyConcentrateGramsPerMl(mineralId) {
+export function getDiyConcentrateGramsPerMl(mineralId: string | null | undefined): number {
   if (!mineralId) return 0;
   const specs = loadDiyConcentrateSpecs();
   const spec = specs && specs[mineralId] ? specs[mineralId] : null;
@@ -1079,10 +993,8 @@ function getDiyConcentrateGramsPerMl(mineralId) {
 /**
  * Grams of equivalent mineral salt per mL of concentrate. Works for DIY (from
  * specs) and brand (from BRAND_CONCENTRATES).
- * @param {unknown} concentrateId
- * @returns {number}
  */
-function getConcentrateGramsPerMl(concentrateId) {
+export function getConcentrateGramsPerMl(concentrateId: unknown): number {
   if (typeof concentrateId !== "string") return 0;
   if (concentrateId.startsWith("diy:")) {
     const mineralId = parseDiyConcentrateId(concentrateId);
@@ -1093,7 +1005,7 @@ function getConcentrateGramsPerMl(concentrateId) {
   return 0;
 }
 
-function getAvailableMineralIds() {
+export function getAvailableMineralIds(): string[] {
   const out = new Set(loadSelectedMinerals());
   const concentrates = loadSelectedConcentrates();
   for (const cid of concentrates) {
@@ -1116,7 +1028,7 @@ function getAvailableMineralIds() {
 // --- Mineral source preferences ---
 
 /** Returns an array of enabled alkalinity source mineral ids (baking-soda and/or potassium-bicarbonate). */
-function getEffectiveAlkalinitySources() {
+export function getEffectiveAlkalinitySources(): string[] {
   const selected = getAvailableMineralIds();
   const hasBakingSoda = selected.includes("baking-soda");
   const hasPotBicarb = selected.includes("potassium-bicarbonate");
@@ -1127,18 +1039,18 @@ function getEffectiveAlkalinitySources() {
 }
 
 /** Returns an array of enabled calcium source mineral ids (calcium-chloride and/or gypsum). */
-function getEffectiveCalciumSources() {
+export function getEffectiveCalciumSources(): string[] {
   const selected = getAvailableMineralIds();
-  const out = [];
+  const out: string[] = [];
   if (selected.includes("calcium-chloride")) out.push("calcium-chloride");
   if (selected.includes("gypsum")) out.push("gypsum");
   return out;
 }
 
 /** Returns an array of enabled magnesium source mineral ids (epsom-salt and/or magnesium-chloride). */
-function getEffectiveMagnesiumSources() {
+export function getEffectiveMagnesiumSources(): string[] {
   const selected = getAvailableMineralIds();
-  const out = [];
+  const out: string[] = [];
   if (selected.includes("epsom-salt")) out.push("epsom-salt");
   if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
   return out;
@@ -1146,33 +1058,32 @@ function getEffectiveMagnesiumSources() {
 
 // --- Effective mineral sources ---
 /** Returns a single alkalinity source when only one is enabled; when both are enabled returns "potassium-bicarbonate" as fallback; when none, null. Use getEffectiveAlkalinitySources() when both can contribute. */
-function getEffectiveAlkalinitySource() {
+export function getEffectiveAlkalinitySource(): string | null {
   const sources = getEffectiveAlkalinitySources();
   if (sources.length === 0) return null;
-  if (sources.length === 1) return sources[0];
+  if (sources.length === 1) return sources[0] ?? null;
   return "potassium-bicarbonate";
 }
 
 /** Returns a single calcium source when only one is enabled; when both enabled returns "calcium-chloride" (tie-breaker); when none, null. */
-function getEffectiveCalciumSource() {
+export function getEffectiveCalciumSource(): string | null {
   const sources = getEffectiveCalciumSources();
   if (sources.length === 0) return null;
-  if (sources.length === 1) return sources[0];
+  if (sources.length === 1) return sources[0] ?? null;
   return "calcium-chloride";
 }
 
 /** Returns a single magnesium source when only one is enabled; when both enabled returns "epsom-salt" (tie-breaker); when none, null. */
-function getEffectiveMagnesiumSource() {
+export function getEffectiveMagnesiumSource(): string | null {
   const sources = getEffectiveMagnesiumSources();
   if (sources.length === 0) return null;
-  if (sources.length === 1) return sources[0];
+  if (sources.length === 1) return sources[0] ?? null;
   return "epsom-salt";
 }
 
 // --- Target presets aggregation + cache ---
-/** @type {Record<string, TargetProfile> | null} */
-let targetPresetsCache = null;
-function invalidateTargetPresetsCache() {
+let targetPresetsCache: Record<string, TargetProfile> | null = null;
+export function invalidateTargetPresetsCache(): void {
   targetPresetsCache = null;
 }
 
@@ -1195,7 +1106,7 @@ function invalidateTargetPresetsCache() {
 // (user lands on library.html before taste.html renders the rail) don't
 // skip the migration.
 const STARTER_MIGRATION_KEY = "cw_starter_migration_applied";
-function ensureStarterBackfill() {
+export function ensureStarterBackfill(): void {
   if (_getGated(STARTER_MIGRATION_KEY) === "1") return;
   const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
   if (!Array.isArray(library) || library.length === 0) return; // rerun when library arrives
@@ -1240,10 +1151,8 @@ function ensureStarterBackfill() {
  *
  * Later sources override earlier ones at the same slug. Tombstones apply
  * uniformly. The "+ Add Custom" pseudo-entry is always appended.
- *
- * @returns {Record<string, TargetProfile>}
  */
-function getAllTargetPresets() {
+export function getAllTargetPresets(): Record<string, TargetProfile> {
   if (targetPresetsCache) return targetPresetsCache;
   const custom = loadCustomTargetProfiles();
   const tombstoned = new Set(loadDeletedTargetPresets());
@@ -1252,8 +1161,7 @@ function getAllTargetPresets() {
   ensureStarterBackfill();
   const added = new Set(loadAddedTargetPresetsRaw());
 
-  /** @type {Record<string, TargetProfile>} */
-  const result = {};
+  const result: Record<string, TargetProfile> = {};
 
   // 1. Shim — lowest priority. Kept so the rail has *something* on cold loads
   //    before Supabase responds. The shim is the 8 starter slugs exactly, so
@@ -1302,11 +1210,7 @@ function getAllTargetPresets() {
   return targetPresetsCache;
 }
 
-/**
- * @param {string} key
- * @returns {TargetProfile | null}
- */
-function getTargetProfileByKey(key) {
+export function getTargetProfileByKey(key: string): TargetProfile | null {
   if (key === "custom") return null;
   // Route through the merged rail so library-only slugs (sey, aviary-*, rasami-*,
   // and all library-seeded built-ins) and library-overridden shim slugs resolve
@@ -1316,12 +1220,10 @@ function getTargetProfileByKey(key) {
   return merged[key] || null;
 }
 
-/**
- * @param {string} key
- * @param {TargetProfile | null | undefined} profile
- * @returns {"espresso" | "filter"}
- */
-function inferTargetProfileBrewMethod(key, profile) {
+export function inferTargetProfileBrewMethod(
+  key: string,
+  profile: TargetProfile | null | undefined,
+): "espresso" | "filter" {
   if (profile && (profile.brewMethod === "filter" || profile.brewMethod === "espresso")) {
     return profile.brewMethod;
   }
@@ -1338,12 +1240,11 @@ function inferTargetProfileBrewMethod(key, profile) {
   return "filter";
 }
 
-/**
- * @param {string} key
- * @param {TargetProfile | null | undefined} profile
- * @param {string | null | undefined} method
- */
-function targetProfileSupportsBrewMethod(key, profile, method) {
+export function targetProfileSupportsBrewMethod(
+  key: string,
+  profile: TargetProfile | null | undefined,
+  method: string | null | undefined,
+): boolean {
   const brewMethod = normalizeBrewMethod(method);
   // Recipe-browser taxonomy v2 (migration 008): brew_method='all' means the
   // recipe works across both modes (e.g. SCA target, some roaster waters),
@@ -1355,8 +1256,8 @@ function targetProfileSupportsBrewMethod(key, profile, method) {
   }
   if (profile && Array.isArray(profile.brewMethods)) {
     const allowed = new Set(
-      /** @type {unknown[]} */ (profile.brewMethods)
-        .map((value) => normalizeBrewMethod(/** @type {string | null | undefined} */ (value)))
+      (profile.brewMethods as unknown[])
+        .map((value) => normalizeBrewMethod(value as string | null | undefined))
         .filter((value, index, array) => array.indexOf(value) === index),
     );
     return allowed.has(brewMethod);
@@ -1364,12 +1265,12 @@ function targetProfileSupportsBrewMethod(key, profile, method) {
   return inferTargetProfileBrewMethod(key, profile) === brewMethod;
 }
 
-/** @param {string | null | undefined} method */
-function getTargetPresetsForBrewMethod(method) {
+export function getTargetPresetsForBrewMethod(
+  method: string | null | undefined,
+): Record<string, TargetProfile> {
   const brewMethod = normalizeBrewMethod(method);
   const allPresets = getAllTargetPresets();
-  /** @type {Record<string, TargetProfile>} */
-  const filtered = {};
+  const filtered: Record<string, TargetProfile> = {};
   for (const [key, profile] of Object.entries(allPresets)) {
     if (key === "custom" || key === "library") {
       filtered[key] = profile;
@@ -1389,12 +1290,10 @@ function getTargetPresetsForBrewMethod(method) {
 }
 
 // --- Profile name validation ---
-/**
- * @param {string | null | undefined} rawName
- * @param {ValidateNameOptions} [options]
- * @returns {ValidateNameResult}
- */
-function validateProfileName(rawName, options = {}) {
+export function validateProfileName(
+  rawName: string | null | undefined,
+  options: ValidateNameOptions = {},
+): ValidateNameResult {
   const allowEmpty = !!options.allowEmpty;
   const emptyMessage = options.emptyMessage || "Enter a profile name.";
   const invalidMessage = options.invalidMessage || "Enter a valid name.";
@@ -1435,12 +1334,10 @@ function validateProfileName(rawName, options = {}) {
   return { ok: true, key, name };
 }
 
-/**
- * @param {string | null | undefined} rawName
- * @param {{ allowEmpty?: boolean }} [options]
- * @returns {ValidateNameResult}
- */
-function validateTargetProfileName(rawName, options = {}) {
+export function validateTargetProfileName(
+  rawName: string | null | undefined,
+  options: { allowEmpty?: boolean } = {},
+): ValidateNameResult {
   return validateProfileName(rawName, {
     allowEmpty: options.allowEmpty,
     builtinKeys: RESERVED_TARGET_KEYS,
@@ -1450,7 +1347,7 @@ function validateTargetProfileName(rawName, options = {}) {
 }
 
 // --- Restore defaults ---
-function restoreSourcePresetDefaults() {
+export function restoreSourcePresetDefaults(): void {
   // Clear tombstones for builtin presets only.  Tombstones for purely-custom
   // slugs must be preserved so deleted customs don't resurrect from the cloud.
   const preserved = loadDeletedPresets().filter(function (key) {
@@ -1468,25 +1365,23 @@ function restoreSourcePresetDefaults() {
 }
 
 // --- Theme ---
-function loadThemePreference() {
+export function loadThemePreference(): "light" | "dark" | "system" {
   const saved = safeGetItem(THEME_KEY);
   if (saved === "light" || saved === "dark" || saved === "system") return saved;
   return "system";
 }
 
-/** @param {string} mode */
-function saveThemePreference(mode) {
+export function saveThemePreference(mode: string): void {
   safeSetItem(THEME_KEY, mode);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 // --- Creator display name (for recipe library publishing) ---
-function loadCreatorDisplayName() {
+export function loadCreatorDisplayName(): string {
   return _getGated("cw_creator_display_name") || "";
 }
 
-/** @param {string} name */
-function saveCreatorDisplayName(name) {
+export function saveCreatorDisplayName(name: string): void {
   _setGated("cw_creator_display_name", name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -1494,22 +1389,22 @@ function saveCreatorDisplayName(name) {
 // --- Recipes-moved toaster (one-time) ---
 const RECIPES_TOASTER_DISMISSED_KEY = "cw_recipes_toaster_dismissed";
 
-function loadRecipesToasterDismissed() {
+export function loadRecipesToasterDismissed(): boolean {
   return safeGetItem(RECIPES_TOASTER_DISMISSED_KEY) === "true";
 }
 
-function saveRecipesToasterDismissed() {
+export function saveRecipesToasterDismissed(): void {
   safeSetItem(RECIPES_TOASTER_DISMISSED_KEY, "true");
 }
 
 // --- Calculator welcome modal (one-time) ---
 const WELCOME_MODAL_DISMISSED_KEY = "cw_calculator_welcome_dismissed";
 
-function loadCalculatorWelcomeDismissed() {
+export function loadCalculatorWelcomeDismissed(): boolean {
   return safeGetItem(WELCOME_MODAL_DISMISSED_KEY) === "true";
 }
 
-function saveCalculatorWelcomeDismissed() {
+export function saveCalculatorWelcomeDismissed(): void {
   safeSetItem(WELCOME_MODAL_DISMISSED_KEY, "true");
 }
 
@@ -1522,7 +1417,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 
   window.addEventListener("storage", function (e) {
     if (!e.key) return;
-    var recipeAffected = false;
+    let recipeAffected = false;
     if (e.key === "cw_custom_profiles") {
       customProfilesCache = null;
       invalidateSourcePresetsCache();
@@ -1581,75 +1476,119 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   }
 }
 
-// --- Node/Vitest UMD shim (harmless in browsers) ---
-// Tests require this file as a CJS module and need to call its functions; in
-// the browser we rely on classic-script globals across files. The shim uses
-// Object.assign(module.exports, …) rather than `module.exports = …` so tsc
-// doesn't classify this file as a CommonJS module — which would hide its
-// top-level function declarations from sibling @ts-checked files like sync.js
-// that reach them as script-scope globals.
-if (typeof module !== "undefined" && module.exports) {
-  const _umdExports = {
-    getAllTargetPresets,
-    getTargetProfileByKey,
-    getTargetPresetsForBrewMethod,
-    targetProfileSupportsBrewMethod,
-    invalidateTargetPresetsCache,
+// --- Window/global population (browser + tests) ---
+// In the browser the legacy-globals.ts bridge module copies these onto window
+// before any UI script runs. In Node/Vitest the test harness aliases
+// `global.window = global`, so this Object.assign lands on global, where
+// sync.ts's lexical references (safeGetItem, loadThemePreference, etc.)
+// resolve via the global scope chain.  Keeping the assignment here means
+// sync.test.js works without loading the bridge.
+if (typeof window !== "undefined") {
+  Object.assign(window, {
+    safeGetItem,
+    safeSetItem,
+    safeRemoveItem,
+    safeParse,
+    _getTransient,
+    _setTransient,
+    _getGated,
+    _setGated,
+    saveSourceWater,
+    loadSourceWater,
+    saveSourcePresetName,
+    loadSourcePresetName,
+    saveMineralDisplayMode,
+    loadMineralDisplayMode,
+    isAdvancedMineralDisplayMode,
+    saveVolumePreference,
+    loadVolumePreference,
+    slugify,
+    loadCustomProfiles,
+    saveCustomProfiles,
+    deleteCustomProfile,
+    loadDeletedPresets,
+    addDeletedPreset,
+    loadCustomTargetProfiles,
+    saveCustomTargetProfiles,
+    deleteCustomTargetProfile,
+    migrateHendonSlug,
     loadDeletedTargetPresets,
     addDeletedTargetPreset,
     removeDeletedTargetPreset,
     loadAddedTargetPresets,
     addAddedTargetPreset,
     removeAddedTargetPreset,
-    loadCustomTargetProfiles,
-    saveCustomTargetProfiles,
     getExistingTargetProfileLabels,
+    getExistingSourceProfileLabels,
+    saveTargetPresetName,
+    loadTargetDraftIons,
+    saveTargetDraftIons,
+    clearTargetDraftIons,
+    loadTargetDraftIonsFor,
     loadTargetPresetName,
-    slugify,
-    // Stock concentrate helpers (B1) — exposed for unit tests; production
-    // callers already see them as classic-script globals.
-    loadStockConcentrateSpecs,
+    normalizeBrewMethod,
+    saveBrewMethod,
+    loadBrewMethod,
+    normalizeLotusDropperType,
+    saveLotusDropperType,
+    loadLotusDropperType,
+    getLotusDropMl,
+    normalizeLotusConcentrateUnit,
+    saveLotusConcentrateUnit,
+    loadLotusConcentrateUnit,
+    loadLotusConcentrateUnits,
+    saveLotusConcentrateUnits,
+    loadLotusConcentrateUnitFor,
+    saveLotusConcentrateUnitFor,
+    invalidateAllCaches,
+    invalidateSourcePresetsCache,
+    invalidateTargetPresetsCache,
+    getAllPresets,
+    getSourceWaterByPreset,
+    saveSelectedMinerals,
+    loadSelectedMinerals,
+    saveSelectedConcentrates,
+    loadSelectedConcentrates,
+    loadValidSelectedConcentrates,
+    saveDiyConcentrateSpecs,
+    loadDiyConcentrateSpecs,
+    parseDiyConcentrateId,
     saveStockConcentrateSpecs,
+    loadStockConcentrateSpecs,
     parseStockConcentrateId,
     getStockSpec,
     getStockMineralIds,
     getActiveStockId,
+    writeActiveStockId,
     getActiveStockSpec,
     computeStockMineralGramsPerL,
     importLibraryStockToPantry,
-    loadSelectedConcentrates,
-    saveSelectedConcentrates,
-    loadValidSelectedConcentrates,
+    getConcentrateMineralId,
+    getDiyConcentrateGramsPerMl,
+    getConcentrateGramsPerMl,
     getAvailableMineralIds,
-    invalidateAllCaches,
-    // Loaders consumed by metrics.js and sync.js's payload builders. Browser
-    // sees these as classic-script globals; the shim routes them through
-    // module.exports for unit tests (metrics-storage.test.js, sync.test.js).
-    saveSelectedMinerals,
-    loadSelectedMinerals,
+    getEffectiveAlkalinitySources,
     getEffectiveCalciumSources,
     getEffectiveMagnesiumSources,
-    getEffectiveAlkalinitySources,
     getEffectiveAlkalinitySource,
-    getSourceWaterByPreset,
-    loadSourcePresetName,
-    loadBrewMethod,
+    getEffectiveCalciumSource,
+    getEffectiveMagnesiumSource,
+    getAllTargetPresets,
+    getTargetProfileByKey,
+    inferTargetProfileBrewMethod,
+    targetProfileSupportsBrewMethod,
+    getTargetPresetsForBrewMethod,
+    validateProfileName,
+    validateTargetProfileName,
+    restoreSourcePresetDefaults,
     loadThemePreference,
-    loadMineralDisplayMode,
-    loadLotusDropperType,
-    loadDiyConcentrateSpecs,
-    loadLotusConcentrateUnits,
+    saveThemePreference,
     loadCreatorDisplayName,
-    loadSourceWater,
-    loadDeletedPresets,
-    loadCustomProfiles,
-    // safeGetItem / safeParse are used by sync.js's collectVolumePreferences
-    // (lexical reference to a storage.js classic-script global). Without
-    // these in the shim, the call throws ReferenceError under Node and
-    // collectVolumePreferences silently returns {} via its outer try/catch.
-    safeGetItem,
-    safeParse,
-  };
-  Object.assign(module.exports, _umdExports);
-  Object.assign(globalThis, _umdExports);
+    saveCreatorDisplayName,
+    loadRecipesToasterDismissed,
+    saveRecipesToasterDismissed,
+    loadCalculatorWelcomeDismissed,
+    saveCalculatorWelcomeDismissed,
+    ensureStarterBackfill,
+  });
 }

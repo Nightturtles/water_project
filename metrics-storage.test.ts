@@ -13,50 +13,16 @@
 //   * buildStoredTargetProfile (brewMethod-fallback branch) — falls through
 //     to loadBrewMethod() when options.brewMethod is absent.
 //
-// `require()` (not `import`) is deliberate so the browser-global stubs below
-// are in place before constants/storage/metrics are evaluated. ES `import`
-// statements hoist above stub assignments and would crash on storage.js's
-// top-level localStorage reads.
+// Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
+// vitest.setup.js so this file can use ES `import` for src/lib/storage.
+// metrics.js stays a classic-script CJS file and is loaded via require().
 import { describe, test, expect, beforeEach } from "vitest";
+import { saveSelectedMinerals } from "./src/lib/storage";
 
-// --- Environment stubs (same pattern as library-merge.test.js) ---
-
-function makeFakeStorage() {
-  let store: Record<string, string> = {};
-  return {
-    getItem: (k: string) => (k in store ? store[k] : null),
-    setItem: (k: string, v: string) => {
-      store[k] = String(v);
-    },
-    removeItem: (k: string) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
-    },
-    get _store() {
-      return store;
-    },
-  };
-}
-
-// Type-erase global to install browser stubs without massaging NodeJS.Global.
-// Reads of g.localStorage / g.sessionStorage below route through the same alias.
 const g: any = global;
 
-g.window = g;
-g.localStorage = makeFakeStorage();
-g.sessionStorage = makeFakeStorage();
-// Tests run on the "logged in" code path so transient storage helpers route
-// to localStorage.  Override per-test to exercise the anonymous path.
-g.isLoggedInSync = () => true;
-g._cachedAuthUserId = "test-user-id";
-
 require("./constants.js");
-const storage = require("./storage.js");
 const metrics = require("./metrics.js");
-
-const { saveSelectedMinerals } = storage;
 
 function resetState() {
   g.localStorage.clear();
