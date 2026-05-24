@@ -158,8 +158,13 @@ module.exports = tseslint.config(
   // the whole point of the shim is letting Node/Vitest consume the same
   // files the browser loads as classic scripts. Silence the TS rule
   // that would flag require() in favor of ESM imports.
+  //
+  // `.test.ts` files (e.g. metrics.test.ts, metrics-storage.test.ts) still
+  // use require() for the same load-order reason: browser-global stubs
+  // must be in place before constants/storage/metrics are evaluated, and
+  // ES `import` would hoist above the stub assignments.
   {
-    files: ["vitest.config.js", "**/*.test.js"],
+    files: ["vitest.config.js", "**/*.test.{js,ts}"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {
@@ -169,6 +174,10 @@ module.exports = tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-require-imports": "off",
+      // Test-file callbacks consume types from `require()`'d sources that
+      // resolve to `any`. Typing each callback param would mean writing the
+      // full source-module surface here. Same trade-off as the e2e block.
+      "@typescript-eslint/no-explicit-any": "off",
       "no-unused-vars": ["error", { args: "none", caughtErrorsIgnorePattern: "^_" }],
     },
   },

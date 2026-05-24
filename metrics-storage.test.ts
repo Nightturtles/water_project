@@ -12,17 +12,23 @@
 //     getSourceWaterByPreset (all storage.js consumers).
 //   * buildStoredTargetProfile (brewMethod-fallback branch) — falls through
 //     to loadBrewMethod() when options.brewMethod is absent.
+//
+// `require()` (not `import`) is deliberate so the browser-global stubs below
+// are in place before constants/storage/metrics are evaluated. ES `import`
+// statements hoist above stub assignments and would crash on storage.js's
+// top-level localStorage reads.
+import { describe, test, expect, beforeEach } from "vitest";
 
 // --- Environment stubs (same pattern as library-merge.test.js) ---
 
 function makeFakeStorage() {
-  let store = {};
+  let store: Record<string, string> = {};
   return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
+    getItem: (k: string) => (k in store ? store[k] : null),
+    setItem: (k: string, v: string) => {
       store[k] = String(v);
     },
-    removeItem: (k) => {
+    removeItem: (k: string) => {
       delete store[k];
     },
     clear: () => {
@@ -34,13 +40,17 @@ function makeFakeStorage() {
   };
 }
 
-global.window = global;
-global.localStorage = makeFakeStorage();
-global.sessionStorage = makeFakeStorage();
+// Type-erase global to install browser stubs without massaging NodeJS.Global.
+// Reads of g.localStorage / g.sessionStorage below route through the same alias.
+const g: any = global;
+
+g.window = g;
+g.localStorage = makeFakeStorage();
+g.sessionStorage = makeFakeStorage();
 // Tests run on the "logged in" code path so transient storage helpers route
 // to localStorage.  Override per-test to exercise the anonymous path.
-global.isLoggedInSync = () => true;
-global._cachedAuthUserId = "test-user-id";
+g.isLoggedInSync = () => true;
+g._cachedAuthUserId = "test-user-id";
 
 require("./constants.js");
 const storage = require("./storage.js");
@@ -49,8 +59,8 @@ const metrics = require("./metrics.js");
 const { saveSelectedMinerals } = storage;
 
 function resetState() {
-  global.localStorage.clear();
-  global.sessionStorage.clear();
+  g.localStorage.clear();
+  g.sessionStorage.clear();
   // saveSelectedMinerals also clears the internal selectedMineralsCache.
   // Resetting to the 4-mineral default that loadSelectedMinerals would
   // return for an empty store keeps each test starting from the same
@@ -145,16 +155,16 @@ describe("deriveStockFormulaFromTarget", () => {
   // water grams = recipe_g / 50. Resulting brew ions = calculateIonPPMs of
   // those per-L grams. The fixture lets us go (recipe → ions) once, then
   // (ions → derived formula) and assert what minerals the heuristic picks.
-  function ionsFromRecipeGrams(recipeGrams) {
-    const perLGrams = {};
-    for (const [id, g] of Object.entries(recipeGrams)) {
-      perLGrams[id] = g / 50;
+  function ionsFromRecipeGrams(recipeGrams: Record<string, number>) {
+    const perLGrams: Record<string, number> = {};
+    for (const [id, grams] of Object.entries(recipeGrams)) {
+      perLGrams[id] = grams / 50;
     }
     return metrics.calculateIonPPMs(perLGrams);
   }
 
-  function mineralIdsOf(formula) {
-    return formula.minerals.map((m) => m.mineralId).sort();
+  function mineralIdsOf(formula: any) {
+    return formula.minerals.map((m: any) => m.mineralId).sort();
   }
 
   test("Distilled target (all zeros) → empty minerals + distilled note", () => {
@@ -205,8 +215,8 @@ describe("deriveStockFormulaFromTarget", () => {
       ["calcium-chloride", "magnesium-chloride", "potassium-bicarbonate"].sort(),
     );
     // No epsom-salt, no baking-soda in this profile.
-    expect(formula.minerals.some((m) => m.mineralId === "epsom-salt")).toBe(false);
-    expect(formula.minerals.some((m) => m.mineralId === "baking-soda")).toBe(false);
+    expect(formula.minerals.some((m: any) => m.mineralId === "epsom-salt")).toBe(false);
+    expect(formula.minerals.some((m: any) => m.mineralId === "baking-soda")).toBe(false);
   });
 
   test("Matt Perger (epsom + baking soda) → derive picks epsom + baking soda", () => {
@@ -230,8 +240,8 @@ describe("deriveStockFormulaFromTarget", () => {
     // The derived formula's minerals are picked heuristically (HCO3 split,
     // Mg by SO4/Cl ratio, Ca always CaCl2). Re-derive ions from the
     // formula's grams and check that the main ions match within tolerance.
-    const perLGrams = {};
-    formula.minerals.forEach((m) => {
+    const perLGrams: Record<string, number> = {};
+    formula.minerals.forEach((m: any) => {
       perLGrams[m.mineralId] = (m.grams / formula.bottleMl) * formula.doseGramsPerL;
     });
     const reIons = metrics.calculateIonPPMs(perLGrams);
@@ -301,7 +311,7 @@ describe("computeFullProfile", () => {
 
 describe("buildStoredTargetProfile (brewMethod fallback)", () => {
   test("options.brewMethod absent + cw_brew_method='espresso' → output brewMethod='espresso'", () => {
-    global.localStorage.setItem("cw_brew_method", "espresso");
+    g.localStorage.setItem("cw_brew_method", "espresso");
     const profile = metrics.buildStoredTargetProfile(
       "X",
       { calcium: 10, magnesium: 5, bicarbonate: 12 },
@@ -314,7 +324,7 @@ describe("buildStoredTargetProfile (brewMethod fallback)", () => {
   test("options.brewMethod 'invalid-mode' + cw_brew_method='espresso' → falls through to loadBrewMethod", () => {
     // metrics.js:815-820 only recognizes 'espresso' or 'filter' on options;
     // everything else falls through to loadBrewMethod().
-    global.localStorage.setItem("cw_brew_method", "espresso");
+    g.localStorage.setItem("cw_brew_method", "espresso");
     const profile = metrics.buildStoredTargetProfile(
       "X",
       { calcium: 10, magnesium: 5, bicarbonate: 12 },

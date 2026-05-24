@@ -38,9 +38,15 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Same command as .claude/launch.json's `dev` config. http-server serves
-    // the raw files exactly as GitHub Pages does — no surprises between test
-    // and production.
+    // e2e keeps http-server even though local dev (.claude/launch.json) now
+    // uses vite. Reason: both `vite dev` (HMR + /@vite/client injection) and
+    // `vite preview` (different request timing than http-server) surface a
+    // latent parallel-execution flake in the creator-gated share-prompt and
+    // smoke-sync tests when run with workers=2. The flake is pre-existing
+    // (see e2e flake tracker #90 entry 2026-05-22) but is exacerbated by
+    // either vite mode. Keeping http-server here preserves the stable e2e
+    // baseline; the move to vite-served e2e lands with PR (g) when dist/
+    // is the deploy artifact and the test workload can be re-tuned.
     command: "npx http-server . -c-1 -p 8080 --silent",
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,
