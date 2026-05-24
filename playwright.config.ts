@@ -38,13 +38,16 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Same command as .claude/launch.json's `dev` config. Vite's dev server
-    // serves the raw root files (constants.js, metrics.js, etc.) as classic
-    // scripts unchanged; it only transforms files referenced via
-    // `<script type="module">`. The Phase A migration uses vite so test,
-    // dev, and the future bundle output all share one toolchain.
-    // --strictPort fails fast if 8080 is taken instead of silently drifting.
-    command: "npx vite --port 8080 --strictPort",
+    // e2e keeps http-server even though local dev (.claude/launch.json) now
+    // uses vite. Reason: both `vite dev` (HMR + /@vite/client injection) and
+    // `vite preview` (different request timing than http-server) surface a
+    // latent parallel-execution flake in the creator-gated share-prompt and
+    // smoke-sync tests when run with workers=2. The flake is pre-existing
+    // (see e2e flake tracker #90 entry 2026-05-22) but is exacerbated by
+    // either vite mode. Keeping http-server here preserves the stable e2e
+    // baseline; the move to vite-served e2e lands with PR (g) when dist/
+    // is the deploy artifact and the test workload can be re-tuned.
+    command: "npx http-server . -c-1 -p 8080 --silent",
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
