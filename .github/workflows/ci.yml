@@ -20,6 +20,8 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build
+      - run: npm run build:verify
 
   e2e:
     runs-on: ubuntu-latest

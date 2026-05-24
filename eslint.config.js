@@ -202,6 +202,16 @@ module.exports = tseslint.config(
     },
   },
 
+  // Vite config. Runs in Node at build time; no browser globals.
+  // .mts (explicit ESM) because vite-plugin-static-copy is ESM-only and the
+  // project's package.json is CJS by default.
+  {
+    files: ["vite.config.mts"],
+    languageOptions: {
+      globals: globals.node,
+    },
+  },
+
   // Prettier compatibility — MUST be last so its rule overrides win. This
   // only disables ESLint rules that conflict with Prettier's formatting
   // (quotes, indentation, semicolons, etc.). It does NOT run Prettier;
