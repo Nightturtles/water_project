@@ -6,43 +6,13 @@
 // pickFeaturedFromFiltered) and the normalizer/slug helpers don't need
 // a browser; testing them here gives a faster, deterministic catch.
 //
-// Load order mirrors the browser per library-merge.test.js: constants
-// (populates RESERVED_TARGET_KEYS, TARGET_PRESETS), then storage (populates
-// slugify, loadCustomTargetProfiles, etc.), then library-data (IIFE that
-// assigns to window — requires the global stubs to exist first).
-
-// --- Environment stubs ---
-
-function makeFakeStorage() {
-  let store = {};
-  return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
-      store[k] = String(v);
-    },
-    removeItem: (k) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
-    },
-    get _store() {
-      return store;
-    },
-  };
-}
-
-global.window = global;
-global.localStorage = makeFakeStorage();
-global.sessionStorage = makeFakeStorage();
-global.isLoggedInSync = () => true;
-global._cachedAuthUserId = "test-user-id";
+// Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
+// vitest.setup.js so this file can use ES `import` for src/lib/storage.
+// library-data.js stays a classic-script CJS file and is loaded via require().
 
 require("./constants.js");
-const storage = require("./storage.js");
+import { saveCustomTargetProfiles, invalidateTargetPresetsCache } from "./src/lib/storage";
 const library = require("./library-data.js");
-
-const { saveCustomTargetProfiles, invalidateTargetPresetsCache } = storage;
 
 const {
   normalizePublicRecipeRow: normalizeRow,

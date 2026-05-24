@@ -15,42 +15,13 @@
 // on re-add, no suffixed copy created) rather than internal bookkeeping —
 // the spec-aligned "My Recipes" refactor may replace the copy-to-custom
 // model with a bookmark set, so tests written to the invariant survive.
+//
+// Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
+// vitest.setup.js so this file can use ES `import` for src/lib/storage.
+// constants.js + library-data.js stay classic-script CJS files (require()).
 
-// --- Environment stubs ---
-
-function makeFakeStorage() {
-  let store = {};
-  return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
-      store[k] = String(v);
-    },
-    removeItem: (k) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
-    },
-    get _store() {
-      return store;
-    },
-  };
-}
-
-global.window = global;
-global.localStorage = makeFakeStorage();
-global.sessionStorage = makeFakeStorage();
-global.isLoggedInSync = () => true;
-global._cachedAuthUserId = "test-user-id";
-
-// Load in browser order. constants.js populates TARGET_PRESETS etc. on
-// globalThis; storage.js does the same for its helpers; library-data.js
-// assigns to window (= global here).
 require("./constants.js");
-const storage = require("./storage.js");
-const library = require("./library-data.js");
-
-const {
+import {
   getAllTargetPresets,
   getTargetProfileByKey,
   getTargetPresetsForBrewMethod,
@@ -63,7 +34,8 @@ const {
   saveCustomTargetProfiles,
   loadCustomTargetProfiles,
   getExistingTargetProfileLabels,
-} = storage;
+} from "./src/lib/storage";
+const library = require("./library-data.js");
 
 const { copyRecipeToMyProfiles, isRecipeInMyProfiles } = library;
 

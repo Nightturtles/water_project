@@ -17,8 +17,7 @@
   "include": [
     "metrics.js",
     "constants.js",
-    "storage.js",
-    "sync.js",
+    "src/**/*.ts",
     "globals.d.ts",
     "vite.config.mts",
     "**/*.test.ts"

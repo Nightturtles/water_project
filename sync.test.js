@@ -1,4 +1,4 @@
-// Unit tests for sync.js payload builders + dirty-tracking helpers.
+// Unit tests for sync.ts payload builders + dirty-tracking helpers.
 //
 // Per CLAUDE.md "Supabase safety", three historic sync bugs (commits
 // 6d8cd63, 6464fdb, 9f89a2e) cost users recipes. Until now the only
@@ -14,56 +14,18 @@
 //   * isDefaultData — first-login-merge decision.
 //
 // Full-flow sync (Realtime, push/pull, auth state changes) stays covered
-// by e2e/smoke-sync.spec.ts — the IIFE captures Supabase + module-level
+// by e2e/smoke-sync.spec.ts — the module captures Supabase + module-level
 // state in lexical closures that don't lend themselves to Node stubbing.
-
-// --- Environment stubs ---
 //
-// sync.js's IIFE registers visibilitychange/beforeunload/pagehide listeners,
-// reads localStorage.length / localStorage.key(i) in collectVolumePreferences,
-// and calls initSync() at the bottom (which calls
-// window.supabaseClient.auth.getSession). The probe in PR #96's commit log
-// confirmed: with these stubs the require succeeds, initSync logs one
-// expected console.warn ("[sync] initSync failed: ... reading 'auth'"), and
-// all 7 payload-builder functions are exposed via the UMD shim.
-
-function makeFakeStorage() {
-  let store = {};
-  return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
-      store[k] = String(v);
-    },
-    removeItem: (k) => {
-      delete store[k];
-    },
-    clear: () => {
-      store = {};
-    },
-    get length() {
-      return Object.keys(store).length;
-    },
-    key: (i) => Object.keys(store)[i] || null,
-    get _store() {
-      return store;
-    },
-  };
-}
-
-global.window = global;
-global.document = { addEventListener: () => {} };
-global.window.addEventListener = () => {};
-global.localStorage = makeFakeStorage();
-global.sessionStorage = makeFakeStorage();
-global.window.supabaseClient = undefined;
-global.isLoggedInSync = () => true;
-global._cachedAuthUserId = "test-user-id";
+// Browser-global stubs (window, localStorage, isLoggedInSync, ...) are
+// installed by vitest.setup.js BEFORE these imports execute. That ordering
+// matters: storage.ts reads localStorage at module-eval time, and sync.ts's
+// initSync() kickoff touches window.supabaseClient (undefined => one
+// expected console.warn).
 
 require("./constants.js");
-const storage = require("./storage.js");
-const sync = require("./sync.js");
-
-const {
+import * as storage from "./src/lib/storage";
+import {
   stableStringify,
   snapshotForCompare,
   buildSourceRow,
@@ -71,7 +33,7 @@ const {
   buildSettingsPayload,
   buildSelectionsPayload,
   isDefaultData,
-} = sync;
+} from "./src/lib/sync";
 
 const { invalidateAllCaches } = storage;
 

@@ -46,15 +46,16 @@ module.exports = tseslint.config(
 
   // Classic-script browser JS files.
   // They load via <script> tag and rely on classic-script scope sharing:
-  // `sync.js` calls `safeGetItem` defined in `storage.js`, etc. ESLint's
+  // `metrics.js` calls `MINERAL_DB` defined in `constants.js`, etc. ESLint's
   // `no-undef` and `no-unused-vars` both get the wrong answer against that
   // structure — both flag correct code as broken because they can't see the
   // cross-file references, so we turn them off here.
   //
   // Safety nets:
   // - Files under @ts-check AND listed in tsconfig.json `include`
-  //   (constants, metrics, storage, sync) get type-checked by `tsc --noEmit`
-  //   against globals.d.ts.
+  //   (constants, metrics) get type-checked by `tsc --noEmit` against
+  //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
+  //   type-checked as ES modules.)
   // - The remaining files (script.js, ui-shared.js, sentry-init.js,
   //   analytics-init.js, recipe-browser.js, my-recipes-ui.js,
   //   mineral-selector.js, stock-editor.js, diy-editor.js,
@@ -69,8 +70,6 @@ module.exports = tseslint.config(
     files: [
       "constants.js",
       "metrics.js",
-      "storage.js",
-      "sync.js",
       "script.js",
       "ui-shared.js",
       // sentry-init.js follows the same classic-script pattern (loaded via
@@ -153,6 +152,25 @@ module.exports = tseslint.config(
     },
   },
 
+  // Phase A storage + sync modules under src/lib/. Converted from
+  // classic-script JS with @ts-check + JSDoc, they inherit the same
+  // tolerance for defensive empty catch blocks and `unknown`-as-any (the
+  // Supabase response shapes are intentionally loose because the project
+  // hasn't generated typed DB schemas yet).
+  {
+    files: ["src/lib/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { args: "none", caughtErrorsIgnorePattern: "^[_e]$", varsIgnorePattern: "^_" },
+      ],
+      "no-empty": ["error", { allowEmptyCatch: true }],
+      // Supabase client responses + library row payloads still flow through
+      // as `any` until we add generated DB types (PR f's territory).
+      "@typescript-eslint/no-explicit-any": "off",
+    },
+  },
+
   // Vitest config (CommonJS) + unit tests (CommonJS + globals: true).
   // These legitimately use require() to import UMD-shimmed sources —
   // the whole point of the shim is letting Node/Vitest consume the same
@@ -164,7 +182,7 @@ module.exports = tseslint.config(
   // must be in place before constants/storage/metrics are evaluated, and
   // ES `import` would hoist above the stub assignments.
   {
-    files: ["vitest.config.js", "**/*.test.{js,ts}"],
+    files: ["vitest.config.js", "vitest.setup.js", "**/*.test.{js,ts}"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {

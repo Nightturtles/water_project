@@ -377,22 +377,21 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
-  <script src="supabase-client.js"></script>
-  <script src="constants.js"></script>
-  <script src="storage.js"></script>
-  <script src="sync.js"></script>
-  <script src="metrics.js"></script>
-  <script src="ui-shared.js"></script>
-  <script src="login-modal.js"></script>
-  <script src="library-data.js"></script>
-  <script src="library-picker.js"></script>
-  <script src="mineral-selector.js"></script>
-  <script src="stock-editor.js"></script>
-  <script src="diy-editor.js"></script>
-  <script src="source-water-ui.js"></script>
-  <script src="estimate-water-ui.js"></script>
-  <script src="script.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
+  <script defer src="supabase-client.js"></script>
+  <script defer src="constants.js"></script>
+  <script type="module" src="/src/lib/legacy-globals.ts"></script>
+  <script defer src="metrics.js"></script>
+  <script defer src="ui-shared.js"></script>
+  <script defer src="login-modal.js"></script>
+  <script defer src="library-data.js"></script>
+  <script defer src="library-picker.js"></script>
+  <script defer src="mineral-selector.js"></script>
+  <script defer src="stock-editor.js"></script>
+  <script defer src="diy-editor.js"></script>
+  <script defer src="source-water-ui.js"></script>
+  <script defer src="estimate-water-ui.js"></script>
+  <script defer src="script.js"></script>
   <script>
     // --- Edit minerals button (opens the mineral picker modal) ---
     (function () {

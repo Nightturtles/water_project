@@ -18,7 +18,7 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 | Area | Files |
 |---|---|
 | Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html`, `start.html`, `reset-password.html` |
-| Data | `storage.js` (localStorage + sync hooks), `sync.js` (Supabase push/pull), `supabase-client.js`, `library-data.js` |
+| Data | `src/lib/storage.ts` (localStorage + sync hooks), `src/lib/sync.ts` (Supabase push/pull), `src/lib/legacy-globals.ts` (bridge module copying storage/sync exports onto window for classic UI scripts), `supabase-client.js`, `library-data.js` |
 | Calc | `metrics.js`, `constants.js` |
 | UI | `script.js`, `ui-shared.js`, `source-water-ui.js`, `recipe-browser.js`, `my-recipes-ui.js`, `library-picker.js`, `stock-editor.js`, `diy-editor.js`, `estimate-water-ui.js`, `theme-init.js` |
 | Styles | `style.css` |
@@ -30,7 +30,7 @@ A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-syntheti
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.
-- **Phase 3** — Vite + TypeScript strict bundling. **In progress**: Vitest + Playwright + incremental `@ts-check`/ESLint, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), and the Pages deploy cutover (PR c) have all landed. Still pending: moving sources into `src/lib/` and switching HTML to `<script type="module">`.
+- **Phase 3** — Vite + TypeScript strict bundling. **In progress**: Vitest + Playwright + incremental `@ts-check`/ESLint, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), the Pages deploy cutover (PR c), and the storage/sync move to `src/lib/*.ts` plus the `legacy-globals.ts` bridge (PR d) have all landed. Still pending: converting the UI files (script.js, ui-shared.js, source-water-ui.js, recipe-browser.js, etc.) one-by-one to `src/components/*.ts`, shrinking the bridge as each one converts.
 
 ## Verifying changes
 

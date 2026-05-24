@@ -65,13 +65,16 @@
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
   </footer>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
-  <script src="supabase-client.js"></script>
-  <script src="constants.js"></script>
-  <script src="storage.js"></script>
-  <script src="sync.js"></script>
-  <script src="ui-shared.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.103.3"></script>
+  <script defer src="supabase-client.js"></script>
+  <script defer src="constants.js"></script>
+  <script type="module" src="/src/lib/legacy-globals.ts"></script>
+  <script defer src="ui-shared.js"></script>
   <script>
+    // Body wrapped in DOMContentLoaded so the deferred classic scripts above
+    // (supabase-client.js etc.) and the legacy-globals.ts module bridge have
+    // populated their globals on window before any top-level calls below run.
+    document.addEventListener("DOMContentLoaded", function () {
     const signinTab = document.getElementById('signin-tab');
     const signupTab = document.getElementById('signup-tab');
     const submitBtn = document.getElementById('login-submit');
@@ -193,6 +196,7 @@
     // Redirect if already logged in
     window.supabaseClient.auth.getSession().then(({ data }) => {
       if (data.session) window.location.href = 'index.html';
+    });
     });
   </script>
 </body>
