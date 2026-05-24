@@ -81,7 +81,17 @@ function findCss(dir, prefix) {
 }
 findCss(distDir, "");
 
-if (cssMatches.length === 0) missing.push("<some .css bundle from style.css>");
+if (cssMatches.length === 0) {
+  missing.push("<some .css bundle from style.css>");
+} else if (cssMatches.length > 1) {
+  // The dist contract is exactly one hashed CSS bundle (from style.css). Two
+  // or more means another <link rel="stylesheet"> slipped into an entry HTML,
+  // or vite-plugin-static-copy is duplicating it. Surface either case here
+  // rather than letting the verifier pass silently.
+  missing.push(
+    `<exactly 1 CSS bundle expected, found ${cssMatches.length}: ${cssMatches.join(", ")}>`,
+  );
+}
 
 // Unexpected files: anything in dist/ that isn't an entry HTML, a copied
 // root .js, an expected static asset, a sourcemap, a hashed CSS/JS asset,
