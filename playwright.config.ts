@@ -38,10 +38,13 @@ export default defineConfig({
   ],
 
   webServer: {
-    // Same command as .claude/launch.json's `dev` config. http-server serves
-    // the raw files exactly as GitHub Pages does — no surprises between test
-    // and production.
-    command: "npx http-server . -c-1 -p 8080 --silent",
+    // Same command as .claude/launch.json's `dev` config. Vite's dev server
+    // serves the raw root files (constants.js, metrics.js, etc.) as classic
+    // scripts unchanged; it only transforms files referenced via
+    // `<script type="module">`. The Phase A migration uses vite so test,
+    // dev, and the future bundle output all share one toolchain.
+    // --strictPort fails fast if 8080 is taken instead of silently drifting.
+    command: "npx vite --port 8080 --strictPort",
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,

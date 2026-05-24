@@ -1,7 +1,10 @@
 // Unit tests for metrics.js pure functions.
-// describe/expect/test are injected via vitest globals: true.
 // Load order mirrors the browser: constants.js populates globalThis first,
 // then metrics.js can resolve MINERAL_DB, CA_TO_CACO3, etc. via global scope.
+// `require()` (not `import`) is deliberate so the constants.js side-effect of
+// populating globalThis happens before metrics.js is evaluated.
+import { describe, test, expect } from "vitest";
+
 require("./constants.js");
 const metrics = require("./metrics.js");
 
@@ -113,8 +116,8 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
   test("RPavlis (no Ca/Mg/SO4, K=39) fires three warns and zero dangers", () => {
     const ions = { potassium: 39, bicarbonate: 60.9 };
     const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
-    const warns = findings.filter((f) => f.severity === "warn");
-    expect(warns.map((f) => f.message)).toEqual(
+    const warns = findings.filter((f: any) => f.severity === "warn");
+    expect(warns.map((f: any) => f.message)).toEqual(
       expect.arrayContaining([
         expect.stringMatching(/^GH is too low/),
         expect.stringMatching(/^Calcium is too low/),
@@ -122,7 +125,7 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
       ]),
     );
     expect(warns).toHaveLength(3);
-    expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
+    expect(findings.filter((f: any) => f.severity === "danger")).toEqual([]);
   });
 
   test("Cafelytic Filter (Ca=7, Mg=18, KH=20) sits within all bands", () => {
@@ -132,8 +135,8 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
       calciumSource: "calcium-chloride",
       magnesiumSource: "magnesium-chloride",
     });
-    expect(findings.filter((f) => f.severity === "danger")).toEqual([]);
-    expect(findings.filter((f) => f.severity === "warn")).toEqual([]);
+    expect(findings.filter((f: any) => f.severity === "danger")).toEqual([]);
+    expect(findings.filter((f: any) => f.severity === "warn")).toEqual([]);
   });
 
   test("no preset emits an info-tier band finding (info tier removed)", () => {
@@ -144,7 +147,7 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
     ];
     for (const ions of samples) {
       const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
-      expect(findings.filter((f) => f.severity === "info")).toEqual([]);
+      expect(findings.filter((f: any) => f.severity === "info")).toEqual([]);
     }
   });
 
@@ -153,9 +156,9 @@ describe("evaluateWaterProfileRanges — preset calibration", () => {
     // recalibration doesn't accidentally silence genuine over-mineralization.
     const ions = { calcium: 200, magnesium: 100, sodium: 100, potassium: 200, bicarbonate: 300 };
     const { findings } = metrics.evaluateWaterProfileRanges(ions, noSources);
-    const dangers = findings.filter((f) => f.severity === "danger").map((f) => f.message);
-    expect(dangers.some((m) => /^TDS/.test(m))).toBe(true);
-    expect(dangers.some((m) => /^Potassium/.test(m))).toBe(true);
+    const dangers = findings.filter((f: any) => f.severity === "danger").map((f: any) => f.message);
+    expect(dangers.some((m: any) => /^TDS/.test(m))).toBe(true);
+    expect(dangers.some((m: any) => /^Potassium/.test(m))).toBe(true);
   });
 });
 
@@ -176,8 +179,10 @@ describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
       ...sourceAwareOptions,
       brewMethod: "espresso",
     });
-    expect(filterEval.findings.some((f) => /^Calcium is too low/.test(f.message))).toBe(true);
-    expect(espressoEval.findings.some((f) => /^Calcium is too low/.test(f.message))).toBe(false);
+    expect(filterEval.findings.some((f: any) => /^Calcium is too low/.test(f.message))).toBe(true);
+    expect(espressoEval.findings.some((f: any) => /^Calcium is too low/.test(f.message))).toBe(
+      false,
+    );
   });
 
   test("missing/invalid brew method falls back to filter bands", () => {
@@ -208,8 +213,8 @@ describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
       ...noSources,
       brewMethod: "espresso",
     });
-    const filterKh = filterEval.findings.find((f) => /^KH is too high/.test(f.message));
-    const espressoKh = espressoEval.findings.find((f) => /^KH is too high/.test(f.message));
+    const filterKh = filterEval.findings.find((f: any) => /^KH is too high/.test(f.message));
+    const espressoKh = espressoEval.findings.find((f: any) => /^KH is too high/.test(f.message));
     expect(filterKh?.severity).toBe("warn");
     expect(espressoKh?.severity).toBe("danger");
   });
@@ -228,8 +233,8 @@ describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
       ...noSources,
       brewMethod: "espresso",
     });
-    const filterGh = filterEval.findings.find((f) => /^GH is too high/.test(f.message));
-    const espressoGh = espressoEval.findings.find((f) => /^GH is too high/.test(f.message));
+    const filterGh = filterEval.findings.find((f: any) => /^GH is too high/.test(f.message));
+    const espressoGh = espressoEval.findings.find((f: any) => /^GH is too high/.test(f.message));
     expect(filterGh?.severity).toBe("warn");
     expect(espressoGh?.severity).toBe("danger");
   });
@@ -239,7 +244,9 @@ describe("MINERAL_DB integrity (constants.js sanity)", () => {
   test("every mineral has positive MW and at least one ion fraction in (0, 1]", () => {
     // Regression guard: if someone adds a mineral with mw=0, ion fractions become
     // NaN/Infinity and the calculator silently produces bad water.
-    for (const [id, mineral] of Object.entries(globalThis.MINERAL_DB)) {
+    // MINERAL_DB is declared ambiently in globals.d.ts; refer to it directly
+    // rather than via globalThis (which doesn't include `declare const` names).
+    for (const [id, mineral] of Object.entries(MINERAL_DB)) {
       expect(mineral.mw, `${id}.mw`).toBeGreaterThan(0);
       const fractions = Object.values(mineral.ions);
       expect(fractions.length, `${id} should declare at least one ion`).toBeGreaterThan(0);
