@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
       - run: npm run format:check
@@ -22,6 +22,10 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:verify
+      # Verify Capacitor's Android scaffold is in sync with dist/ and package.json.
+      # iOS sync requires CocoaPods + macOS, so it runs locally before release
+      # rather than in CI; a follow-up may add a macos-latest job if drift becomes a problem.
+      - run: npx cap sync android --inline
 
   e2e:
     runs-on: ubuntu-latest
@@ -35,7 +39,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
       # Use cached browser downloads when possible; fall back to a fresh install.
@@ -95,7 +99,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
       - run: npm ci
       # SENTRY_AUTH_TOKEN gates @sentry/vite-plugin's sourcemap upload + release
