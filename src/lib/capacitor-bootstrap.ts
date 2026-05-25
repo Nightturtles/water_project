@@ -91,35 +91,47 @@ function registerDeepLinkListener(): void {
 }
 
 async function handleDeepLink(url: string): Promise<void> {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
+  // Gate on a string-prefix shape rather than parsing hostname. Android
+  // WebView's URL parser treats non-special schemes inconsistently —
+  // some versions put "auth-callback" into pathname instead of hostname,
+  // which would make a parsed.hostname check silently reject the URL.
+  // The cafelytic:// scheme may grow other entry points later
+  // (cafelytic://recipe/<slug>, cafelytic://share/..., etc.); the prefix
+  // gate keeps unrelated URLs from running the session-exchange path
+  // without depending on URL-parser quirks. Verified end-to-end on
+  // Android: the same listener also receives the URL on iOS WebKit.
+  if (!url.startsWith("cafelytic://auth-callback")) {
     return;
   }
 
-  // Only consume URLs that match the exact auth-callback shape. The
-  // cafelytic:// scheme may grow other entry points in future PRs
-  // (cafelytic://recipe/<slug>, cafelytic://share/..., etc.); without
-  // this gate the handler would try to read tokens/code from those and
-  // either no-op silently or worse, send unrelated query params to
-  // Supabase. parsed.hostname carries the host segment of a custom-scheme
-  // URL, so "cafelytic://auth-callback?code=..." -> hostname "auth-callback".
-  if (parsed.protocol !== "cafelytic:" || parsed.hostname !== "auth-callback") {
-    return;
+  // Parse query / hash params manually so we don't rely on new URL() behavior
+  // for non-special schemes. Standard ?query precedes #hash; some emails
+  // ship #hash-only flows (implicit-grant OAuth) and some ship ?query
+  // (PKCE / password recovery).
+  const queryStart = url.indexOf("?");
+  const hashStart = url.indexOf("#");
+  let queryStr = "";
+  let hashStr = "";
+  if (queryStart >= 0 && (hashStart < 0 || queryStart < hashStart)) {
+    const queryEnd = hashStart >= 0 ? hashStart : url.length;
+    queryStr = url.substring(queryStart + 1, queryEnd);
+    if (hashStart >= 0) hashStr = url.substring(hashStart + 1);
+  } else if (hashStart >= 0) {
+    hashStr = url.substring(hashStart + 1);
   }
 
   // Implicit-grant OAuth lands in the hash fragment:
   //   cafelytic://auth-callback#access_token=...&refresh_token=...&type=...
-  const hashParams = parsed.hash ? new URLSearchParams(parsed.hash.replace(/^#/, "")) : null;
+  const hashParams = hashStr ? new URLSearchParams(hashStr) : null;
   const accessToken = hashParams?.get("access_token") || null;
   const refreshToken = hashParams?.get("refresh_token") || null;
   const hashType = hashParams?.get("type");
 
   // PKCE / password-recovery emails land in the query string:
   //   cafelytic://auth-callback?code=...&type=recovery
-  const code = parsed.searchParams.get("code");
-  const queryType = parsed.searchParams.get("type");
+  const searchParams = queryStr ? new URLSearchParams(queryStr) : null;
+  const code = searchParams?.get("code") || null;
+  const queryType = searchParams?.get("type");
 
   const client = window.supabaseClient;
   if (!client) return;
