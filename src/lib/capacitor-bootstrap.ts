@@ -98,6 +98,17 @@ async function handleDeepLink(url: string): Promise<void> {
     return;
   }
 
+  // Only consume URLs that match the exact auth-callback shape. The
+  // cafelytic:// scheme may grow other entry points in future PRs
+  // (cafelytic://recipe/<slug>, cafelytic://share/..., etc.); without
+  // this gate the handler would try to read tokens/code from those and
+  // either no-op silently or worse, send unrelated query params to
+  // Supabase. parsed.hostname carries the host segment of a custom-scheme
+  // URL, so "cafelytic://auth-callback?code=..." -> hostname "auth-callback".
+  if (parsed.protocol !== "cafelytic:" || parsed.hostname !== "auth-callback") {
+    return;
+  }
+
   // Implicit-grant OAuth lands in the hash fragment:
   //   cafelytic://auth-callback#access_token=...&refresh_token=...&type=...
   const hashParams = parsed.hash ? new URLSearchParams(parsed.hash.replace(/^#/, "")) : null;
@@ -115,14 +126,22 @@ async function handleDeepLink(url: string): Promise<void> {
 
   let isRecovery = false;
   try {
+    // supabase-js v2's setSession / exchangeCodeForSession do not always
+    // throw on failure — without throwOnError set on the client they
+    // resolve with { error } instead. Treat a non-null error the same as
+    // a thrown exception so a bad token / expired code doesn't fall
+    // through and navigate the recovery flow into reset-password.html
+    // without an actual session.
     if (accessToken && refreshToken) {
-      await client.auth.setSession({
+      const { error } = await client.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
       });
+      if (error) throw error;
       isRecovery = hashType === "recovery";
     } else if (code) {
-      await client.auth.exchangeCodeForSession(code);
+      const { error } = await client.auth.exchangeCodeForSession(code);
+      if (error) throw error;
       isRecovery = queryType === "recovery";
     } else {
       return;
