@@ -41,7 +41,7 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 |---|---|---|
 | Pure-JS logic (calc, storage serialization) | `npm test` + targeted `node --check <file>` when useful | Vitest is available and should be the default first check. |
 | Rendering a single page, single flow | **Claude Preview MCP** (`preview_start` → `dev`, then `preview_eval` / `preview_snapshot` / `preview_console_logs`) | Fast, sandboxed to localhost. First-line default. |
-| Multi-page flows, multi-context sync, creator-gated branches | **Playwright MCP** (`mcp__playwright__*`) | Run a runbook from [e2e/](e2e/README.md). Slower, but supports multiple contexts (two-device sync scenarios). |
+| Multi-page flows, multi-context sync, creator-gated branches | **Playwright MCP** (`mcp__playwright__*`) | Run a runbook from [e2e/](e2e/README.md). Slower, but supports multiple contexts (two-device sync scenarios). The `*.spec.ts` suite runs against `vite preview` (the built `dist/`), so it catches build-only regressions the dev server hides. |
 | Production-only issue (e.g. Sentry wiring, CDN deploy) | `curl` the live URL, then check Sentry Feed | Claude Preview can't navigate off localhost. |
 
 **Default**: reach for Claude Preview first. Escalate to Playwright only when the test requires what Claude Preview can't do (external origins, multiple contexts, richer assertion primitives).

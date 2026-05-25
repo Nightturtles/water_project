@@ -38,15 +38,18 @@ export default defineConfig({
   ],
 
   webServer: {
-    // e2e now uses `vite dev` because PR (d) introduced
-    // `<script type="module" src="/src/lib/legacy-globals.ts">` in every HTML
-    // entry. http-server can't transform TS modules on the fly, so the
-    // browser couldn't load the bridge and `window.initSyncPromise` never
-    // appeared. The smoke-recipe parallel-execution flake (#90, exacerbated
-    // by vite-served e2e) is documented separately; rerun on first hit.
-    command: "npx vite --port 8080 --strictPort",
+    // PR (g): e2e runs against `vite preview` (the built `dist/`) instead of
+    // `vite dev`. The dev server's module graph diverges from the production
+    // Rollup bundle in ways real bugs hide in — tree-shaking, deferred script
+    // execution order through `legacy-globals.ts`, the Sentry plugin's
+    // `window.SENTRY_RELEASE` injection (only emitted by `vite build`), CSS
+    // bundling, asset hashing, and `base: "./"` resolution are all build-only
+    // concerns. Cost: `npm run build` adds ~1.5s of cold-start; preview boots
+    // instantly. Reusing an already-running preview server locally serves a
+    // STALE dist/ — rebuild before testing edits. See e2e/README.md.
+    command: "npm run build && npx vite preview --port 8080 --strictPort",
     url: "http://localhost:8080",
     reuseExistingServer: !process.env.CI,
-    timeout: 30_000,
+    timeout: 60_000,
   },
 });
