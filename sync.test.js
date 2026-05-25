@@ -363,6 +363,33 @@ describe("buildSelectionsPayload", () => {
     const payload = buildSelectionsPayload("u", "t");
     expect(payload.source_preset).toBe("evian");
   });
+
+  test("brand-new espresso user → target_preset defaults to cafelytic-espresso, not cafelytic-filter", () => {
+    // Regression guard for PR (d.1) finding #1: buildSelectionsPayload used
+    // to call loadTargetPresetName() with no arg, so the fallback always
+    // returned cafelytic-filter even for espresso-first users. The bug
+    // would seed cloud's target_preset with the wrong default and the next
+    // pull would snap every device to filter.
+    global.localStorage.setItem("cw_brew_method", "espresso");
+    const payload = buildSelectionsPayload("u", "t");
+    expect(payload.target_preset).toBe("cafelytic-espresso");
+  });
+
+  test("brand-new filter user → target_preset defaults to cafelytic-filter", () => {
+    // Mirror of the espresso test above; documents that the filter default
+    // is still preserved (loadBrewMethod() returns "filter" when unset).
+    const payload = buildSelectionsPayload("u", "t");
+    expect(payload.target_preset).toBe("cafelytic-filter");
+  });
+
+  test("explicit cw_target_preset always wins over the brew-method default", () => {
+    // Once the user has interacted with the rail, cw_target_preset is set
+    // and loadTargetPresetName returns it verbatim regardless of brew mode.
+    global.localStorage.setItem("cw_brew_method", "espresso");
+    global.localStorage.setItem("cw_target_preset", "rao");
+    const payload = buildSelectionsPayload("u", "t");
+    expect(payload.target_preset).toBe("rao");
+  });
 });
 
 // ---------------------------------------------------------------------------
