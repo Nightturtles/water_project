@@ -41,11 +41,15 @@ let syncTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 const SYNC_DEBOUNCE_MS = 500;
 let mergeInFlight: Promise<void> | null = null;
 
-// Realtime channel state. One channel per logged-in user; null when
-// signed out or before initSync has run. The pull debounce coalesces
-// bursts (e.g. user_selections + target_profiles edits arriving in the
-// same logical change) into one pullFromCloud call.
-let realtimeChannel: any = null;
+// Realtime channel state. We split bindings across TWO channels per user:
+// "user-data:<id>" for target_profiles + source_profiles + user_selections
+// (the original three), and "user-settings:<id>" for user_settings alone.
+// Empirical reason for the split: bundling all four bindings onto one
+// channel made target_profiles deliveries flake under load — smoke-sync's
+// Step 9 (create + delete + tombstone-guard) failed ~2/3 runs. The split
+// restores reliable delivery. The pull debounce still coalesces bursts
+// across both channels into one pullFromCloud call.
+let realtimeChannels: any[] = [];
 let realtimeUserId: string | null = null;
 let pullDebounceTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 const PULL_DEBOUNCE_MS = 250;
@@ -957,45 +961,67 @@ export async function handleFirstLoginMerge(): Promise<void> {
 // remain per-user safe.
 function subscribeToCloudChanges(userId: string): void {
   if (!window.supabaseClient || typeof window.supabaseClient.channel !== "function") return;
-  if (realtimeChannel && realtimeUserId === userId) return;
-  if (realtimeChannel) unsubscribeFromCloudChanges();
+  if (realtimeChannels.length > 0 && realtimeUserId === userId) return;
+  if (realtimeChannels.length > 0) unsubscribeFromCloudChanges();
 
   const filter = "user_id=eq." + userId;
-  let channel = window.supabaseClient.channel("user-data:" + userId);
 
-  const tables = ["target_profiles", "source_profiles", "user_selections"];
-  tables.forEach(function (table) {
-    channel = channel.on(
-      "postgres_changes",
-      { event: "*", schema: "public", table: table, filter: filter },
-      scheduleRealtimePull,
-    );
+  // The two channels we'll create. Both must be SUBSCRIBED before we resolve
+  // realtimeSubscribedPromise — callers (smoke-sync, settings writes between
+  // sign-in and rail-render) rely on the promise meaning "every binding is
+  // delivering events", not just "the first one is". Track pending count
+  // here; subscribeChannel decrements as each SUBSCRIBED arrives.
+  const channelSpecs: { name: string; tables: string[] }[] = [
+    {
+      name: "user-data:" + userId,
+      tables: ["target_profiles", "source_profiles", "user_selections"],
+    },
+    { name: "user-settings:" + userId, tables: ["user_settings"] },
+  ];
+  let pendingSubscriptions = channelSpecs.length;
+
+  function subscribeChannel(name: string, tables: string[]): any {
+    let channel = window.supabaseClient.channel(name);
+    tables.forEach(function (table) {
+      channel = channel.on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: table, filter: filter },
+        scheduleRealtimePull,
+      );
+    });
+    channel.subscribe(function (status: string) {
+      if (status === "SUBSCRIBED" && pendingSubscriptions > 0) {
+        pendingSubscriptions -= 1;
+        if (pendingSubscriptions === 0 && realtimeSubscribedResolve) {
+          realtimeSubscribedResolve();
+          realtimeSubscribedResolve = undefined;
+        }
+      }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.warn("[sync] realtime channel status (" + name + "):", status);
+      }
+    });
+    return channel;
+  }
+
+  realtimeChannels = channelSpecs.map(function (spec) {
+    return subscribeChannel(spec.name, spec.tables);
   });
-
-  channel.subscribe(function (status: string) {
-    if (status === "SUBSCRIBED" && realtimeSubscribedResolve) {
-      realtimeSubscribedResolve();
-      realtimeSubscribedResolve = undefined;
-    }
-    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-      console.warn("[sync] realtime channel status:", status);
-    }
-  });
-
-  realtimeChannel = channel;
   realtimeUserId = userId;
 }
 
 function unsubscribeFromCloudChanges(): void {
-  if (!realtimeChannel) return;
-  try {
-    if (window.supabaseClient && typeof window.supabaseClient.removeChannel === "function") {
-      window.supabaseClient.removeChannel(realtimeChannel);
+  if (realtimeChannels.length === 0) return;
+  realtimeChannels.forEach(function (channel) {
+    try {
+      if (window.supabaseClient && typeof window.supabaseClient.removeChannel === "function") {
+        window.supabaseClient.removeChannel(channel);
+      }
+    } catch (err) {
+      console.warn("[sync] removeChannel threw:", err);
     }
-  } catch (err) {
-    console.warn("[sync] removeChannel threw:", err);
-  }
-  realtimeChannel = null;
+  });
+  realtimeChannels = [];
   realtimeUserId = null;
 }
 
