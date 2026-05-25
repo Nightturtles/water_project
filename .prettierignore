@@ -7,6 +7,12 @@ playwright-report/
 supabase/
 dist/
 
+# Capacitor native shells (added in Phase A PR j). Auto-generated
+# Xcode + Gradle trees; ios/App/App/public/ and
+# android/app/src/main/assets/public/ are dist/ copies written by cap sync.
+ios/
+android/
+
 # Claude Code internal worktrees — same reason as ESLint.
 .claude/
 

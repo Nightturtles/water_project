@@ -21,6 +21,12 @@ module.exports = tseslint.config(
       "playwright-report/",
       "supabase/",
       "dist/",
+      // Capacitor native shells (added in Phase A PR j). The Xcode + Gradle
+      // trees are committed but auto-generated, and ios/App/App/public/ +
+      // android/app/src/main/assets/public/ are copies of dist/ written by
+      // `cap sync`. Linting them is meaningless churn.
+      "ios/",
+      "android/",
       // Claude Code's internal worktrees live at .claude/worktrees/ and
       // contain duplicate copies of project files from past sessions.
       ".claude/",
