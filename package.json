@@ -15,11 +15,14 @@
     "preview": "vite preview --port 4173",
     "build:verify": "node scripts/verify-build.cjs"
   },
+  "dependencies": {
+    "@sentry/browser": "^8.0.0",
+    "@supabase/supabase-js": "^2.103.3"
+  },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.59.1",
     "@sentry/vite-plugin": "^5.3.0",
-    "@supabase/supabase-js": "^2.103.3",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^15.15.0",

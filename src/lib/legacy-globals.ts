@@ -20,7 +20,14 @@
 // as ES modules. They are pulled in via bare side-effect imports below; both
 // modules self-publish their public API on window (the same pattern storage
 // and sync use), so no Object.assign addition is needed for them.
+//
+// Phase A PR (h): sentry-init and supabase-client also live under src/lib
+// and are imported here. Order matters: sentry-init FIRST so Sentry catches
+// errors thrown by any subsequent import; supabase-client SECOND so
+// window.supabaseClient exists before storage.ts and sync.ts read it.
 
+import "./sentry-init";
+import "./supabase-client";
 import * as storage from "./storage";
 import * as sync from "./sync";
 import "../components/ui-shared";

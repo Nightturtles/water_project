@@ -2,10 +2,10 @@
 // ESLint flat config for Cafelytic.
 //
 // Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. The five untyped root .js files (script.js,
-// ui-shared.js, source-water-ui.js, library-data.js, supabase-client.js,
-// theme-init.js) are deliberately excluded — linting them is a separate
-// cleanup, not part of this initial rollout.
+// test + config files. The remaining untyped root .js files (script.js,
+// source-water-ui.js, library-data.js, theme-init.js) are deliberately
+// excluded — linting them is a separate cleanup, not part of this initial
+// rollout.
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -30,7 +30,6 @@ module.exports = tseslint.config(
       "source-water-ui.js",
       "library-data.js",
       "library-picker.js",
-      "supabase-client.js",
       "theme-init.js",
     ],
   },
@@ -57,9 +56,8 @@ module.exports = tseslint.config(
   //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
   //   type-checked as ES modules; ui-shared and login-modal moved to
   //   src/components/*.ts via PR (e).)
-  // - The remaining files (script.js, sentry-init.js,
-  //   analytics-init.js, recipe-browser.js, my-recipes-ui.js,
-  //   mineral-selector.js, stock-editor.js, diy-editor.js,
+  // - The remaining files (script.js, analytics-init.js, recipe-browser.js,
+  //   my-recipes-ui.js, mineral-selector.js, stock-editor.js, diy-editor.js,
   //   estimate-water-ui.js) are NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
@@ -72,10 +70,6 @@ module.exports = tseslint.config(
       "constants.js",
       "metrics.js",
       "script.js",
-      // sentry-init.js follows the same classic-script pattern (loaded via
-      // script tag before the Sentry CDN loader). Not under @ts-check yet,
-      // but benefits from the same style rules.
-      "sentry-init.js",
       // analytics-init.js: gates GA4 loading by hostname / webdriver /
       // localStorage opt-out so dev + Playwright traffic doesn't inflate
       // Cafelytic's GA active-user count. Same classic-script pattern.
@@ -106,8 +100,9 @@ module.exports = tseslint.config(
       // (load/saveDiyConcentrateSpecs, load/saveSelectedConcentrates).
       "diy-editor.js",
       // estimate-water-ui: "Estimate from my ZIP" feature. Classic script
-      // depending on globals from constants.js (ION_FIELDS), supabase-client.js
-      // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).
+      // depending on globals from constants.js (ION_FIELDS) plus the bundled
+      // src/lib/supabase-client.ts (window.supabaseClient, window.isLoggedIn)
+      // and src/lib/sentry-init.ts (window.Sentry).
       "estimate-water-ui.js",
     ],
     languageOptions: {
@@ -116,7 +111,8 @@ module.exports = tseslint.config(
         ...globals.browser,
         module: "writable",
         globalThis: "writable",
-        // Sentry global provided by the CDN loader script.
+        // Sentry global re-exposed by src/lib/sentry-init.ts so classic
+        // scripts (estimate-water-ui.js) can call window.Sentry.captureException.
         Sentry: "readonly",
       },
     },
