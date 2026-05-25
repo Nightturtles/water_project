@@ -966,9 +966,20 @@ function subscribeToCloudChanges(userId: string): void {
 
   const filter = "user_id=eq." + userId;
 
-  // Channel 1: the original three tables. user_settings was added in
-  // migration 20260525001632 but lives on its own channel below — see
-  // the realtimeChannels comment at top-of-file for why.
+  // The two channels we'll create. Both must be SUBSCRIBED before we resolve
+  // realtimeSubscribedPromise — callers (smoke-sync, settings writes between
+  // sign-in and rail-render) rely on the promise meaning "every binding is
+  // delivering events", not just "the first one is". Track pending count
+  // here; subscribeChannel decrements as each SUBSCRIBED arrives.
+  const channelSpecs: { name: string; tables: string[] }[] = [
+    {
+      name: "user-data:" + userId,
+      tables: ["target_profiles", "source_profiles", "user_selections"],
+    },
+    { name: "user-settings:" + userId, tables: ["user_settings"] },
+  ];
+  let pendingSubscriptions = channelSpecs.length;
+
   function subscribeChannel(name: string, tables: string[]): any {
     let channel = window.supabaseClient.channel(name);
     tables.forEach(function (table) {
@@ -979,9 +990,12 @@ function subscribeToCloudChanges(userId: string): void {
       );
     });
     channel.subscribe(function (status: string) {
-      if (status === "SUBSCRIBED" && realtimeSubscribedResolve) {
-        realtimeSubscribedResolve();
-        realtimeSubscribedResolve = undefined;
+      if (status === "SUBSCRIBED" && pendingSubscriptions > 0) {
+        pendingSubscriptions -= 1;
+        if (pendingSubscriptions === 0 && realtimeSubscribedResolve) {
+          realtimeSubscribedResolve();
+          realtimeSubscribedResolve = undefined;
+        }
       }
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.warn("[sync] realtime channel status (" + name + "):", status);
@@ -990,14 +1004,9 @@ function subscribeToCloudChanges(userId: string): void {
     return channel;
   }
 
-  realtimeChannels = [
-    subscribeChannel("user-data:" + userId, [
-      "target_profiles",
-      "source_profiles",
-      "user_selections",
-    ]),
-    subscribeChannel("user-settings:" + userId, ["user_settings"]),
-  ];
+  realtimeChannels = channelSpecs.map(function (spec) {
+    return subscribeChannel(spec.name, spec.tables);
+  });
   realtimeUserId = userId;
 }
 
