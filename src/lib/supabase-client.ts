@@ -45,6 +45,26 @@ function trySet(key: string, value: unknown): void {
   }
 }
 
+// Native check: Capacitor (added in Phase A PR j) injects window.Capacitor
+// into the WebView before any user script runs. Returning false on web is
+// the only behavior this PR exercises; PR j flips this on when the iOS /
+// Android shells start loading dist/.
+function isNativePlatform(): boolean {
+  return (
+    (
+      window as { Capacitor?: { isNativePlatform?: () => boolean } }
+    ).Capacitor?.isNativePlatform?.() === true
+  );
+}
+
+const AUTH_CALLBACK = isNativePlatform()
+  ? "cafelytic://auth-callback"
+  : "https://cafelytic.com/login.html";
+
+const RESET_CALLBACK = isNativePlatform()
+  ? "cafelytic://auth-callback"
+  : "https://cafelytic.com/reset-password.html";
+
 trySet("getUser", function () {
   return supabaseClient.auth.getUser();
 });
@@ -63,21 +83,21 @@ trySet("signUpWithEmail", async function (email: string, password: string) {
 
 trySet("resetPasswordForEmail", async function (email: string) {
   return supabaseClient.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://cafelytic.com/reset-password.html",
+    redirectTo: RESET_CALLBACK,
   });
 });
 
 trySet("signInWithGoogle", async function () {
   return supabaseClient.auth.signInWithOAuth({
     provider: "google",
-    options: { redirectTo: "https://cafelytic.com/login.html" },
+    options: { redirectTo: AUTH_CALLBACK },
   });
 });
 
 trySet("signInWithApple", async function () {
   return supabaseClient.auth.signInWithOAuth({
     provider: "apple",
-    options: { redirectTo: "https://cafelytic.com/login.html" },
+    options: { redirectTo: AUTH_CALLBACK },
   });
 });
 
