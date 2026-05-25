@@ -118,6 +118,7 @@ declare global {
   // --- Functions from other files (source-water-ui.js, storage.js, script.js) ---
   // Typed permissively for now; will tighten as those files get @ts-check in
   // later PRs.
+  function calculateMetrics(ions: IonMap): DerivedMetrics;
   function getEffectiveCalciumSources(): string[];
   function getEffectiveMagnesiumSources(): string[];
   function getEffectiveAlkalinitySources(): string[];

@@ -45,7 +45,8 @@ export default defineConfig({
           // classic <script src="foo.js"> tags alone but does NOT copy foo.js
           // into dist/. This plugin closes that gap. Negative globs exclude
           // tooling/test files that must not ship.
-          // storage.js and sync.js were moved under src/lib/*.ts and are now
+          // storage.js and sync.js (PR d) and ui-shared.js + login-modal.js
+          // (PR e) were moved under src/{lib,components}/*.ts and are now
           // bundled via the legacy-globals.ts module entry; the explicit
           // exclusions here document that root-level copies must never ship.
           src: [
@@ -56,6 +57,8 @@ export default defineConfig({
             "!*.test.js",
             "!storage.js",
             "!sync.js",
+            "!ui-shared.js",
+            "!login-modal.js",
           ],
           dest: ".",
         },

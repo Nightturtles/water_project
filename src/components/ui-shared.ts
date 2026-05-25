@@ -1,21 +1,45 @@
 // ============================================
 // UI Shared — DOM helpers and shared UI logic
 // ============================================
+//
+// Phase A PR (e): converted from ui-shared.js. Loaded via legacy-globals.ts
+// (the bridge module imports this file as a side-effect). Storage helpers
+// come in by ES import; cross-script symbols hosted by classic scripts
+// (constants.js's MINERAL_DB / ION_LABELS, metrics.js's calculateMetrics,
+// supabase-client.js's isLoggedIn / signOut / supabaseClient / isLoggedInSync,
+// sync.js's flushPendingSync / clearLocalUserContent / invalidatePublicRecipesCache,
+// library-data.js's invalidatePublicRecipesCache, and login-modal.ts's
+// openLoginModal) are still consumed via window/global lexical lookup.
+
+import {
+  loadCustomTargetProfiles,
+  saveCustomTargetProfiles,
+  loadSourcePresetName,
+  saveSourcePresetName,
+  getAllPresets,
+  loadDeletedPresets,
+  isAdvancedMineralDisplayMode,
+  loadCreatorDisplayName,
+  saveCreatorDisplayName,
+  loadThemePreference,
+  loadRecipesToasterDismissed,
+  saveRecipesToasterDismissed,
+} from "../lib/storage";
 
 // --- Non-negative number input reader ---
-function readNonNegative(el) {
+export function readNonNegative(el: HTMLInputElement): number {
   return Math.max(0, parseFloat(el.value) || 0);
 }
 
 // --- Visible ion fields based on display mode ---
-function getVisibleIonFields() {
+export function getVisibleIonFields(): IonName[] {
   if (isAdvancedMineralDisplayMode()) {
     return ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride"];
   }
   return ["calcium", "magnesium"];
 }
 
-function applyMineralDisplayMode() {
+export function applyMineralDisplayMode(): void {
   const body = document.body;
   if (!body) return;
   const advanced = isAdvancedMineralDisplayMode();
@@ -24,15 +48,18 @@ function applyMineralDisplayMode() {
 }
 
 // --- Status handler ---
-function createStatusHandler(statusEl, options = {}) {
+export function createStatusHandler(
+  statusEl: HTMLElement | null,
+  options: { successMs?: number; errorMs?: number } = {},
+): (message: string, isError?: boolean) => void {
   const successMs = options.successMs || 1500;
   const errorMs = options.errorMs || 3000;
-  let timer = null;
-  return function showStatus(message, isError) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return function showStatus(message: string, isError?: boolean) {
     if (!statusEl) return;
-    clearTimeout(timer);
+    if (timer !== null) clearTimeout(timer);
     statusEl.textContent = message;
-    statusEl.classList.toggle("error", isError);
+    statusEl.classList.toggle("error", !!isError);
     statusEl.classList.add("visible");
     timer = setTimeout(
       () => {
@@ -44,7 +71,10 @@ function createStatusHandler(statusEl, options = {}) {
 }
 
 // --- Enter key binding ---
-function bindEnterToClick(inputEl, buttonEl) {
+export function bindEnterToClick(
+  inputEl: HTMLInputElement | null,
+  buttonEl: HTMLElement | null,
+): void {
   if (!inputEl || !buttonEl) return;
   inputEl.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
@@ -54,14 +84,14 @@ function bindEnterToClick(inputEl, buttonEl) {
 }
 
 // --- Source preset select initialization ---
-function initSourcePresetSelect(selectEl) {
+export function initSourcePresetSelect(selectEl: HTMLSelectElement | null): string | null {
   if (!selectEl) return null;
   selectEl.innerHTML = "";
   const presetEntries = Object.entries(getAllPresets()).filter(([key]) => key !== "custom");
   for (const [key, preset] of presetEntries) {
     const opt = document.createElement("option");
     opt.value = key;
-    opt.textContent = preset.label;
+    opt.textContent = preset.label || key;
     selectEl.appendChild(opt);
   }
   const savedPreset = loadSourcePresetName();
@@ -78,14 +108,15 @@ function initSourcePresetSelect(selectEl) {
 }
 
 // --- Source water tags (Bug 5: XSS-safe, Inconsistency 4: always show alkalinity) ---
-function renderSourceWaterTags(tagsEl, water) {
+export function renderSourceWaterTags(tagsEl: HTMLElement | null, water: IonMap | null): void {
   if (!tagsEl) return;
   tagsEl.innerHTML = "";
   // Drive both the "All zeros" fallback and the per-ion tags from the same
   // visible-ion set so standard mode (Ca/Mg only) never says "All zeros"
   // for a profile that has hidden ions present (or vice versa).
+  const safeWater: IonMap = water || {};
   const nonZero = getVisibleIonFields().filter(function (ion) {
-    return (water && water[ion]) > 0;
+    return (Number(safeWater[ion]) || 0) > 0;
   });
   const metrics = water ? calculateMetrics(water) : { kh: 0 };
   const alk = metrics.kh;
@@ -99,7 +130,7 @@ function renderSourceWaterTags(tagsEl, water) {
     if (alkRounded !== 0) {
       const alkTag = document.createElement("span");
       alkTag.className = "base-tag";
-      alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO\u2083";
+      alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO₃";
       tagsEl.appendChild(alkTag);
     }
     return;
@@ -107,26 +138,26 @@ function renderSourceWaterTags(tagsEl, water) {
   nonZero.forEach(function (ion) {
     const tag = document.createElement("span");
     tag.className = "base-tag";
-    tag.textContent = ION_LABELS[ion] + ": " + Number(water[ion]) + " mg/L";
+    tag.textContent = ION_LABELS[ion] + ": " + Number(safeWater[ion]) + " mg/L";
     tagsEl.appendChild(tag);
   });
   const alkTag = document.createElement("span");
   alkTag.className = "base-tag";
-  alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO\u2083";
+  alkTag.textContent = "Alkalinity: " + alkRounded + " mg/L as CaCO₃";
   tagsEl.appendChild(alkTag);
 }
 
 // --- Confirmation modal (Bug 2: prevent stacking, Bug 3 fix: focus trap + ARIA) ---
-let confirmCleanup = null;
-function showConfirm(message, onYes) {
+let confirmCleanup: (() => void) | null = null;
+export function showConfirm(message: string, onYes: () => void): void {
   if (confirmCleanup) confirmCleanup();
 
-  const overlay = document.getElementById("confirm-overlay");
-  const dialog = overlay.querySelector(".confirm-dialog");
-  const msgEl = document.getElementById("confirm-message");
-  const yesBtn = document.getElementById("confirm-yes");
-  const noBtn = document.getElementById("confirm-no");
-  const previousFocus = document.activeElement;
+  const overlay = document.getElementById("confirm-overlay") as HTMLElement;
+  const dialog = overlay.querySelector(".confirm-dialog") as HTMLElement;
+  const msgEl = document.getElementById("confirm-message") as HTMLElement;
+  const yesBtn = document.getElementById("confirm-yes") as HTMLElement;
+  const noBtn = document.getElementById("confirm-no") as HTMLElement;
+  const previousFocus = document.activeElement as HTMLElement | null;
 
   // ARIA attributes
   dialog.setAttribute("role", "dialog");
@@ -155,24 +186,24 @@ function showConfirm(message, onYes) {
   function noHandler() {
     close();
   }
-  function keyHandler(e) {
+  function keyHandler(e: KeyboardEvent) {
     if (e.key === "Escape") {
       noHandler();
       return;
     }
     if (e.key === "Tab") {
-      const focusable = [yesBtn, noBtn];
-      const idx = focusable.indexOf(document.activeElement);
+      const focusable: HTMLElement[] = [yesBtn, noBtn];
+      const idx = focusable.indexOf(document.activeElement as HTMLElement);
       if (e.shiftKey) {
         e.preventDefault();
-        focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
+        focusable[(idx <= 0 ? focusable.length : idx) - 1]!.focus();
       } else {
         e.preventDefault();
-        focusable[(idx + 1) % focusable.length].focus();
+        focusable[(idx + 1) % focusable.length]!.focus();
       }
     }
   }
-  function overlayClickHandler(e) {
+  function overlayClickHandler(e: MouseEvent) {
     if (e.target === overlay) noHandler();
   }
 
@@ -188,7 +219,7 @@ function showConfirm(message, onYes) {
 // Thin shim over the canonical cache in supabase-client.js
 // (window._cachedAuthUserId).  Kept as named functions for back-compat with
 // existing call sites and the window.* exports below.
-function primeCurrentUserId() {
+export function primeCurrentUserId(): Promise<string | null | undefined> {
   if (window._authStateResolved) return Promise.resolve(window._cachedAuthUserId);
   return new Promise(function (resolve) {
     document.addEventListener("cw:auth-state-resolved", function onResolved() {
@@ -198,7 +229,7 @@ function primeCurrentUserId() {
   });
 }
 
-function getCurrentUserIdSync() {
+export function getCurrentUserIdSync(): string | null {
   return window._cachedAuthUserId || null;
 }
 
@@ -211,30 +242,25 @@ function getCurrentUserIdSync() {
 //    creator (newly-created local profile that will be attributed on push).
 //  - If creatorUserId matches current user's id → creator.
 //  - Otherwise (copy from library, or not logged in) → not creator.
-function isUserTheCreator(profile) {
+export function isUserTheCreator(profile: any): boolean {
   if (!profile) return false;
   if (!("creatorUserId" in profile) || profile.creatorUserId === undefined) return true;
-  var currentId = getCurrentUserIdSync();
+  const currentId = getCurrentUserIdSync();
   if (!currentId) return false;
   return profile.creatorUserId === currentId;
 }
 
-window.primeCurrentUserId = primeCurrentUserId;
-window.getCurrentUserIdSync = getCurrentUserIdSync;
-window.isUserTheCreator = isUserTheCreator;
-
-function maybeOfferSharePrompt(profileKey, profile) {
+export function maybeOfferSharePrompt(profileKey: string, profile?: any): void {
   if (!profileKey) return;
   if (typeof showSharePrompt !== "function") return;
-  var current = profile;
+  let current = profile;
   if (!current && typeof loadCustomTargetProfiles === "function") {
-    var all = loadCustomTargetProfiles();
+    const all = loadCustomTargetProfiles();
     current = all && all[profileKey] ? all[profileKey] : null;
   }
   if (typeof isUserTheCreator === "function" && !isUserTheCreator(current)) return;
   showSharePrompt(profileKey);
 }
-window.maybeOfferSharePrompt = maybeOfferSharePrompt;
 
 // --- Auth gate for save affordances ---
 // Visually locks an element when the user is anonymous and intercepts the
@@ -244,12 +270,15 @@ window.maybeOfferSharePrompt = maybeOfferSharePrompt;
 // via stopImmediatePropagation.  Listens to cw:auth-changed and
 // cw:auth-state-resolved so a sign-in mid-page unlocks affordances without
 // requiring a navigation.
-function applyAuthGate(el, opts) {
+export function applyAuthGate(
+  el: HTMLElement | null | undefined,
+  opts?: { reason?: string },
+): void {
   if (!el) return;
   opts = opts || {};
-  var reason = opts.reason || "save";
+  const reason = opts.reason || "save";
 
-  function gateClickHandler(ev) {
+  function gateClickHandler(ev: Event) {
     if (typeof window.isLoggedInSync === "function" && window.isLoggedInSync()) return;
     ev.preventDefault();
     if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
@@ -260,16 +289,16 @@ function applyAuthGate(el, opts) {
   }
 
   function update() {
-    var loggedIn = typeof window.isLoggedInSync === "function" && window.isLoggedInSync();
+    const loggedIn = typeof window.isLoggedInSync === "function" && window.isLoggedInSync();
     if (loggedIn) {
-      el.classList.remove("auth-locked");
-      el.removeAttribute("aria-disabled");
+      el!.classList.remove("auth-locked");
+      el!.removeAttribute("aria-disabled");
     } else {
-      el.classList.add("auth-locked");
-      el.setAttribute("aria-disabled", "true");
-      if (!el.dataset.authGateBound) {
-        el.addEventListener("click", gateClickHandler, true);
-        el.dataset.authGateBound = "1";
+      el!.classList.add("auth-locked");
+      el!.setAttribute("aria-disabled", "true");
+      if (!el!.dataset.authGateBound) {
+        el!.addEventListener("click", gateClickHandler, true);
+        el!.dataset.authGateBound = "1";
       }
     }
   }
@@ -278,32 +307,32 @@ function applyAuthGate(el, opts) {
   document.addEventListener("cw:auth-changed", update);
   document.addEventListener("cw:auth-state-resolved", update);
 }
-window.applyAuthGate = applyAuthGate;
 
 // --- Share to Recipe Library prompt (post-save dialog) ---
-var sharePromptCleanup = null;
+let sharePromptCleanup: (() => void) | null = null;
 
-async function showSharePrompt(profileKey) {
+export async function showSharePrompt(profileKey: string): Promise<void> {
   // Only show if logged in
-  if (typeof isLoggedIn !== "function" || !(await isLoggedIn())) return;
+  if (typeof (window as any).isLoggedIn !== "function" || !(await (window as any).isLoggedIn()))
+    return;
 
-  var overlay = document.getElementById("share-prompt-overlay");
+  const overlay = document.getElementById("share-prompt-overlay") as HTMLElement | null;
   if (!overlay) return;
 
   if (sharePromptCleanup) sharePromptCleanup();
 
-  var titleEl = document.getElementById("share-prompt-title");
-  var hintEl = document.getElementById("share-prompt-hint");
-  var nameGroup = document.getElementById("share-prompt-name-group");
-  var nameInput = document.getElementById("share-prompt-display-name");
-  var yesBtn = document.getElementById("share-prompt-yes");
-  var noBtn = document.getElementById("share-prompt-no");
-  var previousFocus = document.activeElement;
+  const titleEl = document.getElementById("share-prompt-title");
+  const hintEl = document.getElementById("share-prompt-hint");
+  const nameGroup = document.getElementById("share-prompt-name-group") as HTMLElement;
+  const nameInput = document.getElementById("share-prompt-display-name") as HTMLInputElement;
+  const yesBtn = document.getElementById("share-prompt-yes") as HTMLElement;
+  const noBtn = document.getElementById("share-prompt-no") as HTMLElement;
+  const previousFocus = document.activeElement as HTMLElement | null;
 
   // Tailor the wording: first-time share vs updating an already-public recipe.
-  var profiles = loadCustomTargetProfiles();
-  var thisProfile = profiles[profileKey];
-  var isUpdating = !!(thisProfile && thisProfile.isPublic);
+  const profilesFirstRead = loadCustomTargetProfiles();
+  const thisProfile = profilesFirstRead[profileKey] as any;
+  const isUpdating = !!(thisProfile && thisProfile.isPublic);
   if (titleEl) {
     titleEl.textContent = isUpdating
       ? "Publish these updates to the Recipe Library?"
@@ -317,7 +346,7 @@ async function showSharePrompt(profileKey) {
   if (yesBtn) yesBtn.textContent = isUpdating ? "Publish updates" : "Share";
 
   // Show display name field only if not already set
-  var existingName = loadCreatorDisplayName();
+  const existingName = loadCreatorDisplayName();
   if (existingName) {
     nameGroup.style.display = "none";
   } else {
@@ -333,17 +362,17 @@ async function showSharePrompt(profileKey) {
   }
 
   function close() {
-    overlay.style.display = "none";
+    overlay!.style.display = "none";
     yesBtn.removeEventListener("click", yesHandler);
     noBtn.removeEventListener("click", noHandler);
     document.removeEventListener("keydown", keyHandler);
-    overlay.removeEventListener("click", overlayClickHandler);
+    overlay!.removeEventListener("click", overlayClickHandler);
     sharePromptCleanup = null;
     if (previousFocus && previousFocus.focus) previousFocus.focus();
   }
 
   function yesHandler() {
-    var displayName = existingName || (nameInput.value || "").trim();
+    const displayName = existingName || (nameInput.value || "").trim();
     if (!displayName) {
       nameInput.focus();
       return;
@@ -351,7 +380,7 @@ async function showSharePrompt(profileKey) {
     if (!existingName) saveCreatorDisplayName(displayName);
 
     // Update the saved profile with public fields
-    var profiles = loadCustomTargetProfiles();
+    const profiles = loadCustomTargetProfiles() as Record<string, any>;
     if (profiles[profileKey]) {
       profiles[profileKey].isPublic = true;
       profiles[profileKey].creatorDisplayName = displayName;
@@ -361,8 +390,8 @@ async function showSharePrompt(profileKey) {
 
     // Also update directly in Supabase so it takes effect immediately
     if (typeof window.supabaseClient !== "undefined") {
-      window.supabaseClient.auth.getUser().then(function (res) {
-        var user = res && res.data && res.data.user;
+      window.supabaseClient.auth.getUser().then(function (res: any) {
+        const user = res && res.data && res.data.user;
         if (!user) return;
         window.supabaseClient
           .from("target_profiles")
@@ -373,7 +402,7 @@ async function showSharePrompt(profileKey) {
           })
           .eq("user_id", user.id)
           .eq("slug", profileKey)
-          .then(function (result) {
+          .then(function (result: any) {
             if (result.error) {
               console.warn("[share] direct update failed:", result.error);
               return;
@@ -382,8 +411,8 @@ async function showSharePrompt(profileKey) {
             // shows up in library.html without a full reload. Fallthrough
             // from the Wave D cut-over — before this, library.html only
             // saw new publishes after an invalidate-via-pageload.
-            if (typeof window.invalidatePublicRecipesCache === "function") {
-              window.invalidatePublicRecipesCache();
+            if (typeof (window as any).invalidatePublicRecipesCache === "function") {
+              (window as any).invalidatePublicRecipesCache();
             }
           });
       });
@@ -396,7 +425,7 @@ async function showSharePrompt(profileKey) {
     close();
   }
 
-  function keyHandler(e) {
+  function keyHandler(e: KeyboardEvent) {
     if (e.key === "Escape") {
       noHandler();
       return;
@@ -406,21 +435,21 @@ async function showSharePrompt(profileKey) {
       return;
     }
     if (e.key === "Tab") {
-      var focusable = [nameInput, yesBtn, noBtn].filter(function (el) {
-        return el.offsetParent !== null;
+      const focusable = [nameInput, yesBtn, noBtn].filter(function (el) {
+        return (el as HTMLElement).offsetParent !== null;
       });
-      var idx = focusable.indexOf(document.activeElement);
+      const idx = focusable.indexOf(document.activeElement as any);
       if (e.shiftKey) {
         e.preventDefault();
-        focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
+        (focusable[(idx <= 0 ? focusable.length : idx) - 1] as HTMLElement).focus();
       } else {
         e.preventDefault();
-        focusable[(idx + 1) % focusable.length].focus();
+        (focusable[(idx + 1) % focusable.length] as HTMLElement).focus();
       }
     }
   }
 
-  function overlayClickHandler(e) {
+  function overlayClickHandler(e: MouseEvent) {
     if (e.target === overlay) noHandler();
   }
 
@@ -431,20 +460,23 @@ async function showSharePrompt(profileKey) {
   overlay.addEventListener("click", overlayClickHandler);
 }
 
-function inferEffectiveSourcesFromMineralGrams(mineralGramsPerL, fallback) {
+export function inferEffectiveSourcesFromMineralGrams(
+  mineralGramsPerL: Record<string, number> | null | undefined,
+  fallback?: { calciumSource?: string | null; magnesiumSource?: string | null },
+): { calciumSource: string | null; magnesiumSource: string | null } {
   fallback = fallback || {};
-  var grams = mineralGramsPerL || {};
-  var caSource = null;
-  var mgSource = null;
-  var bestCaAdded = 0;
-  var bestMgAdded = 0;
+  const grams = mineralGramsPerL || {};
+  let caSource: string | null = null;
+  let mgSource: string | null = null;
+  let bestCaAdded = 0;
+  let bestMgAdded = 0;
   Object.keys(grams).forEach(function (mineralId) {
-    var amount = Math.max(0, Number(grams[mineralId]) || 0);
+    const amount = Math.max(0, Number(grams[mineralId]) || 0);
     if (!amount) return;
-    var mineral = typeof MINERAL_DB !== "undefined" ? MINERAL_DB[mineralId] : null;
+    const mineral = typeof MINERAL_DB !== "undefined" ? MINERAL_DB[mineralId] : null;
     if (!mineral || !mineral.ions) return;
-    var caAdded = amount * 1000 * (Number(mineral.ions.calcium) || 0);
-    var mgAdded = amount * 1000 * (Number(mineral.ions.magnesium) || 0);
+    const caAdded = amount * 1000 * (Number(mineral.ions.calcium) || 0);
+    const mgAdded = amount * 1000 * (Number(mineral.ions.magnesium) || 0);
     if (caAdded > bestCaAdded) {
       bestCaAdded = caAdded;
       caSource = mineralId;
@@ -459,12 +491,14 @@ function inferEffectiveSourcesFromMineralGrams(mineralGramsPerL, fallback) {
     magnesiumSource: mgSource || fallback.magnesiumSource || null,
   };
 }
-window.inferEffectiveSourcesFromMineralGrams = inferEffectiveSourcesFromMineralGrams;
 
-function onStorageKeysChanged(keys, handler) {
+export function onStorageKeysChanged(
+  keys: string[],
+  handler: (e: StorageEvent) => void,
+): () => void {
   if (!Array.isArray(keys) || typeof handler !== "function") return function () {};
-  var keySet = new Set(keys.filter(Boolean));
-  function onStorage(e) {
+  const keySet = new Set(keys.filter(Boolean));
+  function onStorage(e: StorageEvent) {
     if (!e || !e.key) return;
     if (!keySet.has(e.key)) return;
     handler(e);
@@ -474,21 +508,20 @@ function onStorageKeysChanged(keys, handler) {
     window.removeEventListener("storage", onStorage);
   };
 }
-window.onStorageKeysChanged = onStorageKeysChanged;
 
 // --- Delta formatting ---
-function roundDelta(delta, decimals = 0) {
-  if (!Number.isFinite(delta)) return null;
+export function roundDelta(delta: number | null | undefined, decimals = 0): number | null {
+  if (!Number.isFinite(delta as number)) return null;
   if (decimals > 0) {
     const p = Math.pow(10, decimals);
-    const rounded = Math.round(delta * p) / p;
+    const rounded = Math.round((delta as number) * p) / p;
     return Object.is(rounded, -0) ? 0 : rounded;
   }
-  const rounded = Math.round(delta);
+  const rounded = Math.round(delta as number);
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
-function formatDelta(delta, decimals = 0) {
+export function formatDelta(delta: number | null | undefined, decimals = 0): string {
   const rounded = roundDelta(delta, decimals);
   if (rounded == null) return "-";
   const abs = decimals > 0 ? Math.abs(rounded).toFixed(decimals) : String(Math.abs(rounded));
@@ -497,7 +530,17 @@ function formatDelta(delta, decimals = 0) {
   return decimals > 0 ? Number(0).toFixed(decimals) : "0";
 }
 
-function setDeltaText(el, delta, options = {}) {
+export function setDeltaText(
+  el: HTMLElement | null,
+  delta: number | null | undefined,
+  options: {
+    decimals?: number;
+    metricName?: string;
+    baselineLabel?: string;
+    visibleBaselineLabel?: string;
+    unit?: string;
+  } = {},
+): void {
   if (!el) return;
   const decimals = options.decimals || 0;
   const metricName = options.metricName || "Value";
@@ -532,7 +575,10 @@ function setDeltaText(el, delta, options = {}) {
 }
 
 // --- Range guidance rendering ---
-function renderRangeGuidance(el, findings) {
+export function renderRangeGuidance(
+  el: HTMLElement | null,
+  findings: Array<{ severity?: string; message?: string }> | null | undefined,
+): void {
   if (!el) return;
   el.innerHTML = "";
   if (!Array.isArray(findings)) return;
@@ -570,18 +616,18 @@ function renderRangeGuidance(el, findings) {
 }
 
 // --- Theme helpers ---
-function getResolvedTheme() {
+export function getResolvedTheme(): "light" | "dark" {
   const pref = loadThemePreference();
   if (pref === "light") return "light";
   if (pref === "dark") return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
-function applyTheme() {
+export function applyTheme(): void {
   document.documentElement.setAttribute("data-theme", getResolvedTheme());
 }
 
-function initThemeListeners() {
+export function initThemeListeners(): void {
   const mq = window.matchMedia("(prefers-color-scheme: dark)");
   mq.addEventListener("change", () => {
     if (loadThemePreference() === "system") applyTheme();
@@ -589,9 +635,12 @@ function initThemeListeners() {
 }
 
 // --- Navigation ---
-function injectNav() {
+export function injectNav(): void {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
-  const navItems = [
+  const navItems: Array<
+    | { type: "group"; label: string; children: Array<{ href: string; label: string }> }
+    | { type: "link"; href: string; label: string }
+  > = [
     {
       type: "group",
       label: "Tools",
@@ -659,13 +708,13 @@ function injectNav() {
 
   // Hamburger toggle behavior
   hamburger.addEventListener("click", function () {
-    var expanded = nav.classList.toggle("nav-open");
+    const expanded = nav.classList.toggle("nav-open");
     hamburger.setAttribute("aria-expanded", String(expanded));
   });
 
   // Close menu when a link is clicked
   linksWrap.addEventListener("click", function (e) {
-    if (e.target.tagName === "A") {
+    if ((e.target as HTMLElement).tagName === "A") {
       nav.classList.remove("nav-open");
       hamburger.setAttribute("aria-expanded", "false");
     }
@@ -674,7 +723,7 @@ function injectNav() {
   _updateNavAuth(authWrap, currentPage);
 }
 
-async function _updateNavAuth(authWrap, currentPage) {
+async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promise<void> {
   if (typeof window.supabaseClient === "undefined") return;
   try {
     const { data } = await window.supabaseClient.auth.getSession();
@@ -683,7 +732,7 @@ async function _updateNavAuth(authWrap, currentPage) {
     if (session && session.user) {
       const email = document.createElement("span");
       email.className = "nav-auth-email";
-      email.textContent = session.user.email;
+      email.textContent = session.user.email || "";
 
       const logoutBtn = document.createElement("button");
       logoutBtn.type = "button";
@@ -713,7 +762,7 @@ async function _updateNavAuth(authWrap, currentPage) {
         // case would leave the next page load authenticated, which defeats
         // the purpose of logout. Bail loudly instead.
         try {
-          await signOut();
+          await (window as any).signOut();
         } catch (err) {
           console.warn("[auth] signOut failed:", err);
           return;
@@ -738,7 +787,10 @@ async function _updateNavAuth(authWrap, currentPage) {
   }
 }
 
-function _buildNavGroup(group, currentPage) {
+function _buildNavGroup(
+  group: { label: string; children: Array<{ href: string; label: string }> },
+  currentPage: string,
+): { wrap: HTMLElement; trigger: HTMLElement; menu: HTMLElement } {
   const isCurrentInGroup = group.children.some((c) => c.href === currentPage);
 
   const wrap = document.createElement("div");
@@ -769,7 +821,7 @@ function _buildNavGroup(group, currentPage) {
   return { wrap, trigger, menu };
 }
 
-function _wireNavGroupBehavior(wrap, trigger, menu) {
+function _wireNavGroupBehavior(wrap: HTMLElement, trigger: HTMLElement, menu: HTMLElement): void {
   function close() {
     wrap.classList.remove("is-open");
     trigger.setAttribute("aria-expanded", "false");
@@ -788,7 +840,7 @@ function _wireNavGroupBehavior(wrap, trigger, menu) {
   });
 
   document.addEventListener("click", function (e) {
-    if (!wrap.contains(e.target)) close();
+    if (!wrap.contains(e.target as Node)) close();
   });
 
   document.addEventListener("keydown", function (e) {
@@ -800,13 +852,13 @@ function _wireNavGroupBehavior(wrap, trigger, menu) {
 }
 
 // --- Shared restore bar helpers ---
-function updateRestoreSourceBar() {
+export function updateRestoreSourceBar(): void {
   const el = document.getElementById("restore-source-bar");
   if (!el) return;
   el.style.display = loadDeletedPresets().length > 0 ? "flex" : "none";
 }
 
-function findFallbackPreset(allPresets) {
+export function findFallbackPreset(allPresets: Record<string, unknown>): string {
   const keys = Object.keys(allPresets);
   return (
     keys.find(function (k) {
@@ -816,18 +868,23 @@ function findFallbackPreset(allPresets) {
 }
 
 // --- Safe radio selection (Bug 6) ---
-function selectRadioByValue(name, value) {
-  const radios = document.querySelectorAll('input[name="' + CSS.escape(name) + '"]');
+export function selectRadioByValue(name: string, value: string): void {
+  const radios = document.querySelectorAll(
+    'input[name="' + CSS.escape(name) + '"]',
+  ) as NodeListOf<HTMLInputElement>;
   radios.forEach(function (el) {
     if (el.value === value) el.checked = true;
   });
 }
 
 // --- Debounce helper (Inefficiency 6) ---
-function debounce(fn, ms) {
-  let timer;
-  return function (...args) {
-    clearTimeout(timer);
+export function debounce<TArgs extends unknown[]>(
+  fn: (...args: TArgs) => void,
+  ms: number,
+): (...args: TArgs) => void {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return function (this: unknown, ...args: TArgs) {
+    if (timer !== undefined) clearTimeout(timer);
     timer = setTimeout(() => {
       fn.apply(this, args);
     }, ms);
@@ -835,27 +892,27 @@ function debounce(fn, ms) {
 }
 
 // --- Recipes-moved toaster (one-time, all pages) ---
-function showRecipesToaster() {
+export function showRecipesToaster(): void {
   if (loadRecipesToasterDismissed()) return;
 
-  var toaster = document.createElement("div");
+  const toaster = document.createElement("div");
   toaster.className = "recipes-toaster";
   toaster.setAttribute("role", "status");
 
-  var link = document.createElement("a");
+  const link = document.createElement("a");
   link.href = "library.html";
   link.className = "recipes-toaster-link";
   link.textContent = "Recipes have moved to the new library section. Check it out!";
   toaster.appendChild(link);
 
-  var closeBtn = document.createElement("button");
+  const closeBtn = document.createElement("button");
   closeBtn.type = "button";
   closeBtn.className = "recipes-toaster-close";
   closeBtn.setAttribute("aria-label", "Dismiss notification");
-  closeBtn.textContent = "\u00d7";
+  closeBtn.textContent = "×";
   toaster.appendChild(closeBtn);
 
-  function dismiss(e) {
+  function dismiss(e: Event) {
     e.preventDefault();
     e.stopPropagation();
     saveRecipesToasterDismissed();
@@ -880,17 +937,17 @@ function showRecipesToaster() {
 // (briefly visible after success, then fades), "error" (sticky until the
 // next attempt succeeds). One element per page, optional — pages without the
 // element opt out.
-function initSaveStatusIndicator() {
+export function initSaveStatusIndicator(): void {
   const el = document.getElementById("save-status-indicator");
   if (!el) return;
-  let hideTimer = null;
+  let hideTimer: ReturnType<typeof setTimeout> | null = null;
 
-  function setState(text, stateClass) {
-    clearTimeout(hideTimer);
-    el.textContent = text;
-    el.classList.remove("status-saving", "status-saved", "status-error");
-    if (stateClass) el.classList.add(stateClass);
-    el.classList.add("visible");
+  function setState(text: string, stateClass?: string) {
+    if (hideTimer !== null) clearTimeout(hideTimer);
+    el!.textContent = text;
+    el!.classList.remove("status-saving", "status-saved", "status-error");
+    if (stateClass) el!.classList.add(stateClass);
+    el!.classList.add("visible");
   }
 
   // Page-init code paths (e.g. recipe.html writing back normalized concentrate
@@ -910,19 +967,62 @@ function initSaveStatusIndicator() {
     document.addEventListener(ev, markInteracted, true);
   });
 
-  window.addEventListener("cw:save-status", (e) => {
-    const status = e.detail && e.detail.status;
+  window.addEventListener("cw:save-status", (e: Event) => {
+    const detail = (e as CustomEvent).detail;
+    const status = detail && detail.status;
     if (!userHasInteracted && (status === "saving" || status === "saved")) return;
     if (status === "saving") {
       setState("Saving…", "status-saving");
     } else if (status === "saved") {
       setState("Saved", "status-saved");
       hideTimer = setTimeout(() => {
-        el.classList.remove("visible", "status-saved");
+        el!.classList.remove("visible", "status-saved");
       }, 2000);
     } else if (status === "error") {
       setState("Couldn't save - retrying", "status-error");
     }
+  });
+}
+
+// --- Window/global population ---
+// Classic-script consumers (script.js, recipe-browser.js, source-water-ui.js,
+// mineral-selector.js, stock-editor.js, estimate-water-ui.js, plus several
+// inline HTML blocks) reach these names via lexical lookup, which resolves to
+// the global scope. Publishing them on window keeps the existing call sites
+// working unchanged. Mirrors storage.ts:1486's pattern. Will shrink as
+// consumers also become TS modules and import directly.
+if (typeof window !== "undefined") {
+  Object.assign(window, {
+    readNonNegative,
+    getVisibleIonFields,
+    applyMineralDisplayMode,
+    createStatusHandler,
+    bindEnterToClick,
+    initSourcePresetSelect,
+    renderSourceWaterTags,
+    showConfirm,
+    primeCurrentUserId,
+    getCurrentUserIdSync,
+    isUserTheCreator,
+    maybeOfferSharePrompt,
+    applyAuthGate,
+    showSharePrompt,
+    inferEffectiveSourcesFromMineralGrams,
+    onStorageKeysChanged,
+    roundDelta,
+    formatDelta,
+    setDeltaText,
+    renderRangeGuidance,
+    getResolvedTheme,
+    applyTheme,
+    initThemeListeners,
+    injectNav,
+    updateRestoreSourceBar,
+    findFallbackPreset,
+    selectRadioByValue,
+    debounce,
+    showRecipesToaster,
+    initSaveStatusIndicator,
   });
 }
 

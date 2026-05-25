@@ -55,11 +55,12 @@ module.exports = tseslint.config(
   // - Files under @ts-check AND listed in tsconfig.json `include`
   //   (constants, metrics) get type-checked by `tsc --noEmit` against
   //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
-  //   type-checked as ES modules.)
-  // - The remaining files (script.js, ui-shared.js, sentry-init.js,
+  //   type-checked as ES modules; ui-shared and login-modal moved to
+  //   src/components/*.ts via PR (e).)
+  // - The remaining files (script.js, sentry-init.js,
   //   analytics-init.js, recipe-browser.js, my-recipes-ui.js,
   //   mineral-selector.js, stock-editor.js, diy-editor.js,
-  //   estimate-water-ui.js, login-modal.js) are NOT under @ts-check today —
+  //   estimate-water-ui.js) are NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
   //   under @ts-check is a separate cleanup tracked outside this PR.
@@ -71,7 +72,6 @@ module.exports = tseslint.config(
       "constants.js",
       "metrics.js",
       "script.js",
-      "ui-shared.js",
       // sentry-init.js follows the same classic-script pattern (loaded via
       // script tag before the Sentry CDN loader). Not under @ts-check yet,
       // but benefits from the same style rules.
@@ -98,7 +98,7 @@ module.exports = tseslint.config(
       // Depends on globals from constants.js (MINERAL_DB,
       // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
       // (load/saveStockConcentrateSpecs, load/saveSelectedConcentrates,
-      // writeActiveStockId, slugify), plus showConfirm from ui-shared.js.
+      // writeActiveStockId, slugify), plus showConfirm from ui-shared.ts.
       "stock-editor.js",
       // diy-editor: modal editor for single-mineral DIY concentrate specs.
       // Depends on globals from constants.js (MINERAL_DB,
@@ -109,11 +109,6 @@ module.exports = tseslint.config(
       // depending on globals from constants.js (ION_FIELDS), supabase-client.js
       // (window.supabaseClient, window.isLoggedIn), sentry-init.js (window.Sentry).
       "estimate-water-ui.js",
-      // login-modal: inline sign-in / sign-up modal used by every page that
-      // loads ui-shared.js. Depends on globals from supabase-client.js
-      // (window.signInWithEmail / signUpWithEmail / signInWithGoogle /
-      // resetPasswordForEmail) and the cw:auth-changed event dispatched there.
-      "login-modal.js",
     ],
     languageOptions: {
       sourceType: "script",
@@ -152,13 +147,13 @@ module.exports = tseslint.config(
     },
   },
 
-  // Phase A storage + sync modules under src/lib/. Converted from
-  // classic-script JS with @ts-check + JSDoc, they inherit the same
+  // Phase A storage + sync modules under src/lib/ + UI components under
+  // src/components/. Converted from classic-script JS, they inherit the same
   // tolerance for defensive empty catch blocks and `unknown`-as-any (the
   // Supabase response shapes are intentionally loose because the project
   // hasn't generated typed DB schemas yet).
   {
-    files: ["src/lib/**/*.ts"],
+    files: ["src/lib/**/*.ts", "src/components/**/*.ts"],
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
