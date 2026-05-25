@@ -470,6 +470,12 @@ profileButtonsContainer.addEventListener("click", (e) => {
     if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
   }
   activateProfile(nextProfile);
+  // Light haptic on the deliberate "switch profile" tap (native only — web
+  // call sites see window.cwHaptic as undefined and the optional chain
+  // no-ops). activateProfile also runs on page init and Realtime refresh
+  // paths; gating the haptic at the click handler keeps it tied to user
+  // intent rather than every internal call.
+  if (typeof window.cwHaptic === "function") window.cwHaptic("light");
 });
 
 // Snapshot the current target inputs as an ion object. Used by the draft-
@@ -632,6 +638,7 @@ targetSaveChangesBtn.addEventListener("click", () => {
     if (!result.saved) return;
     renderProfileButtons();
     offerShareAfterEdit(key, result.profile);
+    if (typeof window.cwHaptic === "function") window.cwHaptic("medium");
   });
 });
 
@@ -714,6 +721,7 @@ targetSaveBtn.addEventListener("click", () => {
 
   // Offer to share to Recipe Library (only if logged in)
   if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profile);
+  if (typeof window.cwHaptic === "function") window.cwHaptic("medium");
 });
 
 const showTargetSaveStatus = createStatusHandler(targetSaveStatus);

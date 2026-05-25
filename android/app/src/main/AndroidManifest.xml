@@ -22,6 +22,20 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Deep-link entry point for Supabase auth callbacks (OAuth,
+                 magic-link, password reset). The bootstrap module
+                 (src/lib/capacitor-bootstrap.ts) parses the callback URL
+                 and calls supabaseClient.auth.exchangeCodeForSession /
+                 setSession to establish the session inside the running
+                 native app. cap sync does not add custom URL schemes
+                 automatically, so this filter is hand-maintained. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="cafelytic" />
+            </intent-filter>
+
         </activity>
 
         <provider
