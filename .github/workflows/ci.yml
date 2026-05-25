@@ -98,7 +98,15 @@ jobs:
           node-version: "20"
           cache: "npm"
       - run: npm ci
+      # SENTRY_AUTH_TOKEN gates @sentry/vite-plugin's sourcemap upload + release
+      # injection. Scoped to the deploy job only: the typecheck-and-test job's
+      # build runs without it so PR builds don't pollute Sentry with one
+      # release per commit. errorHandler in vite.config.mts converts upload
+      # failures (e.g. rotated token) to warnings, so a broken token still
+      # produces a deployable dist/.
       - run: npm run build
+        env:
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

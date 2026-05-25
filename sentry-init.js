@@ -3,7 +3,12 @@
 // point so the loader picks up these options before its default init.
 // See SENTRY_SETUP.md for DSN and option rationale.
 window.sentryOnLoad = function () {
+  // window.SENTRY_RELEASE is injected by @sentry/vite-plugin at build time
+  // (see vite.config.mts). On local dev or PR builds without the auth token
+  // the plugin is disabled and SENTRY_RELEASE is undefined; the optional
+  // chaining falls back to no release tag, same as pre-PR-f behavior.
   Sentry.init({
+    release: window.SENTRY_RELEASE?.id,
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,

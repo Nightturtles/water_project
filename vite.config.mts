@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -66,6 +67,28 @@ export default defineConfig({
         { src: "cafelytic_logo.svg", dest: "." },
         { src: "CNAME", dest: "." },
       ],
+    }),
+    // Sentry sourcemap upload + release injection. Runs only when
+    // SENTRY_AUTH_TOKEN is set (CI deploy job); otherwise the whole plugin
+    // no-ops so local builds and PR runs still produce dist/ cleanly.
+    // errorHandler swallows upload failures (e.g. rotated token -> 401) so a
+    // Sentry outage or expired credential never breaks a production deploy.
+    // filesToDeleteAfterUpload strips *.map from dist/ after upload so the
+    // sourcemaps are not served publicly on GitHub Pages.
+    sentryVitePlugin({
+      org: "cafelytic",
+      project: "cafelytic",
+      authToken: process.env.SENTRY_AUTH_TOKEN,
+      release: {
+        name: process.env.GITHUB_SHA || undefined,
+      },
+      sourcemaps: {
+        filesToDeleteAfterUpload: ["./dist/**/*.map"],
+      },
+      disable: !process.env.SENTRY_AUTH_TOKEN,
+      errorHandler: (err) => {
+        console.warn("[sentry-vite-plugin] non-fatal upload error: " + err.message);
+      },
     }),
   ],
 });
