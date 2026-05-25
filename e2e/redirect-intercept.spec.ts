@@ -33,14 +33,14 @@ test.describe("OAuth redirect intercept — Capacitor on web stays browser-route
       };
     });
 
-    expect(state.capacitorDefined, "PR k imports @capacitor/core; window.Capacitor must exist").toBe(
-      true,
-    );
-    expect(state.hasIsNativePlatform).toBe(true);
     expect(
-      state.isNativePlatform,
-      "isNativePlatform() must return false in a real browser",
-    ).toBe(false);
+      state.capacitorDefined,
+      "PR k imports @capacitor/core; window.Capacitor must exist",
+    ).toBe(true);
+    expect(state.hasIsNativePlatform).toBe(true);
+    expect(state.isNativePlatform, "isNativePlatform() must return false in a real browser").toBe(
+      false,
+    );
   });
 
   test("signInWithGoogle calls signInWithOAuth with redirectTo = https://cafelytic.com/login.html", async ({
@@ -65,7 +65,10 @@ test.describe("OAuth redirect intercept — Capacitor on web stays browser-route
       // we don't navigate away from the test page.
       let captured: string | null = null;
       const auth = window.supabaseClient.auth as unknown as {
-        signInWithOAuth: (opts: { provider: string; options?: { redirectTo?: string } }) => Promise<{
+        signInWithOAuth: (opts: {
+          provider: string;
+          options?: { redirectTo?: string };
+        }) => Promise<{
           data: null;
           error: null;
         }>;

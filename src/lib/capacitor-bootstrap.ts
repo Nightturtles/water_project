@@ -100,9 +100,7 @@ async function handleDeepLink(url: string): Promise<void> {
 
   // Implicit-grant OAuth lands in the hash fragment:
   //   cafelytic://auth-callback#access_token=...&refresh_token=...&type=...
-  const hashParams = parsed.hash
-    ? new URLSearchParams(parsed.hash.replace(/^#/, ""))
-    : null;
+  const hashParams = parsed.hash ? new URLSearchParams(parsed.hash.replace(/^#/, "")) : null;
   const accessToken = hashParams?.get("access_token") || null;
   const refreshToken = hashParams?.get("refresh_token") || null;
   const hashType = hashParams?.get("type");

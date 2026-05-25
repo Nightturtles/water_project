@@ -418,7 +418,10 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
             // the now-public recipe off to friends. No-op on web: classic
             // <script> share affordances don't exist anywhere else in the
             // app, so this is the only path that exercises @capacitor/share.
-            if (window.Capacitor?.isNativePlatform?.() && typeof window.cwNativeShare === "function") {
+            if (
+              window.Capacitor?.isNativePlatform?.() &&
+              typeof window.cwNativeShare === "function"
+            ) {
               const profileLabel =
                 (profiles[profileKey] && profiles[profileKey].label) || profileKey;
               window.cwNativeShare({
