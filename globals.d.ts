@@ -158,21 +158,24 @@ declare global {
   }
   var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
 
-  // Supabase — loaded from CDN via <script src="https://cdn.jsdelivr.net/.../supabase.js">
-  // then wrapped in supabase-client.js as window.supabaseClient.
+  // Supabase — bundled via Vite from @supabase/supabase-js (a runtime
+  // dependency since Phase A PR h). src/lib/supabase-client.ts creates the
+  // client and publishes it as window.supabaseClient for classic UI scripts
+  // (recipe-browser.js, my-recipes-ui.js, etc.) plus inline HTML scripts on
+  // login.html. The Window-typed entry below gives @ts-checked files
+  // (storage.ts, sync.ts) method-chain and auth-response narrowing. Row-level
+  // narrowing on `.from('table').select('*')` stays loose because we haven't
+  // supplied a Database schema type to SupabaseClient<Database> — a future
+  // PR can generate that via `supabase gen types typescript` to catch
+  // column-name typos and wrong-shape upserts.
   //
-  // @supabase/supabase-js is installed as a DEV DEPENDENCY only — we use its
-  // type definitions at `tsc --noEmit` time but the runtime client still
-  // comes from the CDN. This gives @ts-checked files (sync.js) method-chain
-  // and auth-response narrowing (e.g. auth.getUser()'s { data: { user: User |
-  // null } } shape). It does NOT give row-level narrowing on
-  // `.from('table').select('*')` results — those stay loose because we
-  // haven't supplied a Database schema type to SupabaseClient<Database>.
-  // A future PR can generate that via `supabase gen types typescript` to
-  // catch column-name typos and wrong-shape upserts.
+  // SENTRY_RELEASE is injected at build time by @sentry/vite-plugin (see
+  // vite.config.mts) and read by src/lib/sentry-init.ts. Undefined on local
+  // dev / PR builds where SENTRY_AUTH_TOKEN is unset.
   interface Window {
-    supabase: typeof import("@supabase/supabase-js");
     supabaseClient: import("@supabase/supabase-js").SupabaseClient;
+    Sentry?: typeof import("@sentry/browser");
+    SENTRY_RELEASE?: { id?: string };
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;
