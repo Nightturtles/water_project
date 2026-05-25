@@ -54,9 +54,65 @@ only what's toggled there.
 
 ## Release tagging
 
-Phase 1 ships without a release tag — Sentry will group errors under the
-default "unreleased" bucket. Phase 3 will inject the deployed git SHA via a
-Vite `define` so each deploy gets a distinct release.
+Each deploy is tagged with the git SHA so stack traces resolve against the
+TypeScript sources for that exact build.
+
+### How it works
+
+- `@sentry/vite-plugin` runs at build time (see `vite.config.mts`). When
+  `SENTRY_AUTH_TOKEN` is set, it: (1) uploads `dist/assets/*.js.map` to
+  Sentry tagged with the release name, (2) injects
+  `window.SENTRY_RELEASE = { id: "<sha>" }` into the build, then (3) deletes
+  the `*.map` files from `dist/` so they aren't served publicly on GitHub
+  Pages.
+- `sentry-init.js` reads `window.SENTRY_RELEASE.id` and passes it to
+  `Sentry.init` as `release`, so every event from that deploy is tagged with
+  the same identifier the artifacts were uploaded under.
+- The deploy job in `.github/workflows/ci.yml` passes `GITHUB_SHA` to the
+  build, so the release name matches the deployed commit. Locally it
+  defaults to the current `HEAD` SHA from the plugin's git auto-detection.
+
+### Auth token
+
+The plugin authenticates to Sentry with a `SENTRY_AUTH_TOKEN` (secret,
+unlike the public DSN). Scopes: `project:releases` + `org:read`. Generate at
+**Sentry → User Settings → Auth Tokens** (or via
+`https://<org>.sentry.io/settings/auth-tokens/`). Tokens are shown once;
+copy immediately.
+
+Stored as a GitHub Actions secret named `SENTRY_AUTH_TOKEN` on
+`Nightturtles/water_project`. Only the `deploy` job reads it. The
+`typecheck-and-test` job builds without the token so PR runs don't create a
+Sentry release per commit.
+
+### When the token is missing
+
+Local builds and PR builds run without the token. The plugin's `disable`
+guard fires and the whole plugin no-ops: no upload, no release injection,
+no `*.map` deletion. `sentry-init.js`'s optional-chaining handles the
+missing `window.SENTRY_RELEASE` and ships events with `release: undefined`,
+same as pre-PR-f behavior. Build still succeeds and `npm run build:verify`
+still passes.
+
+### When the upload fails
+
+If Sentry rejects the token (e.g. rotated, expired, network blip), the
+plugin's `errorHandler` in `vite.config.mts` logs a warning and continues.
+The build still produces a deployable `dist/`, but the sourcemaps for that
+release won't resolve on Sentry's side. Investigate via the deploy job's
+`npm run build` log.
+
+### Verifying after a deploy
+
+1. Open `https://cafelytic.com`, paste into the console:
+   ```js
+   throw new Error('sentry release test ' + Date.now());
+   ```
+2. Within ~30s the event appears in Sentry, tagged with the deploy's SHA.
+3. The stack trace should resolve to a `.ts` source line (e.g.
+   `src/lib/storage.ts:142`), not the minified `legacy-globals-HASH.js`.
+4. `curl -I https://cafelytic.com/assets/*.js.map` should return 404 — the
+   maps were uploaded to Sentry and deleted from the public bundle.
 
 ## Runbook
 
