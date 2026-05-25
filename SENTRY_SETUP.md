@@ -4,7 +4,10 @@ Production error telemetry for cafelytic.com.
 
 ## Project
 
-- Org/project dashboard: https://sentry.io/organizations/ (project name: `cafelytic`)
+- Org slug: `cafelytic` — dashboard at https://cafelytic.sentry.io/
+- Project slug: `javascript` (Sentry's default for browser projects). Display
+  name is "cafelytic". The slug is what `@sentry/vite-plugin` and the Sentry
+  CLI need; the display name is just a label.
 - Platform: Browser JavaScript (vanilla — no framework)
 - Install method: **Loader Script** (no bundler yet; revisit in Phase 3 after Vite lands)
 
