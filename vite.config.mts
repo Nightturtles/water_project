@@ -77,7 +77,12 @@ export default defineConfig({
     // sourcemaps are not served publicly on GitHub Pages.
     sentryVitePlugin({
       org: "cafelytic",
-      project: "cafelytic",
+      // Project slug (not display name): visible in the Sentry project URL
+      // `https://cafelytic.sentry.io/projects/<slug>/`. The display name is
+      // "cafelytic" but the slug is "javascript" (Sentry's default for browser
+      // projects). PR (f) shipped with project: "cafelytic" and the upload
+      // failed with `projects are invalid (400)`; this restores resolution.
+      project: "javascript",
       authToken: process.env.SENTRY_AUTH_TOKEN,
       release: {
         name: process.env.GITHUB_SHA || undefined,
