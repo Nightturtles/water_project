@@ -293,12 +293,17 @@ export function buildSettingsPayload(userId: string, now: string) {
 }
 
 // Build the user_selections push payload from localStorage.
+// loadTargetPresetName needs the current brewMethod so that on a brand-new
+// account (cw_target_preset unset) we push the correct default for whichever
+// mode the user is actually in — without it, an espresso-first user's first
+// push would seed cloud with "cafelytic-filter" and the next pull would
+// snap the active preset to filter across every device.
 export function buildSelectionsPayload(userId: string, now: string) {
   return {
     user_id: userId,
     source_preset: loadSourcePresetName(),
     source_water: loadSourceWater(),
-    target_preset: loadTargetPresetName(),
+    target_preset: loadTargetPresetName(loadBrewMethod()),
     deleted_source_presets: loadDeletedPresets(),
     deleted_target_presets: loadDeletedTargetPresets(),
     added_target_presets: loadAddedTargetPresets(),
@@ -806,7 +811,19 @@ export function isDefaultData(): boolean {
   );
 }
 
-/** Returns true if Supabase has any stored data for this user. */
+/**
+ * Returns true if Supabase has any stored data for this user.
+ *
+ * Probe failures THROW rather than being collapsed into "no data" — without
+ * this, a transient network blip during handleFirstLoginMerge would route to
+ * the "brand new user" branch and overwrite the cloud row with local
+ * defaults (the same data-loss shape as commits 6d8cd63 / 9f89a2e). Callers
+ * already handle the rejection: handleFirstLoginMerge wraps in mergeInFlight
+ * which propagates the error up, and the onAuthStateChange SIGNED_IN handler
+ * catches it with `console.warn("[sync] post-signin merge failed:", err)` —
+ * the merge is skipped on this attempt and retried on the next sign-in or
+ * page reload.
+ */
 async function hasCloudData(userId: string): Promise<boolean> {
   const results = await Promise.all([
     window.supabaseClient
@@ -822,6 +839,13 @@ async function hasCloudData(userId: string): Promise<boolean> {
     window.supabaseClient.from("source_profiles").select("slug").eq("user_id", userId).limit(1),
     window.supabaseClient.from("target_profiles").select("slug").eq("user_id", userId).limit(1),
   ]);
+  const errored = results.find(function (r) {
+    return !!(r && r.error);
+  });
+  if (errored && errored.error) {
+    console.warn("[sync] hasCloudData probe failed:", errored.error);
+    throw errored.error;
+  }
   return !!(
     results[0].data ||
     results[1].data ||
