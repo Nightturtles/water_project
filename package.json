@@ -38,6 +38,7 @@
     "globals": "^15.15.0",
     "http-server": "^14.1.1",
     "prettier": "^3.8.3",
+    "sharp": "^0.32.6",
     "typescript": "^5.4.0",
     "typescript-eslint": "^8.58.2",
     "vite": "^5.4.10",
