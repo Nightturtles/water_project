@@ -23,7 +23,13 @@ on:
 
 jobs:
   ios-build:
-    runs-on: macos-14
+    # macos-15 ships Xcode 16.x, which has the Swift 6 compiler features
+    # (`$NonescapableTypes` etc.) that the precompiled capacitor-swift-pm
+    # xcframework relies on. macos-14 has Xcode 15.x and silently excludes
+    # the `webView` / `viewController` members from CAPBridgeProtocol via
+    # `#if compiler(>=5.3) && $NonescapableTypes`, which then breaks every
+    # Capacitor plugin that uses them (e.g. @capacitor/status-bar).
+    runs-on: macos-15
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
@@ -31,6 +37,12 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
+      # Pin the highest-numbered Xcode the runner has installed so the build
+      # is reproducible across runner-image updates. macos-15 typically has
+      # Xcode 16.x preinstalled; this select makes the choice explicit.
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+      - run: xcodebuild -version
       - run: npm ci
       - run: npm run build
       # cap sync regenerates the Capacitor plugin shims under ios/App/CapApp-SPM/
@@ -63,7 +75,11 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: "temurin"
-          java-version: "17"
+          # Capacitor 8.3 requires JDK 21 (the bundled
+          # capacitor-android Gradle module sets sourceCompatibility 21).
+          # JDK 17 fails with `error: invalid source release: 21` during
+          # :capacitor-android:compileDebugJavaWithJavac.
+          java-version: "21"
       - run: npm ci
       - run: npm run build
       - run: npx cap sync android
