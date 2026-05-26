@@ -44,7 +44,7 @@ Identical across all platforms so the store listings tell the same story.
 | `04-recipe-builder` | Recipe builder mid-edit |
 | `05-signed-in-nav` | Signed-in state with the Delete account button visible (proves to reviewers that the in-app deletion path exists, which Apple Guideline 5.1.1(v) requires) |
 
-Edit `scripts/capture-screenshots-shared/seed.js` to change what each scene displays. Re-run the capture script to regenerate.
+Edit `scripts/capture-screenshots-shared/seed.cjs` to change what each scene displays. Re-run the capture script to regenerate.
 
 ## Verifying
 

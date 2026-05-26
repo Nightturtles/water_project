@@ -13,7 +13,7 @@ Source water support: start from distilled, RO, or any tap water with a known mi
 
 Recipe library: browse community recipes (Balanced, Bright, Heavy, SCA target water, and more), then save your own.
 
-Multi-mineral support: choose from a dozen plus mineral salts; mix and match for the profile you want.
+Multi-mineral support: choose from a dozen-plus mineral salts; mix and match for the profile you want.
 
 Recipe builder: edit a recipe step by step with live computation of the resulting mineral profile.
 

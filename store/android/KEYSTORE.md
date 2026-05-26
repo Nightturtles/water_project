@@ -4,7 +4,12 @@ Generating, storing, and wiring the keystore used to sign Play Console uploads.
 
 ## Why this matters
 
-Google Play requires every release APK or AAB to be signed by a key the developer controls. **If you lose the upload keystore, you lose the ability to publish updates to the Cafelytic Play Store listing forever.** There is no recovery flow for a lost key. Back it up to at least two places (1Password plus an offline drive) the moment you generate it.
+Google Play requires every release APK or AAB to be signed by a key the developer controls. The consequences of losing the keystore depend on whether you opted into Play App Signing:
+
+- **Without Play App Signing (self-managed)**: losing the keystore is permanent. You lose the ability to publish updates to the Cafelytic Play Store listing, and there is no recovery flow.
+- **With Play App Signing (recommended)**: the keystore documented here is the *upload key*, distinct from the *signing key* Google holds. If you lose the upload key, you can request an upload-key reset through Play Console (typically reviewed within ~48 hours); the user-visible signing key is unaffected.
+
+Either way: back the keystore up to at least two places (1Password plus an offline drive) the moment you generate it. The reset flow exists but is slow; treating the upload key as recoverable in practice undermines the speed of legitimate releases.
 
 Two ways to manage this on the Play Console side:
 

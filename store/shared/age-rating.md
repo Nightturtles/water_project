@@ -44,8 +44,12 @@ Play uses the IARC questionnaire. Answers mirror the Apple ones.
 | Horror/fear | None |
 | User-generated content | Yes (recipe names) |
 | Shares user location | No |
-| Allows users to interact | No (no chat, no comments, no DMs; the library is read-only browsing of recipes) |
+| Allows users to interact | **Yes** (no chat, no comments, no DMs, but users can publish recipes to the library that other users can view; per Google's IARC guidance, sharing user-created content with others counts as "users interact" even without messaging features — see [support.google.com/googleplay/android-developer/answer/7021383](https://support.google.com/googleplay/android-developer/answer/7021383)) |
 | Digital purchases | No |
 | Unrestricted internet access | No |
 
-Resulting Play rating: **Everyone** (IARC equivalent across regions: PEGI 3, USK 0, ClassInd L).
+Resulting Play rating: **Everyone**, with an "Interactive Elements" disclosure of **Users Interact** (because users can share recipes publicly). IARC equivalent across regions: PEGI 3, USK 0, ClassInd L. The interactivity disclosure is a labelled note alongside the rating, not a separate rating bucket.
+
+Interactivity note for the Play Console reviewer (paste into the relevant "Tell us about interaction features" prompt):
+
+> Signed-in users can publish recipes they save to a public library that all users can browse. There is no chat, direct messaging, comments, or any other channel for direct user-to-user communication. The shared field is the recipe name (under 200 chars) plus the mineral target values. Reactive moderation: inappropriate names can be removed via a database-side query; a public reporting UI is planned for v1.1.

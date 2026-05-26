@@ -21,6 +21,14 @@ on:
   push:
     branches: [main]
 
+# Least-privilege GITHUB_TOKEN. These jobs only read the repo; no PR
+# comments, no release writes, no deploys. The existing ci.yml workflow
+# scopes its own permissions per-job (e.g. `issues: write` only on the
+# e2e flake-summary step); mirror the principle here even though the
+# default scope would also work for read-only checkout.
+permissions:
+  contents: read
+
 jobs:
   ios-build:
     # macos-15 ships Xcode 16.x, which has the Swift 6 compiler features
@@ -32,8 +40,17 @@ jobs:
     runs-on: macos-15
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Actions are pinned to commit SHAs (CodeRabbit / zizmor finding):
+      # mutable tags like @v4 can be force-pushed by a compromised maintainer
+      # account, while SHAs are immutable. Dependabot updates the SHA when
+      # a new release is cut. Comment the human-readable tag for legibility.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Don't leave the GITHUB_TOKEN sitting in the local git config after
+          # checkout — none of these jobs run subsequent git operations that
+          # need to push, so persistence has no upside and a small leak surface.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
@@ -67,12 +84,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           cache: "npm"
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
         with:
           distribution: "temurin"
           # Capacitor 8.3 requires JDK 21 (the bundled
