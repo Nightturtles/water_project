@@ -451,6 +451,7 @@
       if (typeof window.invalidatePublicRecipesCache === "function") {
         window.invalidatePublicRecipesCache();
       }
+      if (typeof window.cwHaptic === "function") window.cwHaptic("medium");
       if (ctx.onSaved) ctx.onSaved();
       ctx.close();
     }

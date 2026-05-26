@@ -25,9 +25,15 @@
 // and are imported here. Order matters: sentry-init FIRST so Sentry catches
 // errors thrown by any subsequent import; supabase-client SECOND so
 // window.supabaseClient exists before storage.ts and sync.ts read it.
+//
+// Phase A PR (k): capacitor-bootstrap is imported AFTER supabase-client so
+// the deep-link handler can call window.supabaseClient.auth.exchangeCodeForSession
+// without a null guard. On web the module is effectively a no-op (every
+// side-effect is gated on Capacitor.isNativePlatform()).
 
 import "./sentry-init";
 import "./supabase-client";
+import "./capacitor-bootstrap";
 import * as storage from "./storage";
 import * as sync from "./sync";
 import "../components/ui-shared";

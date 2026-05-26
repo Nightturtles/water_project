@@ -414,6 +414,15 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
             if (typeof (window as any).invalidatePublicRecipesCache === "function") {
               (window as any).invalidatePublicRecipesCache();
             }
+            // The native OS share sheet is intentionally NOT fired here.
+            // "Publish to library" is a discoverability action (flip is_public
+            // so other users find the recipe inside the app); it isn't the
+            // same intent as "share a link with a friend." Conflating them
+            // surprises users who tap "Share" on the publish prompt and get
+            // a system share sheet they didn't ask for. window.cwNativeShare
+            // remains defined by src/lib/capacitor-bootstrap.ts on native and
+            // is waiting on a future PR that adds an explicit Share Link
+            // affordance (likely on a published recipe card).
           });
       });
     }

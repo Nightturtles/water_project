@@ -212,5 +212,21 @@ declare global {
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
     applyAuthGate?: (el: HTMLElement | null | undefined, opts?: { reason?: string }) => void;
+    // Native capability shims published by src/lib/capacitor-bootstrap.ts on
+    // iOS / Android only. Undefined on web, so call sites use optional
+    // chaining (`window.cwHaptic?.("light")`). Classic JS files (script.js,
+    // my-recipes-ui.js) fire-and-forget these — no awaiting and no error
+    // surface, since "haptic didn't fire" is invisible to the user.
+    cwHaptic?: (style?: "light" | "medium" | "heavy") => void;
+    cwNativeShare?: (opts: { title?: string; text?: string; url?: string }) => void;
+    // Capacitor runtime object, present on iOS / Android once
+    // src/lib/capacitor-bootstrap.ts imports @capacitor/core. On web the
+    // import still runs (window.Capacitor IS defined), but
+    // isNativePlatform() returns false. Several call sites (supabase-client
+    // AUTH_CALLBACK selection, ui-shared share-prompt accept) read this to
+    // branch web vs native behavior.
+    Capacitor?: {
+      isNativePlatform?: () => boolean;
+    };
   }
 }
