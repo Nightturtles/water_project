@@ -1,0 +1,18 @@
+<!--
+  Source for the dark-mode splash. Slate-900 (#0f172a) page background
+  to match style.css's body background in dark mode (the dark-theme
+  gray-50 token), so the splash to WebView hand-off is seamless when the user
+  has dark mode enabled. The Ca tile is the same composition as splash.svg
+  so the brand mark reads identically.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732">
+  <rect width="2732" height="2732" fill="#0f172a"/>
+  <g transform="translate(854, 854)">
+    <rect width="1024" height="1024" rx="160" fill="#111C2E" stroke="#4B8FE0" stroke-width="48"/>
+    <text x="180" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="140" fill="#3A5272">20</text>
+    <text x="512" y="640" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="440" font-weight="500" fill="#4B8FE0">Ca</text>
+    <text x="512" y="860" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="120">
+      <tspan fill="#4B8FE0">cafe</tspan><tspan fill="#E8EEF8">lytic</tspan>
+    </text>
+  </g>
+</svg>

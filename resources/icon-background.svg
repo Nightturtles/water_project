@@ -1,0 +1,9 @@
+<!--
+  Source for the Android adaptive-icon background layer. Solid dark navy
+  (#111C2E, matching the brand tile fill in dark mode and the icon-only
+  background) so the foreground "Ca" composited on top reads correctly
+  regardless of the launcher mask.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <rect width="1024" height="1024" fill="#111C2E"/>
+</svg>

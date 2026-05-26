@@ -1,0 +1,21 @@
+<!--
+  Source for the light-mode splash. Cream (#fafaf7) page background to
+  match SplashScreen.backgroundColor in capacitor.config.ts and to bridge
+  into the WebView's light body background (#f8fafc) with no visible
+  flash. The Ca tile is centered at 1024x1024 (37.5% of canvas) with a
+  rounded-rectangle border in brand blue, the full favicon composition
+  inside. capacitor-assets crops 2732x2732 to each device's splash
+  dimensions via CENTER_CROP, so we keep the tile well within the central
+  third to survive the crop on every aspect ratio.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2732 2732">
+  <rect width="2732" height="2732" fill="#fafaf7"/>
+  <g transform="translate(854, 854)">
+    <rect width="1024" height="1024" rx="160" fill="#111C2E" stroke="#4B8FE0" stroke-width="48"/>
+    <text x="180" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="140" fill="#3A5272">20</text>
+    <text x="512" y="640" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="440" font-weight="500" fill="#4B8FE0">Ca</text>
+    <text x="512" y="860" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="120">
+      <tspan fill="#4B8FE0">cafe</tspan><tspan fill="#E8EEF8">lytic</tspan>
+    </text>
+  </g>
+</svg>
