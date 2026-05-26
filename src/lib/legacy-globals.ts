@@ -38,5 +38,6 @@ import * as storage from "./storage";
 import * as sync from "./sync";
 import "../components/ui-shared";
 import "../components/login-modal";
+import "./creator-display";
 
 Object.assign(window, storage, sync);

@@ -1649,6 +1649,60 @@ select:focus {
   justify-content: center;
 }
 
+/* Type-to-confirm input inside the confirm dialog (Delete Account flow).
+   Inserted dynamically between the message and the action buttons by
+   showConfirm() when options.requireText is set. */
+.confirm-input-wrap {
+  margin: 0 0 1rem;
+  text-align: left;
+}
+
+.confirm-input-label {
+  display: block;
+  font-size: 0.85rem;
+  color: var(--gray-700, var(--gray-600));
+  margin-bottom: 0.35rem;
+}
+
+.confirm-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 0.95rem;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.confirm-input:focus {
+  outline: none;
+  border-color: var(--blue-600);
+  box-shadow: 0 0 0 2px var(--blue-50);
+}
+
+/* Post-account-deletion flash banner, shown once on the next page load.
+   Pinned top-center, fades out after ~4s. */
+.account-deleted-flash {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 300;
+  background: #1f2937;
+  color: #ffffff;
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  transition: opacity 0.4s ease;
+}
+
+.account-deleted-flash--leaving {
+  opacity: 0;
+}
+
 /* Welcome modal (Calculator page, one-time) */
 body.welcome-modal-open {
   overflow: hidden;
@@ -2701,6 +2755,18 @@ footer {
   color: var(--blue-700);
   background: var(--blue-50);
   font-weight: 600;
+}
+
+/* Muted destructive variant for the in-nav "Delete account" button.
+   Kept subdued so it doesn't dominate the nav; the type-your-email
+   confirm modal is the real guard against accidental taps. */
+.nav-auth-btn--danger {
+  color: var(--gray-400);
+}
+
+.nav-auth-btn--danger:hover {
+  color: #b91c1c;
+  background: #fef2f2;
 }
 
 /* ========================

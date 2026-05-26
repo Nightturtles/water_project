@@ -148,15 +148,60 @@ export function renderSourceWaterTags(tagsEl: HTMLElement | null, water: IonMap 
 }
 
 // --- Confirmation modal (Bug 2: prevent stacking, Bug 3 fix: focus trap + ARIA) ---
+//
+// The static overlay markup (#confirm-overlay) lives in index.html, recipe.html,
+// taste.html, and minerals.html only. Pages that don't ship it (library.html,
+// start.html, login.html, reset-password.html, privacy/index.html) still need
+// to be able to call showConfirm() for the nav-auth "Delete account" button,
+// which appears on every page when the user is signed in. `ensureConfirmOverlay`
+// inserts a matching DOM subtree on demand; the CSS in style.css then styles
+// it identically to the static version.
 let confirmCleanup: (() => void) | null = null;
-export function showConfirm(message: string, onYes: () => void): void {
+
+export interface ShowConfirmOptions {
+  // When set, an <input> appears between the message and the buttons. The
+  // confirm (Yes) button is disabled until the trimmed input value exactly
+  // matches `value`. Used by the Delete Account flow to force the user to
+  // re-type their email — more memorable and less click-through-able than
+  // a generic "type DELETE" pattern, and makes them look at which account
+  // they're about to nuke.
+  requireText?: { value: string; label: string; placeholder?: string };
+  // Override button labels. Defaults: yesLabel="Yes", noLabel="No".
+  yesLabel?: string;
+  noLabel?: string;
+}
+
+function ensureConfirmOverlay(): HTMLElement {
+  let overlay = document.getElementById("confirm-overlay");
+  if (overlay) return overlay;
+  overlay = document.createElement("div");
+  overlay.id = "confirm-overlay";
+  overlay.className = "confirm-overlay";
+  overlay.style.display = "none";
+  overlay.innerHTML =
+    '<div class="confirm-dialog">' +
+    '<p id="confirm-message"></p>' +
+    '<div class="confirm-actions">' +
+    '<button id="confirm-yes" class="preset-btn">Yes</button>' +
+    '<button id="confirm-no" class="preset-btn">No</button>' +
+    "</div>" +
+    "</div>";
+  document.body.appendChild(overlay);
+  return overlay;
+}
+
+export function showConfirm(
+  message: string,
+  onYes: () => void,
+  options?: ShowConfirmOptions,
+): void {
   if (confirmCleanup) confirmCleanup();
 
-  const overlay = document.getElementById("confirm-overlay") as HTMLElement;
+  const overlay = ensureConfirmOverlay();
   const dialog = overlay.querySelector(".confirm-dialog") as HTMLElement;
   const msgEl = document.getElementById("confirm-message") as HTMLElement;
-  const yesBtn = document.getElementById("confirm-yes") as HTMLElement;
-  const noBtn = document.getElementById("confirm-no") as HTMLElement;
+  const yesBtn = document.getElementById("confirm-yes") as HTMLButtonElement;
+  const noBtn = document.getElementById("confirm-no") as HTMLButtonElement;
   const previousFocus = document.activeElement as HTMLElement | null;
 
   // ARIA attributes
@@ -165,8 +210,63 @@ export function showConfirm(message: string, onYes: () => void): void {
   dialog.setAttribute("aria-labelledby", "confirm-message");
 
   msgEl.textContent = message;
+
+  // Reset button labels each call so a previous invocation's custom copy
+  // doesn't bleed into the next.
+  yesBtn.textContent = options?.yesLabel || "Yes";
+  noBtn.textContent = options?.noLabel || "No";
+  yesBtn.disabled = false;
+
+  // Optional type-to-confirm input. Inserted between the message and the
+  // action buttons; removed in close() so it doesn't accumulate across calls.
+  let inputWrap: HTMLElement | null = null;
+  let input: HTMLInputElement | null = null;
+  if (options?.requireText) {
+    const required = options.requireText;
+    inputWrap = document.createElement("div");
+    inputWrap.className = "confirm-input-wrap";
+
+    const label = document.createElement("label");
+    label.className = "confirm-input-label";
+    label.textContent = required.label;
+    const inputId = "confirm-require-text-input";
+    label.setAttribute("for", inputId);
+
+    input = document.createElement("input");
+    input.type = "text";
+    input.id = inputId;
+    input.className = "confirm-input";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    if (required.placeholder) input.placeholder = required.placeholder;
+
+    inputWrap.appendChild(label);
+    inputWrap.appendChild(input);
+    // Insert before the action buttons. msgEl is the dialog's first child;
+    // .confirm-actions follows. Inserting before .confirm-actions keeps the
+    // visual order message -> input -> buttons regardless of how the
+    // dialog was constructed (static markup vs. ensureConfirmOverlay).
+    const actions = dialog.querySelector(".confirm-actions") as HTMLElement;
+    dialog.insertBefore(inputWrap, actions);
+
+    yesBtn.disabled = true;
+    input.addEventListener("input", () => {
+      yesBtn.disabled = input!.value.trim() !== required.value.trim();
+    });
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !yesBtn.disabled) {
+        e.preventDefault();
+        yesHandler();
+      }
+    });
+  }
+
   overlay.style.display = "flex";
-  yesBtn.focus();
+  if (input) {
+    input.focus();
+  } else {
+    yesBtn.focus();
+  }
 
   function close() {
     overlay.style.display = "none";
@@ -174,12 +274,15 @@ export function showConfirm(message: string, onYes: () => void): void {
     noBtn.removeEventListener("click", noHandler);
     document.removeEventListener("keydown", keyHandler);
     overlay.removeEventListener("click", overlayClickHandler);
+    if (inputWrap && inputWrap.parentNode) inputWrap.parentNode.removeChild(inputWrap);
+    yesBtn.disabled = false;
     confirmCleanup = null;
     if (previousFocus && previousFocus.focus) {
       previousFocus.focus();
     }
   }
   function yesHandler() {
+    if (yesBtn.disabled) return;
     close();
     onYes();
   }
@@ -192,7 +295,7 @@ export function showConfirm(message: string, onYes: () => void): void {
       return;
     }
     if (e.key === "Tab") {
-      const focusable: HTMLElement[] = [yesBtn, noBtn];
+      const focusable: HTMLElement[] = input ? [input, yesBtn, noBtn] : [yesBtn, noBtn];
       const idx = focusable.indexOf(document.activeElement as HTMLElement);
       if (e.shiftKey) {
         e.preventDefault();
@@ -782,8 +885,71 @@ async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promi
         window.location.href = "index.html";
       });
 
+      // Apple Guideline 5.1.1(v) and Google Play's Data Deletion policy
+      // require an in-app deletion path. The button stays muted (CSS class
+      // .nav-auth-btn--danger) so a thumb-fat tap isn't likely; the typed-
+      // email confirm modal does the rest of the guarding.
+      const userEmail = session.user.email || "";
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "nav-auth-btn nav-auth-btn--danger";
+      deleteBtn.textContent = "Delete account";
+      deleteBtn.addEventListener("click", () => {
+        showConfirm(
+          "This permanently deletes your account and all recipes saved to it. " +
+            "Recipes you originally created and shared with others will stay " +
+            'visible to them but show as "by Anonymous User". This cannot be undone.',
+          async () => {
+            // Unlike Log out, we deliberately skip flushPendingSync — there's
+            // no point persisting the user's last edit to a row that's about
+            // to be deleted, and racing the flush against the delete would
+            // only surface confusing RLS errors.
+            try {
+              const { error } = await window.supabaseClient.rpc("delete_account");
+              if (error) throw error;
+            } catch (err) {
+              console.warn("[auth] delete_account RPC failed:", err);
+              alert(
+                "Could not delete your account: " +
+                  ((err as { message?: string })?.message || "unknown error") +
+                  ". Please try again or contact info@cafelytic.com.",
+              );
+              return;
+            }
+            try {
+              await (window as any).signOut();
+            } catch (err) {
+              console.warn("[auth] signOut after delete failed:", err);
+              // Continue regardless — the auth row is already gone, so the
+              // local session token is now invalid on the server side.
+            }
+            if (typeof window.clearLocalUserContent === "function") {
+              window.clearLocalUserContent();
+            }
+            try {
+              sessionStorage.setItem("cw_account_deleted_flash", "1");
+            } catch (_) {
+              // sessionStorage may be unavailable (private mode, embedded
+              // contexts); the redirect still happens, just without the
+              // confirmation toast.
+            }
+            window.location.href = "index.html";
+          },
+          {
+            requireText: {
+              value: userEmail,
+              label: "Type your email to confirm:",
+              placeholder: userEmail,
+            },
+            yesLabel: "Delete account",
+            noLabel: "Cancel",
+          },
+        );
+      });
+
       authWrap.appendChild(email);
       authWrap.appendChild(logoutBtn);
+      authWrap.appendChild(deleteBtn);
     } else {
       const loginLink = document.createElement("a");
       loginLink.href = "login.html";
@@ -1035,6 +1201,35 @@ if (typeof window !== "undefined") {
   });
 }
 
+// --- One-shot flash banner after account deletion ---
+// The delete-account handler (in _updateNavAuth) sets this flag in
+// sessionStorage immediately before navigating to index.html. We read +
+// clear it here so the user lands on the home page with a brief
+// confirmation that the deletion went through, rather than a silent
+// unauthed redirect that looks like they got logged out by mistake.
+function showAccountDeletedFlashIfPending(): void {
+  let pending = false;
+  try {
+    pending = sessionStorage.getItem("cw_account_deleted_flash") === "1";
+    if (pending) sessionStorage.removeItem("cw_account_deleted_flash");
+  } catch (_) {
+    return;
+  }
+  if (!pending) return;
+  const banner = document.createElement("div");
+  banner.className = "account-deleted-flash";
+  banner.setAttribute("role", "status");
+  banner.setAttribute("aria-live", "polite");
+  banner.textContent = "Your account has been deleted.";
+  document.body.appendChild(banner);
+  setTimeout(() => {
+    banner.classList.add("account-deleted-flash--leaving");
+    setTimeout(() => {
+      if (banner.parentNode) banner.parentNode.removeChild(banner);
+    }, 400);
+  }, 4000);
+}
+
 // --- Run shared UI setup on load ---
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
@@ -1042,4 +1237,5 @@ document.addEventListener("DOMContentLoaded", () => {
   initThemeListeners();
   showRecipesToaster();
   initSaveStatusIndicator();
+  showAccountDeletedFlashIfPending();
 });

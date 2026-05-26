@@ -16,10 +16,17 @@
 
 import { Capacitor } from "@capacitor/core";
 import { App, type URLOpenListenerEvent } from "@capacitor/app";
+import { Browser } from "@capacitor/browser";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Share } from "@capacitor/share";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { SplashScreen } from "@capacitor/splash-screen";
+
+// Public privacy-policy URL, registered with both app stores. Hard-coded
+// rather than derived from window.location.origin because on native the
+// origin is file:// and we always want the user routed to the published
+// page over the network.
+const PRIVACY_POLICY_URL = "https://cafelytic.com/privacy";
 
 // Matches the launch background in capacitor.config.ts so the WebView paints
 // the same color the splash screen was showing, avoiding a flash on hand-off.
@@ -34,6 +41,7 @@ function bootstrap(): void {
   hideSplashAfterPaint();
   exposeGlobals();
   registerDeepLinkListener();
+  bindPrivacyLinkInterceptor();
 }
 
 function initStatusBar(): void {
@@ -61,6 +69,27 @@ function exposeGlobals(): void {
   window.cwNativeShare = (opts: { title?: string; text?: string; url?: string }) => {
     Share.share(opts).catch(() => {});
   };
+}
+
+// Intercept clicks on the in-app "Privacy policy" link and open it in
+// Safari / Chrome Custom Tabs via @capacitor/browser instead of letting the
+// WKWebView navigate to the URL itself. Without this, the privacy page loads
+// inside the same WebView that hosts the app, which (a) traps the user
+// (back button leaves them stranded), (b) makes the in-app shell look like
+// an embedded clone of the website, and (c) is the kind of UX issue Apple
+// reviewers explicitly call out as a reject reason. Web builds keep the
+// plain <a href="/privacy"> behavior — the page exists at that URL there.
+function bindPrivacyLinkInterceptor(): void {
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (!target || typeof target.closest !== "function") return;
+    const link = target.closest("#privacy-link, [data-privacy-link]");
+    if (!link) return;
+    e.preventDefault();
+    Browser.open({ url: PRIVACY_POLICY_URL, presentationStyle: "popover" }).catch((err) => {
+      console.warn("[capacitor-bootstrap] Browser.open(privacy) failed:", err);
+    });
+  });
 }
 
 function registerDeepLinkListener(): void {

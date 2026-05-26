@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy - Cafelytic</title>
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../analytics-init.js"></script>
+  <script src="../theme-init.js"></script>
+</head>
+<body class="privacy-page">
+  <header>
+    <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Privacy Policy</h1>
+    <p class="subtitle">Last updated: May 25, 2026</p>
+  </header>
+
+  <main>
+    <article class="privacy-card">
+      <section>
+        <h2>What we collect</h2>
+        <p>If you create an account, we store the email address you sign up with. We use it to recognize you across devices and to send password-reset emails when you ask for one.</p>
+        <p>While you use the app, we save the recipes, brewing profiles, source-water profiles, and mineral preferences you create. If you sign in, those are synced to your account so they appear on every device you sign in to. If you don't sign in, they stay on your device only.</p>
+        <p>We also save your theme preference (light, dark, or system) and a small amount of anonymous device-paired state used to sync recipes between your devices.</p>
+      </section>
+
+      <section>
+        <h2>What we don't collect</h2>
+        <p>No payment information (the app is free), no contacts, no location, no health data, no microphone or camera access.</p>
+      </section>
+
+      <section>
+        <h2>Where it lives</h2>
+        <p>Account data and synced recipes live on Supabase, which hosts our database. Anything you create while signed out lives only in your browser's local storage on the device you're using.</p>
+      </section>
+
+      <section>
+        <h2>Analytics</h2>
+        <p>The public website (cafelytic.com) loads Google Analytics 4 to count page views and broadly understand which features people use. The native iOS and Android apps do not load it. Analytics is also skipped on localhost, in automated test browsers, and for visitors who have opted out.</p>
+        <p>To opt out on the website, visit <a href="https://cafelytic.com/?no-analytics=1">cafelytic.com/?no-analytics=1</a> once. Your browser will remember the choice. To turn it back on, visit <a href="https://cafelytic.com/?no-analytics=0">cafelytic.com/?no-analytics=0</a>.</p>
+      </section>
+
+      <section>
+        <h2>Error telemetry</h2>
+        <p>We use Sentry to capture JavaScript errors so we can fix bugs we wouldn't otherwise hear about. Sentry receives the error message, a stack trace, and the page URL. It does not receive your email, password, or the contents of your recipes.</p>
+        <p>To disable error reporting in your browser, open the developer console and run: <code>localStorage.setItem("cafelytic_no_sentry", "1")</code>, then reload.</p>
+      </section>
+
+      <section>
+        <h2>How to delete your data</h2>
+        <p>Inside the app, tap the "Delete account" button next to "Log out" in the navigation. We will permanently remove your account, your recipes, your source-water profiles, your settings, and all related data. Recipes you originally created and shared with other users will remain visible to those users but will show as "by Anonymous User" - the link back to your identity is severed.</p>
+        <p>If you can't sign in, email <a href="mailto:info@cafelytic.com">info@cafelytic.com</a> from the address on your account and we'll delete it for you.</p>
+      </section>
+
+      <section>
+        <h2>Contact</h2>
+        <p>For questions about this policy or to exercise any privacy right, email <a href="mailto:info@cafelytic.com">info@cafelytic.com</a>.</p>
+      </section>
+    </article>
+  </main>
+
+  <footer>
+    <p><a href="../index.html">Back to the calculator</a></p>
+    <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
+  </footer>
+
+  <script type="module" src="/src/lib/legacy-globals.ts"></script>
+</body>
+</html>

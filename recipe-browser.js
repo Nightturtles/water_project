@@ -465,7 +465,11 @@
     var header = el("div", "rx-card-header");
     var titleCol = el("div", "rx-card-title-col");
     titleCol.appendChild(el("h3", "rx-card-title", recipe.label || ""));
-    if (recipe.creatorDisplayName) {
+    // creatorDisplayLabel (src/lib/creator-display.ts) collapses the three
+    // attribution states (system / deleted creator / known) into one string.
+    if (typeof window.creatorDisplayLabel === "function") {
+      titleCol.appendChild(el("p", "rx-card-source", "by " + window.creatorDisplayLabel(recipe)));
+    } else if (recipe.creatorDisplayName) {
       titleCol.appendChild(el("p", "rx-card-source", "by " + recipe.creatorDisplayName));
     }
     header.appendChild(titleCol);
@@ -639,7 +643,9 @@
 
     header.appendChild(titleRow);
 
-    if (recipe.creatorDisplayName) {
+    if (typeof window.creatorDisplayLabel === "function") {
+      header.appendChild(el("p", "rx-detail-byline", "by " + window.creatorDisplayLabel(recipe)));
+    } else if (recipe.creatorDisplayName) {
       header.appendChild(el("p", "rx-detail-byline", "by " + recipe.creatorDisplayName));
     }
 
@@ -950,7 +956,11 @@
     var header = el("header", "rx-featured-header");
     var titleCol = el("div", "rx-featured-title-col");
     titleCol.appendChild(el("h2", "rx-featured-title", recipe.label || ""));
-    if (recipe.creatorDisplayName) {
+    if (typeof window.creatorDisplayLabel === "function") {
+      titleCol.appendChild(
+        el("p", "rx-featured-source", "by " + window.creatorDisplayLabel(recipe)),
+      );
+    } else if (recipe.creatorDisplayName) {
       titleCol.appendChild(el("p", "rx-featured-source", "by " + recipe.creatorDisplayName));
     }
     header.appendChild(titleCol);
