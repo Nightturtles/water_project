@@ -1,0 +1,15 @@
+<!--
+  Source for the Android adaptive-icon foreground layer. Transparent
+  background: the launcher composites this over icon-background.svg and
+  applies a circular or rounded-square mask depending on the device's
+  launcher theme. Content must fit inside the central 66% safe zone
+  (roughly x=170..854 of a 1024 canvas) so it isn't clipped by any
+  launcher mask.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <text x="280" y="370" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="110" fill="#3A5272">20</text>
+  <text x="512" y="610" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="340" font-weight="500" fill="#4B8FE0">Ca</text>
+  <text x="512" y="740" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="90">
+    <tspan fill="#4B8FE0">cafe</tspan><tspan fill="#E8EEF8">lytic</tspan>
+  </text>
+</svg>

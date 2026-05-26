@@ -19,6 +19,14 @@ const config: CapacitorConfig = {
       launchShowDuration: 0,
       launchAutoHide: false,
       backgroundColor: "#fafaf7",
+      // CENTER_CROP scales the 2732x2732 splash PNG to fill the screen
+      // (cropping the excess in the short dimension) instead of the
+      // plugin's default FIT_XY, which would stretch the square source
+      // into the device aspect ratio and distort the centered Ca tile.
+      // The tile sits well within the central third of the source so it
+      // survives the crop on every aspect ratio. iOS uses scaleAspectFill
+      // via LaunchScreen.storyboard for the equivalent behavior.
+      androidScaleType: "CENTER_CROP",
     },
     StatusBar: {
       style: "DEFAULT",
