@@ -1,0 +1,16 @@
+// Apple Developer Team ID template.
+//
+// One-time setup:
+//   cp ios/team.xcconfig.example ios/team.xcconfig
+//   # Then edit ios/team.xcconfig and fill in DEVELOPMENT_TEAM below.
+//
+// Find your Team ID at https://developer.apple.com/account → Membership.
+// It is a 10-character alphanumeric identifier (e.g. ABCDE12345).
+//
+// ios/team.xcconfig is gitignored. It is included by ios/debug.xcconfig via
+// `#include? "team.xcconfig"` so the project picks it up automatically the
+// next time Xcode opens. With CODE_SIGN_STYLE = Automatic (set in the
+// .pbxproj), Xcode uses this team ID to provision a development certificate
+// the first time you build for a device.
+
+DEVELOPMENT_TEAM =

@@ -226,6 +226,25 @@ module.exports = tseslint.config(
     },
   },
 
+  // ESM Node scripts (capture-screenshots.mjs). Runs in Node but drives
+  // Playwright, so its addInitScript callbacks execute in browser context
+  // and legitimately reference window / localStorage. Allow both global
+  // sets — ESLint can't tell which scope each line belongs to.
+  {
+    files: ["scripts/**/*.mjs"],
+    languageOptions: {
+      sourceType: "module",
+      globals: {
+        ...globals.node,
+        ...globals.browser,
+      },
+    },
+    rules: {
+      "@typescript-eslint/no-require-imports": "off",
+      "no-unused-vars": ["error", { args: "none", caughtErrorsIgnorePattern: "^_" }],
+    },
+  },
+
   // Vite config. Runs in Node at build time; no browser globals.
   // .mts (explicit ESM) because vite-plugin-static-copy is ESM-only and the
   // project's package.json is CJS by default.

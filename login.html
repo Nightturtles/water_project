@@ -85,6 +85,21 @@
     const modeToggle = document.querySelector('.login-mode-toggle');
     const divider = document.querySelector('.login-divider');
 
+    // Apple Guideline 4.8 requires Sign in with Apple parity for any third-party
+    // social sign-in on iOS. v1 sidesteps this by hiding Google sign-in on
+    // native builds (web is unchanged). Sign in with Apple may follow in v1.1.
+    // Capacitor exposes window.Capacitor only when running inside the native
+    // shell; on the web build the property is undefined and this is a no-op.
+    const isNativePlatform = !!(
+      window.Capacitor &&
+      typeof window.Capacitor.isNativePlatform === 'function' &&
+      window.Capacitor.isNativePlatform()
+    );
+    if (isNativePlatform) {
+      googleBtn.style.display = 'none';
+      divider.style.display = 'none';
+    }
+
     let mode = 'signin';
 
     function setMode(newMode) {
@@ -104,8 +119,12 @@
       } else {
         passwordGroup.style.display = '';
         modeToggle.style.display = '';
-        divider.style.display = '';
-        googleBtn.style.display = '';
+        // Skip the Google/divider reset on native so the 4.8 hide above sticks
+        // when toggling between sign-in and create-account modes.
+        if (!isNativePlatform) {
+          divider.style.display = '';
+          googleBtn.style.display = '';
+        }
         forgotLink.style.display = '';
         backToSigninLink.style.display = 'none';
         signinTab.classList.toggle('active', isSignin);

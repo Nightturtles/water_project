@@ -1,0 +1,112 @@
+name: Native build
+
+# Compile-check the iOS and Android native shells on every push so a
+# Capacitor plugin upgrade, native dependency drift, or PrivacyInfo
+# regression can't sneak through to a store submission.
+#
+# These jobs do NOT sign for distribution and do NOT upload anywhere.
+# They just confirm the projects build. Actual uploads run from
+# scripts/upload-{testflight,play-internal}.sh once Apple Developer +
+# Play Console accounts exist.
+#
+# Cost note: macOS runners bill at ~10x the Linux rate. The ios-build
+# job runs on every push for v1 because store-rejection bugs are
+# expensive in a different way. If macOS minutes become a concern,
+# gate this workflow with a `paths:` filter targeting ios/**,
+# android/**, capacitor.config.ts, package*.json, and src/lib/*.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least-privilege GITHUB_TOKEN. These jobs only read the repo; no PR
+# comments, no release writes, no deploys. The existing ci.yml workflow
+# scopes its own permissions per-job (e.g. `issues: write` only on the
+# e2e flake-summary step); mirror the principle here even though the
+# default scope would also work for read-only checkout.
+permissions:
+  contents: read
+
+jobs:
+  ios-build:
+    # macos-15 ships Xcode 16.x, which has the Swift 6 compiler features
+    # (`$NonescapableTypes` etc.) that the precompiled capacitor-swift-pm
+    # xcframework relies on. macos-14 has Xcode 15.x and silently excludes
+    # the `webView` / `viewController` members from CAPBridgeProtocol via
+    # `#if compiler(>=5.3) && $NonescapableTypes`, which then breaks every
+    # Capacitor plugin that uses them (e.g. @capacitor/status-bar).
+    runs-on: macos-15
+    timeout-minutes: 25
+    steps:
+      # Actions are pinned to commit SHAs (CodeRabbit / zizmor finding):
+      # mutable tags like @v4 can be force-pushed by a compromised maintainer
+      # account, while SHAs are immutable. Dependabot updates the SHA when
+      # a new release is cut. Comment the human-readable tag for legibility.
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          # Don't leave the GITHUB_TOKEN sitting in the local git config after
+          # checkout — none of these jobs run subsequent git operations that
+          # need to push, so persistence has no upside and a small leak surface.
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      # Pin the highest-numbered Xcode the runner has installed so the build
+      # is reproducible across runner-image updates. macos-15 typically has
+      # Xcode 16.x preinstalled; this select makes the choice explicit.
+      - name: Select latest Xcode
+        run: sudo xcode-select -s /Applications/Xcode.app
+      - run: xcodebuild -version
+      - run: npm ci
+      - run: npm run build
+      # cap sync regenerates the Capacitor plugin shims under ios/App/CapApp-SPM/
+      # from package.json before xcodebuild reads them.
+      - run: npx cap sync ios
+      # Simulator SDK + CODE_SIGNING_ALLOWED=NO so this works without an
+      # Apple Developer Team ID. The xcodeproj is targeted directly because
+      # Capacitor's iOS shell uses Swift Package Manager rather than
+      # CocoaPods, so there is no .xcworkspace file.
+      - name: xcodebuild (Release, simulator, unsigned)
+        working-directory: ios/App
+        run: |
+          xcodebuild build \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+        with:
+          distribution: "temurin"
+          # Capacitor 8.3 requires JDK 21 (the bundled
+          # capacitor-android Gradle module sets sourceCompatibility 21).
+          # JDK 17 fails with `error: invalid source release: 21` during
+          # :capacitor-android:compileDebugJavaWithJavac.
+          java-version: "21"
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      # Debug signing: the debug keystore ships with the Android tooling, so
+      # no CAFELYTIC_RELEASE_* secrets are needed here. assembleDebug catches
+      # Gradle dependency conflicts and AndroidManifest regressions, which
+      # is the point of this job. The release build path with the env-driven
+      # signing config is exercised locally before each Play upload.
+      - name: gradle assembleDebug
+        working-directory: android
+        run: ./gradlew assembleDebug
