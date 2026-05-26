@@ -16,10 +16,34 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        // Release signing reads from environment variables so the keystore
+        // file and its passwords never live in the repo. See
+        // store/android/KEYSTORE.md for the one-time keystore generation
+        // step and the four CAFELYTIC_RELEASE_* env vars to set.
+        //
+        // When CAFELYTIC_RELEASE_KEYSTORE is unset (e.g. on CI building a
+        // debug APK, or for contributors without the keystore), this block
+        // configures nothing and `signingConfigs.release` resolves to an
+        // empty config. Gradle then signs `release` with the debug key,
+        // which is fine for local sanity checks and CI compile-checks but
+        // is rejected by Play Console — production uploads require the env
+        // vars to be set.
+        release {
+            def keystorePath = System.getenv("CAFELYTIC_RELEASE_KEYSTORE") ?: ""
+            if (keystorePath) {
+                storeFile file(keystorePath)
+                storePassword System.getenv("CAFELYTIC_RELEASE_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("CAFELYTIC_RELEASE_KEY_ALIAS")
+                keyPassword System.getenv("CAFELYTIC_RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            signingConfig signingConfigs.release
         }
     }
 }

@@ -1,1 +1,8 @@
 CAPACITOR_DEBUG = true
+
+// Optional include for the Apple Developer Team ID. Copy
+// team.xcconfig.example to team.xcconfig and fill in DEVELOPMENT_TEAM
+// before opening the project in Xcode for device builds. The `?` after
+// #include makes this a no-op when the file is absent (e.g. on CI with
+// CODE_SIGNING_ALLOWED=NO, or for contributors without an Apple account).
+#include? "team.xcconfig"

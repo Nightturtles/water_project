@@ -13,7 +13,10 @@
     "test:e2e": "playwright test",
     "build": "vite build",
     "preview": "vite preview --port 4173",
-    "build:verify": "node scripts/verify-build.cjs"
+    "build:verify": "node scripts/verify-build.cjs",
+    "screenshots": "node scripts/capture-screenshots.mjs --platform both",
+    "screenshots:ios": "node scripts/capture-screenshots.mjs --platform ios",
+    "screenshots:android": "node scripts/capture-screenshots.mjs --platform android"
   },
   "dependencies": {
     "@capacitor/app": "^8.1.0",

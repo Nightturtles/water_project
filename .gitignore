@@ -22,9 +22,28 @@ ios/App/App.xcodeproj/xcuserdata/
 ios/DerivedData/
 ios/build/
 
+# Apple Developer Team ID (per-contributor). Tracked via the .example sibling;
+# the real file is gitignored so different contributors can use their own team
+# without churning the repo. Optionally included from ios/debug.xcconfig.
+ios/team.xcconfig
+
 android/.gradle/
 android/.idea/
 android/app/build/
 android/build/
 android/captures/
 android/local.properties
+
+# Android release signing material. NEVER commit a keystore: losing it means
+# losing the ability to publish updates to the Play Store app. Keep the file
+# in a password manager and reference its path via the CAFELYTIC_RELEASE_*
+# environment variables documented in store/android/KEYSTORE.md.
+*.keystore
+*.jks
+android/keystore.properties
+
+# Generated store screenshots. Kept locally for iteration; the published
+# versions live on App Store Connect / Play Console. The README is tracked so
+# the directory contract is visible in code review.
+store/screenshots/**
+!store/screenshots/README.md

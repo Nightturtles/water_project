@@ -1,0 +1,77 @@
+name: Native build
+
+# Compile-check the iOS and Android native shells on every push so a
+# Capacitor plugin upgrade, native dependency drift, or PrivacyInfo
+# regression can't sneak through to a store submission.
+#
+# These jobs do NOT sign for distribution and do NOT upload anywhere.
+# They just confirm the projects build. Actual uploads run from
+# scripts/upload-{testflight,play-internal}.sh once Apple Developer +
+# Play Console accounts exist.
+#
+# Cost note: macOS runners bill at ~10x the Linux rate. The ios-build
+# job runs on every push for v1 because store-rejection bugs are
+# expensive in a different way. If macOS minutes become a concern,
+# gate this workflow with a `paths:` filter targeting ios/**,
+# android/**, capacitor.config.ts, package*.json, and src/lib/*.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  ios-build:
+    runs-on: macos-14
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run build
+      # cap sync regenerates the Capacitor plugin shims under ios/App/CapApp-SPM/
+      # from package.json before xcodebuild reads them.
+      - run: npx cap sync ios
+      # Simulator SDK + CODE_SIGNING_ALLOWED=NO so this works without an
+      # Apple Developer Team ID. The xcodeproj is targeted directly because
+      # Capacitor's iOS shell uses Swift Package Manager rather than
+      # CocoaPods, so there is no .xcworkspace file.
+      - name: xcodebuild (Release, simulator, unsigned)
+        working-directory: ios/App
+        run: |
+          xcodebuild build \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+  android-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      # Debug signing: the debug keystore ships with the Android tooling, so
+      # no CAFELYTIC_RELEASE_* secrets are needed here. assembleDebug catches
+      # Gradle dependency conflicts and AndroidManifest regressions, which
+      # is the point of this job. The release build path with the env-driven
+      # signing config is exercised locally before each Play upload.
+      - name: gradle assembleDebug
+        working-directory: android
+        run: ./gradlew assembleDebug
