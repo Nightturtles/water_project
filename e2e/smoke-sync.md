@@ -86,6 +86,27 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: assert the edit modal is still open, `.rx-edit-overlay` is still in the DOM, and the in-progress text in `.rx-edit-input` is what A typed (not B's value, not blank). The deferred re-render is gated by `window._cwEditModalOpenSlug` set in `openEditRecipeModal`.
 - Context A: cancel the modal (`.rx-edit-cancel`). After close, `_cwEditModalOpenSlug` is `null`, and a follow-up `cw:cloud-data-changed` (from any storage event) re-renders the rail. Confirm B's description change is now visible on A's card without reload.
 
+## Post-run cleanup
+
+Steps 7-11 create or mutate recipes the test user owns. The codified `smoke-sync.spec.ts` cleans up `smoke-*` slugs automatically via [`cleanupStaleJunk`](smoke-sync.spec.ts) (prefixes: `smoke-`, `smoke5-`, `smoke6-`), but **manual walks must clean up explicitly** — there's no automated sweep for ad-hoc names (`runbook-8-<tag>`, `mobiletest-*`, etc.).
+
+Before signing out, on the test user:
+
+1. List recent activity:
+   ```sql
+   SELECT id, slug, label, is_public, updated_at
+   FROM target_profiles
+   WHERE user_id = :USER_ID
+   ORDER BY updated_at DESC LIMIT 30;
+   ```
+2. **Critical**: delete every row with `is_public = true` that this run created or touched. Public rows are visible to every user at cafelytic.com/library.html — leaving them turns the public library into a graveyard. If a step in this runbook involved clicking a Share/Publish button, the resulting row will be public and MUST be deleted.
+3. Also delete any private rows created during the run. The test account isn't meant to hold permanent recipes.
+4. Delete by primary key (safer than `LIKE` patterns):
+   ```sql
+   DELETE FROM target_profiles WHERE id IN ('<uuid>', '<uuid>', ...);
+   ```
+5. Re-run the SELECT to confirm the rows are gone.
+
 ## Exit criteria
 
 - All eleven steps pass.
