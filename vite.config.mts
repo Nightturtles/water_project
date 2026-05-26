@@ -16,6 +16,11 @@ const htmlEntries = [
   "minerals.html",
   "start.html",
   "reset-password.html",
+  // Directory form so the public URL is cafelytic.com/privacy (no .html
+  // suffix). The path we'll register with App Store Connect and Google
+  // Play needs to be clean and stable, since it ends up on the store
+  // listings indefinitely.
+  "privacy/index.html",
 ] as const;
 
 export default defineConfig({
@@ -34,7 +39,14 @@ export default defineConfig({
     sourcemap: true,
     rollupOptions: {
       input: Object.fromEntries(
-        htmlEntries.map((f): [string, string] => [f.replace(/\.html$/, ""), resolve(root, f)]),
+        htmlEntries.map((f): [string, string] => [
+          // Rollup input names can't contain "/"; turn "privacy/index.html"
+          // into "privacy-index" so it stays a valid key while the resolved
+          // path still points at the real file. Rollup keeps the on-disk
+          // directory structure in the output regardless of the key.
+          f.replace(/\.html$/, "").replace(/\//g, "-"),
+          resolve(root, f),
+        ]),
       ),
     },
   },

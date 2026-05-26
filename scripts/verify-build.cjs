@@ -18,6 +18,9 @@ const htmlEntries = [
   "minerals.html",
   "start.html",
   "reset-password.html",
+  // Nested entry — served at cafelytic.com/privacy via the directory-form
+  // path. Vite emits dist/privacy/index.html alongside the root entries.
+  "privacy/index.html",
 ];
 
 // Globs we never want shipped: build/tooling/test files. Mirrors the
@@ -55,8 +58,10 @@ const rootJsSources = fs
 const distEntries = new Set(fs.readdirSync(distDir));
 const missing = [];
 
+// HTML entries can be nested (e.g. privacy/index.html). Walk the path
+// rather than relying on the top-level readdirSync.
 for (const html of htmlEntries) {
-  if (!distEntries.has(html)) missing.push(html);
+  if (!fs.existsSync(path.join(distDir, html))) missing.push(html);
 }
 for (const js of rootJsSources) {
   if (!distEntries.has(js)) missing.push(js);
@@ -95,8 +100,17 @@ if (cssMatches.length === 0) {
 
 // Unexpected files: anything in dist/ that isn't an entry HTML, a copied
 // root .js, an expected static asset, a sourcemap, a hashed CSS/JS asset,
-// or the conventional `.vite/` manifest dir.
-const allowed = new Set([...htmlEntries, ...rootJsSources, ...expectedExtras, ".vite", "assets"]);
+// the conventional `.vite/` manifest dir, or a subdirectory that hosts a
+// nested HTML entry (e.g. `privacy/` for privacy/index.html).
+const nestedDirs = htmlEntries.filter((f) => f.includes("/")).map((f) => f.split("/")[0]);
+const allowed = new Set([
+  ...htmlEntries,
+  ...rootJsSources,
+  ...expectedExtras,
+  ".vite",
+  "assets",
+  ...nestedDirs,
+]);
 
 const extras = [];
 for (const name of distEntries) {

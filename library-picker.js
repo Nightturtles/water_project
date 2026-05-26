@@ -41,6 +41,13 @@
   }
 
   function creatorLine(recipe) {
+    // Delegate to the shared helper (src/lib/creator-display.ts) so the
+    // "Anonymous User" fallback for deleted-creator recipes is consistent
+    // with the recipe browser. Falls through to the legacy two-branch
+    // logic if the bridge module hasn't initialized yet.
+    if (typeof window.creatorDisplayLabel === "function") {
+      return window.creatorDisplayLabel(recipe);
+    }
     if (recipe.userId == null) return "Cafelytic";
     return recipe.creatorDisplayName || "Community";
   }
