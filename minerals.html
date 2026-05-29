@@ -438,7 +438,7 @@
     // so edits can't sneak in placeholder mineral rows or zero bottle/dose
     // values that the create flow would have rejected.
     function validateStockSpec(spec) {
-      if (!spec) return "Stock is empty.";
+      if (!spec) return "Recipe Concentrate is empty.";
       const bottleMl = Math.max(0, Number(spec.bottleMl) || 0);
       const doseGramsPerL = Math.max(0, Number(spec.doseGramsPerL) || 0);
       if (bottleMl <= 0) return "Bottle volume must be greater than 0.";
@@ -815,7 +815,7 @@
             if (!m) return;
             const recipeSlug = m[1];
             if (typeof deriveStockFormulaFromTarget !== "function") {
-              alert("Stock derivation is unavailable. Please reload the page and try again.");
+              alert("Recipe Concentrate derivation is unavailable. Please reload the page and try again.");
               return;
             }
             // Resolve the source recipe. Public library + published customs

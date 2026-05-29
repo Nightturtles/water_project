@@ -824,8 +824,8 @@
           var stockChip = document.createElement("span");
           stockChip.className = "mineral-chip";
           stockChip.textContent = stockLabel;
-          stockChip.title = "Stock: " + stockLabel;
-          appendBadge(stockChip, "Stock", "badge badge-concentrate");
+          stockChip.title = "Recipe Concentrate: " + stockLabel;
+          appendBadge(stockChip, "Recipe", "badge badge-concentrate");
           chips.appendChild(stockChip);
         } else if (concId.indexOf("brand:") === 0) {
           var brand = brandDb[concId];

@@ -95,11 +95,11 @@ function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
 function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
   const caSources = getEffectiveCalciumSources();
   const mgSources = getEffectiveMagnesiumSources();
-  const needCa = deltaCa > 0 && caSources.length > 0;
-  const needMg = deltaMg > 0 && mgSources.length > 0;
-
-  const caCandidates = needCa ? caSources : caSources.length ? caSources : [];
-  const mgCandidates = needMg ? mgSources : mgSources.length ? mgSources : [];
+  // caSources/mgSources are already empty arrays when no sources are enabled,
+  // so the candidate lists are just the source lists. (The prior needCa/needMg
+  // ternaries always resolved to the same value and were effectively dead.)
+  const caCandidates = caSources;
+  const mgCandidates = mgSources;
 
   if (caCandidates.length === 0 && mgCandidates.length === 0) {
     return {

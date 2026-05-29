@@ -149,7 +149,7 @@
       <p class="hint" id="mineral-inputs-hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
       <div class="brew-method-toggle dispense-mode-toggle" id="dispense-mode-toggle" style="display:none;">
         <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="manual">Manual minerals</button>
-        <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="stock">Stock dispense</button>
+        <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="stock">Recipe concentrate</button>
       </div>
       <div class="mineral-inputs" id="mineral-inputs">
         <!-- Populated by JS in manual mode -->
@@ -749,7 +749,7 @@
       nameSpan.textContent = activeStockSpec.label || activeStockId;
       const stockBadge = document.createElement("span");
       stockBadge.className = "badge badge-concentrate";
-      stockBadge.textContent = "STOCK";
+      stockBadge.textContent = "CONCENTRATE";
       nameSpan.appendChild(stockBadge);
       const formulaSpan = document.createElement("span");
       formulaSpan.className = "mineral-input-formula";
@@ -809,7 +809,7 @@
         if (mineralInputsHintEl) {
           mineralInputsHintEl.textContent =
             "Enter total grams of " + (activeStockSpec.label || activeStockId) +
-            " stock dispensed for the volume above. Default is the prescribed dose.";
+            " recipe concentrate dispensed for the volume above. Default is the prescribed dose.";
         }
       } else {
         if (mineralInputsEl) mineralInputsEl.style.display = "";
