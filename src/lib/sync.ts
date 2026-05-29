@@ -1026,14 +1026,21 @@ function subscribeToCloudChanges(userId: string): void {
     });
     channel.subscribe(function (status: string) {
       if (status === "SUBSCRIBED") {
-        // Clean (re)subscribe: reset the backoff so a later failure starts
-        // from the base delay again.
-        realtimeReconnectAttempts = 0;
         if (pendingSubscriptions > 0) {
           pendingSubscriptions -= 1;
-          if (pendingSubscriptions === 0 && realtimeSubscribedResolve) {
-            realtimeSubscribedResolve();
-            realtimeSubscribedResolve = undefined;
+          if (pendingSubscriptions === 0) {
+            // Every channel is healthy now — only here is it safe to reset the
+            // backoff. Resetting on the FIRST channel's SUBSCRIBED would let a
+            // healthy channel keep zeroing attempts while the other keeps
+            // failing, defeating the backoff and causing reconnect churn. This
+            // runs on reconnects too (a fresh subscribeToCloudChanges resets
+            // pendingSubscriptions), independent of realtimeSubscribedResolve
+            // which is consumed once on the first subscribe.
+            realtimeReconnectAttempts = 0;
+            if (realtimeSubscribedResolve) {
+              realtimeSubscribedResolve();
+              realtimeSubscribedResolve = undefined;
+            }
           }
         }
       }
@@ -1062,6 +1069,9 @@ function unsubscribeFromCloudChanges(): void {
     clearTimeout(realtimeReconnectTimer);
     realtimeReconnectTimer = undefined;
   }
+  // Reset backoff so stale attempt state from this session doesn't carry into a
+  // later sign-in (which would start the first failure at a long delay).
+  realtimeReconnectAttempts = 0;
   if (realtimeChannels.length === 0) return;
   realtimeChannels.forEach(function (channel) {
     try {
