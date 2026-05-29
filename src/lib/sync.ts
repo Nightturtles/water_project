@@ -53,6 +53,15 @@ let realtimeChannels: any[] = [];
 let realtimeUserId: string | null = null;
 let pullDebounceTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 const PULL_DEBOUNCE_MS = 250;
+// Realtime channel recovery. A CHANNEL_ERROR / TIMED_OUT used to be logged and
+// left dead, so cross-device updates silently stopped arriving until a manual
+// reload. We now resubscribe with capped exponential backoff; the counter
+// resets on a clean SUBSCRIBED and any pending attempt is cancelled on
+// teardown/sign-out.
+let realtimeReconnectTimer: ReturnType<typeof setTimeout> | undefined = undefined;
+let realtimeReconnectAttempts = 0;
+const REALTIME_RECONNECT_BASE_MS = 1000;
+const REALTIME_RECONNECT_MAX_MS = 30000;
 
 // Test-observable readiness signals. `initSyncPromise` (created below at the
 // bottom of the module) resolves when initSync's push+pull are done and
@@ -124,8 +133,8 @@ const USER_CONTENT_KEYS_EXACT: string[] = [
 ];
 const USER_CONTENT_KEYS_PREFIX: string[] = ["cw_volume_"];
 // Category A keys, used for routing to sessionStorage when anonymous
-// (commit 3) and for tracking which keys participate in transient state.
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
+// (commit 3), tracking which keys participate in transient state, and
+// migrating anonymous in-tab work into localStorage on sign-in.
 const TRANSIENT_KEYS: string[] = [
   "cw_source_water",
   "cw_source_preset",
@@ -144,7 +153,6 @@ const TRANSIENT_KEYS: string[] = [
   "cw_recipe_dispense_mode",
   "cw_target_draft_ions",
 ];
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const TRANSIENT_KEYS_PREFIX: string[] = ["cw_volume_"];
 
 // Stable JSON.stringify: sorts object keys so two objects with the same
@@ -805,13 +813,40 @@ export function isDefaultData(): boolean {
       return minerals.includes(m);
     });
 
+  // Created artifacts beyond the original six checks. The prior version missed
+  // these, so a user who had built concentrate specs / recipe drafts / a
+  // curated rail (but happened to leave source water zeroed and the default
+  // minerals selected) was judged "default" and silently overwritten by
+  // pullFromCloud on a fresh device — the data-loss shape behind commits
+  // 6d8cd63 / 9f89a2e.
+  //
+  // Deliberately NOT counted here: display/format preferences (brew_method,
+  // mineral_display_mode, lotus dropper type, volume units, source/target
+  // preset *selection*). This function gates a binary merge dialog whose "keep
+  // local" branch runs pushAllToCloud and overwrites the cloud row; prompting
+  // over a trivial toggle would push users toward clobbering their own cloud
+  // recipes. Losing a stray preference to a cloud pull is recoverable —
+  // clobbering cloud content is not — so only real artifacts flip this false.
+  const noConcentrates = loadSelectedConcentrates().length === 0;
+  const noDiySpecs = Object.keys(loadDiyConcentrateSpecs()).length === 0;
+  const noStockSpecs = Object.keys(loadStockConcentrateSpecs()).length === 0;
+  const noAddedPresets = loadAddedTargetPresets().length === 0;
+  const noCreatorName = !loadCreatorDisplayName();
+  const noDrafts = Object.keys(collectDrafts()).length === 0;
+
   return (
     allZeroSource &&
     noCustomSource &&
     noCustomTarget &&
     noDeletedSource &&
     noDeletedTarget &&
-    mineralsAreDefault
+    mineralsAreDefault &&
+    noConcentrates &&
+    noDiySpecs &&
+    noStockSpecs &&
+    noAddedPresets &&
+    noCreatorName &&
+    noDrafts
   );
 }
 
@@ -990,15 +1025,31 @@ function subscribeToCloudChanges(userId: string): void {
       );
     });
     channel.subscribe(function (status: string) {
-      if (status === "SUBSCRIBED" && pendingSubscriptions > 0) {
-        pendingSubscriptions -= 1;
-        if (pendingSubscriptions === 0 && realtimeSubscribedResolve) {
-          realtimeSubscribedResolve();
-          realtimeSubscribedResolve = undefined;
+      if (status === "SUBSCRIBED") {
+        if (pendingSubscriptions > 0) {
+          pendingSubscriptions -= 1;
+          if (pendingSubscriptions === 0) {
+            // Every channel is healthy now — only here is it safe to reset the
+            // backoff. Resetting on the FIRST channel's SUBSCRIBED would let a
+            // healthy channel keep zeroing attempts while the other keeps
+            // failing, defeating the backoff and causing reconnect churn. This
+            // runs on reconnects too (a fresh subscribeToCloudChanges resets
+            // pendingSubscriptions), independent of realtimeSubscribedResolve
+            // which is consumed once on the first subscribe.
+            realtimeReconnectAttempts = 0;
+            if (realtimeSubscribedResolve) {
+              realtimeSubscribedResolve();
+              realtimeSubscribedResolve = undefined;
+            }
+          }
         }
       }
+      // CLOSED is excluded on purpose: it also fires during our own
+      // removeChannel() teardown, so reconnecting on it would fight a
+      // deliberate unsubscribe. Only genuine failures resubscribe.
       if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.warn("[sync] realtime channel status (" + name + "):", status);
+        scheduleRealtimeReconnect();
       }
     });
     return channel;
@@ -1011,6 +1062,16 @@ function subscribeToCloudChanges(userId: string): void {
 }
 
 function unsubscribeFromCloudChanges(): void {
+  // Cancel any pending reconnect first, so a sign-out / page-leave that lands
+  // here while a backoff timer is armed doesn't fire a stray resubscribe later
+  // (this runs even when no channels are currently live).
+  if (realtimeReconnectTimer) {
+    clearTimeout(realtimeReconnectTimer);
+    realtimeReconnectTimer = undefined;
+  }
+  // Reset backoff so stale attempt state from this session doesn't carry into a
+  // later sign-in (which would start the first failure at a long delay).
+  realtimeReconnectAttempts = 0;
   if (realtimeChannels.length === 0) return;
   realtimeChannels.forEach(function (channel) {
     try {
@@ -1023,6 +1084,34 @@ function unsubscribeFromCloudChanges(): void {
   });
   realtimeChannels = [];
   realtimeUserId = null;
+}
+
+// Resubscribe after a realtime CHANNEL_ERROR / TIMED_OUT, with capped
+// exponential backoff. No-op if a reconnect is already pending or we're signed
+// out. Tears the dead channels down first because subscribeToCloudChanges
+// short-circuits when channels already exist for the same user.
+function scheduleRealtimeReconnect(): void {
+  if (realtimeReconnectTimer) return;
+  const userId = realtimeUserId;
+  if (!userId) return;
+  const delay = Math.min(
+    REALTIME_RECONNECT_MAX_MS,
+    REALTIME_RECONNECT_BASE_MS * Math.pow(2, realtimeReconnectAttempts),
+  );
+  realtimeReconnectAttempts += 1;
+  realtimeReconnectTimer = setTimeout(function () {
+    realtimeReconnectTimer = undefined;
+    // Bail if we signed out or switched users while waiting.
+    if (!realtimeUserId || realtimeUserId !== userId) return;
+    unsubscribeFromCloudChanges();
+    subscribeToCloudChanges(userId);
+    // Catch-up pull: Realtime only delivers events that fire while subscribed,
+    // so anything another device wrote during the dead/reconnecting window
+    // would otherwise be missed until the next event. The write is already in
+    // the cloud by now, so pull reconciles it. Debounced + push-first via the
+    // same bridge the live events use.
+    scheduleRealtimePull();
+  }, delay);
 }
 
 // Realtime → pull bridge. Debounce so a burst of events (one per affected
@@ -1166,6 +1255,53 @@ window.addEventListener("beforeunload", teardownOnLeave);
 // beforeunload is often skipped.
 window.addEventListener("pagehide", teardownOnLeave);
 
+// Promote anonymous in-tab work into logged-in storage on sign-in. Transient
+// keys route to sessionStorage while logged out (storage.ts _getTransient/
+// _setTransient), but nothing copied them across when auth flipped to true, so
+// the moment _isLoggedInSync() returned true every transient read switched to
+// (empty) localStorage and the sessionStorage copy was stranded until the tab
+// closed — silently losing whatever the visitor had entered before signing in.
+//
+// Uses explicit sessionStorage -> localStorage access (NOT _getTransient/
+// _setTransient, which branch on login state and are ambiguous mid-transition).
+// Runs before handleFirstLoginMerge so the migrated work counts as local data.
+// Idempotent: each genuine SIGNED_IN clears the sessionStorage copy it moves,
+// so a later sign-in with no fresh anonymous work migrates nothing.
+export function migrateAnonTransientToLocal(): void {
+  if (typeof sessionStorage === "undefined" || typeof localStorage === "undefined") return;
+  try {
+    const keys: string[] = TRANSIENT_KEYS.slice();
+    // Plus any dynamic cw_volume_* entries written while anonymous.
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (
+        k &&
+        keys.indexOf(k) === -1 &&
+        TRANSIENT_KEYS_PREFIX.some(function (prefix) {
+          return k.startsWith(prefix);
+        })
+      ) {
+        keys.push(k);
+      }
+    }
+    keys.forEach(function (key) {
+      let val: string | null;
+      try {
+        val = sessionStorage.getItem(key);
+      } catch (_) {
+        return;
+      }
+      if (val === null) return;
+      try {
+        // The anonymous in-tab edit is the most recent intent, so it wins over
+        // any stale localStorage value; the cloud merge still gets a say after.
+        localStorage.setItem(key, val);
+        sessionStorage.removeItem(key);
+      } catch (_) {}
+    });
+  } catch (_) {}
+}
+
 // Re-bind Realtime when the auth session changes within a single page
 // (sign-in from a logged-out tab, or sign-out without a reload).
 // SIGNED_OUT tears the channel down; SIGNED_IN subscribes for the new
@@ -1180,6 +1316,11 @@ if (window.supabaseClient && window.supabaseClient.auth) {
       // Idempotent with the button's explicit clearLocalUserContent call.
       clearLocalUserContent();
     } else if (event === "SIGNED_IN" && session && session.user) {
+      // Promote any work the user did while logged out (transient keys live in
+      // sessionStorage when anonymous) into localStorage BEFORE the merge runs,
+      // so handleFirstLoginMerge sees it as local data instead of silently
+      // discarding it when the storage namespace flips to localStorage.
+      migrateAnonTransientToLocal();
       subscribeToCloudChanges(session.user.id);
       // Without this call, modal-based sign-ins succeed but the user's
       // saved recipes/profiles don't appear until the next page navigation

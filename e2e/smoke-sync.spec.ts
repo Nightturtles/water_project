@@ -82,6 +82,17 @@ function loadEnvTest(): { email?: string; password?: string } {
 
 const { email: EMAIL, password: PASSWORD } = loadEnvTest();
 
+// In CI, missing credentials must FAIL the run, not silently skip. The
+// describe block below test.skip-s without them so contributors lacking
+// .env.test stay green locally — but in CI a lost or mis-wired GitHub secret
+// would otherwise let this sync-critical suite report green having never
+// exercised the signed-in paths. Throw at collection time so the run is loud.
+if (process.env.CI && (!EMAIL || !PASSWORD)) {
+  throw new Error(
+    "CI is missing CAFELYTIC_TEST_EMAIL / CAFELYTIC_TEST_PASSWORD — signed-in sync tests must run in CI, not skip. Check the workflow's secrets wiring.",
+  );
+}
+
 // Per-poll budget for "wait for Realtime push to land". Supabase Realtime is
 // fast in the steady state (~250ms PULL_DEBOUNCE_MS + RTT, typically <2s),
 // but the channel-subscribe and post-write paths can spike to ~30s under

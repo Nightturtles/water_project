@@ -758,6 +758,18 @@
       window.applyAuthGate(currentSaveBtn, { reason: "save-profile" });
     }
 
+    // Update and Delete mutate custom profiles through _setGated, which is a
+    // silent no-op for anonymous users — so without gating they'd report
+    // "Profile updated/deleted" while persisting nothing. Gate them like Save:
+    // applyAuthGate's capture-phase handler stops the click (and opens the
+    // login modal) before the mutating bubble handlers below run.
+    const currentUpdateBtn = document.getElementById("current-update-btn");
+    const currentDeleteBtn = document.getElementById("current-delete-btn");
+    if (typeof window.applyAuthGate === "function") {
+      if (currentUpdateBtn) window.applyAuthGate(currentUpdateBtn, { reason: "save-profile" });
+      if (currentDeleteBtn) window.applyAuthGate(currentDeleteBtn, { reason: "save-profile" });
+    }
+
     function updateCurrentProfileNameError() {
       const errEl = document.getElementById("current-profile-name-error");
       const validation = validateTargetProfileName(currentProfileNameInput.value, { allowEmpty: true });

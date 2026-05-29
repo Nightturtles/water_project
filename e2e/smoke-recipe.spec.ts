@@ -84,6 +84,17 @@ function loadEnvTest(): { email?: string; password?: string } {
 
 const { email: EMAIL, password: PASSWORD } = loadEnvTest();
 
+// In CI, missing credentials must FAIL the run, not silently skip. The
+// signed-in describe block below test.skip-s without them so contributors
+// lacking .env.test stay green locally — but in CI a lost or mis-wired secret
+// would otherwise let the signed-in paths report green having never run. Throw
+// at collection time so the run is loud.
+if (process.env.CI && (!EMAIL || !PASSWORD)) {
+  throw new Error(
+    "CI is missing CAFELYTIC_TEST_EMAIL / CAFELYTIC_TEST_PASSWORD — signed-in tests must run in CI, not skip. Check the workflow's secrets wiring.",
+  );
+}
+
 // ---------------------------------------------------------------------------
 // recipe.html — Recipe Builder smoke (anonymous)
 // ---------------------------------------------------------------------------
