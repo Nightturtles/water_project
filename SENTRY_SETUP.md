@@ -68,7 +68,7 @@ TypeScript sources for that exact build.
   `window.SENTRY_RELEASE = { id: "<sha>" }` into the build, then (3) deletes
   the `*.map` files from `dist/` so they aren't served publicly on GitHub
   Pages.
-- `sentry-init.js` reads `window.SENTRY_RELEASE.id` and passes it to
+- `src/lib/sentry-init.ts` reads `window.SENTRY_RELEASE.id` and passes it to
   `Sentry.init` as `release`, so every event from that deploy is tagged with
   the same identifier the artifacts were uploaded under.
 - The deploy job in `.github/workflows/ci.yml` passes `GITHUB_SHA` to the
@@ -92,7 +92,7 @@ Sentry release per commit.
 
 Local builds and PR builds run without the token. The plugin's `disable`
 guard fires and the whole plugin no-ops: no upload, no release injection,
-no `*.map` deletion. `sentry-init.js`'s optional-chaining handles the
+no `*.map` deletion. `src/lib/sentry-init.ts`'s optional-chaining handles the
 missing `window.SENTRY_RELEASE` and ships events with `release: undefined`,
 same as pre-PR-f behavior. Build still succeeds and `npm run build:verify`
 still passes.
