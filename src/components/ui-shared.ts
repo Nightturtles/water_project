@@ -482,7 +482,13 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
     }
     if (!existingName) saveCreatorDisplayName(displayName);
 
-    // Update the saved profile with public fields
+    // Flip the profile public locally. saveCustomTargetProfiles schedules a
+    // sync-layer push of the full row (including is_public) — the SAME single
+    // path every other field uses. Previously this also fired a separate
+    // direct target_profiles.update(), a second writer of is_public that could
+    // disagree with the sync push on a partial failure (and whose errors were
+    // silently swallowed while the dialog still closed as "done"). One writer,
+    // no disagreement.
     const profiles = loadCustomTargetProfiles() as Record<string, any>;
     if (profiles[profileKey]) {
       profiles[profileKey].isPublic = true;
@@ -491,43 +497,29 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
       saveCustomTargetProfiles(profiles);
     }
 
-    // Also update directly in Supabase so it takes effect immediately
-    if (typeof window.supabaseClient !== "undefined") {
-      window.supabaseClient.auth.getUser().then(function (res: any) {
-        const user = res && res.data && res.data.user;
-        if (!user) return;
-        window.supabaseClient
-          .from("target_profiles")
-          .update({
-            is_public: true,
-            creator_display_name: displayName,
-            tags: profiles[profileKey] ? profiles[profileKey].tags : [],
-          })
-          .eq("user_id", user.id)
-          .eq("slug", profileKey)
-          .then(function (result: any) {
-            if (result.error) {
-              console.warn("[share] direct update failed:", result.error);
-              return;
-            }
-            // Invalidate the library cache so the freshly-published recipe
-            // shows up in library.html without a full reload. Fallthrough
-            // from the Wave D cut-over — before this, library.html only
-            // saw new publishes after an invalidate-via-pageload.
-            if (typeof (window as any).invalidatePublicRecipesCache === "function") {
-              (window as any).invalidatePublicRecipesCache();
-            }
-            // The native OS share sheet is intentionally NOT fired here.
-            // "Publish to library" is a discoverability action (flip is_public
-            // so other users find the recipe inside the app); it isn't the
-            // same intent as "share a link with a friend." Conflating them
-            // surprises users who tap "Share" on the publish prompt and get
-            // a system share sheet they didn't ask for. window.cwNativeShare
-            // remains defined by src/lib/capacitor-bootstrap.ts on native and
-            // is waiting on a future PR that adds an explicit Share Link
-            // affordance (likely on a published recipe card).
-          });
-      });
+    // Push now (syncNow) instead of waiting for the debounce, then invalidate
+    // the public-recipes cache once the push lands so the recipe shows up in
+    // library.html promptly. On a failed push the sync layer already broadcasts
+    // cw:save-status "error" (the save indicator surfaces it) and the next
+    // sync/pull reconciles is_public, so we simply skip the cache bust.
+    //
+    // No native OS share sheet fires here: "Publish to library" is a
+    // discoverability action (flip is_public so other users find the recipe in
+    // the app), not "share a link with a friend" — conflating them surprises
+    // users. window.cwNativeShare stays defined for a future explicit Share
+    // Link affordance.
+    if (typeof (window as any).syncNow === "function") {
+      Promise.resolve((window as any).syncNow())
+        .then(function () {
+          if (typeof (window as any).invalidatePublicRecipesCache === "function") {
+            (window as any).invalidatePublicRecipesCache();
+          }
+        })
+        .catch(function (err: any) {
+          console.warn("[share] publish push failed:", err);
+        });
+    } else if (typeof (window as any).invalidatePublicRecipesCache === "function") {
+      (window as any).invalidatePublicRecipesCache();
     }
 
     close();
