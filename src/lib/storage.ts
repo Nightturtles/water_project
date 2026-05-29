@@ -4,6 +4,8 @@
 // Cross-file globals (scheduleSyncToCloud, supabaseClient, TARGET_PRESETS, etc.)
 // are declared in globals.d.ts.
 
+import { KEYS, VOLUME_PREFIX } from "./storage-keys";
+
 interface SourceProfile {
   label?: string;
   // Picker grouping bucket (e.g. "pure", "generic", "bottled", "saved"). Set
@@ -145,7 +147,7 @@ export function safeParse<T>(json: string | null, fallback: T): any | T {
 
 // --- Source water ---
 export function saveSourceWater(profile: SourceProfile): boolean {
-  const ok = _setTransient("cw_source_water", JSON.stringify(profile));
+  const ok = _setTransient(KEYS.SOURCE_WATER, JSON.stringify(profile));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   return ok;
 }
@@ -160,27 +162,27 @@ export function loadSourceWater() {
     chloride: 0,
     bicarbonate: 0,
   };
-  const parsed = safeParse(_getTransient("cw_source_water"), fallback);
+  const parsed = safeParse(_getTransient(KEYS.SOURCE_WATER), fallback);
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : fallback;
 }
 
 export function saveSourcePresetName(name: string): void {
-  _setTransient("cw_source_preset", name);
+  _setTransient(KEYS.SOURCE_PRESET, name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadSourcePresetName(): string {
-  return _getTransient("cw_source_preset") || "distilled";
+  return _getTransient(KEYS.SOURCE_PRESET) || "distilled";
 }
 
 // --- Mineral display mode ---
 export function saveMineralDisplayMode(mode: string): void {
-  _setTransient("cw_mineral_display_mode", mode === "advanced" ? "advanced" : "standard");
+  _setTransient(KEYS.MINERAL_DISPLAY_MODE, mode === "advanced" ? "advanced" : "standard");
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadMineralDisplayMode(): "standard" | "advanced" {
-  return _getTransient("cw_mineral_display_mode") === "advanced" ? "advanced" : "standard";
+  return _getTransient(KEYS.MINERAL_DISPLAY_MODE) === "advanced" ? "advanced" : "standard";
 }
 
 export function isAdvancedMineralDisplayMode(): boolean {
@@ -194,7 +196,7 @@ export function saveVolumePreference(
   unit: string | null | undefined,
 ): void {
   if (!pageKey) return;
-  const key = "cw_volume_" + pageKey;
+  const key = VOLUME_PREFIX + pageKey;
   const payload = {
     value: String(value ?? ""),
     unit: unit === "gallons" ? "gallons" : "liters",
@@ -212,7 +214,7 @@ export function loadVolumePreference(
     unit: defaults.unit === "gallons" ? "gallons" : "liters",
   };
   if (!pageKey) return fallback;
-  const key = "cw_volume_" + pageKey;
+  const key = VOLUME_PREFIX + pageKey;
   const parsed = safeParse(_getTransient(key), fallback);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return fallback;
   const value = String(parsed.value ?? fallback.value);
@@ -234,7 +236,7 @@ let customProfilesCache: Record<string, SourceProfile> | null = null;
 
 export function loadCustomProfiles(): Record<string, SourceProfile> {
   if (customProfilesCache) return Object.assign({}, customProfilesCache);
-  const parsed = safeParse(_getGated("cw_custom_profiles"), {});
+  const parsed = safeParse(_getGated(KEYS.CUSTOM_PROFILES), {});
   customProfilesCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customProfilesCache);
@@ -250,10 +252,10 @@ export function saveCustomProfiles(profiles: Record<string, SourceProfile>): boo
     profiles,
     customProfilesCache,
     loadDeletedPresets,
-    "cw_deleted_presets",
+    KEYS.DELETED_PRESETS,
     invalidateSourcePresetsCache,
   );
-  const ok = _setGated("cw_custom_profiles", JSON.stringify(profiles));
+  const ok = _setGated(KEYS.CUSTOM_PROFILES, JSON.stringify(profiles));
   customProfilesCache = null;
   invalidateSourcePresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
@@ -296,7 +298,7 @@ export function deleteCustomProfile(key: string): void {
 
 // --- Deleted source preset tracking ---
 export function loadDeletedPresets(): string[] {
-  const parsed = safeParse(_getGated("cw_deleted_presets"), []);
+  const parsed = safeParse(_getGated(KEYS.DELETED_PRESETS), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -304,7 +306,7 @@ export function addDeletedPreset(key: string): void {
   const deleted = loadDeletedPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
-    _setGated("cw_deleted_presets", JSON.stringify(deleted));
+    _setGated(KEYS.DELETED_PRESETS, JSON.stringify(deleted));
     invalidateSourcePresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -315,7 +317,7 @@ let customTargetProfilesCache: Record<string, TargetProfile> | null = null;
 
 export function loadCustomTargetProfiles(): Record<string, TargetProfile> {
   if (customTargetProfilesCache) return Object.assign({}, customTargetProfilesCache);
-  const parsed = safeParse(_getGated("cw_custom_target_profiles"), {});
+  const parsed = safeParse(_getGated(KEYS.CUSTOM_TARGET_PROFILES), {});
   customTargetProfilesCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, customTargetProfilesCache);
@@ -326,10 +328,10 @@ export function saveCustomTargetProfiles(profiles: Record<string, TargetProfile>
     profiles,
     customTargetProfilesCache,
     loadDeletedTargetPresets,
-    "cw_deleted_target_presets",
+    KEYS.DELETED_TARGET_PRESETS,
     invalidateTargetPresetsCache,
   );
-  const ok = _setGated("cw_custom_target_profiles", JSON.stringify(profiles));
+  const ok = _setGated(KEYS.CUSTOM_TARGET_PROFILES, JSON.stringify(profiles));
   customTargetProfilesCache = null;
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
@@ -358,30 +360,30 @@ export function migrateHendonSlug(): void {
   // touch the raw storage areas directly — the auth-routed helpers would
   // return null on a cold signed-in load and the stale slug would survive
   // long enough to get pushed back up on the next sync.
-  if (safeGetItem("cw_target_preset") === FROM) {
-    safeSetItem("cw_target_preset", TO);
+  if (safeGetItem(KEYS.TARGET_PRESET) === FROM) {
+    safeSetItem(KEYS.TARGET_PRESET, TO);
   }
   try {
-    if (sessionStorage.getItem("cw_target_preset") === FROM) {
-      sessionStorage.setItem("cw_target_preset", TO);
+    if (sessionStorage.getItem(KEYS.TARGET_PRESET) === FROM) {
+      sessionStorage.setItem(KEYS.TARGET_PRESET, TO);
     }
   } catch (e) {}
 
-  const added = safeParse(safeGetItem("cw_added_target_presets"), []);
+  const added = safeParse(safeGetItem(KEYS.ADDED_TARGET_PRESETS), []);
   if (Array.isArray(added) && added.includes(FROM)) {
     const next = Array.from(new Set(added.map((s) => (s === FROM ? TO : s))));
-    safeSetItem("cw_added_target_presets", JSON.stringify(next));
+    safeSetItem(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(next));
   }
 
-  const deleted = safeParse(safeGetItem("cw_deleted_target_presets"), []);
+  const deleted = safeParse(safeGetItem(KEYS.DELETED_TARGET_PRESETS), []);
   if (Array.isArray(deleted) && deleted.includes(FROM)) {
-    safeSetItem("cw_deleted_target_presets", JSON.stringify(deleted.filter((s) => s !== FROM)));
+    safeSetItem(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(deleted.filter((s) => s !== FROM)));
   }
 }
 
 // --- Deleted target preset tracking (tombstones so deletions survive pull) ---
 export function loadDeletedTargetPresets(): string[] {
-  const parsed = safeParse(_getGated("cw_deleted_target_presets"), []);
+  const parsed = safeParse(_getGated(KEYS.DELETED_TARGET_PRESETS), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -389,7 +391,7 @@ export function addDeletedTargetPreset(key: string): void {
   const deleted = loadDeletedTargetPresets();
   if (!deleted.includes(key)) {
     deleted.push(key);
-    _setGated("cw_deleted_target_presets", JSON.stringify(deleted));
+    _setGated(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(deleted));
     invalidateTargetPresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -405,7 +407,7 @@ export function removeDeletedTargetPreset(key: string): void {
   const idx = deleted.indexOf(key);
   if (idx === -1) return;
   deleted.splice(idx, 1);
-  _setGated("cw_deleted_target_presets", JSON.stringify(deleted));
+  _setGated(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(deleted));
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -425,7 +427,7 @@ export function removeDeletedTargetPreset(key: string): void {
 // save-state and copy logic.
 
 function loadAddedTargetPresetsRaw(): string[] {
-  const parsed = safeParse(_getGated("cw_added_target_presets"), []);
+  const parsed = safeParse(_getGated(KEYS.ADDED_TARGET_PRESETS), []);
   return Array.isArray(parsed) ? parsed : [];
 }
 
@@ -438,7 +440,7 @@ export function addAddedTargetPreset(key: string): void {
   const added = loadAddedTargetPresets();
   if (!added.includes(key)) {
     added.push(key);
-    _setGated("cw_added_target_presets", JSON.stringify(added));
+    _setGated(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(added));
     invalidateTargetPresetsCache();
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
@@ -449,7 +451,7 @@ export function removeAddedTargetPreset(key: string): void {
   const idx = added.indexOf(key);
   if (idx === -1) return;
   added.splice(idx, 1);
-  _setGated("cw_added_target_presets", JSON.stringify(added));
+  _setGated(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(added));
   invalidateTargetPresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
@@ -497,7 +499,7 @@ export function getExistingSourceProfileLabels(): Set<string> {
 
 // --- Target preset name ---
 export function saveTargetPresetName(name: string): void {
-  _setTransient("cw_target_preset", name);
+  _setTransient(KEYS.TARGET_PRESET, name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -511,7 +513,7 @@ export function saveTargetPresetName(name: string): void {
 // Shape: { "<slug>": { calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate } }
 
 export function loadTargetDraftIons(): Record<string, Record<string, number>> {
-  const parsed = safeParse(_getTransient("cw_target_draft_ions"), {});
+  const parsed = safeParse(_getTransient(KEYS.TARGET_DRAFT_IONS), {});
   return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
 
@@ -519,7 +521,7 @@ export function saveTargetDraftIons(slug: string, ions: Record<string, number>):
   if (!slug) return;
   const drafts = loadTargetDraftIons();
   drafts[slug] = ions;
-  _setTransient("cw_target_draft_ions", JSON.stringify(drafts));
+  _setTransient(KEYS.TARGET_DRAFT_IONS, JSON.stringify(drafts));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -528,7 +530,7 @@ export function clearTargetDraftIons(slug: string): void {
   const drafts = loadTargetDraftIons();
   if (!Object.prototype.hasOwnProperty.call(drafts, slug)) return;
   delete drafts[slug];
-  _setTransient("cw_target_draft_ions", JSON.stringify(drafts));
+  _setTransient(KEYS.TARGET_DRAFT_IONS, JSON.stringify(drafts));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -553,7 +555,7 @@ export function loadTargetPresetName(brewMethod?: string): string {
   // handlers never persist it, but devtools tampering or a future
   // regression could leave it stuck in storage; treat it as missing so a
   // bad value can't auto-open the picker on every page load.
-  const saved = _getTransient("cw_target_preset");
+  const saved = _getTransient(KEYS.TARGET_PRESET);
   if (saved && saved !== "library") return saved;
   return brewMethod === "espresso" ? "cafelytic-espresso" : "cafelytic-filter";
 }
@@ -564,12 +566,12 @@ export function normalizeBrewMethod(method: string | null | undefined): "espress
 }
 
 export function saveBrewMethod(method: string | null | undefined): void {
-  _setTransient("cw_brew_method", normalizeBrewMethod(method));
+  _setTransient(KEYS.BREW_METHOD, normalizeBrewMethod(method));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadBrewMethod(): "espresso" | "filter" {
-  return normalizeBrewMethod(_getTransient("cw_brew_method"));
+  return normalizeBrewMethod(_getTransient(KEYS.BREW_METHOD));
 }
 
 // --- Lotus dropper preference ---
@@ -578,12 +580,12 @@ export function normalizeLotusDropperType(type: string | null | undefined): "str
 }
 
 export function saveLotusDropperType(type: string | null | undefined): void {
-  _setTransient("cw_lotus_dropper_type", normalizeLotusDropperType(type));
+  _setTransient(KEYS.LOTUS_DROPPER_TYPE, normalizeLotusDropperType(type));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadLotusDropperType(): "straight" | "round" {
-  return normalizeLotusDropperType(_getTransient("cw_lotus_dropper_type"));
+  return normalizeLotusDropperType(_getTransient(KEYS.LOTUS_DROPPER_TYPE));
 }
 
 export function getLotusDropMl(): number {
@@ -599,16 +601,16 @@ export function normalizeLotusConcentrateUnit(unit: string | null | undefined): 
 }
 
 export function saveLotusConcentrateUnit(unit: string | null | undefined): void {
-  _setTransient("cw_lotus_concentrate_unit", normalizeLotusConcentrateUnit(unit));
+  _setTransient(KEYS.LOTUS_CONCENTRATE_UNIT, normalizeLotusConcentrateUnit(unit));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadLotusConcentrateUnit(): "ml" | "drops" {
-  return normalizeLotusConcentrateUnit(_getTransient("cw_lotus_concentrate_unit"));
+  return normalizeLotusConcentrateUnit(_getTransient(KEYS.LOTUS_CONCENTRATE_UNIT));
 }
 
 export function loadLotusConcentrateUnits(): Record<string, "ml" | "drops"> {
-  const parsed = safeParse(_getTransient("cw_lotus_concentrate_units"), {});
+  const parsed = safeParse(_getTransient(KEYS.LOTUS_CONCENTRATE_UNITS), {});
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
   const normalized: Record<string, "ml" | "drops"> = {};
   Object.keys(parsed).forEach((key) => {
@@ -626,7 +628,7 @@ export function saveLotusConcentrateUnits(
       safeUnits[key] = normalizeLotusConcentrateUnit(units[key]);
     });
   }
-  _setTransient("cw_lotus_concentrate_units", JSON.stringify(safeUnits));
+  _setTransient(KEYS.LOTUS_CONCENTRATE_UNITS, JSON.stringify(safeUnits));
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -714,14 +716,14 @@ export function getSourceWaterByPreset(presetName: string) {
 let selectedMineralsCache: string[] | null = null;
 
 export function saveSelectedMinerals(mineralIds: string[]): void {
-  _setTransient("cw_selected_minerals", JSON.stringify(mineralIds));
+  _setTransient(KEYS.SELECTED_MINERALS, JSON.stringify(mineralIds));
   selectedMineralsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadSelectedMinerals(): string[] {
   if (selectedMineralsCache) return selectedMineralsCache;
-  const parsed = safeParse(_getTransient("cw_selected_minerals"), null);
+  const parsed = safeParse(_getTransient(KEYS.SELECTED_MINERALS), null);
   selectedMineralsCache = Array.isArray(parsed)
     ? parsed
     : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
@@ -734,14 +736,14 @@ let diyConcentrateSpecsCache: Record<string, DiyConcentrateSpec> | null = null;
 let stockConcentrateSpecsCache: Record<string, StockConcentrateSpec> | null = null;
 
 export function saveSelectedConcentrates(concentrateIds: string[]): void {
-  _setTransient("cw_selected_concentrates", JSON.stringify(concentrateIds));
+  _setTransient(KEYS.SELECTED_CONCENTRATES, JSON.stringify(concentrateIds));
   selectedConcentratesCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadSelectedConcentrates(): string[] {
   if (selectedConcentratesCache) return selectedConcentratesCache;
-  const parsed = safeParse(_getTransient("cw_selected_concentrates"), null);
+  const parsed = safeParse(_getTransient(KEYS.SELECTED_CONCENTRATES), null);
   selectedConcentratesCache = Array.isArray(parsed) ? parsed : [];
   return selectedConcentratesCache;
 }
@@ -759,14 +761,14 @@ export function loadValidSelectedConcentrates(): string[] {
 export function saveDiyConcentrateSpecs(
   specs: Record<string, DiyConcentrateSpec> | null | undefined,
 ): void {
-  _setGated("cw_diy_concentrate_specs", JSON.stringify(specs || {}));
+  _setGated(KEYS.DIY_CONCENTRATE_SPECS, JSON.stringify(specs || {}));
   diyConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadDiyConcentrateSpecs(): Record<string, DiyConcentrateSpec> {
   if (diyConcentrateSpecsCache) return Object.assign({}, diyConcentrateSpecsCache);
-  const parsed = safeParse(_getGated("cw_diy_concentrate_specs"), {});
+  const parsed = safeParse(_getGated(KEYS.DIY_CONCENTRATE_SPECS), {});
   diyConcentrateSpecsCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, diyConcentrateSpecsCache);
@@ -790,14 +792,14 @@ export function parseDiyConcentrateId(concentrateId: unknown): string | null {
 export function saveStockConcentrateSpecs(
   specs: Record<string, StockConcentrateSpec> | null | undefined,
 ): void {
-  _setGated("cw_stock_concentrate_specs", JSON.stringify(specs || {}));
+  _setGated(KEYS.STOCK_CONCENTRATE_SPECS, JSON.stringify(specs || {}));
   stockConcentrateSpecsCache = null;
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
 export function loadStockConcentrateSpecs(): Record<string, StockConcentrateSpec> {
   if (stockConcentrateSpecsCache) return Object.assign({}, stockConcentrateSpecsCache);
-  const parsed = safeParse(_getGated("cw_stock_concentrate_specs"), {});
+  const parsed = safeParse(_getGated(KEYS.STOCK_CONCENTRATE_SPECS), {});
   stockConcentrateSpecsCache =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
   return Object.assign({}, stockConcentrateSpecsCache);
@@ -1105,7 +1107,7 @@ export function invalidateTargetPresetsCache(): void {
 // getAllTargetPresets and loadAddedTargetPresets — so library-first flows
 // (user lands on library.html before taste.html renders the rail) don't
 // skip the migration.
-const STARTER_MIGRATION_KEY = "cw_starter_migration_applied";
+const STARTER_MIGRATION_KEY = KEYS.STARTER_MIGRATION_APPLIED;
 export function ensureStarterBackfill(): void {
   if (_getGated(STARTER_MIGRATION_KEY) === "1") return;
   const library = typeof getPublicRecipesSync === "function" ? getPublicRecipesSync() : [];
@@ -1126,7 +1128,7 @@ export function ensureStarterBackfill(): void {
       seed.push(row.slug);
       seedSet.add(row.slug);
     }
-    _setGated("cw_added_target_presets", JSON.stringify(seed));
+    _setGated(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(seed));
     if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   }
   _setGated(STARTER_MIGRATION_KEY, "1");
@@ -1353,7 +1355,7 @@ export function restoreSourcePresetDefaults(): void {
   const preserved = loadDeletedPresets().filter(function (key) {
     return !SOURCE_PRESETS[key];
   });
-  _setGated("cw_deleted_presets", JSON.stringify(preserved));
+  _setGated(KEYS.DELETED_PRESETS, JSON.stringify(preserved));
   invalidateSourcePresetsCache();
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
   const custom = loadCustomProfiles();
@@ -1378,11 +1380,11 @@ export function saveThemePreference(mode: string): void {
 
 // --- Creator display name (for recipe library publishing) ---
 export function loadCreatorDisplayName(): string {
-  return _getGated("cw_creator_display_name") || "";
+  return _getGated(KEYS.CREATOR_DISPLAY_NAME) || "";
 }
 
 export function saveCreatorDisplayName(name: string): void {
-  _setGated("cw_creator_display_name", name);
+  _setGated(KEYS.CREATOR_DISPLAY_NAME, name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
@@ -1418,37 +1420,37 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("storage", function (e) {
     if (!e.key) return;
     let recipeAffected = false;
-    if (e.key === "cw_custom_profiles") {
+    if (e.key === KEYS.CUSTOM_PROFILES) {
       customProfilesCache = null;
       invalidateSourcePresetsCache();
       recipeAffected = true;
     }
-    if (e.key === "cw_custom_target_profiles") {
+    if (e.key === KEYS.CUSTOM_TARGET_PROFILES) {
       customTargetProfilesCache = null;
       invalidateTargetPresetsCache();
       recipeAffected = true;
     }
-    if (e.key === "cw_selected_minerals") {
+    if (e.key === KEYS.SELECTED_MINERALS) {
       selectedMineralsCache = null;
     }
-    if (e.key === "cw_selected_concentrates") {
+    if (e.key === KEYS.SELECTED_CONCENTRATES) {
       selectedConcentratesCache = null;
     }
-    if (e.key === "cw_diy_concentrate_specs") {
+    if (e.key === KEYS.DIY_CONCENTRATE_SPECS) {
       diyConcentrateSpecsCache = null;
     }
-    if (e.key === "cw_stock_concentrate_specs") {
+    if (e.key === KEYS.STOCK_CONCENTRATE_SPECS) {
       stockConcentrateSpecsCache = null;
     }
-    if (e.key === "cw_deleted_presets") {
+    if (e.key === KEYS.DELETED_PRESETS) {
       invalidateSourcePresetsCache();
       recipeAffected = true;
     }
-    if (e.key === "cw_deleted_target_presets") {
+    if (e.key === KEYS.DELETED_TARGET_PRESETS) {
       invalidateTargetPresetsCache();
       recipeAffected = true;
     }
-    if (e.key === "cw_added_target_presets") {
+    if (e.key === KEYS.ADDED_TARGET_PRESETS) {
       invalidateTargetPresetsCache();
       recipeAffected = true;
     }
