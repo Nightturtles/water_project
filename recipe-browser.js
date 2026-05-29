@@ -1049,7 +1049,21 @@
     return wrap;
   }
 
-  function renderContent(root, filtered, catalogLoaded, handlers, method) {
+  // Shown when the catalog fetch failed and there's nothing cached to display,
+  // so the content region offers a recovery path instead of hanging blank
+  // (library-data.js fires onLibraryDataError on failure).
+  function createErrorState(onRetry) {
+    var wrap = el("section", "rx-empty-state");
+    wrap.appendChild(el("p", "rx-empty-title", "Couldn't load the recipe library."));
+    wrap.appendChild(el("p", "rx-empty-subtitle", "Check your connection and try again."));
+    var cta = el("button", "rx-empty-clear", "Retry");
+    cta.type = "button";
+    cta.addEventListener("click", onRetry);
+    wrap.appendChild(cta);
+    return wrap;
+  }
+
+  function renderContent(root, filtered, catalogLoaded, handlers, method, loadFailed) {
     // Capture horizontal scroll position of each existing carousel so a
     // re-render (triggered e.g. by star-toggle) doesn't reset users back to
     // the leftmost card of every tray. Keyed by tray slug in data-tray.
@@ -1066,8 +1080,13 @@
     // Library fetch hasn't resolved yet — stay silent until data lands.
     // Using an explicit "loaded" boolean (not a zero count) so a successful
     // fetch that returns zero rows correctly falls through to the empty
-    // state rather than masquerading as still-loading.
-    if (!catalogLoaded) return;
+    // state rather than masquerading as still-loading. If the fetch FAILED
+    // and left us with no catalog, surface an error + retry instead of an
+    // indefinite blank.
+    if (!catalogLoaded) {
+      if (loadFailed) root.appendChild(createErrorState(handlers.onRetry));
+      return;
+    }
 
     // Catalog loaded, but either filters excluded everything or the catalog
     // itself is empty. Either way, surface the clear-filters CTA — it's an
@@ -1135,6 +1154,9 @@
     // for onLibraryDataLoaded to flip this true before unblocking the
     // content region.
     var catalogLoaded = allRecipes.length > 0;
+    // Set when a catalog fetch fails with no cache to fall back on; flips
+    // renderContent from a silent loading state to an error + retry card.
+    var loadFailed = false;
 
     // currentUserId drives owner-only affordances (Edit / Unpublish).
     // null until getUser() resolves; re-rendered when it does. Stays null
@@ -1357,6 +1379,7 @@
         });
       },
       onClearFilters: onClearFilters,
+      onRetry: onRetry,
     };
 
     // Shared helper: re-fetch library rows after an owner-initiated mutation
@@ -1414,6 +1437,17 @@
       commit();
     }
 
+    // Retry after a failed catalog load. Clear the error flag, re-render into
+    // the silent loading state, then force a fresh fetch — the onLibraryData*
+    // subscriptions below re-drive render() with the result (data or error).
+    function onRetry() {
+      loadFailed = false;
+      render();
+      if (typeof window.fetchPublicRecipes === "function") {
+        window.fetchPublicRecipes(true);
+      }
+    }
+
     function commit() {
       writeFiltersToUrl(state);
       render();
@@ -1429,16 +1463,28 @@
         typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
       var filtered = applyFilters(state, allRecipes, { isSaved: isSaved });
       summary.sync(filtered.length, allRecipes.length, hasAnyActiveFilter(state));
-      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers, state.method);
+      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers, state.method, loadFailed);
     }
 
-    // Re-render when async library fetch completes. library-data.js auto-
-    // fetches on load for pages with supabaseClient; we just subscribe.
+    // Re-render when the async library fetch completes. library.html warms the
+    // fetch via ensurePublicRecipesLoaded() on DOMContentLoaded; we subscribe
+    // to both outcomes so a failure surfaces a retry instead of hanging blank.
     if (typeof window.onLibraryDataLoaded === "function") {
       window.onLibraryDataLoaded(function (recipes) {
         allRecipes = Array.isArray(recipes) ? recipes : [];
         catalogLoaded = true;
+        loadFailed = false;
         render();
+      });
+    }
+    if (typeof window.onLibraryDataError === "function") {
+      window.onLibraryDataError(function () {
+        // Only show the error card if we have nothing to display; a populated
+        // catalog (e.g. from a prior load) should stay visible.
+        if (!catalogLoaded) {
+          loadFailed = true;
+          render();
+        }
       });
     }
 

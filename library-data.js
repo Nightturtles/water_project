@@ -109,6 +109,26 @@
     });
   }
 
+  // Error counterpart to onLibraryDataLoaded. Fires when fetchPublicRecipes
+  // can't produce fresh rows AND there's no cached catalog to fall back on,
+  // so consumers (recipe-browser.js) can swap an indefinite loading state for
+  // an explicit error + retry affordance instead of hanging blank. Same
+  // Set-based dedupe + unregister-token contract as onLibraryDataLoaded.
+  var errorCallbacks = new Set();
+  function onLibraryDataError(cb) {
+    if (typeof cb !== "function") return function () {};
+    errorCallbacks.add(cb);
+    return function unregister() {
+      errorCallbacks.delete(cb);
+    };
+  }
+
+  function fireErrorCallbacks(err) {
+    errorCallbacks.forEach(function (cb) {
+      try { cb(err); } catch (e) { console.warn("[library] onLibraryDataError callback failed:", e); }
+    });
+  }
+
   // Fetch all public recipes from Supabase. Caches in sessionStorage.
   async function fetchPublicRecipes(forceRefresh) {
     if (!forceRefresh && publicRecipesCache) return publicRecipesCache;
@@ -126,44 +146,59 @@
       } catch (e) { /* ignore */ }
     }
 
+    // No client to fetch with. By the time library.html calls this on
+    // DOMContentLoaded the legacy-globals module has run, so this is an edge
+    // case (misconfigured page); return [] without escalating to an error
+    // state so a momentarily-late client doesn't flash a spurious retry card.
     if (typeof window.supabaseClient === "undefined") return [];
 
-    var result = await window.supabaseClient
-      .from("target_profiles")
-      .select(
-        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter, stock_formula"
-      )
-      .eq("is_public", true)
-      .order("created_at", { ascending: false });
+    try {
+      var result = await window.supabaseClient
+        .from("target_profiles")
+        .select(
+          "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter, stock_formula"
+        )
+        .eq("is_public", true)
+        .order("created_at", { ascending: false });
 
-    if (result.error) {
-      console.warn("[library] failed to fetch public recipes:", result.error);
+      if (result.error) {
+        console.warn("[library] failed to fetch public recipes:", result.error);
+        // Only escalate to a visible error state when there's nothing cached
+        // to show — a stale cache beats a blank page.
+        if (!publicRecipesCache) fireErrorCallbacks(result.error);
+        return publicRecipesCache || [];
+      }
+
+      // Taxonomy v2 (migration 006): category (DB column: `tray`) + roast
+      // power the recipe-browser carousels, filter chips, and the
+      // re-add-from-library UI. The recipe-browser spec and mockups call
+      // this field `category`; the DB keeps `tray` for parallelism with
+      // `roast`, so the rename happens at the client boundary via
+      // normalizePublicRecipeRow (which also accepts pre-Wave-B cached
+      // rows with `tray` and rewrites them to `category`).
+      var recipes = (result.data || []).map(normalizePublicRecipeRow);
+
+      publicRecipesCache = recipes;
+      try {
+        sessionStorage.setItem(CACHE_KEY, JSON.stringify(recipes));
+      } catch (e) { /* sessionStorage full or unavailable */ }
+
+      // Preset rail consumers (taste.html, index.html) cache the merged rail
+      // in storage.targetPresetsCache. Invalidate so the next render picks up
+      // the freshly-fetched library rows.
+      if (typeof invalidateTargetPresetsCache === "function") {
+        invalidateTargetPresetsCache();
+      }
+      fireLoadedCallbacks(recipes);
+
+      return recipes;
+    } catch (err) {
+      // Network/transport throw (vs. a structured result.error above). Same
+      // rule: surface a retry only when we have no cache to fall back on.
+      console.warn("[library] failed to fetch public recipes:", err);
+      if (!publicRecipesCache) fireErrorCallbacks(err);
       return publicRecipesCache || [];
     }
-
-    // Taxonomy v2 (migration 006): category (DB column: `tray`) + roast
-    // power the recipe-browser carousels, filter chips, and the
-    // re-add-from-library UI. The recipe-browser spec and mockups call
-    // this field `category`; the DB keeps `tray` for parallelism with
-    // `roast`, so the rename happens at the client boundary via
-    // normalizePublicRecipeRow (which also accepts pre-Wave-B cached
-    // rows with `tray` and rewrites them to `category`).
-    var recipes = (result.data || []).map(normalizePublicRecipeRow);
-
-    publicRecipesCache = recipes;
-    try {
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify(recipes));
-    } catch (e) { /* sessionStorage full or unavailable */ }
-
-    // Preset rail consumers (taste.html, index.html) cache the merged rail
-    // in storage.targetPresetsCache. Invalidate so the next render picks up
-    // the freshly-fetched library rows.
-    if (typeof invalidateTargetPresetsCache === "function") {
-      invalidateTargetPresetsCache();
-    }
-    fireLoadedCallbacks(recipes);
-
-    return recipes;
   }
 
   // Lazy warmup hook: page scripts call this once they actually need library
@@ -492,6 +527,7 @@
   window.isRecipeInMyProfiles = isRecipeInMyProfiles;
   window.getPublicRecipesSync = getPublicRecipesSync;
   window.onLibraryDataLoaded = onLibraryDataLoaded;
+  window.onLibraryDataError = onLibraryDataError;
   window.LIBRARY_TRAYS = LIBRARY_TRAYS;
   window.FEATURED_PICKS = FEATURED_PICKS;
   window.defaultFilters = defaultFilters;
@@ -513,6 +549,7 @@
       isRecipeInMyProfiles: isRecipeInMyProfiles,
       getPublicRecipesSync: getPublicRecipesSync,
       onLibraryDataLoaded: onLibraryDataLoaded,
+      onLibraryDataError: onLibraryDataError,
       LIBRARY_TRAYS: LIBRARY_TRAYS,
       FEATURED_PICKS: FEATURED_PICKS,
       defaultFilters: defaultFilters,
