@@ -45,7 +45,7 @@
 
 ## Realtime propagation (migration 012, sync.js Realtime channel)
 
-Steps 7–11 cover the change that makes adds/edits/deletes appear on the other device **within ~2 s without reload**. Before commit ca89ae9 + migration 012, every assertion below would have required a manual reload on Device B.
+Steps 7–12 cover the change that makes adds/edits/deletes appear on the other device **within ~2 s without reload**, plus automatic recovery when the Realtime channel drops. Before commit ca89ae9 + migration 012, every assertion below would have required a manual reload on Device B.
 
 The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` debounce + a Supabase Realtime round-trip + the dispatched `cw:cloud-data-changed` re-render. Use `waitFor({ timeout: 4000 })` to give the network the slack it needs without masking a regression.
 
@@ -86,9 +86,15 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: assert the edit modal is still open, `.rx-edit-overlay` is still in the DOM, and the in-progress text in `.rx-edit-input` is what A typed (not B's value, not blank). The deferred re-render is gated by `window._cwEditModalOpenSlug` set in `openEditRecipeModal`.
 - Context A: cancel the modal (`.rx-edit-cancel`). After close, `_cwEditModalOpenSlug` is `null`, and a follow-up `cw:cloud-data-changed` (from any storage event) re-renders the rail. Confirm B's description change is now visible on A's card without reload.
 
+### 12. Realtime auto-reconnects after a channel drop (sync-hardening)
+- Context B: on `/index.html`, confirm Realtime delivery is live (a Step 7-9 change from A lands without reload).
+- Drop B's connection so the channel fails rather than closes cleanly: `await contextB.setOffline(true)`, wait ~10 s for the channel to emit `TIMED_OUT` / `CHANNEL_ERROR` (console shows the one-time `[sync] realtime channel status (...)` warning), then `await contextB.setOffline(false)`.
+- Context A: make a change (rename a recipe + save, or add-from-library) so a fresh Realtime event is emitted.
+- Context B: the change appears within a few seconds **without a reload** — confirming the channel resubscribed (capped exponential backoff, first retry ~1 s). Before this fix a `TIMED_OUT` was only logged and updates stopped arriving until a manual reload. (Note: a clean `unsubscribe()` emits `CLOSED`, which we deliberately do NOT reconnect on — only genuine failures resubscribe, so use the offline toggle here.)
+
 ## Post-run cleanup
 
-Steps 7-11 create or mutate recipes the test user owns. The codified `smoke-sync.spec.ts` cleans up `smoke-*` slugs automatically via [`cleanupStaleJunk`](smoke-sync.spec.ts) (prefixes: `smoke-`, `smoke5-`, `smoke6-`), but **manual walks must clean up explicitly** — there's no automated sweep for ad-hoc names (`runbook-8-<tag>`, `mobiletest-*`, etc.).
+Steps 7-12 create or mutate recipes the test user owns. The codified `smoke-sync.spec.ts` cleans up `smoke-*` slugs automatically via [`cleanupStaleJunk`](smoke-sync.spec.ts) (prefixes: `smoke-`, `smoke5-`, `smoke6-`), but **manual walks must clean up explicitly** — there's no automated sweep for ad-hoc names (`runbook-8-<tag>`, `mobiletest-*`, etc.).
 
 Before signing out, on the test user:
 
@@ -109,7 +115,7 @@ Before signing out, on the test user:
 
 ## Exit criteria
 
-- All eleven steps pass.
+- All twelve steps pass.
 - No "sync error" toasts in the save-status elements on either device.
 - No console errors on either context. Warnings about `[sync] realtime channel status: SUBSCRIBED` are fine; `CHANNEL_ERROR` / `TIMED_OUT` are not.
 - Sentry Feed shows no new issues tagged with the sync code paths (`sync.js`, `storage.js`).

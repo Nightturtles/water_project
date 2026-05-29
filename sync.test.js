@@ -33,6 +33,7 @@ import {
   buildSettingsPayload,
   buildSelectionsPayload,
   isDefaultData,
+  migrateAnonTransientToLocal,
 } from "./src/lib/sync";
 
 const { invalidateAllCaches } = storage;
@@ -449,5 +450,94 @@ describe("isDefaultData", () => {
       JSON.stringify(["baking-soda", "potassium-bicarbonate", "calcium-chloride", "epsom-salt"]),
     );
     expect(isDefaultData()).toBe(true);
+  });
+
+  // Created-artifact checks added in the sync-hardening pass: these used to be
+  // missed, so a customized profile could be silently overwritten by cloud.
+  test("DIY concentrate spec present → false", () => {
+    global.localStorage.setItem(
+      "cw_diy_concentrate_specs",
+      JSON.stringify({ "diy:epsom-salt": { gramsPerLiter: 5 } }),
+    );
+    expect(isDefaultData()).toBe(false);
+  });
+
+  test("stock concentrate spec present → false", () => {
+    global.localStorage.setItem(
+      "cw_stock_concentrate_specs",
+      JSON.stringify({ "stock:my-mix": { bottleMl: 200, doseGramsPerL: 1 } }),
+    );
+    expect(isDefaultData()).toBe(false);
+  });
+
+  test("selected concentrates present → false", () => {
+    global.localStorage.setItem("cw_selected_concentrates", JSON.stringify(["diy:epsom-salt"]));
+    expect(isDefaultData()).toBe(false);
+  });
+
+  test("added target preset present → false", () => {
+    global.localStorage.setItem("cw_added_target_presets", JSON.stringify(["rao"]));
+    expect(isDefaultData()).toBe(false);
+  });
+
+  test("creator display name present → false", () => {
+    global.localStorage.setItem("cw_creator_display_name", "Kyle");
+    expect(isDefaultData()).toBe(false);
+  });
+
+  test("recipe draft present → false", () => {
+    global.localStorage.setItem(
+      "cw_recipe_mineral_inputs",
+      JSON.stringify({ "calcium-chloride": "0.5" }),
+    );
+    expect(isDefaultData()).toBe(false);
+  });
+
+  // Display/format preferences are deliberately NOT counted: this gates a
+  // binary merge dialog whose "keep local" branch overwrites cloud, so a
+  // trivial toggle must not put that destructive choice in front of the user.
+  test("display/format preferences alone → still true (prefs excluded)", () => {
+    global.localStorage.setItem("cw_brew_method", "espresso");
+    global.localStorage.setItem("cw_mineral_display_mode", "advanced");
+    global.localStorage.setItem("cw_lotus_dropper_type", "straight");
+    global.localStorage.setItem("cw_source_preset", "evian");
+    expect(isDefaultData()).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// migrateAnonTransientToLocal — anonymous in-tab work survives sign-in
+// ---------------------------------------------------------------------------
+
+describe("migrateAnonTransientToLocal", () => {
+  test("moves transient keys (incl. cw_volume_*) from sessionStorage to localStorage", () => {
+    global.sessionStorage.setItem("cw_source_water", JSON.stringify({ calcium: 40 }));
+    global.sessionStorage.setItem("cw_brew_method", "espresso");
+    global.sessionStorage.setItem(
+      "cw_volume_taste",
+      JSON.stringify({ value: "2", unit: "liters" }),
+    );
+    // A non-transient key must be left untouched.
+    global.sessionStorage.setItem("cw_unrelated", "keep-me");
+
+    migrateAnonTransientToLocal();
+
+    expect(global.localStorage.getItem("cw_source_water")).toBe(JSON.stringify({ calcium: 40 }));
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("espresso");
+    expect(global.localStorage.getItem("cw_volume_taste")).toBe(
+      JSON.stringify({ value: "2", unit: "liters" }),
+    );
+    // Migrated keys are cleared from sessionStorage.
+    expect(global.sessionStorage.getItem("cw_source_water")).toBe(null);
+    expect(global.sessionStorage.getItem("cw_brew_method")).toBe(null);
+    expect(global.sessionStorage.getItem("cw_volume_taste")).toBe(null);
+    // Non-transient key is untouched on both sides.
+    expect(global.sessionStorage.getItem("cw_unrelated")).toBe("keep-me");
+    expect(global.localStorage.getItem("cw_unrelated")).toBe(null);
+  });
+
+  test("no anonymous work → no-op", () => {
+    migrateAnonTransientToLocal();
+    expect(global.localStorage.length).toBe(0);
   });
 });
