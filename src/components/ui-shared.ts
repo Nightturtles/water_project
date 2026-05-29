@@ -373,6 +373,30 @@ export function maybeOfferSharePrompt(profileKey: string, profile?: any): void {
 // via stopImmediatePropagation.  Listens to cw:auth-changed and
 // cw:auth-state-resolved so a sign-in mid-page unlocks affordances without
 // requiring a navigation.
+// One shared pair of document listeners drives every gated element's updater.
+// Previously each applyAuthGate(el) call added its OWN pair of document
+// listeners, so the document-level listener count scaled with the number of
+// gated controls on the page (dozens on library.html), and every one re-ran on
+// each auth change. Elements now register an updater once; the two shared
+// listeners iterate the registry.
+const authGateUpdaters = new Set<() => void>();
+let authGateListenersBound = false;
+
+function runAuthGateUpdaters(): void {
+  authGateUpdaters.forEach(function (fn) {
+    try {
+      fn();
+    } catch (_) {}
+  });
+}
+
+function ensureAuthGateListeners(): void {
+  if (authGateListenersBound) return;
+  authGateListenersBound = true;
+  document.addEventListener("cw:auth-changed", runAuthGateUpdaters);
+  document.addEventListener("cw:auth-state-resolved", runAuthGateUpdaters);
+}
+
 export function applyAuthGate(
   el: HTMLElement | null | undefined,
   opts?: { reason?: string },
@@ -407,8 +431,15 @@ export function applyAuthGate(
   }
 
   update();
-  document.addEventListener("cw:auth-changed", update);
-  document.addEventListener("cw:auth-state-resolved", update);
+
+  // Register this element's updater once (re-calling applyAuthGate on the same
+  // element just refreshes its state above), and bind the shared document
+  // listeners once per page.
+  if (!el.dataset.authGateRegistered) {
+    el.dataset.authGateRegistered = "1";
+    authGateUpdaters.add(update);
+    ensureAuthGateListeners();
+  }
 }
 
 // --- Share to Recipe Library prompt (post-save dialog) ---
