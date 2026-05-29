@@ -181,7 +181,7 @@ declare global {
     scheduleSyncToCloud?: () => void;
     syncNow?: () => Promise<void> | void;
     pushAllToCloud?: () => Promise<void>;
-    pullFromCloud?: () => Promise<void>;
+    pullFromCloud?: (options?: { skipIfLocalWriteDuringPull?: boolean }) => Promise<boolean>;
     handleFirstLoginMerge?: () => Promise<void>;
     // Exposed from sync.js so the logout button (in ui-shared.js) can flush
     // any debounced edit to cloud BEFORE signOut() clears the session, and
