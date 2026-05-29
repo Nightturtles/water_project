@@ -9,21 +9,21 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 ## Stack
 
 - **Frontend**: vanilla JS, no framework, no bundler. Root-level `.js` files loaded via `<script>` tags in document order.
-- **Backend**: Supabase (Postgres + Auth). Client loaded from CDN via `supabase-client.js`; migrations in `supabase/migrations/`.
+- **Backend**: Supabase (Postgres + Auth). Client created in `src/lib/supabase-client.ts` (bundled from the `@supabase/supabase-js` npm package; was a CDN `<script>` pre-migration); migrations in `supabase/migrations/`.
 - **Deploy**: push to `main` → GitHub Actions runs the `deploy` job in [.github/workflows/ci.yml](.github/workflows/ci.yml), which builds `dist/` via Vite and publishes to Pages. Pages source must be set to "GitHub Actions" in repo settings (one-time setup, done in PR (c)).
-- **Dev server**: `npx http-server . -c-1`, wired as the `dev` config in `.claude/launch.json` (port 8080).
+- **Dev server**: the `dev` config in `.claude/launch.json` runs `vite` on port 8080 (the Vite dev server, which transpiles the TS modules on the fly). This is what Claude Preview's `preview_start dev` launches.
 
 ## File map
 
 | Area | Files |
 |---|---|
 | Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html`, `start.html`, `reset-password.html` |
-| Data | `src/lib/storage.ts` (localStorage + sync hooks), `src/lib/sync.ts` (Supabase push/pull), `src/lib/legacy-globals.ts` (bridge module copying exports onto window for classic UI scripts; transitively pulls in `src/components/*`), `supabase-client.js`, `library-data.js` |
+| Data | `src/lib/storage.ts` (localStorage + sync hooks), `src/lib/sync.ts` (Supabase push/pull), `src/lib/supabase-client.ts` (client + auth helpers), `src/lib/legacy-globals.ts` (bridge module copying exports onto window for classic UI scripts; transitively pulls in `src/components/*`), `library-data.js` |
 | Calc | `metrics.js`, `constants.js` |
 | UI (TS modules) | `src/components/ui-shared.ts` (DOM helpers, nav, theme, share/confirm dialogs, applyAuthGate), `src/components/login-modal.ts` (anonymous sign-in modal opened from gated affordances) |
 | UI (classic) | `script.js`, `source-water-ui.js`, `recipe-browser.js`, `my-recipes-ui.js`, `library-picker.js`, `stock-editor.js`, `diy-editor.js`, `estimate-water-ui.js`, `mineral-selector.js`, `theme-init.js` |
 | Styles | `style.css` |
-| Tooling | `.coderabbit.yaml`, `sentry-init.js`, `SENTRY_SETUP.md`, `e2e/` |
+| Tooling | `.coderabbit.yaml`, `src/lib/sentry-init.ts`, `SENTRY_SETUP.md`, `e2e/` |
 
 ## Verification stack (in progress)
 
@@ -31,7 +31,7 @@ A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-syntheti
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.
-- **Phase 3** — Vite + TypeScript strict bundling. **In progress**: Vitest + Playwright + incremental `@ts-check`/ESLint, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), the Pages deploy cutover (PR c), the storage/sync move to `src/lib/*.ts` plus the `legacy-globals.ts` bridge (PR d), and the first UI slice (ui-shared.js + login-modal.js → `src/components/*.ts`, PR e) have all landed. Still pending: converting the remaining UI files (script.js, source-water-ui.js, recipe-browser.js, my-recipes-ui.js, library-picker.js, library-data.js, mineral-selector.js, stock-editor.js, diy-editor.js, estimate-water-ui.js, supabase-client.js, theme-init.js, analytics-init.js, sentry-init.js) one-by-one to `src/components/*.ts`, shrinking the bridge as each one converts.
+- **Phase 3** — Vite + TypeScript strict bundling. **In progress**: Vitest + Playwright + incremental `@ts-check`/ESLint, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), the Pages deploy cutover (PR c), the storage/sync move to `src/lib/*.ts` plus the `legacy-globals.ts` bridge (PR d), and the first UI slice (ui-shared.js + login-modal.js → `src/components/*.ts`, PR e) have all landed. Still pending: converting the remaining UI files (script.js, source-water-ui.js, recipe-browser.js, my-recipes-ui.js, library-picker.js, library-data.js, mineral-selector.js, stock-editor.js, diy-editor.js, estimate-water-ui.js, theme-init.js, analytics-init.js) one-by-one to `src/components/*.ts`, shrinking the bridge as each one converts. (`supabase-client.js` and `sentry-init.js` have since landed as `src/lib/*.ts`.)
 
 ## Verifying changes
 
