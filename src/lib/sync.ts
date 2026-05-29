@@ -22,6 +22,14 @@ import {
   loadTargetPresetName,
   invalidateAllCaches,
 } from "./storage";
+import {
+  KEYS,
+  VOLUME_PREFIX,
+  USER_CONTENT_KEYS_EXACT,
+  USER_CONTENT_KEYS_PREFIX,
+  TRANSIENT_KEYS,
+  TRANSIENT_KEYS_PREFIX,
+} from "./storage-keys";
 
 // ============================================
 // Sync — Cloud sync layer (localStorage-first)
@@ -84,76 +92,18 @@ const realtimeSubscribedPromise: Promise<void> = new Promise(function (resolve) 
 // broadcast, and every subscribed page receives them, including the
 // pusher itself, which then runs a redundant pullFromCloud that can race
 // an immediately-following local write).
-const LAST_PUSHED_SETTINGS_KEY = "cw_last_pushed_settings";
-const LAST_PUSHED_SELECTIONS_KEY = "cw_last_pushed_selections";
-const LAST_PUSHED_SOURCES_KEY = "cw_last_pushed_source_profiles";
-const LAST_PUSHED_TARGETS_KEY = "cw_last_pushed_target_profiles";
+const LAST_PUSHED_SETTINGS_KEY = KEYS.LAST_PUSHED_SETTINGS;
+const LAST_PUSHED_SELECTIONS_KEY = KEYS.LAST_PUSHED_SELECTIONS;
+const LAST_PUSHED_SOURCES_KEY = KEYS.LAST_PUSHED_SOURCE_PROFILES;
+const LAST_PUSHED_TARGETS_KEY = KEYS.LAST_PUSHED_TARGET_PROFILES;
 
-// User-content keys gated by auth.  Wiped on logout by clearLocalUserContent.
-// Category A: transient state (routed to sessionStorage when anonymous).
-// Category B: named artifacts (refused when anonymous).
-// Category C: sync tracking (only meaningful while logged in).
+// USER_CONTENT_KEYS_EXACT / USER_CONTENT_KEYS_PREFIX (the logout wipe) and
+// TRANSIENT_KEYS / TRANSIENT_KEYS_PREFIX (anonymous sessionStorage routing +
+// sign-in migration) are imported from the categorized key registry in
+// ./storage-keys, so they're derived from one source and can't drift apart.
 // Category D keys (cw_theme, banner dismissals, cafelytic_no_analytics,
-// cw_estimate_cache_v1:*, sb-*-auth-token) are NOT in these lists and are
-// never cleared.
-const USER_CONTENT_KEYS_EXACT: string[] = [
-  // Category A
-  "cw_source_water",
-  "cw_source_preset",
-  "cw_target_preset",
-  "cw_brew_method",
-  "cw_selected_minerals",
-  "cw_selected_concentrates",
-  "cw_lotus_dropper_type",
-  "cw_lotus_concentrate_units",
-  "cw_lotus_concentrate_unit",
-  "cw_mineral_display_mode",
-  "cw_mineral_selector_tab",
-  "cw_recipe_mineral_inputs",
-  "cw_recipe_concentrate_inputs",
-  "cw_recipe_stock_grams",
-  "cw_recipe_dispense_mode",
-  "cw_target_draft_ions",
-  // Category B
-  "cw_custom_profiles",
-  "cw_custom_target_profiles",
-  "cw_stock_concentrate_specs",
-  "cw_diy_concentrate_specs",
-  "cw_deleted_presets",
-  "cw_deleted_target_presets",
-  "cw_added_target_presets",
-  "cw_creator_display_name",
-  // Category C
-  "cw_last_pushed_settings",
-  "cw_last_pushed_selections",
-  "cw_last_pushed_source_profiles",
-  "cw_last_pushed_target_profiles",
-  "cw_synced_user_id",
-  "cw_starter_migration_applied",
-];
-const USER_CONTENT_KEYS_PREFIX: string[] = ["cw_volume_"];
-// Category A keys, used for routing to sessionStorage when anonymous
-// (commit 3), tracking which keys participate in transient state, and
-// migrating anonymous in-tab work into localStorage on sign-in.
-const TRANSIENT_KEYS: string[] = [
-  "cw_source_water",
-  "cw_source_preset",
-  "cw_target_preset",
-  "cw_brew_method",
-  "cw_selected_minerals",
-  "cw_selected_concentrates",
-  "cw_lotus_dropper_type",
-  "cw_lotus_concentrate_units",
-  "cw_lotus_concentrate_unit",
-  "cw_mineral_display_mode",
-  "cw_mineral_selector_tab",
-  "cw_recipe_mineral_inputs",
-  "cw_recipe_concentrate_inputs",
-  "cw_recipe_stock_grams",
-  "cw_recipe_dispense_mode",
-  "cw_target_draft_ions",
-];
-const TRANSIENT_KEYS_PREFIX: string[] = ["cw_volume_"];
+// cw_estimate_cache_v1:*, sb-*-auth-token) are intentionally absent there and
+// are never cleared.
 
 // Stable JSON.stringify: sorts object keys so two objects with the same
 // content but different insertion order serialize identically. Used for
@@ -249,8 +199,8 @@ function collectVolumePreferences(): Record<string, unknown> {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
-      if (key && key.startsWith("cw_volume_")) {
-        const pageKey = key.slice("cw_volume_".length);
+      if (key && key.startsWith(VOLUME_PREFIX)) {
+        const pageKey = key.slice(VOLUME_PREFIX.length);
         const val = safeParse(safeGetItem(key), null);
         if (val !== null) volumes[pageKey] = val;
       }
@@ -266,18 +216,18 @@ function collectVolumePreferences(): Record<string, unknown> {
 // between phone and laptop mid-edit without losing work.
 function collectDrafts(): Record<string, unknown> {
   const drafts: Record<string, unknown> = {};
-  const mineralInputs = safeParse(safeGetItem("cw_recipe_mineral_inputs"), null);
+  const mineralInputs = safeParse(safeGetItem(KEYS.RECIPE_MINERAL_INPUTS), null);
   if (mineralInputs && typeof mineralInputs === "object")
     drafts.recipe_mineral_inputs = mineralInputs;
-  const concentrateInputs = safeParse(safeGetItem("cw_recipe_concentrate_inputs"), null);
+  const concentrateInputs = safeParse(safeGetItem(KEYS.RECIPE_CONCENTRATE_INPUTS), null);
   if (concentrateInputs && typeof concentrateInputs === "object")
     drafts.recipe_concentrate_inputs = concentrateInputs;
-  const stockGrams = safeParse(safeGetItem("cw_recipe_stock_grams"), null);
+  const stockGrams = safeParse(safeGetItem(KEYS.RECIPE_STOCK_GRAMS), null);
   if (stockGrams && typeof stockGrams === "object") drafts.recipe_stock_grams = stockGrams;
-  const dispenseMode = safeGetItem("cw_recipe_dispense_mode");
+  const dispenseMode = safeGetItem(KEYS.RECIPE_DISPENSE_MODE);
   if (dispenseMode === "manual" || dispenseMode === "stock")
     drafts.recipe_dispense_mode = dispenseMode;
-  const targetDraftIons = safeParse(safeGetItem("cw_target_draft_ions"), null);
+  const targetDraftIons = safeParse(safeGetItem(KEYS.TARGET_DRAFT_IONS), null);
   if (targetDraftIons && typeof targetDraftIons === "object")
     drafts.target_draft_ions = targetDraftIons;
   return drafts;
@@ -629,60 +579,60 @@ export async function pullFromCloud(): Promise<void> {
   if (settings) {
     if (settings.theme) safeSetItem(THEME_KEY, settings.theme);
     if (settings.mineral_display_mode)
-      safeSetItem("cw_mineral_display_mode", settings.mineral_display_mode);
-    if (settings.brew_method) safeSetItem("cw_brew_method", settings.brew_method);
+      safeSetItem(KEYS.MINERAL_DISPLAY_MODE, settings.mineral_display_mode);
+    if (settings.brew_method) safeSetItem(KEYS.BREW_METHOD, settings.brew_method);
     if (settings.lotus_dropper_type)
-      safeSetItem("cw_lotus_dropper_type", settings.lotus_dropper_type);
+      safeSetItem(KEYS.LOTUS_DROPPER_TYPE, settings.lotus_dropper_type);
     if (settings.selected_minerals)
-      safeSetItem("cw_selected_minerals", JSON.stringify(settings.selected_minerals));
+      safeSetItem(KEYS.SELECTED_MINERALS, JSON.stringify(settings.selected_minerals));
     if (settings.selected_concentrates)
-      safeSetItem("cw_selected_concentrates", JSON.stringify(settings.selected_concentrates));
+      safeSetItem(KEYS.SELECTED_CONCENTRATES, JSON.stringify(settings.selected_concentrates));
     if (settings.diy_concentrate_specs)
-      safeSetItem("cw_diy_concentrate_specs", JSON.stringify(settings.diy_concentrate_specs));
+      safeSetItem(KEYS.DIY_CONCENTRATE_SPECS, JSON.stringify(settings.diy_concentrate_specs));
     if (settings.stock_concentrate_specs)
-      safeSetItem("cw_stock_concentrate_specs", JSON.stringify(settings.stock_concentrate_specs));
+      safeSetItem(KEYS.STOCK_CONCENTRATE_SPECS, JSON.stringify(settings.stock_concentrate_specs));
     if (settings.lotus_concentrate_units)
-      safeSetItem("cw_lotus_concentrate_units", JSON.stringify(settings.lotus_concentrate_units));
+      safeSetItem(KEYS.LOTUS_CONCENTRATE_UNITS, JSON.stringify(settings.lotus_concentrate_units));
     if (settings.volume_preferences && typeof settings.volume_preferences === "object") {
       Object.entries(settings.volume_preferences).forEach(function (entry) {
-        safeSetItem("cw_volume_" + entry[0], JSON.stringify(entry[1]));
+        safeSetItem(VOLUME_PREFIX + entry[0], JSON.stringify(entry[1]));
       });
     }
     if (settings.creator_display_name)
-      safeSetItem("cw_creator_display_name", settings.creator_display_name);
+      safeSetItem(KEYS.CREATOR_DISPLAY_NAME, settings.creator_display_name);
     // Drafts: restore each known key only if present. An empty/missing
     // drafts blob shouldn't blow away the user's local in-progress edits —
     // their local draft is the more recent write in that case.
     if (settings.drafts && typeof settings.drafts === "object") {
       const drafts = settings.drafts;
       if (drafts.recipe_mineral_inputs && typeof drafts.recipe_mineral_inputs === "object")
-        safeSetItem("cw_recipe_mineral_inputs", JSON.stringify(drafts.recipe_mineral_inputs));
+        safeSetItem(KEYS.RECIPE_MINERAL_INPUTS, JSON.stringify(drafts.recipe_mineral_inputs));
       if (drafts.recipe_concentrate_inputs && typeof drafts.recipe_concentrate_inputs === "object")
         safeSetItem(
-          "cw_recipe_concentrate_inputs",
+          KEYS.RECIPE_CONCENTRATE_INPUTS,
           JSON.stringify(drafts.recipe_concentrate_inputs),
         );
       if (drafts.recipe_stock_grams && typeof drafts.recipe_stock_grams === "object")
-        safeSetItem("cw_recipe_stock_grams", JSON.stringify(drafts.recipe_stock_grams));
+        safeSetItem(KEYS.RECIPE_STOCK_GRAMS, JSON.stringify(drafts.recipe_stock_grams));
       if (drafts.recipe_dispense_mode === "manual" || drafts.recipe_dispense_mode === "stock")
-        safeSetItem("cw_recipe_dispense_mode", drafts.recipe_dispense_mode);
+        safeSetItem(KEYS.RECIPE_DISPENSE_MODE, drafts.recipe_dispense_mode);
       if (drafts.target_draft_ions && typeof drafts.target_draft_ions === "object")
-        safeSetItem("cw_target_draft_ions", JSON.stringify(drafts.target_draft_ions));
+        safeSetItem(KEYS.TARGET_DRAFT_IONS, JSON.stringify(drafts.target_draft_ions));
     }
   }
 
   // Apply user_selections
   if (selections) {
-    if (selections.source_preset) safeSetItem("cw_source_preset", selections.source_preset);
+    if (selections.source_preset) safeSetItem(KEYS.SOURCE_PRESET, selections.source_preset);
     if (selections.source_water)
-      safeSetItem("cw_source_water", JSON.stringify(selections.source_water));
-    if (selections.target_preset) safeSetItem("cw_target_preset", selections.target_preset);
+      safeSetItem(KEYS.SOURCE_WATER, JSON.stringify(selections.source_water));
+    if (selections.target_preset) safeSetItem(KEYS.TARGET_PRESET, selections.target_preset);
     if (selections.deleted_source_presets)
-      safeSetItem("cw_deleted_presets", JSON.stringify(selections.deleted_source_presets));
+      safeSetItem(KEYS.DELETED_PRESETS, JSON.stringify(selections.deleted_source_presets));
     if (selections.deleted_target_presets)
-      safeSetItem("cw_deleted_target_presets", JSON.stringify(selections.deleted_target_presets));
+      safeSetItem(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(selections.deleted_target_presets));
     if (selections.added_target_presets)
-      safeSetItem("cw_added_target_presets", JSON.stringify(selections.added_target_presets));
+      safeSetItem(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(selections.added_target_presets));
   }
 
   // Apply source profiles, skipping any that are tombstoned locally.
@@ -719,7 +669,7 @@ export async function pullFromCloud(): Promise<void> {
         buildSourceRow(sessionUserId, row.slug, profile),
       );
     });
-    safeSetItem("cw_custom_profiles", JSON.stringify(srcProfiles));
+    safeSetItem(KEYS.CUSTOM_PROFILES, JSON.stringify(srcProfiles));
     safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(newSourceSnapshots));
   }
 
@@ -756,7 +706,7 @@ export async function pullFromCloud(): Promise<void> {
         buildTargetRow(sessionUserId, row.slug, profile),
       );
     });
-    safeSetItem("cw_custom_target_profiles", JSON.stringify(tgtProfiles));
+    safeSetItem(KEYS.CUSTOM_TARGET_PROFILES, JSON.stringify(tgtProfiles));
     safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(newTargetSnapshots));
   }
 
@@ -948,7 +898,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
     if (!userId) return;
 
     // Already set up for this user on this device — just pull latest
-    const syncedUserId = safeGetItem("cw_synced_user_id");
+    const syncedUserId = safeGetItem(KEYS.SYNCED_USER_ID);
     if (syncedUserId === userId) {
       await pullFromCloud();
       return;
@@ -974,7 +924,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
       }
     }
 
-    safeSetItem("cw_synced_user_id", userId);
+    safeSetItem(KEYS.SYNCED_USER_ID, userId);
   })();
   return mergeInFlight.finally(function () {
     mergeInFlight = null;
