@@ -1463,7 +1463,14 @@
         typeof window.isRecipeInMyProfiles === "function" ? window.isRecipeInMyProfiles : null;
       var filtered = applyFilters(state, allRecipes, { isSaved: isSaved });
       summary.sync(filtered.length, allRecipes.length, hasAnyActiveFilter(state));
-      renderContent(contentRoot, filtered, catalogLoaded, contentHandlers, state.method, loadFailed);
+      renderContent(
+        contentRoot,
+        filtered,
+        catalogLoaded,
+        contentHandlers,
+        state.method,
+        loadFailed,
+      );
     }
 
     // Re-render when the async library fetch completes. library.html warms the

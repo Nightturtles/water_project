@@ -129,6 +129,13 @@
     });
   }
 
+  // True only when we hold a non-empty catalog to render. An empty array counts
+  // as "nothing cached": otherwise a fetch failure with publicRecipesCache===[]
+  // would skip the error callback and leave the page silently blank.
+  function hasCachedCatalog() {
+    return Array.isArray(publicRecipesCache) && publicRecipesCache.length > 0;
+  }
+
   // Fetch all public recipes from Supabase. Caches in sessionStorage.
   async function fetchPublicRecipes(forceRefresh) {
     if (!forceRefresh && publicRecipesCache) return publicRecipesCache;
@@ -164,8 +171,8 @@
       if (result.error) {
         console.warn("[library] failed to fetch public recipes:", result.error);
         // Only escalate to a visible error state when there's nothing cached
-        // to show — a stale cache beats a blank page.
-        if (!publicRecipesCache) fireErrorCallbacks(result.error);
+        // to show — a non-empty stale cache beats a blank page.
+        if (!hasCachedCatalog()) fireErrorCallbacks(result.error);
         return publicRecipesCache || [];
       }
 
@@ -194,9 +201,9 @@
       return recipes;
     } catch (err) {
       // Network/transport throw (vs. a structured result.error above). Same
-      // rule: surface a retry only when we have no cache to fall back on.
+      // rule: surface a retry only when we have no non-empty cache to fall back on.
       console.warn("[library] failed to fetch public recipes:", err);
-      if (!publicRecipesCache) fireErrorCallbacks(err);
+      if (!hasCachedCatalog()) fireErrorCallbacks(err);
       return publicRecipesCache || [];
     }
   }
