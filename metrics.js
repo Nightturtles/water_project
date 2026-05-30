@@ -465,7 +465,7 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
  *   4. Residual K → potassium-chloride; residual Na → sodium-chloride.
  *
  * @param {Partial<Record<IonName, number | string | null | undefined>> | null | undefined} target
- * @param {{ bottleMl?: number, doseGramsPerL?: number, calciumChlorideId?: string }} [options]
+ * @param {{ bottleMl?: number, doseGramsPerL?: number, calciumChlorideId?: "calcium-chloride" | "calcium-chloride-anhydrous" }} [options]
  * @returns {{ bottleMl: number, doseGramsPerL: number, minerals: Array<{ mineralId: string, grams: number }>, notes: string[] }}
  */
 function deriveStockFormulaFromTarget(target, options) {
@@ -628,9 +628,16 @@ function deriveStockFormulaFromTarget(target, options) {
     // weight differs. Use whichever form the user has (dihydrate by default).
     var caForm =
       typeof getEffectiveCalciumSource === "function" ? getEffectiveCalciumSource() : null;
+    // Trust calciumChlorideId only if it names a known CaCl2 form; otherwise
+    // fall back to the user's effective source so a bad id can't silently
+    // skip calcium addition for a non-zero target.
+    var requestedCaId = options.calciumChlorideId;
     var caId =
-      options.calciumChlorideId ||
-      (caForm === "calcium-chloride-anhydrous" ? "calcium-chloride-anhydrous" : "calcium-chloride");
+      requestedCaId === "calcium-chloride" || requestedCaId === "calcium-chloride-anhydrous"
+        ? requestedCaId
+        : caForm === "calcium-chloride-anhydrous"
+          ? "calcium-chloride-anhydrous"
+          : "calcium-chloride";
     if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
       notes.push(
         "Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
