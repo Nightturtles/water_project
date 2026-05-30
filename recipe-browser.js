@@ -185,6 +185,7 @@
     "epsom-salt": "epsom",
     "magnesium-chloride": "MgCl₂·6H₂O",
     "calcium-chloride": "CaCl₂·2H₂O",
+    "calcium-chloride-anhydrous": "CaCl₂",
     "baking-soda": "NaHCO₃",
     "potassium-bicarbonate": "KHCO₃",
     gypsum: "gypsum",

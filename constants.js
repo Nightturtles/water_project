@@ -8,13 +8,24 @@
 // Each mineral salt and the ions it contributes per gram dissolved in 1 liter
 const MINERAL_DB = {
   "calcium-chloride": {
-    name: "Calcium Chloride",
+    name: "Calcium Chloride (Dihydrate)",
     formula: "CaCl\u2082\u00b72H\u2082O",
     mw: 147.01,
     description: "Adds calcium and chloride. Increases sweetness and body.",
     ions: {
       calcium: 40.078 / 147.01, // g Ca per g salt
       chloride: 70.906 / 147.01, // g Cl per g salt (2 * 35.453)
+    },
+  },
+  "calcium-chloride-anhydrous": {
+    name: "Calcium Chloride (Anhydrous)",
+    formula: "CaCl₂",
+    mw: 110.98,
+    description:
+      "Water-free calcium chloride. Adds the same calcium and chloride as the dihydrate, but more concentrated, so you weigh out less per dose.",
+    ions: {
+      calcium: 40.078 / 110.98, // g Ca per g salt
+      chloride: 70.906 / 110.98, // g Cl per g salt (2 * 35.453)
     },
   },
   "epsom-salt": {
@@ -93,6 +104,7 @@ const MINERAL_DB = {
 // Used only to warn when DIY concentrate strengths are likely to precipitate.
 const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
   "calcium-chloride": 700,
+  "calcium-chloride-anhydrous": 745,
   "epsom-salt": 700,
   "baking-soda": 96,
   "potassium-bicarbonate": 330,

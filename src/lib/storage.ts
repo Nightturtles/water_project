@@ -1040,11 +1040,25 @@ export function getEffectiveAlkalinitySources(): string[] {
   return ["potassium-bicarbonate"];
 }
 
-/** Returns an array of enabled calcium source mineral ids (calcium-chloride and/or gypsum). */
+/**
+ * The two calcium-chloride forms (dihydrate `calcium-chloride` and anhydrous
+ * `calcium-chloride-anhydrous`) are chemically interchangeable: same Ca:Cl
+ * ratio, differing only in grams per dose. The derivation logic treats them as
+ * a single calcium-source slot, so collapse them to one representative here.
+ * Prefer the dihydrate when both are enabled to preserve prior behavior.
+ */
+function getEffectiveCalciumChlorideForm(selected: string[]): string | null {
+  if (selected.includes("calcium-chloride")) return "calcium-chloride";
+  if (selected.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
+  return null;
+}
+
+/** Returns an array of enabled calcium source mineral ids (a calcium-chloride form and/or gypsum). */
 export function getEffectiveCalciumSources(): string[] {
   const selected = getAvailableMineralIds();
   const out: string[] = [];
-  if (selected.includes("calcium-chloride")) out.push("calcium-chloride");
+  const cacl2 = getEffectiveCalciumChlorideForm(selected);
+  if (cacl2) out.push(cacl2);
   if (selected.includes("gypsum")) out.push("gypsum");
   return out;
 }
@@ -1067,12 +1081,13 @@ export function getEffectiveAlkalinitySource(): string | null {
   return "potassium-bicarbonate";
 }
 
-/** Returns a single calcium source when only one is enabled; when both enabled returns "calcium-chloride" (tie-breaker); when none, null. */
+/** Returns a single calcium source when only one is enabled; when a calcium-chloride form and gypsum are both enabled returns the calcium-chloride form (tie-breaker); when none, null. */
 export function getEffectiveCalciumSource(): string | null {
   const sources = getEffectiveCalciumSources();
   if (sources.length === 0) return null;
   if (sources.length === 1) return sources[0] ?? null;
-  return "calcium-chloride";
+  // Two sources means one calcium-chloride form + gypsum; prefer the CaCl2 form.
+  return sources.find((s) => s !== "gypsum") ?? sources[0] ?? null;
 }
 
 /** Returns a single magnesium source when only one is enabled; when both enabled returns "epsom-salt" (tie-breaker); when none, null. */
