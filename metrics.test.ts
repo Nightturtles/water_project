@@ -31,6 +31,16 @@ describe("calculateIonPPMs", () => {
     expect(ions.chloride).toBe(0);
   });
 
+  test("1 g/L anhydrous calcium chloride → ~361.13 mg/L calcium and ~638.91 mg/L chloride", () => {
+    // CaCl2 (anhydrous), MW 110.98. Per-g: Ca 40.078/110.98, Cl 70.906/110.98.
+    // More concentrated than the dihydrate (MW 147.01), so more of each per gram.
+    const ions = metrics.calculateIonPPMs({ "calcium-chloride-anhydrous": 1 });
+    expect(ions.calcium).toBeCloseTo(361.13, 1);
+    expect(ions.chloride).toBeCloseTo(638.91, 1);
+    expect(ions.magnesium).toBe(0);
+    expect(ions.sulfate).toBe(0);
+  });
+
   test("ignores unknown mineral ids without throwing", () => {
     const ions = metrics.calculateIonPPMs({ "not-a-real-mineral": 5 });
     expect(ions.calcium).toBe(0);

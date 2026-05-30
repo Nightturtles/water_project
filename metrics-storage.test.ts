@@ -108,6 +108,33 @@ describe("pickBestCaMgSources", () => {
     );
     expect(result.caSource).toBe("gypsum");
   });
+
+  test("only anhydrous CaCl2 selected → picks anhydrous as the calcium source", () => {
+    saveSelectedMinerals(["calcium-chloride-anhydrous", "epsom-salt", "baking-soda"]);
+    const result = metrics.pickBestCaMgSources(
+      { calcium: 0, magnesium: 0 },
+      { chloride: 30, sulfate: 0 },
+      40,
+      10,
+    );
+    expect(result.caSource).toBe("calcium-chloride-anhydrous");
+  });
+
+  test("both CaCl2 forms selected → prefers the dihydrate (preserves prior behavior)", () => {
+    saveSelectedMinerals([
+      "calcium-chloride",
+      "calcium-chloride-anhydrous",
+      "epsom-salt",
+      "baking-soda",
+    ]);
+    const result = metrics.pickBestCaMgSources(
+      { calcium: 0, magnesium: 0 },
+      { chloride: 30, sulfate: 0 },
+      40,
+      10,
+    );
+    expect(result.caSource).toBe("calcium-chloride");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -166,6 +193,34 @@ describe("deriveStockFormulaFromTarget", () => {
     const nan = metrics.deriveStockFormulaFromTarget({}, { bottleMl: "bad", doseGramsPerL: NaN });
     expect(nan.bottleMl).toBe(200);
     expect(nan.doseGramsPerL).toBe(4);
+  });
+
+  test("calciumChlorideId option → anhydrous CaCl2 needs ~25% less mass than the dihydrate", () => {
+    const target = { calcium: 40 };
+    const dihydrate = metrics.deriveStockFormulaFromTarget(target, {
+      calciumChlorideId: "calcium-chloride",
+    });
+    const anhydrous = metrics.deriveStockFormulaFromTarget(target, {
+      calciumChlorideId: "calcium-chloride-anhydrous",
+    });
+    const dCa = dihydrate.minerals.find((m: any) => m.mineralId === "calcium-chloride");
+    const aCa = anhydrous.minerals.find((m: any) => m.mineralId === "calcium-chloride-anhydrous");
+    expect(dCa).toBeTruthy();
+    expect(aCa).toBeTruthy();
+    // Anhydrous is more concentrated: less mass for the same Ca, scaling by the
+    // CaCl2 MW ratio (110.98 / 147.01 ≈ 0.755). Output grams are rounded, so
+    // compare the ratio loosely rather than to full precision.
+    expect(aCa.grams).toBeLessThan(dCa.grams);
+    expect(aCa.grams / dCa.grams).toBeCloseTo(110.98 / 147.01, 1);
+  });
+
+  test("only anhydrous CaCl2 selected (no override) → derive uses anhydrous via effective source", () => {
+    saveSelectedMinerals(["calcium-chloride-anhydrous", "epsom-salt", "baking-soda"]);
+    const formula = metrics.deriveStockFormulaFromTarget({ calcium: 40 });
+    expect(formula.minerals.some((m: any) => m.mineralId === "calcium-chloride-anhydrous")).toBe(
+      true,
+    );
+    expect(formula.minerals.some((m: any) => m.mineralId === "calcium-chloride")).toBe(false);
   });
 
   // --- Coffee ad Astra calibration anchors ---
