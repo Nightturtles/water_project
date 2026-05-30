@@ -108,6 +108,14 @@ export default defineConfig({
       disable: !process.env.SENTRY_AUTH_TOKEN,
       errorHandler: (err) => {
         console.warn("[sentry-vite-plugin] non-fatal upload error: " + err.message);
+        // Surface the failure in CI so a rotated/expired token doesn't silently
+        // stop sourcemap uploads (which would leave production errors
+        // unsymbolicated). Non-blocking: a GitHub Actions ::warning:: annotation
+        // shows in the run summary without failing the deploy, preserving the
+        // "a Sentry issue never breaks a production deploy" rule above.
+        if (process.env.GITHUB_ACTIONS) {
+          console.warn("::warning title=Sentry sourcemap upload failed::" + err.message);
+        }
       },
     }),
   ],

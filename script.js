@@ -171,7 +171,7 @@ function renderResultItems() {
       nameSpan.textContent = item.label;
       const stockBadge = document.createElement("span");
       stockBadge.className = "badge badge-concentrate";
-      stockBadge.textContent = "STOCK";
+      stockBadge.textContent = "CONCENTRATE";
       nameSpan.appendChild(stockBadge);
       const detailSpan = document.createElement("span");
       detailSpan.className = "result-detail";
