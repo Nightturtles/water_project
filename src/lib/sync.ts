@@ -47,6 +47,11 @@ import {
 
 let syncTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 const SYNC_DEBOUNCE_MS = 500;
+// Monotonic counter bumped on every local save (scheduleSyncToCloud). The
+// realtime pull snapshots it before its network read and bails out of applying
+// cloud data if it changed — i.e. a local write landed mid-pull — so the
+// full-row overwrites can't clobber an edit made while the pull was in flight.
+let localWriteSeq = 0;
 let mergeInFlight: Promise<void> | null = null;
 
 // Realtime channel state. We split bindings across TWO channels per user:
@@ -154,6 +159,7 @@ async function waitForAuthStateResolved(): Promise<void> {
 
 // --- Debounced sync trigger (called from storage.js save functions) ---
 export function scheduleSyncToCloud(): void {
+  localWriteSeq += 1;
   dispatchSaveStatus("saving");
   clearTimeout(syncTimer);
   syncTimer = setTimeout(function () {
@@ -547,9 +553,19 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
 }
 
 // --- Pull all cloud data into localStorage and invalidate caches ---
-export async function pullFromCloud(): Promise<void> {
+export async function pullFromCloud(options?: {
+  skipIfLocalWriteDuringPull?: boolean;
+}): Promise<boolean> {
+  // Snapshot the local-write counter before any network round-trip. When the
+  // realtime path sets skipIfLocalWriteDuringPull, a change here before we
+  // apply means a local save landed mid-pull and the full-row overwrites below
+  // would clobber it — so we skip applying and return false (the caller
+  // re-pulls once that write has been pushed). Page-load / first-login pulls
+  // leave the option unset and apply unconditionally, as before.
+  const skipIfLocalWrite = !!(options && options.skipIfLocalWriteDuringPull);
+  const seqAtStart = localWriteSeq;
   const userId = await getLoggedInUserId();
-  if (!userId) return;
+  if (!userId) return true;
 
   const results = await Promise.all([
     window.supabaseClient.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
@@ -563,6 +579,16 @@ export async function pullFromCloud(): Promise<void> {
   if (errored && errored.error) {
     console.warn("[sync] pull failed:", errored.error);
     throw errored.error;
+  }
+
+  if (skipIfLocalWrite && localWriteSeq !== seqAtStart) {
+    // A local save landed while we were fetching. The rows we just read are
+    // already stale for whatever the user touched, and the full-row
+    // safeSetItem calls below would overwrite that edit. Skip applying: the
+    // local write stays in localStorage, its own debounced push sends it to
+    // the cloud, and the realtime caller re-pulls to bring remote changes down.
+    console.warn("[sync] pull skipped: local write landed mid-pull; will reconcile after push");
+    return false;
   }
 
   // Re-bind userId as `string` (not `string | null`) so the forEach
@@ -737,6 +763,8 @@ export async function pullFromCloud(): Promise<void> {
       snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
     );
   }
+
+  return true;
 }
 
 // --- Returns true if local data is entirely default (no user customization) ---
@@ -1076,9 +1104,17 @@ function scheduleRealtimePull(): void {
     const pendingPush = syncTimer ? syncNow() : Promise.resolve();
     Promise.resolve(pendingPush)
       .then(function () {
-        return pullFromCloud();
+        return pullFromCloud({ skipIfLocalWriteDuringPull: true });
       })
-      .then(function () {
+      .then(function (applied) {
+        if (applied === false) {
+          // pullFromCloud bailed because a local write landed mid-pull. Re-arm
+          // so the remote change still lands once that write has been pushed
+          // (the debounce throttles this, and the push-first step above sends
+          // the local write up before the retry reads cloud again).
+          scheduleRealtimePull();
+          return;
+        }
         if (typeof window.dispatchEvent === "function") {
           window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
         }
