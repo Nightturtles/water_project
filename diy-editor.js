@@ -17,14 +17,7 @@
 (function () {
   "use strict";
 
-  function escapeHtml(s) {
-    return String(s)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
+  // escapeHtml: shared global from src/lib/html.ts (bridged onto window).
 
   function getSolubilityLimitGPerL(mineralId) {
     var v =

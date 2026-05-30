@@ -130,6 +130,11 @@ declare global {
   function loadBrewMethod(): string;
   function isReservedTargetKey(key: string): boolean;
 
+  // From src/lib/html.ts — shared HTML-escaper, bridged onto window so the
+  // classic UI scripts (diy-editor.js, stock-editor.js, minerals.html inline)
+  // share one implementation instead of each defining their own.
+  var escapeHtml: ((s: unknown) => string) | undefined;
+
   // From sync.js — feature-detected via `typeof scheduleSyncToCloud === 'function'`
   // in several storage.js paths, so guard against the function being absent in
   // contexts where sync.js hasn't loaded (tests, pages that skip sync).
@@ -176,6 +181,8 @@ declare global {
     supabaseClient: import("@supabase/supabase-js").SupabaseClient;
     Sentry?: typeof import("@sentry/browser");
     SENTRY_RELEASE?: { id?: string };
+    // From src/lib/html.ts — shared HTML-escaper (see the global above).
+    escapeHtml?: (s: unknown) => string;
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;

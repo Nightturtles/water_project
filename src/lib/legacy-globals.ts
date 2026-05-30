@@ -32,6 +32,7 @@
 // side-effect is gated on Capacitor.isNativePlatform()).
 
 import "./sentry-init";
+import "./html";
 import "./supabase-client";
 import "./capacitor-bootstrap";
 import * as storage from "./storage";

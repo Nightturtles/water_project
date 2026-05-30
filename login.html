@@ -2,6 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <!-- CSP (defense in depth). 'unsafe-inline' stays until inline scripts are externalized;
+       localhost / capacitor:// keep the Capacitor native build working; frame-ancestors is header-only. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' https://localhost capacitor://localhost; script-src 'self' 'unsafe-inline' https://www.googletagmanager.com https://localhost capacitor://localhost; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data:; connect-src 'self' https://srlwgayrxzamxlodpsrq.supabase.co wss://srlwgayrxzamxlodpsrq.supabase.co https://*.ingest.us.sentry.io https://www.google-analytics.com https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com https://localhost capacitor://localhost http://localhost; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Sign in - Cafelytic</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
