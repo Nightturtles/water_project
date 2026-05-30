@@ -1,11 +1,31 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { viteStaticCopy } from "vite-plugin-static-copy";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // Resolve __dirname for an ESM-style TS config evaluated by Vite's loader.
 const root = dirname(fileURLToPath(import.meta.url));
+
+// Build-time HTML partials: replace `<!-- @partial:NAME -->` markers in the HTML
+// entries with the contents of partials/NAME.html. Lets the pages share one
+// canonical <head> (CSP, favicon, stylesheet, analytics/theme init) instead of
+// copy-pasting it into every file. order:"pre" runs before Vite's own HTML asset
+// processing, so the expanded markup is hashed/bundled exactly as if inline.
+function htmlPartials(): Plugin {
+  return {
+    name: "html-partials",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html: string): string {
+        return html.replace(/[ \t]*<!-- @partial:([\w-]+) -->/g, (_match, name) =>
+          readFileSync(resolve(root, "partials", `${name}.html`), "utf8").replace(/\n+$/, ""),
+        );
+      },
+    },
+  };
+}
 
 const htmlEntries = [
   "index.html",
@@ -51,6 +71,7 @@ export default defineConfig({
     },
   },
   plugins: [
+    htmlPartials(),
     viteStaticCopy({
       targets: [
         {
