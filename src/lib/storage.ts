@@ -1482,9 +1482,15 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   // A logout swaps the underlying store for transient keys (localStorage ->
   // sessionStorage) and wipes user content; a login does the reverse and
   // pulls cloud data into localStorage.  Either way, cached values from the
-  // pre-flip state are stale.
+  // pre-flip state are stale. cw:auth-state-resolved is included so a cache
+  // populated during the pre-auth window (before the initial getSession()
+  // settles) is dropped once auth settles, independent of whether
+  // cw:auth-changed fires first.
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
     document.addEventListener("cw:auth-changed", function () {
+      if (typeof invalidateAllCaches === "function") invalidateAllCaches();
+    });
+    document.addEventListener("cw:auth-state-resolved", function () {
       if (typeof invalidateAllCaches === "function") invalidateAllCaches();
     });
     window.addEventListener("cw:storage-invalidated", function () {

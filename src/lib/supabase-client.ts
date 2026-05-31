@@ -6,6 +6,7 @@
 // declared below — keep their signatures stable.
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { persistedSessionStorageKey, extractUserIdFromPersistedSession } from "./auth-session";
 
 const SUPABASE_URL = "https://srlwgayrxzamxlodpsrq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq";
@@ -112,6 +113,29 @@ trySet("signOut", async function () {
 // (once, when the initial getSession() settles).
 trySet("_cachedAuthUserId", null);
 trySet("_authStateResolved", false);
+
+// Optimistically prime _cachedAuthUserId from the already-persisted Supabase
+// session so storage.ts transient reads route to localStorage on the very
+// first synchronous call. Without this there is a sub-second window after
+// every page load — before getSession() resolves below — where isLoggedInSync()
+// returns false, so a logged-in user's reads mis-route to (empty) sessionStorage
+// and fall back to defaults. Pages that snapshot state at DOMContentLoaded
+// (recipe.html mineral inputs, the calculator results, source water) then keep
+// showing defaults until something forces a re-read.
+//
+// Best-effort only: the async getSession() below stays the source of truth and
+// overwrites this value (firing cw:auth-changed) if the token is invalid. Any
+// drift — missing token, malformed JSON, storage blocked, or a future
+// supabase-js key/shape change — leaves _cachedAuthUserId null and falls back
+// to the prior behavior. Runs AFTER the null default above so it takes effect.
+try {
+  const primedUserId = extractUserIdFromPersistedSession(
+    localStorage.getItem(persistedSessionStorageKey(SUPABASE_URL)),
+  );
+  if (primedUserId) trySet("_cachedAuthUserId", primedUserId);
+} catch (_) {
+  // localStorage unavailable (e.g. Safari private mode) — stay null.
+}
 
 supabaseClient.auth
   .getSession()
