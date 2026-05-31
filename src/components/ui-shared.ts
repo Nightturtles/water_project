@@ -858,6 +858,99 @@ export function injectNav(): void {
   _updateNavAuth(authWrap, currentPage);
 }
 
+// Shared logout sequence. Order matters to avoid the data-loss class of bug:
+//   1. flush any debounced edit to cloud while the session still exists
+//   2. sign out (Supabase clears the session, fires SIGNED_OUT)
+//   3. wipe local user content (Categories A/B/C; D preserved)
+//   4. navigate to a clean page
+// If the pending push fails, abort logout. Continuing would call signOut()
+// and clearLocalUserContent() and silently drop the unsynced edit (e.g. a
+// save made within SYNC_DEBOUNCE_MS of clicking Log out). Better to leave the
+// user signed in so they can retry than to lose their data.
+// Shared verbatim by the desktop top nav (_updateNavAuth) and the native
+// bottom sheet (injectBottomNav) so this sequence lives in exactly one place.
+async function performLogout(): Promise<void> {
+  if (typeof window.flushPendingSync === "function") {
+    try {
+      await window.flushPendingSync();
+    } catch (err) {
+      console.warn("[auth] flushPendingSync failed; aborting logout:", err);
+      return;
+    }
+  }
+  // If signOut() throws (network blip, transient Supabase error), the auth
+  // token survives — wiping local state and redirecting in that case would
+  // leave the next page load authenticated, which defeats the purpose of
+  // logout. Bail loudly instead.
+  try {
+    await (window as any).signOut();
+  } catch (err) {
+    console.warn("[auth] signOut failed:", err);
+    return;
+  }
+  if (typeof window.clearLocalUserContent === "function") {
+    window.clearLocalUserContent();
+  }
+  window.location.href = "index.html";
+}
+
+// Shared delete-account flow: typed-email confirm modal → delete_account RPC →
+// signOut → wipe local content → flash flag → redirect. Shared by the desktop
+// top nav and the native bottom sheet so the data-loss-sensitive sequence and
+// its typed-email guard live in exactly one place.
+function confirmAndDeleteAccount(userEmail: string): void {
+  showConfirm(
+    "This permanently deletes your account and all recipes saved to it. " +
+      "Recipes you originally created and shared with others will stay " +
+      'visible to them but show as "by Anonymous User". This cannot be undone.',
+    async () => {
+      // Unlike Log out, we deliberately skip flushPendingSync — there's no
+      // point persisting the user's last edit to a row that's about to be
+      // deleted, and racing the flush against the delete would only surface
+      // confusing RLS errors.
+      try {
+        const { error } = await window.supabaseClient.rpc("delete_account");
+        if (error) throw error;
+      } catch (err) {
+        console.warn("[auth] delete_account RPC failed:", err);
+        alert(
+          "Could not delete your account: " +
+            ((err as { message?: string })?.message || "unknown error") +
+            ". Please try again or contact info@cafelytic.com.",
+        );
+        return;
+      }
+      try {
+        await (window as any).signOut();
+      } catch (err) {
+        console.warn("[auth] signOut after delete failed:", err);
+        // Continue regardless — the auth row is already gone, so the local
+        // session token is now invalid on the server side.
+      }
+      if (typeof window.clearLocalUserContent === "function") {
+        window.clearLocalUserContent();
+      }
+      try {
+        sessionStorage.setItem("cw_account_deleted_flash", "1");
+      } catch (_) {
+        // sessionStorage may be unavailable (private mode, embedded
+        // contexts); the redirect still happens, just without the
+        // confirmation toast.
+      }
+      window.location.href = "index.html";
+    },
+    {
+      requireText: {
+        value: userEmail,
+        label: "Type your email to confirm:",
+        placeholder: userEmail,
+      },
+      yesLabel: "Delete account",
+      noLabel: "Cancel",
+    },
+  );
+}
+
 async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promise<void> {
   if (typeof window.supabaseClient === "undefined") return;
   try {
@@ -873,40 +966,7 @@ async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promi
       logoutBtn.type = "button";
       logoutBtn.className = "nav-auth-btn";
       logoutBtn.textContent = "Log out";
-      logoutBtn.addEventListener("click", async () => {
-        // Order matters to avoid the data-loss class of bug:
-        //   1. flush any debounced edit to cloud while the session still exists
-        //   2. sign out (Supabase clears the session, fires SIGNED_OUT)
-        //   3. wipe local user content (Categories A/B/C; D preserved)
-        //   4. navigate to a clean page
-        // If the pending push fails, abort logout. Continuing would call
-        // signOut() and clearLocalUserContent() and silently drop the
-        // unsynced edit (e.g. a save made within SYNC_DEBOUNCE_MS of
-        // clicking Log out). Better to leave the user signed in so they
-        // can retry than to lose their data.
-        if (typeof window.flushPendingSync === "function") {
-          try {
-            await window.flushPendingSync();
-          } catch (err) {
-            console.warn("[auth] flushPendingSync failed; aborting logout:", err);
-            return;
-          }
-        }
-        // If signOut() throws (network blip, transient Supabase error), the
-        // auth token survives — wiping local state and redirecting in that
-        // case would leave the next page load authenticated, which defeats
-        // the purpose of logout. Bail loudly instead.
-        try {
-          await (window as any).signOut();
-        } catch (err) {
-          console.warn("[auth] signOut failed:", err);
-          return;
-        }
-        if (typeof window.clearLocalUserContent === "function") {
-          window.clearLocalUserContent();
-        }
-        window.location.href = "index.html";
-      });
+      logoutBtn.addEventListener("click", performLogout);
 
       // Apple Guideline 5.1.1(v) and Google Play's Data Deletion policy
       // require an in-app deletion path. The button stays muted (CSS class
@@ -917,58 +977,7 @@ async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promi
       deleteBtn.type = "button";
       deleteBtn.className = "nav-auth-btn nav-auth-btn--danger";
       deleteBtn.textContent = "Delete account";
-      deleteBtn.addEventListener("click", () => {
-        showConfirm(
-          "This permanently deletes your account and all recipes saved to it. " +
-            "Recipes you originally created and shared with others will stay " +
-            'visible to them but show as "by Anonymous User". This cannot be undone.',
-          async () => {
-            // Unlike Log out, we deliberately skip flushPendingSync — there's
-            // no point persisting the user's last edit to a row that's about
-            // to be deleted, and racing the flush against the delete would
-            // only surface confusing RLS errors.
-            try {
-              const { error } = await window.supabaseClient.rpc("delete_account");
-              if (error) throw error;
-            } catch (err) {
-              console.warn("[auth] delete_account RPC failed:", err);
-              alert(
-                "Could not delete your account: " +
-                  ((err as { message?: string })?.message || "unknown error") +
-                  ". Please try again or contact info@cafelytic.com.",
-              );
-              return;
-            }
-            try {
-              await (window as any).signOut();
-            } catch (err) {
-              console.warn("[auth] signOut after delete failed:", err);
-              // Continue regardless — the auth row is already gone, so the
-              // local session token is now invalid on the server side.
-            }
-            if (typeof window.clearLocalUserContent === "function") {
-              window.clearLocalUserContent();
-            }
-            try {
-              sessionStorage.setItem("cw_account_deleted_flash", "1");
-            } catch (_) {
-              // sessionStorage may be unavailable (private mode, embedded
-              // contexts); the redirect still happens, just without the
-              // confirmation toast.
-            }
-            window.location.href = "index.html";
-          },
-          {
-            requireText: {
-              value: userEmail,
-              label: "Type your email to confirm:",
-              placeholder: userEmail,
-            },
-            yesLabel: "Delete account",
-            noLabel: "Cancel",
-          },
-        );
-      });
+      deleteBtn.addEventListener("click", () => confirmAndDeleteAccount(userEmail));
 
       authWrap.appendChild(email);
       authWrap.appendChild(logoutBtn);
@@ -983,6 +992,304 @@ async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promi
   } catch (_) {
     // Silently skip auth nav if Supabase is unavailable
   }
+}
+
+// Native check: Capacitor injects window.Capacitor into the WebView before any
+// user script runs. Mirrors isNativePlatform() in supabase-client.ts; kept
+// local so this UI module doesn't have to import that side-effectful client
+// module (the file header notes supabase symbols are reached via window here).
+function isNativeApp(): boolean {
+  return (
+    (
+      window as { Capacitor?: { isNativePlatform?: () => boolean } }
+    ).Capacitor?.isNativePlatform?.() === true
+  );
+}
+
+// Inline SVG path data for the bottom nav + More sheet. viewBox 0 0 24 24,
+// stroke="currentColor". Bar body paths tagged .cw-bn-fill get a tinted fill
+// when their tab is active (see style.css). Source: the design handoff
+// (prototype/cw-screen.jsx CwIcon); log-out/trash are standard 24px stroke
+// icons in the same visual language for the sheet's account actions.
+const BN_ICONS = {
+  droplet:
+    '<path class="cw-bn-fill" d="M12 2.6c0 0 6.6 6.9 6.6 11.4a6.6 6.6 0 0 1-13.2 0C5.4 9.5 12 2.6 12 2.6Z"/>',
+  beaker:
+    '<path class="cw-bn-fill" d="M10 3v5L5.4 18.2A1.4 1.4 0 0 0 6.7 20.3h10.6a1.4 1.4 0 0 0 1.3-2.1L14 8V3"/>' +
+    '<path d="M8.5 3h7"/><path d="M7.2 14.5h9.6"/>',
+  tuner:
+    '<path d="M7 4v16"/><path d="M12 4v16"/><path d="M17 4v16"/>' +
+    '<circle cx="7" cy="9" r="2.3" fill="var(--surface)"/>' +
+    '<circle cx="12" cy="15" r="2.3" fill="var(--surface)"/>' +
+    '<circle cx="17" cy="8" r="2.3" fill="var(--surface)"/>',
+  book:
+    '<path class="cw-bn-fill" d="M12 6.6C10.4 5.4 8.1 5.1 5.4 5.3a1 1 0 0 0-.9 1v11.2a1 1 0 0 0 1.1 1c2.4-.2 4.5.1 6.4 1.2 1.9-1.1 4-1.4 6.4-1.2a1 1 0 0 0 1.1-1V6.3a1 1 0 0 0-.9-1c-2.7-.2-5 .1-6.6 1.3Z"/>' +
+    '<path d="M12 6.6V20"/>',
+  more:
+    '<circle cx="5" cy="12" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="12" cy="12" r="1.7" fill="currentColor" stroke="none"/>' +
+    '<circle cx="19" cy="12" r="1.7" fill="currentColor" stroke="none"/>',
+  sliders:
+    '<path d="M3.5 7h17"/><path d="M3.5 12h17"/><path d="M3.5 17h17"/>' +
+    '<circle cx="15.5" cy="7" r="2.4" fill="var(--surface)"/>' +
+    '<circle cx="8.5" cy="12" r="2.4" fill="var(--surface)"/>' +
+    '<circle cx="16" cy="17" r="2.4" fill="var(--surface)"/>',
+  lightbulb:
+    '<path d="M9.5 18h5"/><path d="M10 21h4"/>' +
+    '<path d="M12 3a6 6 0 0 0-4 10.5c.6.6 1 1.4 1.1 2.2h5.8c.1-.8.5-1.6 1.1-2.2A6 6 0 0 0 12 3Z"/>',
+  person: '<circle cx="12" cy="8" r="3.6"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
+  logout:
+    '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
+  trash:
+    '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>' +
+    '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  chevron: '<path d="M9 5l7 7-7 7"/>',
+};
+
+function _bnSvg(inner: string): string {
+  return (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    inner +
+    "</svg>"
+  );
+}
+
+// Builds one More-sheet row. Navigation rows pass `href` (rendered as <a> with
+// a trailing chevron); action rows pass `onClick` (rendered as <button>, no
+// chevron); a display-only row passes neither (rendered as a static <div>).
+// Text is set via textContent — only the SVG markup is trusted innerHTML.
+function _buildSheetRow(opts: {
+  href?: string;
+  icon: string;
+  label: string;
+  sub?: string;
+  accent?: boolean;
+  danger?: boolean;
+  onClick?: () => void;
+}): HTMLElement {
+  const row = document.createElement(opts.href ? "a" : opts.onClick ? "button" : "div");
+  row.className =
+    "more-sheet__row" +
+    (opts.accent ? " more-sheet__row--accent" : "") +
+    (opts.danger ? " more-sheet__row--danger" : "");
+  if (opts.href) {
+    (row as HTMLAnchorElement).href = opts.href;
+  } else if (opts.onClick) {
+    (row as HTMLButtonElement).type = "button";
+  }
+
+  const chip = document.createElement("span");
+  chip.className = "more-sheet__chip";
+  chip.innerHTML = _bnSvg(opts.icon);
+  row.appendChild(chip);
+
+  const text = document.createElement("span");
+  text.className = "more-sheet__text";
+  const label = document.createElement("span");
+  label.className = "more-sheet__label";
+  label.textContent = opts.label;
+  text.appendChild(label);
+  if (opts.sub) {
+    const sub = document.createElement("span");
+    sub.className = "more-sheet__sub";
+    sub.textContent = opts.sub;
+    text.appendChild(sub);
+  }
+  row.appendChild(text);
+
+  if (opts.href) {
+    const chev = document.createElement("span");
+    chev.className = "more-sheet__chevron";
+    chev.innerHTML = _bnSvg(BN_ICONS.chevron);
+    row.appendChild(chev);
+  }
+  if (opts.onClick) row.addEventListener("click", opts.onClick);
+  return row;
+}
+
+// Fills the More sheet's Account section from auth state. Mirrors
+// _updateNavAuth's getSession branching but renders icon-chip rows, and calls
+// the SAME shared handlers (performLogout / confirmAndDeleteAccount) so the
+// data-loss-sensitive logout + delete sequences are never forked.
+async function _buildSheetAccount(container: HTMLElement, currentPage: string): Promise<void> {
+  if (typeof window.supabaseClient === "undefined") return;
+  try {
+    const { data } = await window.supabaseClient.auth.getSession();
+    const session = data && data.session;
+    if (session && session.user) {
+      const userEmail = session.user.email || "";
+      container.appendChild(
+        _buildSheetRow({
+          icon: BN_ICONS.person,
+          label: userEmail || "Account",
+          sub: "Signed in",
+          accent: true,
+        }),
+      );
+      container.appendChild(
+        _buildSheetRow({ icon: BN_ICONS.logout, label: "Log out", onClick: performLogout }),
+      );
+      container.appendChild(
+        _buildSheetRow({
+          icon: BN_ICONS.trash,
+          label: "Delete account",
+          danger: true,
+          onClick: () => confirmAndDeleteAccount(userEmail),
+        }),
+      );
+    } else {
+      container.appendChild(
+        _buildSheetRow({
+          href: "login.html",
+          icon: BN_ICONS.person,
+          label: "Log in",
+          sub: "Sync recipes across devices",
+          accent: true,
+        }),
+      );
+    }
+  } catch (_) {
+    // Silently skip — mirrors _updateNavAuth's catch when Supabase is unavailable.
+  }
+}
+
+// Native-only bottom tab bar + "More" bottom sheet. Mirrors injectNav()'s
+// imperative createElement style. Injected only inside the Capacitor shell
+// (gated by isNativeApp() in the DOMContentLoaded init); the web build keeps
+// the existing top nav untouched.
+function injectBottomNav(): void {
+  const currentPage = window.location.pathname.split("/").pop() || "index.html";
+
+  const tabs: Array<{ href: string | null; label: string; icon: string }> = [
+    { href: "index.html", label: "Calculator", icon: BN_ICONS.droplet },
+    { href: "recipe.html", label: "Builder", icon: BN_ICONS.beaker },
+    { href: "taste.html", label: "Tuner", icon: BN_ICONS.tuner },
+    { href: "library.html", label: "Library", icon: BN_ICONS.book },
+    { href: null, label: "More", icon: BN_ICONS.more },
+  ];
+
+  // Pages that live behind the More sheet rather than a bar tab. On these the
+  // More tab carries the active treatment.
+  const SHEET_PAGES = ["minerals.html", "start.html", "login.html"];
+  const moreActive = SHEET_PAGES.indexOf(currentPage) !== -1;
+
+  let sheetOpen = false;
+  let moreBtn: HTMLButtonElement | null = null;
+
+  // --- Bottom bar ---
+  const bar = document.createElement("nav");
+  bar.className = "bottom-nav";
+  bar.setAttribute("aria-label", "Primary");
+
+  tabs.forEach((tab) => {
+    const isActive = tab.href ? currentPage === tab.href : moreActive;
+    const el: HTMLElement = tab.href
+      ? document.createElement("a")
+      : document.createElement("button");
+    el.className = "bottom-nav__tab" + (isActive ? " active" : "");
+    el.innerHTML =
+      '<span class="bottom-nav__pill">' +
+      _bnSvg(tab.icon) +
+      '</span><span class="bottom-nav__label">' +
+      tab.label +
+      "</span>";
+    if (tab.href) {
+      (el as HTMLAnchorElement).href = tab.href;
+      if (isActive) el.setAttribute("aria-current", "page");
+      el.addEventListener("click", (e) => {
+        if (sheetOpen) closeSheet();
+        // Same-page tap is a no-op (don't reload the page we're already on).
+        if (tab.href === currentPage) e.preventDefault();
+      });
+    } else {
+      const btn = el as HTMLButtonElement;
+      btn.type = "button";
+      btn.setAttribute("aria-haspopup", "dialog");
+      btn.setAttribute("aria-expanded", "false");
+      moreBtn = btn;
+      btn.addEventListener("click", () => (sheetOpen ? closeSheet() : openSheet()));
+    }
+    bar.appendChild(el);
+  });
+
+  // --- More sheet: scrim + panel ---
+  const scrim = document.createElement("div");
+  scrim.className = "more-scrim";
+
+  const sheet = document.createElement("div");
+  sheet.className = "more-sheet";
+  sheet.setAttribute("role", "dialog");
+  sheet.setAttribute("aria-modal", "true");
+  sheet.setAttribute("aria-label", "More");
+  sheet.innerHTML =
+    '<div class="more-sheet__grip" aria-hidden="true"></div>' +
+    '<div class="more-sheet__heading">More</div>' +
+    '<div class="more-sheet__list"></div>';
+  const list = sheet.querySelector(".more-sheet__list") as HTMLElement;
+
+  list.appendChild(
+    _buildSheetRow({
+      href: "minerals.html",
+      icon: BN_ICONS.sliders,
+      label: "Settings",
+      sub: "Minerals, units & preferences",
+    }),
+  );
+  list.appendChild(
+    _buildSheetRow({
+      href: "start.html",
+      icon: BN_ICONS.lightbulb,
+      label: "Beginners Guide",
+      sub: "New to coffee water? Start here",
+    }),
+  );
+
+  const divider = document.createElement("div");
+  divider.className = "more-sheet__divider";
+  list.appendChild(divider);
+
+  const accountWrap = document.createElement("div");
+  accountWrap.className = "more-sheet__account";
+  list.appendChild(accountWrap);
+
+  document.body.appendChild(bar);
+  document.body.appendChild(scrim);
+  document.body.appendChild(sheet);
+
+  function openSheet(): void {
+    sheetOpen = true;
+    scrim.classList.add("is-open");
+    sheet.classList.add("is-open");
+    if (moreBtn) {
+      moreBtn.classList.add("active");
+      moreBtn.setAttribute("aria-expanded", "true");
+    }
+    const firstRow = list.querySelector<HTMLElement>(".more-sheet__row");
+    if (firstRow) firstRow.focus();
+  }
+  function closeSheet(): void {
+    sheetOpen = false;
+    scrim.classList.remove("is-open");
+    sheet.classList.remove("is-open");
+    if (moreBtn) {
+      // Restore the active treatment to whatever the current page dictates.
+      if (!moreActive) moreBtn.classList.remove("active");
+      moreBtn.setAttribute("aria-expanded", "false");
+    }
+  }
+
+  scrim.addEventListener("click", closeSheet);
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sheetOpen) closeSheet();
+  });
+  // Tapping any sheet row dismisses the sheet (navigation rows then follow
+  // their href; action rows have already run their handler).
+  list.addEventListener("click", (e) => {
+    if ((e.target as HTMLElement).closest(".more-sheet__row")) closeSheet();
+  });
+
+  void _buildSheetAccount(accountWrap, currentPage);
 }
 
 function _buildNavGroup(
@@ -1256,6 +1563,12 @@ function showAccountDeletedFlashIfPending(): void {
 // --- Run shared UI setup on load ---
 document.addEventListener("DOMContentLoaded", () => {
   injectNav();
+  // Native (Capacitor) only: add the bottom tab bar + More sheet, and flag the
+  // body so CSS slims the top nav to a brand-only strip. Web is unchanged.
+  if (isNativeApp()) {
+    document.body.classList.add("is-capacitor");
+    injectBottomNav();
+  }
   applyMineralDisplayMode();
   initThemeListeners();
   showRecipesToaster();
