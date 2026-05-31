@@ -4837,7 +4837,7 @@ body.is-capacitor .recipes-toaster {
   stroke-width: 2.4;
 }
 .bottom-nav__tab.active .cw-bn-fill {
-  fill: currentColor;
+  fill: currentcolor;
   fill-opacity: 0.16;
 }
 
