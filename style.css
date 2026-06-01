@@ -1048,19 +1048,6 @@ select:focus {
   background: var(--blue-50);
 }
 
-/* Single-stock-active rule (PR #60 / B2-enforcement): when one stock is active,
-   the others remain visible + editable but are visually muted to signal that
-   they aren't dispensing. Clicking the checkbox auto-switches the active stock
-   (radio-like) — see minerals.html change handler. */
-.stock-concentrate-item.stock-other-active {
-  opacity: 0.65;
-}
-
-.stock-concentrate-item.stock-other-active:hover,
-.stock-concentrate-item.stock-other-active:focus-within {
-  opacity: 1;
-}
-
 .concentrate-label {
   display: flex;
   align-items: flex-start;

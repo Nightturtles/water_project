@@ -3,14 +3,13 @@ import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke for minerals.html (Settings) Recipe Concentrates section.
 //
-// Covers the single-stock-active rule (PR #60 contract enforced in B2-fix).
-// The Settings UI used to allow multiple stock checkboxes to be checked at
-// once, while the calculator only ever dispenses from the first stock id in
-// cw_selected_concentrates (getActiveStockId in storage.js). This caused a
-// silent desync — fixed by making the checkboxes radio-like (checking one
-// auto-unchecks any other) plus a normalize-on-render pass for legacy state.
+// Covers the multi-Recipe-Concentrate rule (v2 of B3): any number of stock
+// checkboxes can be checked at once, and the recipe builder + calculator sum
+// every enabled concentrate's contribution. This replaced the v1 single-active
+// rule (radio-like checkboxes, a normalize-on-render pass, and .stock-other-active
+// muting), all removed when setStockEnabled became an additive per-stock toggle.
 
-test.describe("minerals.html — Recipe Concentrates single-active rule", () => {
+test.describe("minerals.html — Recipe Concentrates multi-select", () => {
   const consoleErrors: string[] = [];
 
   test.beforeEach(async ({ page }) => {
@@ -62,7 +61,7 @@ test.describe("minerals.html — Recipe Concentrates single-active rule", () => 
     expect(consoleErrors).toEqual([]);
   });
 
-  test("checking a second stock auto-unchecks the first (radio-like)", async ({ page }) => {
+  test("checking a second stock keeps both checked (multi-select)", async ({ page }) => {
     const itemA = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-a"]');
     const itemB = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-b"]');
     const cbA = itemA.locator('input[type="checkbox"]');
@@ -73,36 +72,35 @@ test.describe("minerals.html — Recipe Concentrates single-active rule", () => 
     await expect(cbA).not.toBeChecked();
     await expect(cbB).not.toBeChecked();
 
-    // Activate A.
+    // Activate A, then B. B must NOT auto-uncheck A — both stay enabled.
     await cbA.click();
     await expect(cbA).toBeChecked();
     await expect(itemA).toHaveClass(/selected/);
-    // B is now visually muted (.stock-other-active) because A is active.
-    await expect(itemB).toHaveClass(/stock-other-active/);
 
-    // Activate B — should auto-uncheck A.
     await cbB.click();
     await expect(cbB).toBeChecked();
-    await expect(cbA).not.toBeChecked();
+    await expect(cbA).toBeChecked();
+    await expect(itemA).toHaveClass(/selected/);
     await expect(itemB).toHaveClass(/selected/);
-    await expect(itemA).not.toHaveClass(/selected/);
-    await expect(itemA).toHaveClass(/stock-other-active/);
+
+    // No row is muted — .stock-other-active was removed with the single-active rule.
+    await expect(itemA).not.toHaveClass(/stock-other-active/);
     await expect(itemB).not.toHaveClass(/stock-other-active/);
 
-    // Persisted state has only B's id.
-    const stored = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("cw_selected_concentrates") || "[]"),
+    // Persisted state carries BOTH stock ids.
+    const stockIds = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("cw_selected_concentrates") || "[]").filter(
+        (id: string) => typeof id === "string" && id.startsWith("stock:"),
+      ),
     );
-    const stockIds = stored.filter(
-      (id: unknown) => typeof id === "string" && id.startsWith("stock:"),
-    );
-    expect(stockIds).toEqual(["stock:test-stock-b"]);
+    expect(stockIds.sort()).toEqual(["stock:test-stock-a", "stock:test-stock-b"]);
   });
 
-  test("normalizes pre-rule legacy multi-stock state on page load", async ({ page }) => {
-    // Simulate a user who shipped both stocks selected before the rule landed.
-    // The page should drop all but the first on render, matching what
-    // getActiveStockId in storage.js would resolve at calc time.
+  test("pre-existing multi-stock state is preserved on page load (no normalize)", async ({
+    page,
+  }) => {
+    // The v1 normalize-on-render pass that dropped all but the first stock is
+    // gone; both selections must survive a reload.
     await page.evaluate(() => {
       localStorage.setItem(
         "cw_selected_concentrates",
@@ -118,45 +116,39 @@ test.describe("minerals.html — Recipe Concentrates single-active rule", () => 
       '.stock-concentrate-item[data-stock-slug="test-stock-b"] input[type="checkbox"]',
     );
     await expect(cbA).toBeChecked();
-    await expect(cbB).not.toBeChecked();
+    await expect(cbB).toBeChecked();
 
-    const stored = await page.evaluate(() =>
-      JSON.parse(localStorage.getItem("cw_selected_concentrates") || "[]"),
+    const stockIds = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("cw_selected_concentrates") || "[]").filter(
+        (id: string) => typeof id === "string" && id.startsWith("stock:"),
+      ),
     );
-    expect(stored.filter((id: string) => id.startsWith("stock:"))).toEqual(["stock:test-stock-a"]);
+    expect(stockIds.sort()).toEqual(["stock:test-stock-a", "stock:test-stock-b"]);
   });
 
-  test("stale active slug from storage doesn't mute rendered rows", async ({ page }) => {
-    // Regression: if cw_selected_concentrates carries a stock:* id whose spec
-    // was deleted (or is from a cross-device sync of an unknown stock), the
-    // pre-fix updateStockLockState treated it as "active" and muted every
-    // rendered row (since none matched the stale slug). Fix: verify the
-    // active slug has a DOM row before applying .stock-other-active.
-    await page.evaluate(() => {
-      localStorage.setItem("cw_selected_concentrates", JSON.stringify(["stock:no-such-stock"]));
-    });
-    await page.reload();
-
-    const itemA = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-a"]');
-    const itemB = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-b"]');
-    await expect(itemA).toBeVisible();
-    await expect(itemB).toBeVisible();
-    await expect(itemA).not.toHaveClass(/stock-other-active/);
-    await expect(itemB).not.toHaveClass(/stock-other-active/);
-  });
-
-  test("unchecking the active stock leaves both rows unmuted", async ({ page }) => {
+  test("unchecking one stock leaves the other enabled (additive toggle)", async ({ page }) => {
     const itemA = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-a"]');
     const itemB = page.locator('.stock-concentrate-item[data-stock-slug="test-stock-b"]');
     const cbA = itemA.locator('input[type="checkbox"]');
+    const cbB = itemB.locator('input[type="checkbox"]');
 
     await cbA.click();
-    await expect(itemB).toHaveClass(/stock-other-active/);
+    await cbB.click();
+    await expect(cbA).toBeChecked();
+    await expect(cbB).toBeChecked();
 
-    await cbA.click(); // uncheck
+    // Uncheck A — B stays enabled and selected (no clobber).
+    await cbA.click();
     await expect(cbA).not.toBeChecked();
     await expect(itemA).not.toHaveClass(/selected/);
-    await expect(itemA).not.toHaveClass(/stock-other-active/);
-    await expect(itemB).not.toHaveClass(/stock-other-active/);
+    await expect(cbB).toBeChecked();
+    await expect(itemB).toHaveClass(/selected/);
+
+    const stockIds = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("cw_selected_concentrates") || "[]").filter(
+        (id: string) => typeof id === "string" && id.startsWith("stock:"),
+      ),
+    );
+    expect(stockIds).toEqual(["stock:test-stock-b"]);
   });
 });
