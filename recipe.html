@@ -391,12 +391,14 @@
     const mineralInputsHome = mineralInputsEl ? mineralInputsEl.parentNode : null;
     const mineralInputsAnchor = mineralInputsEl ? mineralInputsEl.nextSibling : null;
 
-    // Active stock for v1: first stock:* concentrate enabled in Settings.
-    // Manual mode just ignores stocks; stock mode uses this one. Helper
-    // pair lives in storage.js so all three call sites (calculator, recipe
-    // builder, future spots) share one definition of "active".
-    const activeStockId = typeof getActiveStockId === "function" ? getActiveStockId(selectedConcentrates) : null;
-    const activeStockSpec = typeof getActiveStockSpec === "function" ? getActiveStockSpec(selectedConcentrates) : null;
+    // Every "stock:*" id enabled in Settings. Manual mode ignores all of
+    // them; Recipe-Concentrate mode dispenses from each one and sums the
+    // contributions into the final ion profile. getActiveStockSpecs filters
+    // orphan ids (selection references a deleted spec) so each entry is a
+    // resolved { id, spec } pair safe to render and compute.
+    const activeStockEntries =
+      typeof getActiveStockSpecs === "function" ? getActiveStockSpecs(selectedConcentrates) : [];
+    const hasAnyActiveStock = activeStockEntries.length > 0;
 
     function loadRecipeMineralInputs() {
       const parsed = safeParse(_getTransient("cw_recipe_mineral_inputs"), {});
@@ -436,9 +438,9 @@
     function loadRecipeDispenseMode() {
       const raw = _getTransient("cw_recipe_dispense_mode");
       if (raw === "manual" || raw === "stock") return raw;
-      // Default: stock mode when a stock is enabled (matches likely intent of
-      // the user enabling it in Settings); manual otherwise.
-      return activeStockSpec ? "stock" : "manual";
+      // Default: Recipe-Concentrate mode when at least one is enabled (matches
+      // likely intent of the user enabling it in Settings); manual otherwise.
+      return hasAnyActiveStock ? "stock" : "manual";
     }
 
     function saveRecipeDispenseMode(mode) {
@@ -465,7 +467,7 @@
     const recipeMineralInputs = loadRecipeMineralInputs();
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
     const recipeStockGrams = loadRecipeStockGrams();
-    let recipeDispenseMode = activeStockSpec ? loadRecipeDispenseMode() : "manual";
+    let recipeDispenseMode = hasAnyActiveStock ? loadRecipeDispenseMode() : "manual";
 
     function normalizeRecipeLotusInputValue(savedVal) {
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
@@ -725,86 +727,101 @@
       return v;
     }
 
-    // Total grams of the active stock that recalculate should treat as
-    // dispensed: the user's persisted override if set, otherwise the live
+    // Total grams of a given Recipe Concentrate that recalculate should treat
+    // as dispensed: the user's persisted override if set, otherwise the live
     // default of `doseGramsPerL × volumeL`. Keeping the default *unpersisted*
     // is what lets the displayed grams scale with volume changes — once we
     // wrote a default into recipeStockGrams it'd freeze and stay stale.
-    function getEffectiveStockTotalGrams(volumeL) {
-      if (!activeStockSpec || !activeStockId) return 0;
-      const savedRaw = recipeStockGrams[activeStockId];
+    function getEffectiveStockTotalGrams(stockId, spec, volumeL) {
+      if (!spec || !stockId) return 0;
+      const savedRaw = recipeStockGrams[stockId];
       if (savedRaw != null) {
         return Math.max(0, parseFloat(savedRaw) || 0);
       }
-      const dosePerL = Number(activeStockSpec.doseGramsPerL) || 0;
+      const dosePerL = Number(spec.doseGramsPerL) || 0;
       const v = Number(volumeL) || 0;
       return dosePerL > 0 && v > 0 ? dosePerL * v : 0;
     }
 
-    // Refresh the stock input's displayed value to the live default. Skipped
-    // when the user has saved an override — explicit overrides should
-    // persist across volume changes and only get cleared via direct edit.
+    // Refresh every Recipe-Concentrate row's displayed value to the live
+    // default for the current volume. Skipped per-row when the user has saved
+    // an override — explicit overrides should persist across volume changes
+    // and only get cleared via direct edit.
     function refreshStockInputDisplay() {
-      if (!activeStockSpec || !activeStockId || !stockInputsEl) return;
-      if (recipeStockGrams[activeStockId] != null) return;
-      const input = stockInputsEl.querySelector(
-        'input[data-stock-id="' + CSS.escape(activeStockId) + '"]',
-      );
-      if (!input) return;
-      input.value = String(getEffectiveStockTotalGrams(getCurrentRecipeVolumeL()));
+      if (!stockInputsEl || activeStockEntries.length === 0) return;
+      const volumeL = getCurrentRecipeVolumeL();
+      for (const { id, spec } of activeStockEntries) {
+        if (recipeStockGrams[id] != null) continue;
+        const input = stockInputsEl.querySelector(
+          'input[data-stock-id="' + CSS.escape(id) + '"]',
+        );
+        if (!input) continue;
+        input.value = String(getEffectiveStockTotalGrams(id, spec, volumeL));
+      }
     }
 
     function buildStockDispenseUI() {
       if (!stockInputsEl) return;
       stockInputsEl.innerHTML = "";
-      if (!activeStockSpec || !activeStockId) return;
+      if (activeStockEntries.length === 0) return;
 
-      const initialGrams = getEffectiveStockTotalGrams(getCurrentRecipeVolumeL());
+      const volumeL = getCurrentRecipeVolumeL();
+      for (const { id: stockId, spec: activeStockSpec } of activeStockEntries) {
+        const initialGrams = getEffectiveStockTotalGrams(stockId, activeStockSpec, volumeL);
 
-      const div = document.createElement("div");
-      div.className = "mineral-input-row";
-      div.dataset.stockId = activeStockId;
+        const div = document.createElement("div");
+        div.className = "mineral-input-row";
+        div.dataset.stockId = stockId;
 
-      const info = document.createElement("div");
-      info.className = "mineral-input-info";
-      const nameSpan = document.createElement("span");
-      nameSpan.className = "mineral-input-name";
-      nameSpan.textContent = activeStockSpec.label || activeStockId;
-      const stockBadge = document.createElement("span");
-      stockBadge.className = "badge badge-concentrate";
-      stockBadge.textContent = "CONCENTRATE";
-      nameSpan.appendChild(stockBadge);
-      const formulaSpan = document.createElement("span");
-      formulaSpan.className = "mineral-input-formula";
-      formulaSpan.textContent = formatStockMineralList(activeStockSpec);
-      info.appendChild(nameSpan);
-      info.appendChild(formulaSpan);
+        const info = document.createElement("div");
+        info.className = "mineral-input-info";
+        const nameSpan = document.createElement("span");
+        nameSpan.className = "mineral-input-name";
+        nameSpan.textContent = activeStockSpec.label || stockId;
+        const stockBadge = document.createElement("span");
+        stockBadge.className = "badge badge-concentrate";
+        stockBadge.textContent = "CONCENTRATE";
+        nameSpan.appendChild(stockBadge);
+        const formulaSpan = document.createElement("span");
+        formulaSpan.className = "mineral-input-formula";
+        formulaSpan.textContent = formatStockMineralList(activeStockSpec);
+        info.appendChild(nameSpan);
+        info.appendChild(formulaSpan);
 
-      const field = document.createElement("div");
-      field.className = "mineral-input-field";
-      const input = document.createElement("input");
-      input.type = "number";
-      input.id = "add-stock-" + activeStockId;
-      input.value = String(initialGrams);
-      input.min = "0";
-      input.step = "0.01";
-      input.dataset.stockId = activeStockId;
-      const unit = document.createElement("span");
-      unit.className = "mineral-input-unit";
-      unit.textContent = "g";
-      field.appendChild(input);
-      field.appendChild(unit);
+        const field = document.createElement("div");
+        field.className = "mineral-input-field";
+        const input = document.createElement("input");
+        input.type = "number";
+        input.id = "add-stock-" + stockId;
+        input.value = String(initialGrams);
+        input.min = "0";
+        input.step = "0.01";
+        input.dataset.stockId = stockId;
+        const unit = document.createElement("span");
+        unit.className = "mineral-input-unit";
+        unit.textContent = "g";
+        field.appendChild(input);
+        field.appendChild(unit);
 
-      div.appendChild(info);
-      div.appendChild(field);
-      stockInputsEl.appendChild(div);
+        div.appendChild(info);
+        div.appendChild(field);
+        stockInputsEl.appendChild(div);
 
-      input.addEventListener("input", () => {
-        recipeStockGrams[activeStockId] = input.value;
-        saveRecipeStockGrams(recipeStockGrams);
-        clearLastSavedTargetState();
-        debouncedRecalculate();
-      });
+        input.addEventListener("input", () => {
+          // Empty field = "use the default dose": clear the override rather
+          // than persisting "" (getEffectiveStockTotalGrams treats any non-null
+          // entry as a hard override, which would otherwise freeze the row at
+          // 0 g until the key is cleared).
+          if (input.value === "") {
+            delete recipeStockGrams[stockId];
+          } else {
+            recipeStockGrams[stockId] = input.value;
+          }
+          saveRecipeStockGrams(recipeStockGrams);
+          clearLastSavedTargetState();
+          debouncedRecalculate();
+        });
+      }
     }
 
     // Move #mineral-inputs out of the supplement details panel back to its
@@ -846,7 +863,7 @@
     let suppressSupplementPanelToggleSave = false;
 
     function applyDispenseModeUI() {
-      if (!activeStockSpec) {
+      if (!hasAnyActiveStock) {
         if (dispenseModeToggleEl) dispenseModeToggleEl.style.display = "none";
         if (stockInputsEl) stockInputsEl.style.display = "none";
         if (supplementPanelEl) supplementPanelEl.hidden = true;
@@ -882,9 +899,20 @@
         }
         if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (mineralInputsHintEl) {
+          const labels = activeStockEntries.map(({ id, spec }) => spec.label || id);
+          const labelText =
+            labels.length === 1
+              ? labels[0]
+              : labels.length === 2
+                ? labels.join(" and ")
+                : labels.slice(0, -1).join(", ") + ", and " + labels[labels.length - 1];
+          const noun = labels.length === 1 ? "Recipe Concentrate" : "Recipe Concentrates";
           mineralInputsHintEl.textContent =
-            "Enter total grams of " + (activeStockSpec.label || activeStockId) +
-            " recipe concentrate dispensed for the volume above. Default is the prescribed dose. " +
+            "Enter total grams of " +
+            labelText +
+            " " +
+            noun +
+            " dispensed for the volume above. Default is each one's prescribed dose. " +
             "Use the supplement panel below to layer in extra minerals or Mineral Concentrates.";
         }
       } else {
@@ -1008,14 +1036,17 @@
       // Collect total grams of each mineral, convert to grams per liter for ion calculation
       const mineralGramsPerLiter = {};
       if (volumeL > 0) {
-        if (recipeDispenseMode === "stock" && activeStockSpec) {
-          // Recipe-Concentrate mode: distribute total grams across the formula's
-          // minerals. Routing through computeStockMineralGramsPerL keeps the
+        if (recipeDispenseMode === "stock" && hasAnyActiveStock) {
+          // Recipe-Concentrate mode: distribute each enabled concentrate's
+          // total dispensed grams across its formula minerals, then sum
+          // contributions across all active concentrates. Routing through
+          // computeStockMineralGramsPerL keeps the
           //   (grams / bottleMl) * totalStockGrams / volumeL
           // formula in one place — same convention as the seeding script and
           // the calculator's Recipe-Concentrate branch.
-          const totalStockGrams = getEffectiveStockTotalGrams(volumeL);
-          if (totalStockGrams > 0) {
+          for (const { id: stockId, spec: activeStockSpec } of activeStockEntries) {
+            const totalStockGrams = getEffectiveStockTotalGrams(stockId, activeStockSpec, volumeL);
+            if (totalStockGrams <= 0) continue;
             const effectiveSpec = Object.assign({}, activeStockSpec, {
               doseGramsPerL: totalStockGrams / volumeL,
             });

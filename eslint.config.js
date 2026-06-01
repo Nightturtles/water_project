@@ -92,13 +92,13 @@ module.exports = tseslint.config(
       // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
       // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
       // load/saveSelectedConcentrates, load/saveLotusDropperType,
-      // loadStockConcentrateSpecs, getActiveStockId, writeActiveStockId).
+      // loadStockConcentrateSpecs, getActiveStockIds, setStockEnabled).
       "mineral-selector.js",
       // stock-editor: modal editor for stock concentrate solutions.
       // Depends on globals from constants.js (MINERAL_DB,
       // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
       // (load/saveStockConcentrateSpecs, load/saveSelectedConcentrates,
-      // writeActiveStockId, slugify), plus showConfirm from ui-shared.ts.
+      // setStockEnabled, slugify), plus showConfirm from ui-shared.ts.
       "stock-editor.js",
       // diy-editor: modal editor for single-mineral DIY concentrate specs.
       // Depends on globals from constants.js (MINERAL_DB,
