@@ -808,7 +808,15 @@
         stockInputsEl.appendChild(div);
 
         input.addEventListener("input", () => {
-          recipeStockGrams[stockId] = input.value;
+          // Empty field = "use the default dose": clear the override rather
+          // than persisting "" (getEffectiveStockTotalGrams treats any non-null
+          // entry as a hard override, which would otherwise freeze the row at
+          // 0 g until the key is cleared).
+          if (input.value === "") {
+            delete recipeStockGrams[stockId];
+          } else {
+            recipeStockGrams[stockId] = input.value;
+          }
           saveRecipeStockGrams(recipeStockGrams);
           clearLastSavedTargetState();
           debouncedRecalculate();

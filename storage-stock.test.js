@@ -549,10 +549,29 @@ describe("getActiveStockIds / getActiveStockSpecs (multi-active)", () => {
     expect(getActiveStockIds(["diy:calcium-chloride", "brand:lotus:1"])).toEqual([]);
   });
 
-  test("singular shim getActiveStockId returns first element or null", () => {
+  test("singular shim getActiveStockId returns the first RESOLVED id, aligned with getActiveStockSpec", () => {
+    saveStockConcentrateSpecs({
+      rao: {
+        label: "Rao",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+      },
+      eils: {
+        label: "Eils",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "calcium-chloride", grams: 3 }],
+      },
+    });
     expect(getActiveStockId(["stock:rao", "stock:eils"])).toBe("stock:rao");
     expect(getActiveStockId(["diy:calcium-chloride"])).toBe(null);
     expect(getActiveStockId([])).toBe(null);
+    // An orphaned first id is skipped so the singular id and spec stay aligned.
+    expect(getActiveStockId(["stock:deleted", "stock:rao"])).toBe("stock:rao");
+    expect(getActiveStockSpec(["stock:deleted", "stock:rao"])).toEqual(
+      expect.objectContaining({ label: "Rao" }),
+    );
   });
 
   test("getActiveStockSpecs resolves each stock id to its spec, preserving order", () => {

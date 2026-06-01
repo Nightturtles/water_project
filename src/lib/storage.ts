@@ -863,12 +863,14 @@ export function getActiveStockIds(concentrateIds: unknown): string[] {
 }
 
 /**
- * Singular shim — returns the first active "stock:<slug>" id, or null. Kept
- * for the small number of call sites that legitimately want a representative
- * id. New code should use getActiveStockIds and iterate.
+ * Singular shim — returns the id of the first active stock whose spec resolves
+ * (skipping orphaned ids whose spec was deleted), or null. Aligned with
+ * getActiveStockSpec so the singular id and singular spec never refer to
+ * different concentrates. New code should use getActiveStockSpecs and iterate.
  */
 export function getActiveStockId(concentrateIds: unknown): string | null {
-  return getActiveStockIds(concentrateIds)[0] || null;
+  const first = getActiveStockSpecs(concentrateIds)[0];
+  return first ? first.id : null;
 }
 
 /**

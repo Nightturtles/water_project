@@ -1628,10 +1628,17 @@ window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 
 // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
 if (typeof onStorageKeysChanged === "function") {
-  onStorageKeysChanged(["cw_selected_minerals", "cw_selected_concentrates"], function () {
-    renderResultItems();
-    calculate();
-  });
+  // Include cw_stock_concentrate_specs: the calculator reads concentrate specs
+  // for labels, formulas, orphan filtering, and dose totals, so editing a
+  // Recipe Concentrate in Settings (another tab) must refresh the rows + doses
+  // here, not just selection changes.
+  onStorageKeysChanged(
+    ["cw_selected_minerals", "cw_selected_concentrates", "cw_stock_concentrate_specs"],
+    function () {
+      renderResultItems();
+      calculate();
+    },
+  );
 }
 
 // --- Refresh on bfcache restore ---
