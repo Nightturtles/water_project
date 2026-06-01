@@ -926,6 +926,59 @@ select:focus {
   padding-right: 0;
 }
 
+.recipe-supplement-panel {
+  margin-top: 0.5rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 0;
+  background: var(--gray-100);
+}
+
+.recipe-supplement-panel > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--gray-700);
+  user-select: none;
+}
+
+.recipe-supplement-panel > summary::-webkit-details-marker {
+  display: none;
+}
+
+.recipe-supplement-panel > summary::before {
+  content: "\25B8";
+  display: inline-block;
+  width: 1em;
+  margin-right: 0.25em;
+  color: var(--gray-500);
+  transition: transform 0.15s ease;
+}
+
+.recipe-supplement-panel[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+.recipe-supplement-panel > .mineral-inputs {
+  padding: 0 0.75rem 0.75rem;
+}
+
+.recipe-solubility-warning {
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--orange-600);
+  background: var(--orange-bg);
+}
+
+.recipe-solubility-warning[hidden] {
+  display: none;
+}
+
 /* ========================
    Minerals page
    ======================== */

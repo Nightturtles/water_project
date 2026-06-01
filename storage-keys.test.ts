@@ -35,6 +35,7 @@ const CATEGORY_A_EXPECTED = [
   "cw_recipe_concentrate_inputs",
   "cw_recipe_stock_grams",
   "cw_recipe_dispense_mode",
+  "cw_recipe_supplement_panel_open",
   "cw_target_draft_ions",
 ];
 const CATEGORY_B_EXPECTED = [
