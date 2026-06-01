@@ -55,6 +55,17 @@ declare global {
     [key: string]: unknown;
   }
 
+  // A Recipe Concentrate spec (internal name: "stock"): a multi-mineral bottle
+  // dosed by g/L. Defined in src/lib/storage.ts; mirrored here as a global for
+  // the classic JS files (metrics.js inverse solver) that reference it.
+  interface StockConcentrateSpec {
+    label?: string;
+    bottleMl?: number;
+    doseGramsPerL?: number;
+    minerals?: Array<{ mineralId: string; grams: number }>;
+    [key: string]: unknown;
+  }
+
   // --- Constants from constants.js (classic-script globals) ---
   const MINERAL_DB: Record<string, MineralEntry>;
   const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: Record<string, number>;
@@ -129,6 +140,12 @@ declare global {
   function loadSourcePresetName(): string;
   function loadBrewMethod(): string;
   function isReservedTargetKey(key: string): boolean;
+  // From src/lib/storage.ts (bridged onto window) — distributes a Recipe
+  // Concentrate's prescribed dose across its mineral formula (g/L of each
+  // mineral). Called by metrics.js's solveCalculatorDosing.
+  function computeStockMineralGramsPerL(
+    spec: StockConcentrateSpec | null | undefined,
+  ): Record<string, number>;
 
   // From src/lib/html.ts — shared HTML-escaper, bridged onto window so the
   // classic UI scripts (diy-editor.js, stock-editor.js, minerals.html inline)
