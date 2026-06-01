@@ -839,6 +839,12 @@
       return false;
     }
 
+    // Set true synchronously right before applyDispenseModeUI flips
+    // supplementPanelEl.open from script, so the toggle listener (which fires
+    // for programmatic .open changes too) can skip persisting that change as a
+    // user preference.
+    let suppressSupplementPanelToggleSave = false;
+
     function applyDispenseModeUI() {
       if (!activeStockSpec) {
         if (dispenseModeToggleEl) dispenseModeToggleEl.style.display = "none";
@@ -866,7 +872,13 @@
           supplementPanelEl.hidden = false;
           moveMineralInputsToSupplementPanel();
           const savedOpen = loadRecipeSupplementPanelOpen();
-          supplementPanelEl.open = savedOpen != null ? savedOpen : hasAnySupplementValue();
+          const nextOpen = savedOpen != null ? savedOpen : hasAnySupplementValue();
+          // Only set when the value actually changes: otherwise no toggle event
+          // fires and the suppress flag would leak to the next (user) toggle.
+          if (supplementPanelEl.open !== nextOpen) {
+            suppressSupplementPanelToggleSave = true;
+            supplementPanelEl.open = nextOpen;
+          }
         }
         if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (mineralInputsHintEl) {
@@ -903,15 +915,19 @@
     }
 
     // Persist the supplement-panel open/closed state across visits, so a user
-    // who expanded it on one device sees it expanded on the next. Only persist
-    // USER-initiated toggles: setting `.open` programmatically in
-    // applyDispenseModeUI also fires this event (per the HTML spec), and saving
-    // there would write the computed default as a sticky preference and trigger
-    // a redundant cloud sync on every load. event.isTrusted is true only for a
-    // real user gesture on the summary.
+    // who expanded it on one device sees it expanded on the next. The toggle
+    // event also fires when applyDispenseModeUI sets .open from script (the
+    // user agent fires it either way, so it is isTrusted in both cases), so a
+    // bare save here would write the computed default as a sticky preference
+    // and trigger a redundant cloud sync on every load. The
+    // suppressSupplementPanelToggleSave flag, set just before that programmatic
+    // change, lets us skip persisting it.
     if (supplementPanelEl) {
-      supplementPanelEl.addEventListener("toggle", (e) => {
-        if (!e.isTrusted) return;
+      supplementPanelEl.addEventListener("toggle", () => {
+        if (suppressSupplementPanelToggleSave) {
+          suppressSupplementPanelToggleSave = false;
+          return;
+        }
         saveRecipeSupplementPanelOpen(supplementPanelEl.open);
       });
     }
