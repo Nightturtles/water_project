@@ -4,6 +4,10 @@
 // `require()` (not `import`) is deliberate so the constants.js side-effect of
 // populating globalThis happens before metrics.js is evaluated.
 import { describe, test, expect } from "vitest";
+// solveCalculatorDosing (metrics.js) calls computeStockMineralGramsPerL as a
+// global; importing storage publishes it onto window (= global in vitest, via
+// vitest.setup.js). Mirrors storage-stock.test.js.
+import "./src/lib/storage";
 
 require("./constants.js");
 const metrics = require("./metrics.js");
@@ -489,5 +493,287 @@ describe("getRecipeOverLimitMineralIds", () => {
         "baking-soda": -5,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("solveNNLS", () => {
+  test("identity 1×1 — trivial scaling", () => {
+    // 2 * x = 6 → x = 3
+    const x = metrics.solveNNLS([[2]], [6]);
+    expect(x[0]).toBeCloseTo(3, 6);
+  });
+
+  test("over-determined, exact fit — solves to zero residual", () => {
+    // x1 + x2 = 3, 2x1 - x2 = 0 → x1 = 1, x2 = 2.
+    const x = metrics.solveNNLS(
+      [
+        [1, 1],
+        [2, -1],
+      ],
+      [3, 0],
+    );
+    expect(x[0]).toBeCloseTo(1, 6);
+    expect(x[1]).toBeCloseTo(2, 6);
+  });
+
+  test("returns non-negative solution — clamps a would-be negative", () => {
+    // Unconstrained LS to fit b=[1,-1] with A=[[1,0],[0,1]] would be x=[1,-1].
+    // NNLS must clamp the second component to 0 and refit x1, giving x=[1,0].
+    const x = metrics.solveNNLS(
+      [
+        [1, 0],
+        [0, 1],
+      ],
+      [1, -1],
+    );
+    expect(x[0]).toBeCloseTo(1, 6);
+    expect(x[1]).toBe(0);
+  });
+
+  test("empty A returns empty x", () => {
+    expect(metrics.solveNNLS([], [])).toEqual([]);
+  });
+
+  test("infeasible target — residual remains positive, no negative entries", () => {
+    // Single column [1, 1]; b=[2, 0]. Best non-negative scaling is x≈[1].
+    const x = metrics.solveNNLS([[1], [1]], [2, 0]);
+    expect(x[0]).toBeGreaterThanOrEqual(0);
+    expect(x[0]).toBeCloseTo(1, 6);
+  });
+});
+
+describe("solveCalculatorDosing", () => {
+  const distilled = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
+  };
+
+  // Synthetic single-mineral "unit concentrate" for testing — pick bottleMl
+  // and grams so each gram of dispensed concentrate equals one gram of the
+  // underlying salt in brew water. From computeStockMineralGramsPerL:
+  //   g/L of mineral = (grams / bottleMl) * doseGramsPerL
+  // So bottleMl=1, grams=1, doseGramsPerL=1 makes the math 1:1 — solver
+  // expectations can be reasoned about as if the concentrate were the raw
+  // mineral salt. Not a realistic concentrate (a 1 mL bottle is absurd) —
+  // strictly a test fixture for clean unit-dose math.
+  function unitCaConcentrate() {
+    return {
+      bottleMl: 1,
+      doseGramsPerL: 1,
+      minerals: [{ mineralId: "calcium-chloride", grams: 1 }],
+    };
+  }
+
+  test("no concentrates and no minerals → zero doses, residual = target", () => {
+    const result = metrics.solveCalculatorDosing(distilled, { calcium: 50 }, [], []);
+    expect(result.concentrateGramsPerL).toEqual({});
+    expect(result.mineralGramsPerL).toEqual({});
+    expect(result.residualIons.calcium).toBeCloseTo(50, 6);
+  });
+
+  test("single concentrate is scaled by the solver — Ca target with matching Cl", () => {
+    // 1 g/L of CaCl2 contributes ~272.7 mg/L Ca and ~482.6 mg/L Cl. With a
+    // target that includes the Cl that CaCl2 produces (no overshoot penalty),
+    // the solver picks x ≈ 50 / 272.7 ≈ 0.183 g/L to hit Ca exactly. This is
+    // the "best case" where the target ion ratio matches the source's.
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 50, chloride: 88.5 },
+      [{ id: "stock:test", spec: unitCaConcentrate() }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:test"]).toBeGreaterThan(0.15);
+    expect(result.concentrateGramsPerL["stock:test"]).toBeLessThan(0.25);
+    expect(Math.abs(result.residualIons.calcium)).toBeLessThan(1);
+  });
+
+  test("squared-error compromise when target ignores a side-ion", () => {
+    // Target only specifies Ca; Cl is implicitly 0. Solver minimizes
+    // ||A·x - b||² across all 7 ions, so dosing CaCl2 to hit Ca exactly
+    // would incur a huge Cl-overshoot penalty. The optimal x balances the
+    // two: x = (50·272.7) / (272.7² + 482.6²) ≈ 0.044 g/L.
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 50 },
+      [],
+      ["calcium-chloride"],
+    );
+    expect(result.mineralGramsPerL["calcium-chloride"]).toBeGreaterThan(0.02);
+    expect(result.mineralGramsPerL["calcium-chloride"]).toBeLessThan(0.07);
+  });
+
+  test("doses are never negative", () => {
+    // Source already over target on Ca — solver should pick zero dose
+    // rather than negative.
+    const result = metrics.solveCalculatorDosing(
+      { ...distilled, calcium: 100 },
+      { calcium: 50 },
+      [],
+      ["calcium-chloride"],
+    );
+    expect(result.mineralGramsPerL["calcium-chloride"]).toBeGreaterThanOrEqual(0);
+  });
+
+  test("snaps to prescribed dose when within 5% — handles derive-formula rounding", () => {
+    // deriveStockFormulaFromTarget rounds salt grams to 0.1g; for a small
+    // target like Cafelytic Filter (Ca=4, Mg=10, K=8.65, Cl=34.05, HCO3=13.18)
+    // the rounded concentrate at its prescribed 4 g/L dose overshoots Cl by
+    // ~2 mg/L and undershoots Ca by ~0.18 mg/L. Without snapping, the solver
+    // picks ~3.82 g/L to minimize squared error. With snapping, ~3.82 falls
+    // within 5% of 4 → snaps to exactly 4 g/L (the prescribed dose).
+    const target = {
+      calcium: 4,
+      magnesium: 10,
+      potassium: 8.65,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 34.05,
+      bicarbonate: 13.18,
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(target, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: derived.minerals,
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      target,
+      [{ id: "stock:cafelytic-filter", spec }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:cafelytic-filter"]).toBe(4);
+  });
+
+  test("snaps to prescribed when multiple concentrates are enabled but one dominates", () => {
+    // Multi-concentrate case from user feedback: with Cafelytic Filter
+    // target + Cafelytic Filter Recipe Concentrate + two unrelated
+    // concentrates also enabled, NNLS finds a marginally-better fit by
+    // using tiny doses of the unrelated concentrates, which pulls the
+    // dominant Filter concentrate's dose down to ~3.70 g/L (7.5% off
+    // prescribed 4 g/L). The snap should still recognize Filter as
+    // operating at its prescribed dose and zero out the noise.
+    const filterTarget = {
+      calcium: 4,
+      magnesium: 10,
+      potassium: 8.65,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 34.05,
+      bicarbonate: 13.18,
+    };
+    const filterDerived = metrics.deriveStockFormulaFromTarget(filterTarget, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const espressoTarget = {
+      calcium: 13,
+      magnesium: 5.5,
+      potassium: 22.8,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 36.6,
+      bicarbonate: 34.8,
+    };
+    const espressoDerived = metrics.deriveStockFormulaFromTarget(espressoTarget, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const entries = [
+      {
+        id: "stock:filter",
+        spec: { bottleMl: 200, doseGramsPerL: 4, minerals: filterDerived.minerals },
+      },
+      {
+        id: "stock:espresso",
+        spec: { bottleMl: 200, doseGramsPerL: 4, minerals: espressoDerived.minerals },
+      },
+    ];
+    const result = metrics.solveCalculatorDosing(distilled, filterTarget, entries, []);
+    expect(result.concentrateGramsPerL["stock:filter"]).toBe(4);
+    expect(result.concentrateGramsPerL["stock:espresso"]).toBe(0);
+  });
+
+  test("does NOT snap when solver picks a dose significantly off prescribed", () => {
+    // Two-mineral concentrate scaled at unit bottleMl/doseGramsPerL. Target
+    // has 5× more Ca than the concentrate provides at prescribed dose, so
+    // the solver picks ~5 g/L, which is far above the 1 g/L prescribed and
+    // outside the snap tolerance. Snap stays inactive.
+    const spec = unitCaConcentrate();
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 1363, chloride: 2413 }, // 5× the unit concentrate's per-g/L delivery
+      [{ id: "stock:test", spec }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:test"]).toBeGreaterThan(2);
+    expect(result.concentrateGramsPerL["stock:test"]).not.toBe(1);
+  });
+
+  test("identifies the largest residual ion", () => {
+    // No dosing options; residual = target. Largest residual is whichever
+    // ion has the biggest target value.
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 50, magnesium: 100 },
+      [],
+      [],
+    );
+    expect(result.maxResidualIon).not.toBeNull();
+    expect(result.maxResidualIon.ion).toBe("magnesium");
+    expect(result.maxResidualIon.residual).toBeCloseTo(100, 6);
+  });
+
+  test("Cafelytic Espresso concentrate at its own target snaps to prescribed (reproduction case)", () => {
+    // The reported bug: a concentrate derived from a recipe, dosed against
+    // that same recipe, must show the prescribed dose (not a scaled approx).
+    const target = {
+      calcium: 2.16,
+      magnesium: 8.65,
+      potassium: 13.51,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 29.19,
+      bicarbonate: 21.09,
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(target, {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+    });
+    const spec = { bottleMl: 200, doseGramsPerL: 4, minerals: derived.minerals };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      target,
+      [{ id: "stock:cafelytic-espresso", spec }],
+      [],
+    );
+    expect(result.concentrateGramsPerL["stock:cafelytic-espresso"]).toBe(4);
+    expect(Math.abs(result.maxResidualIon.residual)).toBeLessThan(5);
+  });
+
+  test("under-target alkalinity leaves a positive bicarbonate residual for gap-fill", () => {
+    // A concentrate with no bicarbonate can't satisfy an alkalinity target;
+    // the bicarbonate residual must stay positive so the calculator suggests
+    // a buffer supplement.
+    const spec = {
+      bottleMl: 1,
+      doseGramsPerL: 1,
+      minerals: [{ mineralId: "calcium-chloride", grams: 1 }],
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      { calcium: 50, chloride: 88.5, bicarbonate: 60 },
+      [{ id: "stock:cacl", spec }],
+      [],
+    );
+    expect(result.residualIons.bicarbonate).toBeGreaterThan(0);
   });
 });

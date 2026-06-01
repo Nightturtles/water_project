@@ -864,6 +864,49 @@ select:focus {
   white-space: nowrap;
 }
 
+/* Volume-independent prescribed-dose reference under a concentrate's name; the
+   calculator may scale the actual dose to fit the target. */
+.result-prescribed {
+  font-size: 0.7rem;
+  color: var(--gray-500);
+}
+
+/* Subheading separating the concentrate dispense rows from the gap-fill
+   supplement rows when a Recipe Concentrate is active on the calculator. */
+.result-section-heading {
+  margin-top: 0.5rem;
+  padding: 0.25rem 0 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+
+/* One-click "Enable {mineral}" row: a mineral needed to close the gap that the
+   user hasn't enabled individually. */
+.result-enable-suggestion {
+  border: 1px dashed var(--gray-300);
+  background: var(--gray-100);
+}
+
+.enable-mineral-btn {
+  border: 1px solid var(--blue-600);
+  background: var(--blue-600);
+  color: #fff;
+  border-radius: 6px;
+  padding: 0.3rem 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.enable-mineral-btn:hover {
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+}
+
 .result-warnings {
   margin-top: 0.75rem;
   font-size: 0.85rem;
