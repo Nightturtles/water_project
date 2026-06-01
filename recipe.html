@@ -903,10 +903,15 @@
     }
 
     // Persist the supplement-panel open/closed state across visits, so a user
-    // who expanded it on one device sees it expanded on the next. The toggle
-    // event fires after open is flipped, so we read the current value.
+    // who expanded it on one device sees it expanded on the next. Only persist
+    // USER-initiated toggles: setting `.open` programmatically in
+    // applyDispenseModeUI also fires this event (per the HTML spec), and saving
+    // there would write the computed default as a sticky preference and trigger
+    // a redundant cloud sync on every load. event.isTrusted is true only for a
+    // real user gesture on the summary.
     if (supplementPanelEl) {
-      supplementPanelEl.addEventListener("toggle", () => {
+      supplementPanelEl.addEventListener("toggle", (e) => {
+        if (!e.isTrusted) return;
         saveRecipeSupplementPanelOpen(supplementPanelEl.open);
       });
     }
