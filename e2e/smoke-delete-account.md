@@ -7,9 +7,9 @@ NOT verify the actual server-side deletion against a real Supabase project.
 
 Run this runbook end-to-end before any PR that touches:
 - `supabase/migrations/<ts>_delete_account.sql`
-- `src/components/ui-shared.ts` (showConfirm or `_updateNavAuth`)
+- `src/components/ui-shared.ts` (showConfirm, `confirmAndDeleteAccount`, or `mountDeleteAccountSetting`)
 - `src/lib/sync.ts` (`clearLocalUserContent`)
-- The nav-auth area generally
+- The Settings "Delete account" section or the nav-auth area generally
 
 ## Why this runbook exists
 
@@ -52,17 +52,21 @@ account, so this is a manual gate by design.
 Open the app — site, iOS simulator, or Android simulator — and sign in with
 the throwaway account.
 
-### Step 1: Button visibility + copy
-Open the nav (hamburger on mobile, top bar on desktop). Confirm:
-- "Delete account" button appears next to "Log out"
-- It's styled muted/grey, not a loud destructive red
+### Step 1: Section visibility + copy
+Open Settings (More -> Settings on mobile, the Settings link in the top nav on
+desktop). Scroll to the bottom. Confirm:
+- "Delete account" is the last card, directly below the Theme section
+- It appears only while signed in (signed out, the page ends at Theme)
 - The button text is exactly "Delete account" (capitalization matters for
   store-review compliance checklists)
+- It's styled as a subdued red destructive button, not a loud fill
+- The nav (top bar / More sheet) no longer shows a "Delete account" entry,
+  only "Log out"
 
 ### Step 2: Confirm modal
 Tap "Delete account". Confirm:
 - Modal opens centered, overlay is dark
-- Message text is the warning copy from `_updateNavAuth`
+- Message text is the warning copy from `confirmAndDeleteAccount`
 - Label reads "Type your email to confirm:"
 - An empty input is focused
 - Confirm button reads "Delete account" and is disabled
@@ -90,7 +94,8 @@ Reopen the modal, type your exact email, click "Delete account". Confirm:
 - The page navigates to `index.html` (or stays on it)
 - A small dark flash banner appears at the top reading
   "Your account has been deleted." It fades out after ~4 seconds.
-- The nav-auth area now shows "Log in" instead of email + Log out + Delete
+- The nav-auth area now shows "Log in" instead of email + Log out (the Delete
+  account control lives in Settings, which is hidden again with no session)
 
 ### Step 6: Server-side verification
 In the Supabase SQL editor:

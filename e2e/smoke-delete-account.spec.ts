@@ -1,7 +1,8 @@
 // Codified verification of the e2e/smoke-delete-account.md runbook.
 //
 // What this spec actually tests:
-//   - The nav-auth "Delete account" button appears for authenticated users
+//   - The Settings "Delete account" section (minerals.html) reveals its button
+//     for authenticated users
 //   - The type-your-email confirm modal opens on click
 //   - The confirm button is disabled until the typed value matches the email
 //     EXACTLY (whitespace insensitive, case sensitive)
@@ -172,12 +173,20 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
     page,
   }) => {
     await stubAuthenticated(page);
-    await page.goto("/index.html");
+    await page.goto("/minerals.html");
 
-    // Wait for nav to inject the auth area
-    await expect(page.locator(".nav-auth-email")).toHaveText(TEST_EMAIL);
+    // The Delete account section ships hidden and is revealed by
+    // mountDeleteAccountSetting() once getSession() confirms a signed-in user.
+    const section = page.locator("#delete-account-section");
+    await expect(section).toBeVisible();
 
-    const deleteBtn = page.locator(".nav-auth-btn--danger");
+    // Regression guard: the web nav no longer carries a Delete account control;
+    // Settings is its only home now.
+    await expect(
+      page.locator(".nav-auth").getByRole("button", { name: "Delete account" }),
+    ).toHaveCount(0);
+
+    const deleteBtn = page.locator("#delete-account-btn");
     await expect(deleteBtn).toHaveText("Delete account");
 
     await deleteBtn.click();
@@ -193,8 +202,8 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
 
   test("Confirm button enables only when typed email matches exactly", async ({ page }) => {
     await stubAuthenticated(page);
-    await page.goto("/index.html");
-    await page.locator(".nav-auth-btn--danger").click();
+    await page.goto("/minerals.html");
+    await page.locator("#delete-account-btn").click();
 
     const input = page.locator(".confirm-input");
     const yesBtn = page.locator("#confirm-yes");
@@ -219,8 +228,8 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
 
   test("Cancel closes the modal without invoking the RPC", async ({ page }) => {
     await stubAuthenticated(page);
-    await page.goto("/index.html");
-    await page.locator(".nav-auth-btn--danger").click();
+    await page.goto("/minerals.html");
+    await page.locator("#delete-account-btn").click();
 
     await page.locator("#confirm-no").click();
     await expect(page.locator("#confirm-overlay")).toBeHidden();
@@ -236,8 +245,8 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
     page,
   }) => {
     await stubAuthenticated(page, { rpcResult: { error: null } });
-    await page.goto("/index.html");
-    await page.locator(".nav-auth-btn--danger").click();
+    await page.goto("/minerals.html");
+    await page.locator("#delete-account-btn").click();
     await page.locator(".confirm-input").fill(TEST_EMAIL);
     await page.locator("#confirm-yes").click();
 
@@ -272,8 +281,8 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
       void d.dismiss();
     });
 
-    await page.goto("/index.html");
-    await page.locator(".nav-auth-btn--danger").click();
+    await page.goto("/minerals.html");
+    await page.locator("#delete-account-btn").click();
     await page.locator(".confirm-input").fill(TEST_EMAIL);
     await page.locator("#confirm-yes").click();
 
@@ -281,7 +290,7 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
     await expect.poll(() => dialogs.length).toBeGreaterThan(0);
     expect(dialogs[0]).toContain("boom");
 
-    // Still on index.html, still showing the nav-auth as authenticated
+    // Still on minerals.html, still showing the nav-auth as authenticated
     await expect(page.locator(".nav-auth-email")).toHaveText(TEST_EMAIL);
 
     const captured = await page.evaluate(() => {

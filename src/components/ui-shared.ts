@@ -895,9 +895,10 @@ async function performLogout(): Promise<void> {
 }
 
 // Shared delete-account flow: typed-email confirm modal → delete_account RPC →
-// signOut → wipe local content → flash flag → redirect. Shared by the desktop
-// top nav and the native bottom sheet so the data-loss-sensitive sequence and
-// its typed-email guard live in exactly one place.
+// signOut → wipe local content → flash flag → redirect. Invoked from the
+// Settings page's "Delete account" section (mountDeleteAccountSetting) so the
+// data-loss-sensitive sequence and its typed-email guard live in exactly one
+// place.
 function confirmAndDeleteAccount(userEmail: string): void {
   showConfirm(
     "This permanently deletes your account and all recipes saved to it. " +
@@ -951,6 +952,34 @@ function confirmAndDeleteAccount(userEmail: string): void {
   );
 }
 
+// Settings page (minerals.html) "Delete account" section. Apple Guideline
+// 5.1.1(v) and Google Play's Data Deletion policy require an in-app deletion
+// path; it lives here, as the last Settings card, on every platform — the web
+// top nav and the native More sheet intentionally no longer carry it (too easy
+// to tap by accident). The section ships hidden and is revealed only for
+// signed-in users; there's no account to delete otherwise. The typed-email
+// confirm modal is the real guard against an accidental tap.
+async function mountDeleteAccountSetting(): Promise<void> {
+  const section = document.getElementById("delete-account-section");
+  const btn = document.getElementById("delete-account-btn");
+  if (!section || !btn) return; // not the Settings page
+  if (typeof window.supabaseClient === "undefined") return;
+  try {
+    // getSession() is the authoritative async auth source the nav uses too;
+    // gating on it (rather than a sync snapshot) avoids the pre-auth-window
+    // flash where a logged-in user briefly reads as logged out.
+    const { data } = await window.supabaseClient.auth.getSession();
+    const session = data && data.session;
+    if (session && session.user) {
+      const userEmail = session.user.email || "";
+      btn.addEventListener("click", () => confirmAndDeleteAccount(userEmail));
+      section.hidden = false;
+    }
+  } catch (_) {
+    // Silently skip — mirrors _updateNavAuth's catch when Supabase is unavailable.
+  }
+}
+
 async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promise<void> {
   if (typeof window.supabaseClient === "undefined") return;
   try {
@@ -968,20 +997,11 @@ async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promi
       logoutBtn.textContent = "Log out";
       logoutBtn.addEventListener("click", performLogout);
 
-      // Apple Guideline 5.1.1(v) and Google Play's Data Deletion policy
-      // require an in-app deletion path. The button stays muted (CSS class
-      // .nav-auth-btn--danger) so a thumb-fat tap isn't likely; the typed-
-      // email confirm modal does the rest of the guarding.
-      const userEmail = session.user.email || "";
-      const deleteBtn = document.createElement("button");
-      deleteBtn.type = "button";
-      deleteBtn.className = "nav-auth-btn nav-auth-btn--danger";
-      deleteBtn.textContent = "Delete account";
-      deleteBtn.addEventListener("click", () => confirmAndDeleteAccount(userEmail));
-
+      // "Delete account" intentionally lives in Settings (minerals.html), not
+      // beside Log out here — it was too easy to fat-finger. See
+      // mountDeleteAccountSetting().
       authWrap.appendChild(email);
       authWrap.appendChild(logoutBtn);
-      authWrap.appendChild(deleteBtn);
     } else {
       const loginLink = document.createElement("a");
       loginLink.href = "login.html";
@@ -1040,9 +1060,6 @@ const BN_ICONS = {
   person: '<circle cx="12" cy="8" r="3.6"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/>',
   logout:
     '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
-  trash:
-    '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>' +
-    '<path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
   chevron: '<path d="M9 5l7 7-7 7"/>',
 };
 
@@ -1110,8 +1127,9 @@ function _buildSheetRow(opts: {
 
 // Fills the More sheet's Account section from auth state. Mirrors
 // _updateNavAuth's getSession branching but renders icon-chip rows, and calls
-// the SAME shared handlers (performLogout / confirmAndDeleteAccount) so the
-// data-loss-sensitive logout + delete sequences are never forked.
+// the SAME shared logout handler (performLogout) so that data-loss-sensitive
+// sequence is never forked. Account deletion lives in Settings now
+// (mountDeleteAccountSetting), so this sheet no longer carries a delete row.
 async function _buildSheetAccount(container: HTMLElement, currentPage: string): Promise<void> {
   if (typeof window.supabaseClient === "undefined") return;
   try {
@@ -1130,14 +1148,8 @@ async function _buildSheetAccount(container: HTMLElement, currentPage: string): 
       container.appendChild(
         _buildSheetRow({ icon: BN_ICONS.logout, label: "Log out", onClick: performLogout }),
       );
-      container.appendChild(
-        _buildSheetRow({
-          icon: BN_ICONS.trash,
-          label: "Delete account",
-          danger: true,
-          onClick: () => confirmAndDeleteAccount(userEmail),
-        }),
-      );
+      // "Delete account" lives in Settings (minerals.html) now, reached via the
+      // Settings row in this sheet; it's intentionally not duplicated here.
     } else {
       container.appendChild(
         _buildSheetRow({
@@ -1532,10 +1544,10 @@ if (typeof window !== "undefined") {
 }
 
 // --- One-shot flash banner after account deletion ---
-// The delete-account handler (in _updateNavAuth) sets this flag in
-// sessionStorage immediately before navigating to index.html. We read +
-// clear it here so the user lands on the home page with a brief
-// confirmation that the deletion went through, rather than a silent
+// confirmAndDeleteAccount (triggered from the Settings "Delete account"
+// section) sets this flag in sessionStorage immediately before navigating to
+// index.html. We read + clear it here so the user lands on the home page with
+// a brief confirmation that the deletion went through, rather than a silent
 // unauthed redirect that looks like they got logged out by mistake.
 function showAccountDeletedFlashIfPending(): void {
   let pending = false;
@@ -1573,5 +1585,8 @@ document.addEventListener("DOMContentLoaded", () => {
   initThemeListeners();
   showRecipesToaster();
   initSaveStatusIndicator();
+  // Settings page only: reveal + wire the "Delete account" section for
+  // signed-in users (no-ops on every other page).
+  mountDeleteAccountSetting();
   showAccountDeletedFlashIfPending();
 });
