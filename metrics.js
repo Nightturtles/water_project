@@ -869,6 +869,34 @@ function buildStoredTargetProfile(label, ions, description, options) {
   };
 }
 
+/**
+ * Mineral ids whose combined g/L in the brew water exceeds the approximate
+ * solubility cap from MINERAL_SOLUBILITY_G_PER_L_25C_APPROX. Used by the
+ * recipe builder to warn when any single mineral's total contribution (summed
+ * across all Recipe Concentrates, Mineral Concentrates, and manual inputs)
+ * would precipitate out. Per-Recipe-Concentrate solubility checks in Settings
+ * are unchanged; this is the combined-in-brew-water check.
+ * @param {Record<string, number> | null | undefined} mineralGramsPerLiter
+ * @returns {string[]}
+ */
+function getRecipeOverLimitMineralIds(mineralGramsPerLiter) {
+  /** @type {string[]} */
+  const out = [];
+  if (!mineralGramsPerLiter || typeof mineralGramsPerLiter !== "object") return out;
+  if (typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX === "undefined") return out;
+  const solubility = /** @type {Record<string, number | undefined>} */ (
+    MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
+  );
+  for (const [mineralId, gPerLraw] of Object.entries(mineralGramsPerLiter)) {
+    const cap = solubility[mineralId];
+    if (!Number.isFinite(cap) || cap == null || cap <= 0) continue;
+    const gPerL = Number(gPerLraw);
+    if (!Number.isFinite(gPerL) || gPerL <= 0) continue;
+    if (gPerL >= cap) out.push(mineralId);
+  }
+  return out;
+}
+
 // --- Node/Vitest UMD shim (harmless in browsers) ---
 // See constants.js for the pattern. Assumes constants.js has already loaded
 // and populated globalThis (both in browser script-scope and in tests that
@@ -885,5 +913,6 @@ if (typeof module !== "undefined" && module.exports) {
     deriveStockFormulaFromTarget,
     computeFullProfile,
     buildStoredTargetProfile,
+    getRecipeOverLimitMineralIds,
   };
 }

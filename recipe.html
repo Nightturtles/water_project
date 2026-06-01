@@ -148,12 +148,16 @@
         <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="manual">Manual minerals</button>
         <button type="button" class="preset-btn brew-method-btn dispense-mode-btn" data-mode="stock">Recipe concentrate</button>
       </div>
-      <div class="mineral-inputs" id="mineral-inputs">
-        <!-- Populated by JS in manual mode -->
-      </div>
       <div class="stock-dispense-inputs" id="stock-dispense-inputs" style="display:none;">
-        <!-- Populated by JS in stock mode -->
+        <!-- Populated by JS in Recipe-Concentrate mode -->
       </div>
+      <div class="mineral-inputs" id="mineral-inputs">
+        <!-- Populated by JS; moved inside #recipe-supplement-panel in Recipe-Concentrate mode -->
+      </div>
+      <details class="recipe-supplement-panel" id="recipe-supplement-panel" hidden>
+        <summary>Supplement minerals (optional)</summary>
+      </details>
+      <div class="recipe-solubility-warning" id="recipe-solubility-warning" hidden aria-live="polite"></div>
     </section>
 
     <!-- PPM Results -->
@@ -379,6 +383,13 @@
     const stockInputsEl = document.getElementById("stock-dispense-inputs");
     const dispenseModeToggleEl = document.getElementById("dispense-mode-toggle");
     const mineralInputsHintEl = document.getElementById("mineral-inputs-hint");
+    const supplementPanelEl = document.getElementById("recipe-supplement-panel");
+    const solubilityWarningEl = document.getElementById("recipe-solubility-warning");
+    // Original parent + position of #mineral-inputs so we can restore it when
+    // leaving Recipe-Concentrate mode (it gets moved inside the supplement
+    // details panel while in that mode).
+    const mineralInputsHome = mineralInputsEl ? mineralInputsEl.parentNode : null;
+    const mineralInputsAnchor = mineralInputsEl ? mineralInputsEl.nextSibling : null;
 
     // Active stock for v1: first stock:* concentrate enabled in Settings.
     // Manual mode just ignores stocks; stock mode uses this one. Helper
@@ -433,6 +444,21 @@
     function saveRecipeDispenseMode(mode) {
       if (mode !== "manual" && mode !== "stock") return;
       _setTransient("cw_recipe_dispense_mode", mode);
+      if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
+    }
+
+    // Supplement panel open/closed state for Recipe-Concentrate (Mixed) mode.
+    // Returns null when no preference is saved so the caller can default
+    // based on whether any supplement input has a value.
+    function loadRecipeSupplementPanelOpen() {
+      const raw = _getTransient("cw_recipe_supplement_panel_open");
+      if (raw === "true") return true;
+      if (raw === "false") return false;
+      return null;
+    }
+
+    function saveRecipeSupplementPanelOpen(open) {
+      _setTransient("cw_recipe_supplement_panel_open", open ? "true" : "false");
       if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
     }
 
@@ -781,10 +807,44 @@
       });
     }
 
+    // Move #mineral-inputs out of the supplement details panel back to its
+    // original position in the section. No-op if it's already there.
+    function restoreMineralInputsToHome() {
+      if (!mineralInputsEl || !mineralInputsHome) return;
+      if (mineralInputsEl.parentNode === mineralInputsHome) return;
+      mineralInputsHome.insertBefore(mineralInputsEl, mineralInputsAnchor);
+    }
+
+    // Move #mineral-inputs into the supplement details panel so it renders
+    // below the "Supplement minerals (optional)" disclosure. No-op if it's
+    // already inside the panel.
+    function moveMineralInputsToSupplementPanel() {
+      if (!mineralInputsEl || !supplementPanelEl) return;
+      if (mineralInputsEl.parentNode === supplementPanelEl) return;
+      supplementPanelEl.appendChild(mineralInputsEl);
+    }
+
+    // Any supplement row carrying a value > 0 — used to default the panel
+    // to expanded on first visit when the user has inputs to see.
+    function hasAnySupplementValue() {
+      if (!mineralInputsEl) return false;
+      const mineralInputs = mineralInputsEl.querySelectorAll("input[data-mineral]");
+      for (const inp of mineralInputs) {
+        if ((parseFloat(inp.value) || 0) > 0) return true;
+      }
+      const concentrateInputs = mineralInputsEl.querySelectorAll("input[data-concentrate]");
+      for (const inp of concentrateInputs) {
+        if ((parseFloat(inp.value) || 0) > 0) return true;
+      }
+      return false;
+    }
+
     function applyDispenseModeUI() {
       if (!activeStockSpec) {
         if (dispenseModeToggleEl) dispenseModeToggleEl.style.display = "none";
         if (stockInputsEl) stockInputsEl.style.display = "none";
+        if (supplementPanelEl) supplementPanelEl.hidden = true;
+        restoreMineralInputsToHome();
         if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (mineralInputsHintEl) {
           mineralInputsHintEl.textContent =
@@ -801,16 +861,25 @@
       }
 
       if (recipeDispenseMode === "stock") {
-        if (mineralInputsEl) mineralInputsEl.style.display = "none";
         if (stockInputsEl) stockInputsEl.style.display = "";
+        if (supplementPanelEl) {
+          supplementPanelEl.hidden = false;
+          moveMineralInputsToSupplementPanel();
+          const savedOpen = loadRecipeSupplementPanelOpen();
+          supplementPanelEl.open = savedOpen != null ? savedOpen : hasAnySupplementValue();
+        }
+        if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (mineralInputsHintEl) {
           mineralInputsHintEl.textContent =
             "Enter total grams of " + (activeStockSpec.label || activeStockId) +
-            " recipe concentrate dispensed for the volume above. Default is the prescribed dose.";
+            " recipe concentrate dispensed for the volume above. Default is the prescribed dose. " +
+            "Use the supplement panel below to layer in extra minerals or Mineral Concentrates.";
         }
       } else {
-        if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (stockInputsEl) stockInputsEl.style.display = "none";
+        if (supplementPanelEl) supplementPanelEl.hidden = true;
+        restoreMineralInputsToHome();
+        if (mineralInputsEl) mineralInputsEl.style.display = "";
         if (mineralInputsHintEl) {
           mineralInputsHintEl.textContent =
             "Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.";
@@ -833,8 +902,80 @@
       });
     }
 
+    // Persist the supplement-panel open/closed state across visits, so a user
+    // who expanded it on one device sees it expanded on the next. The toggle
+    // event fires after open is flipped, so we read the current value.
+    if (supplementPanelEl) {
+      supplementPanelEl.addEventListener("toggle", () => {
+        saveRecipeSupplementPanelOpen(supplementPanelEl.open);
+      });
+    }
+
     buildStockDispenseUI();
     applyDispenseModeUI();
+
+    // Sum the manual mineral + Mineral-Concentrate (DIY/brand) rows into
+    // mineralGramsPerLiter, additively so it composes with any prior
+    // contribution (e.g. from a Recipe Concentrate in Mixed mode). Shared by
+    // both Manual and Recipe-Concentrate branches of recalculate().
+    function accumulateManualMineralRowsIntoGramsPerLiter(target, volumeL) {
+      if (!(volumeL > 0)) return;
+      document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach((input) => {
+        const totalGrams = Math.max(0, parseFloat(input.value) || 0);
+        if (totalGrams <= 0) return;
+        const id = input.dataset.mineral;
+        if (!id) return;
+        target[id] = (target[id] || 0) + totalGrams / volumeL;
+      });
+
+      // Mineral Concentrates (DIY + brand): convert mL or drops -> grams using concentrate strength
+      document
+        .querySelectorAll("#mineral-inputs .mineral-input-row[data-concentrate-id]")
+        .forEach((row) => {
+          const concentrateId = row.dataset.concentrateId;
+          const mineralId = row.dataset.mineralId;
+          if (!concentrateId || !mineralId) return;
+          const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
+          let ml = 0;
+          if (isLotusConcentrate) {
+            const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
+            const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
+            const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+            const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
+            ml = unit === "ml" ? value : (value * getLotusDropMl());
+          } else {
+            const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
+            ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
+          }
+          if (ml <= 0) return;
+          const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
+          if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
+          const totalGrams = ml * gramsPerMl;
+          if (totalGrams <= 0) return;
+          target[mineralId] = (target[mineralId] || 0) + totalGrams / volumeL;
+        });
+    }
+
+    function updateRecipeSolubilityWarning(mineralGramsPerLiter) {
+      if (!solubilityWarningEl) return;
+      const overLimitIds =
+        typeof getRecipeOverLimitMineralIds === "function"
+          ? getRecipeOverLimitMineralIds(mineralGramsPerLiter)
+          : [];
+      if (overLimitIds.length === 0) {
+        solubilityWarningEl.textContent = "";
+        solubilityWarningEl.hidden = true;
+        return;
+      }
+      const names = overLimitIds.map(
+        (mid) => (MINERAL_DB[mid] && MINERAL_DB[mid].name) || mid,
+      );
+      solubilityWarningEl.textContent =
+        "Above solubility limit for " +
+        names.join(", ") +
+        ". Reduce the dose or split across more brew water.";
+      solubilityWarningEl.hidden = false;
+    }
 
     function recalculate() {
       const baseWater = sourceSection.getSourceWater();
@@ -847,12 +988,11 @@
       const mineralGramsPerLiter = {};
       if (volumeL > 0) {
         if (recipeDispenseMode === "stock" && activeStockSpec) {
-          // Stock mode: distribute total stock grams across formula minerals.
-          // Per-mineral inputs in the DOM are hidden here; we ignore them.
-          // Routing through computeStockMineralGramsPerL keeps the
+          // Recipe-Concentrate mode: distribute total grams across the formula's
+          // minerals. Routing through computeStockMineralGramsPerL keeps the
           //   (grams / bottleMl) * totalStockGrams / volumeL
-          // formula in one place — same convention as the seeding script
-          // and the calculator's stock branch.
+          // formula in one place — same convention as the seeding script and
+          // the calculator's Recipe-Concentrate branch.
           const totalStockGrams = getEffectiveStockTotalGrams(volumeL);
           if (totalStockGrams > 0) {
             const effectiveSpec = Object.assign({}, activeStockSpec, {
@@ -863,40 +1003,14 @@
               mineralGramsPerLiter[id] = (mineralGramsPerLiter[id] || 0) + perL[id];
             }
           }
-        } else {
-          document.querySelectorAll("#mineral-inputs input[data-mineral]").forEach(input => {
-            const totalGrams = Math.max(0, parseFloat(input.value) || 0);
-            if (totalGrams > 0) {
-              mineralGramsPerLiter[input.dataset.mineral] = totalGrams / volumeL;
-            }
-          });
-
-          // Concentrates (DIY + brand): convert mL or drops -> grams using concentrate strength
-          document.querySelectorAll("#mineral-inputs .mineral-input-row[data-concentrate-id]").forEach((row) => {
-            const concentrateId = row.dataset.concentrateId;
-            const mineralId = row.dataset.mineralId;
-            if (!concentrateId || !mineralId) return;
-            const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
-            let ml = 0;
-            if (isLotusConcentrate) {
-              const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
-              const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
-              const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
-              const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
-              ml = unit === "ml" ? value : (value * getLotusDropMl());
-            } else {
-              const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
-              ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
-            }
-            if (ml <= 0) return;
-            const gramsPerMl = getConcentrateGramsPerMl(concentrateId);
-            if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) return;
-            const totalGrams = ml * gramsPerMl;
-            if (totalGrams <= 0) return;
-            mineralGramsPerLiter[mineralId] = (mineralGramsPerLiter[mineralId] || 0) + (totalGrams / volumeL);
-          });
         }
+        // Mixed mode: also fold in supplement minerals / Mineral Concentrates.
+        // In Manual mode this is the only source. The helper is additive so it
+        // composes correctly with any Recipe-Concentrate contribution above.
+        accumulateManualMineralRowsIntoGramsPerLiter(mineralGramsPerLiter, volumeL);
       }
+
+      updateRecipeSolubilityWarning(mineralGramsPerLiter);
 
       // Calculate ion contributions from minerals (calculateIonPPMs expects g/L)
       const addedIons = calculateIonPPMs(mineralGramsPerLiter);

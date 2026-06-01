@@ -40,6 +40,7 @@ export const KEYS = {
   RECIPE_CONCENTRATE_INPUTS: "cw_recipe_concentrate_inputs",
   RECIPE_STOCK_GRAMS: "cw_recipe_stock_grams",
   RECIPE_DISPENSE_MODE: "cw_recipe_dispense_mode",
+  RECIPE_SUPPLEMENT_PANEL_OPEN: "cw_recipe_supplement_panel_open",
   TARGET_DRAFT_IONS: "cw_target_draft_ions",
   // --- Category B: named artifacts ---
   CUSTOM_PROFILES: "cw_custom_profiles",
@@ -80,6 +81,7 @@ export const CATEGORY_A: string[] = [
   KEYS.RECIPE_CONCENTRATE_INPUTS,
   KEYS.RECIPE_STOCK_GRAMS,
   KEYS.RECIPE_DISPENSE_MODE,
+  KEYS.RECIPE_SUPPLEMENT_PANEL_OPEN,
   KEYS.TARGET_DRAFT_IONS,
 ];
 

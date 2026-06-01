@@ -437,3 +437,57 @@ describe("buildStoredTargetProfile", () => {
     expect(profile.label).toBe("My Custom Label");
   });
 });
+
+describe("getRecipeOverLimitMineralIds", () => {
+  test("empty input → []", () => {
+    expect(metrics.getRecipeOverLimitMineralIds({})).toEqual([]);
+  });
+
+  test("null / undefined / non-object input → []", () => {
+    expect(metrics.getRecipeOverLimitMineralIds(null)).toEqual([]);
+    expect(metrics.getRecipeOverLimitMineralIds(undefined)).toEqual([]);
+    expect(metrics.getRecipeOverLimitMineralIds(42)).toEqual([]);
+  });
+
+  test("all minerals below their solubility caps → []", () => {
+    // Caps: baking-soda 96, calcium-chloride 700, gypsum 2. All inputs well under.
+    expect(
+      metrics.getRecipeOverLimitMineralIds({
+        "baking-soda": 0.5,
+        "calcium-chloride": 1,
+        gypsum: 0.5,
+      }),
+    ).toEqual([]);
+  });
+
+  test("flags any mineral whose g/L meets or exceeds its cap", () => {
+    // gypsum cap is 2 g/L; 2.5 exceeds. baking-soda cap is 96; 50 is under.
+    const over = metrics.getRecipeOverLimitMineralIds({
+      gypsum: 2.5,
+      "baking-soda": 50,
+    });
+    expect(over).toEqual(["gypsum"]);
+  });
+
+  test("multiple over-limit minerals are all returned", () => {
+    const over = metrics.getRecipeOverLimitMineralIds({
+      gypsum: 10,
+      "baking-soda": 200,
+      "calcium-chloride": 1,
+    });
+    expect(over.sort()).toEqual(["baking-soda", "gypsum"]);
+  });
+
+  test("unknown mineral id (no solubility entry) is ignored", () => {
+    expect(metrics.getRecipeOverLimitMineralIds({ "not-a-real-mineral": 9999 })).toEqual([]);
+  });
+
+  test("zero or negative g/L values are ignored", () => {
+    expect(
+      metrics.getRecipeOverLimitMineralIds({
+        gypsum: 0,
+        "baking-soda": -5,
+      }),
+    ).toEqual([]);
+  });
+});
