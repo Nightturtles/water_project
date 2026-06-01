@@ -907,6 +907,12 @@ select:focus {
   border-color: var(--blue-700);
 }
 
+.enable-mineral-btn:focus-visible {
+  outline: none;
+  border-color: var(--blue-600);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .result-warnings {
   margin-top: 0.75rem;
   font-size: 0.85rem;
