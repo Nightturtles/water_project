@@ -759,6 +759,23 @@ select:focus {
   font-weight: 500;
 }
 
+/* Destructive variant of .preset-btn for the Settings "Delete account"
+   action. Subdued red so it reads as dangerous without shouting; the
+   typed-email confirm modal is the real guard against accidental taps.
+   Theme-safe (CSS vars) so it holds up in dark mode. Modeled on
+   .stock-editor-delete. */
+.preset-btn.settings-danger-btn {
+  border-color: var(--gray-300);
+  color: var(--red-600);
+  background: transparent;
+}
+
+.preset-btn.settings-danger-btn:hover {
+  border-color: var(--red-600);
+  color: var(--red-700, var(--red-600));
+  background: var(--gray-100);
+}
+
 /* Category headings that group source-water preset buttons. .source-presets
    is flex-wrap on desktop and switches to a 2-col grid on narrow viewports
    (see the @media block lower down) so the heading needs both sets of
@@ -2846,18 +2863,6 @@ footer {
   color: var(--blue-700);
   background: var(--blue-50);
   font-weight: 600;
-}
-
-/* Muted destructive variant for the in-nav "Delete account" button.
-   Kept subdued so it doesn't dominate the nav; the type-your-email
-   confirm modal is the real guard against accidental taps. */
-.nav-auth-btn--danger {
-  color: var(--gray-400);
-}
-
-.nav-auth-btn--danger:hover {
-  color: #b91c1c;
-  background: #fef2f2;
 }
 
 /* ========================
