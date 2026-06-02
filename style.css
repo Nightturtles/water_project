@@ -556,6 +556,25 @@ select:focus {
   box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
+/* iOS Safari (and the iOS native wrapper) auto-zooms when a focused form
+   control renders below 16px. Enforce a 16px floor on touch devices so
+   focusing or typing in any field never triggers a zoom — the modal stays
+   fully in view. We intentionally leave the viewport's maximum-scale alone,
+   so users can still pinch-zoom by choice. `pointer: coarse` targets touch
+   input (phones/tablets in any orientation, incl. landscape phones wider
+   than a max-width breakpoint) and never matches mouse/desktop, so the
+   compact desktop sizes are untouched. `!important` is the maintainable way
+   to clear the floor in one place over the various <16px per-component rules
+   (.stock-mineral-row, .login-form, .rx-search-input, .save-bar,
+   .estimate-water-form) without re-listing each as it's added. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 .input-with-unit {
   display: flex;
   gap: 0.5rem;
