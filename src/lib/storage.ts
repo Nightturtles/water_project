@@ -1451,17 +1451,6 @@ export function saveCreatorDisplayName(name: string): void {
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
 }
 
-// --- Recipes-moved toaster (one-time) ---
-const RECIPES_TOASTER_DISMISSED_KEY = "cw_recipes_toaster_dismissed";
-
-export function loadRecipesToasterDismissed(): boolean {
-  return safeGetItem(RECIPES_TOASTER_DISMISSED_KEY) === "true";
-}
-
-export function saveRecipesToasterDismissed(): void {
-  safeSetItem(RECIPES_TOASTER_DISMISSED_KEY, "true");
-}
-
 // --- Calculator welcome modal (one-time) ---
 const WELCOME_MODAL_DISMISSED_KEY = "cw_calculator_welcome_dismissed";
 
@@ -1659,8 +1648,6 @@ if (typeof window !== "undefined") {
     saveThemePreference,
     loadCreatorDisplayName,
     saveCreatorDisplayName,
-    loadRecipesToasterDismissed,
-    saveRecipesToasterDismissed,
     loadCalculatorWelcomeDismissed,
     saveCalculatorWelcomeDismissed,
     ensureStarterBackfill,
