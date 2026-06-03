@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Dark-mode window backdrop. Mirrors --gray-50 (dark) in style.css.
+    <!-- Dark-mode window backdrop. Mirrors the gray-50 token (dark) in style.css.
          Auto-applied by the DayNight theme when the system is in dark mode. -->
     <color name="windowBg">#0f172a</color>
 </resources>
