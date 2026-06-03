@@ -251,6 +251,7 @@ declare global {
     // branch web vs native behavior.
     Capacitor?: {
       isNativePlatform?: () => boolean;
+      getPlatform?: () => string;
     };
   }
 }

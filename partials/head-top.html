@@ -5,3 +5,13 @@
        notched devices, so the Capacitor bottom nav can pad clear of the home
        indicator. No-op on web (insets are 0). -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <!-- Critical first-paint background so inter-page navigation in the native
+       WebView doesn't flash the black backdrop before style.css loads.
+       theme-init.js sets data-theme render-blocking, so the dark rule resolves
+       on the first frame. Literal hex mirrors the gray-50 token (style.css loads later). -->
+  <style>
+    html { background-color: #f8fafc; }
+    html[data-theme="dark"] { background-color: #0f172a; }
+  </style>
+  <meta name="theme-color" content="#f8fafc" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">

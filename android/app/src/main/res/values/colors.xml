@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Window backdrop painted during the blank frame between full-page
+         navigations. Mirrors the gray-50 token (light) in style.css;
+         values-night/ supplies the dark variant. Stops the black inter-page flash. -->
+    <color name="windowBg">#f8fafc</color>
+</resources>
