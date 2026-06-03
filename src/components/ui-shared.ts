@@ -22,8 +22,6 @@ import {
   loadCreatorDisplayName,
   saveCreatorDisplayName,
   loadThemePreference,
-  loadRecipesToasterDismissed,
-  saveRecipesToasterDismissed,
 } from "../lib/storage";
 
 // --- Non-negative number input reader ---
@@ -1419,46 +1417,6 @@ export function debounce<TArgs extends unknown[]>(
   };
 }
 
-// --- Recipes-moved toaster (one-time, all pages) ---
-export function showRecipesToaster(): void {
-  if (loadRecipesToasterDismissed()) return;
-
-  const toaster = document.createElement("div");
-  toaster.className = "recipes-toaster";
-  toaster.setAttribute("role", "status");
-
-  const link = document.createElement("a");
-  link.href = "library.html";
-  link.className = "recipes-toaster-link";
-  link.textContent = "Recipes have moved to the new library section. Check it out!";
-  toaster.appendChild(link);
-
-  const closeBtn = document.createElement("button");
-  closeBtn.type = "button";
-  closeBtn.className = "recipes-toaster-close";
-  closeBtn.setAttribute("aria-label", "Dismiss notification");
-  closeBtn.textContent = "×";
-  toaster.appendChild(closeBtn);
-
-  function dismiss(e: Event) {
-    e.preventDefault();
-    e.stopPropagation();
-    saveRecipesToasterDismissed();
-    toaster.classList.add("recipes-toaster--hiding");
-    toaster.addEventListener("animationend", function () {
-      toaster.remove();
-    });
-  }
-
-  closeBtn.addEventListener("click", dismiss);
-
-  document.body.appendChild(toaster);
-  // Trigger entrance animation on next frame
-  requestAnimationFrame(function () {
-    toaster.classList.add("recipes-toaster--visible");
-  });
-}
-
 // --- Save-status indicator (closes the "did my edit save?" loop) ---
 // Listens for cw:save-status events dispatched by sync.js. Three transitions:
 // "saving" (visible while a debounced push is queued or in-flight), "saved"
@@ -1549,7 +1507,6 @@ if (typeof window !== "undefined") {
     findFallbackPreset,
     selectRadioByValue,
     debounce,
-    showRecipesToaster,
     initSaveStatusIndicator,
   });
 }
@@ -1598,7 +1555,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   applyMineralDisplayMode();
   initThemeListeners();
-  showRecipesToaster();
   initSaveStatusIndicator();
   // Settings page only: reveal + wire the "Delete account" section for
   // signed-in users (no-ops on every other page).

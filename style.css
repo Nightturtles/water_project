@@ -1386,6 +1386,22 @@ select:focus {
   padding-right: 0.25rem;
 }
 
+.stock-editor-form input[type="text"] {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--gray-300);
+  border-radius: 8px;
+  font-size: 1rem;
+  background: var(--gray-50);
+  color: var(--gray-900);
+  width: 100%;
+}
+
+.stock-editor-form input[type="text"]:focus {
+  outline: none;
+  border-color: var(--blue-500);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .stock-editor-actions {
   display: flex;
   gap: 0.5rem;
@@ -3083,80 +3099,6 @@ footer {
   outline: none;
   border-color: var(--blue-500);
   box-shadow: 0 0 0 3px var(--focus-ring);
-}
-
-/* ===== Recipes-moved toaster ===== */
-.recipes-toaster {
-  position: fixed;
-  bottom: 1rem;
-  left: 50%;
-  transform: translateX(-50%) translateY(100%);
-  opacity: 0;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  background: var(--blue-600);
-  color: #fff;
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  z-index: 300;
-  max-width: 560px;
-  width: calc(100% - 2rem);
-  transition: none;
-}
-
-.recipes-toaster--visible {
-  animation: toaster-slide-in 0.35s ease forwards;
-}
-
-.recipes-toaster--hiding {
-  animation: toaster-slide-out 0.25s ease forwards;
-}
-
-@keyframes toaster-slide-in {
-  from { transform: translateX(-50%) translateY(100%); opacity: 0; }
-  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
-}
-
-@keyframes toaster-slide-out {
-  from { transform: translateX(-50%) translateY(0);    opacity: 1; }
-  to   { transform: translateX(-50%) translateY(100%); opacity: 0; }
-}
-
-.recipes-toaster-link {
-  flex: 1;
-  color: #fff;
-  text-decoration: none;
-  font-size: 0.9rem;
-  font-weight: 500;
-  line-height: 1.4;
-}
-
-.recipes-toaster-link:hover {
-  text-decoration: underline;
-}
-
-.recipes-toaster-close {
-  flex-shrink: 0;
-  min-width: 32px;
-  min-height: 32px;
-  padding: 0;
-  font-size: 1.25rem;
-  line-height: 1;
-  color: rgba(255, 255, 255, 0.8);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.recipes-toaster-close:hover {
-  color: #fff;
-  background: rgba(255, 255, 255, 0.15);
 }
 
 /* ========================
@@ -4886,10 +4828,6 @@ body.is-capacitor .nav-hamburger {
 /* Clear the fixed bottom bar so page content isn't hidden behind it. */
 body.is-capacitor main {
   padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
-}
-/* Lift the one-time recipes-moved toaster above the fixed bar in native. */
-body.is-capacitor .recipes-toaster {
-  bottom: calc(70px + env(safe-area-inset-bottom, 0px));
 }
 
 /* iOS native only: drop the brand-only top strip (it overlaps the status-bar
