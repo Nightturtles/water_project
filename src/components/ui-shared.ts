@@ -760,6 +760,17 @@ export function getResolvedTheme(): "light" | "dark" {
 
 export function applyTheme(): void {
   document.documentElement.setAttribute("data-theme", getResolvedTheme());
+  // Native iOS only: keep the shell's interface style in sync when the user
+  // changes the theme without a reload (see theme-init.js for the load path and
+  // CafelyticViewController for the native side). No-op off native.
+  try {
+    const w = window as unknown as {
+      webkit?: { messageHandlers?: { cwTheme?: { postMessage: (m: string) => void } } };
+    };
+    w.webkit?.messageHandlers?.cwTheme?.postMessage(loadThemePreference());
+  } catch {
+    /* not on iOS native */
+  }
 }
 
 export function initThemeListeners(): void {
@@ -1579,6 +1590,10 @@ document.addEventListener("DOMContentLoaded", () => {
   // body so CSS slims the top nav to a brand-only strip. Web is unchanged.
   if (isNativeApp()) {
     document.body.classList.add("is-capacitor");
+    const platform = (
+      window as { Capacitor?: { getPlatform?: () => string } }
+    ).Capacitor?.getPlatform?.();
+    if (platform === "ios") document.body.classList.add("platform-ios");
     injectBottomNav();
   }
   applyMineralDisplayMode();

@@ -1,4 +1,4 @@
-import UIKit
+ import UIKit
 import Capacitor
 
 @UIApplicationMain
@@ -7,7 +7,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Theme the host window so the blank frame between full-page navigations
+        // shows the app background (not black) behind the non-opaque WebView, and
+        // seed the interface style from the persisted in-app theme so the first
+        // navigation after launch matches the app (not the iOS system) appearance.
+        // See CafelyticViewController for the full anti-flash rationale.
+        window?.overrideUserInterfaceStyle = cafelyticInterfaceStyle(
+            for: UserDefaults.standard.string(forKey: cafelyticThemeKey))
+        window?.backgroundColor = .cafelyticBackground
         return true
     }
 
