@@ -75,6 +75,34 @@ describe("calculateMetrics", () => {
   });
 });
 
+describe("recipeMetricsSummary", () => {
+  test("GH from Ca+Mg, KH from alkalinity, TDS from ion sum, rounded to integers", () => {
+    // cafelytic-filter-like: Ca 4, Mg 10, alkalinity 11 (+ trace ions for TDS).
+    const { gh, kh, tds } = metrics.recipeMetricsSummary({
+      calcium: 4,
+      magnesium: 10,
+      alkalinity: 11,
+      chloride: 34,
+      bicarbonate: 13,
+    });
+    expect(gh).toBe(Math.round(4 * (100.09 / 40.078) + 10 * (100.09 / 24.305))); // 51
+    expect(kh).toBe(11);
+    expect(tds).toBe(4 + 10 + 34 + 13); // sum of provided ions = 61
+  });
+
+  test("KH reads alkalinity directly, so it works without a bicarbonate field", () => {
+    // SCA shim carries alkalinity but no bicarbonate; KH must still be 40.
+    expect(metrics.recipeMetricsSummary({ calcium: 51, magnesium: 17, alkalinity: 40 }).kh).toBe(
+      40,
+    );
+  });
+
+  test("missing or empty input defaults to zero", () => {
+    expect(metrics.recipeMetricsSummary({})).toEqual({ gh: 0, kh: 0, tds: 0 });
+    expect(metrics.recipeMetricsSummary(undefined)).toEqual({ gh: 0, kh: 0, tds: 0 });
+  });
+});
+
 describe("calculateSo4ClRatio", () => {
   test("returns sulfate / chloride for positive values", () => {
     expect(metrics.calculateSo4ClRatio({ sulfate: 100, chloride: 50 })).toBe(2);

@@ -400,18 +400,27 @@ function renderProfileButtons() {
       continue;
     }
     if (!isSentinel) shownReal++;
-    const btn = document.createElement("button");
-    btn.className = "profile-btn";
-    btn.dataset.profile = key;
-    btn.textContent = profile.label;
-    if (isTargetEditMode && key !== "custom" && key !== "library") {
-      const del = document.createElement("span");
-      del.className = "preset-delete";
-      del.dataset.delete = key;
-      del.textContent = "\u00d7";
-      btn.appendChild(del);
+    if (isSentinel) {
+      // "+ Custom" / "+ From Library" stay as compact dashed action tiles, not
+      // recipe cards (they have no minerals/tags). data-profile keeps the
+      // existing delegated click handler dispatching them (custom flow / picker).
+      const tile = document.createElement("button");
+      tile.type = "button";
+      tile.className = "rx-slim-action-tile";
+      tile.dataset.profile = key;
+      tile.textContent = profile.label;
+      profileButtonsContainer.appendChild(tile);
+    } else {
+      // buildSlimRecipeCard is bridged via legacy-globals.ts (same as
+      // getTargetPresetsForBrewMethod above), so it's safe to call directly.
+      const card = window.buildSlimRecipeCard(profile, {
+        slug: key,
+        attrName: "profile",
+        selected: key === currentProfile,
+        deletable: isTargetEditMode,
+      });
+      profileButtonsContainer.appendChild(card);
     }
-    profileButtonsContainer.appendChild(btn);
   }
 
   if (filterActive && shownReal === 0) {
@@ -469,11 +478,15 @@ function updateTargetModeUI() {
 }
 
 function highlightProfile(profileName) {
-  profileButtonsContainer
-    .querySelectorAll(".profile-btn")
-    .forEach((b) => b.classList.remove("active"));
+  profileButtonsContainer.querySelectorAll(".active").forEach((b) => {
+    b.classList.remove("active");
+    b.setAttribute("aria-pressed", "false");
+  });
   const btn = profileButtonsContainer.querySelector(`[data-profile="${CSS.escape(profileName)}"]`);
-  if (btn) btn.classList.add("active");
+  if (btn) {
+    btn.classList.add("active");
+    btn.setAttribute("aria-pressed", "true");
+  }
   targetSaveBar.style.display = profileName === "custom" ? "flex" : "none";
   targetEditBar.style.display = "none";
   updateTargetModeUI();
@@ -596,7 +609,7 @@ profileButtonsContainer.addEventListener("click", (e) => {
     return;
   }
 
-  const btn = e.target.closest(".profile-btn");
+  const btn = e.target.closest("[data-profile]");
   if (!btn) return;
   const nextProfile = btn.dataset.profile;
   // Warn before discarding in-progress edits. confirm() is the simplest

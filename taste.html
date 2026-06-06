@@ -392,8 +392,10 @@
         presetKey = findFallbackPreset(visiblePresets);
       }
       const reset = options.resetSliders !== false;
-      tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => {
-        b.classList.toggle("active", b.dataset.preset === presetKey);
+      tastePresetsContainer.querySelectorAll("[data-preset]").forEach(b => {
+        const on = b.dataset.preset === presetKey;
+        b.classList.toggle("active", on);
+        b.setAttribute("aria-pressed", on ? "true" : "false");
       });
 
       if (presetKey === "custom") {
@@ -429,24 +431,29 @@
       const allPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
       const customProfiles = loadCustomTargetProfiles();
       for (const [key, profile] of Object.entries(allPresets)) {
-        const btn = document.createElement("button");
-        btn.className = "taste-preset-btn";
-        btn.dataset.preset = key;
-        // Inconsistency 2: show edit bar for overridden built-in presets too
-        if (key !== "custom") {
-          if (!TARGET_PRESETS[key] || customProfiles[key]) {
-            btn.dataset.targetKey = key;
-          }
+        const isSentinel = key === "custom" || key === "library";
+        if (isSentinel) {
+          // "+ Custom" / "+ From Library" stay as compact dashed action tiles.
+          // data-preset keeps the existing delegated click handler dispatching
+          // them (custom flow / library picker).
+          const tile = document.createElement("button");
+          tile.type = "button";
+          tile.className = "rx-slim-action-tile";
+          tile.dataset.preset = key;
+          tile.textContent = profile.label;
+          tastePresetsContainer.appendChild(tile);
+          continue;
         }
-        btn.textContent = profile.label;
-        if (isTasteEditMode && key !== "custom" && key !== "library") {
-          const del = document.createElement("span");
-          del.className = "preset-delete";
-          del.dataset.delete = key;
-          del.textContent = "\u00d7";
-          btn.appendChild(del);
-        }
-        tastePresetsContainer.appendChild(btn);
+        // Mark overridden built-ins + custom profiles as editable (drives the
+        // Current edit bar via updateCurrentEditBar's data-target-key read).
+        const targetKey = !TARGET_PRESETS[key] || customProfiles[key] ? key : null;
+        const card = window.buildSlimRecipeCard(profile, {
+          slug: key,
+          attrName: "preset",
+          deletable: isTasteEditMode,
+          targetKey,
+        });
+        tastePresetsContainer.appendChild(card);
       }
       const keys = Object.keys(allPresets);
       const savedPreset = loadTargetPresetName(activeBrewMethod);
@@ -497,7 +504,7 @@
         editBar.style.display = "none";
         return;
       }
-      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       const targetKey = activeBtn && activeBtn.dataset.targetKey;
       if (targetKey) {
         const profiles = loadCustomTargetProfiles();
@@ -510,7 +517,7 @@
     }
 
     function getTasteActivePresetKey() {
-      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       return activeBtn ? activeBtn.dataset.preset : null;
     }
 
@@ -529,7 +536,7 @@
         return;
       }
 
-      const btn = e.target.closest(".taste-preset-btn");
+      const btn = e.target.closest("[data-preset]");
       if (!btn) return;
       // "library" is an action pseudo-tile, not a real preset: open the picker
       // and skip activation so it never becomes the active preset.
@@ -550,8 +557,15 @@
     // --- Input change handlers (debounced) ---
     ION_FIELDS.forEach(ion => {
       document.getElementById("cur-" + ion).addEventListener("input", () => {
-        tastePresetsContainer.querySelectorAll(".taste-preset-btn").forEach(b => b.classList.remove("active"));
-        tastePresetsContainer.querySelector('[data-preset="custom"]')?.classList.add("active");
+        tastePresetsContainer.querySelectorAll("[data-preset]").forEach(b => {
+          b.classList.remove("active");
+          b.setAttribute("aria-pressed", "false");
+        });
+        const customTile = tastePresetsContainer.querySelector('[data-preset="custom"]');
+        if (customTile) {
+          customTile.classList.add("active");
+          customTile.setAttribute("aria-pressed", "true");
+        }
         updateCurrentEditBar();
         updateTasteModeUI();
         debouncedRecalculate();
@@ -830,7 +844,7 @@
 
     // --- Update selected custom profile with current grid values ---
     document.getElementById("current-update-btn").addEventListener("click", () => {
-      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       const targetKey = activeBtn && activeBtn.dataset.targetKey;
       if (!targetKey) return;
       const profiles = loadCustomTargetProfiles();
@@ -859,7 +873,7 @@
 
     // --- Delete selected custom profile ---
     document.getElementById("current-delete-btn").addEventListener("click", () => {
-      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       const targetKey = activeBtn && activeBtn.dataset.targetKey;
       if (!targetKey) return;
       const profiles = loadCustomTargetProfiles();
@@ -903,7 +917,7 @@
     if (tasteEditModeBtn) {
       tasteEditModeBtn.addEventListener("click", () => {
         isTasteEditMode = !isTasteEditMode;
-        const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+        const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
         const activeKey = activeBtn ? activeBtn.dataset.preset : null;
         renderTastePresets(activeKey, { resetSliders: false });
         updateTasteModeUI();
@@ -933,7 +947,7 @@
     // request so refreshTasteRail can activate it once the library arrives.
     let pendingPresetFromUrl = null;
     if (presetFromUrl) {
-      const activeAfterRender = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeAfterRender = tastePresetsContainer.querySelector("[data-preset].active");
       const activatedKey = activeAfterRender ? activeAfterRender.dataset.preset : null;
       if (activatedKey !== presetFromUrl) {
         pendingPresetFromUrl = presetFromUrl;
@@ -946,7 +960,7 @@
     // Preserve the currently-active preset if it still exists in the merged
     // rail; otherwise renderTastePresets(null) will pick a fallback.
     function refreshTasteRail() {
-      const activeBtn = tastePresetsContainer.querySelector(".taste-preset-btn.active");
+      const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       const activeKey = activeBtn ? activeBtn.dataset.preset : null;
       const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
       // A pending URL-named preset wins over the current activeKey only if

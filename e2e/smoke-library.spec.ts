@@ -490,7 +490,7 @@ test.describe("library.html — Wave D recipe browser", () => {
     // (migration 009), so passing method=filter surfaces it in the filter rail.
     await page.goto("/taste.html?preset=sca&method=filter");
 
-    await expect(page.locator('.taste-preset-btn[data-preset="sca"]')).toHaveClass(/active/);
+    await expect(page.locator('.rx-slim-card[data-preset="sca"]')).toHaveClass(/active/);
   });
 
   // Filter-drives-render + empty state (D5) ----------------------------

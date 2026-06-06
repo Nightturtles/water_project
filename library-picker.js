@@ -53,10 +53,11 @@
   }
 
   function ionsSummary(recipe) {
-    var ca = Math.round(Number(recipe.calcium) || 0);
-    var mg = Math.round(Number(recipe.magnesium) || 0);
-    var alk = Math.round(Number(recipe.alkalinity) || 0);
-    return "Ca " + ca + " · Mg " + mg + " · Alk " + alk;
+    var s =
+      typeof window.recipeMetricsSummary === "function"
+        ? window.recipeMetricsSummary(recipe)
+        : { gh: null, kh: null };
+    return "GH " + (s.gh != null ? s.gh : "-") + " · KH " + (s.kh != null ? s.kh : "-");
   }
 
   function el(tag, className, text) {

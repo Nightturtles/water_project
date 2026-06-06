@@ -200,6 +200,21 @@ declare global {
     SENTRY_RELEASE?: { id?: string };
     // From src/lib/html.ts — shared HTML-escaper (see the global above).
     escapeHtml?: (s: unknown) => string;
+    // From metrics.js - headline water metrics (rounded) for recipe surfaces:
+    // GH/KH as mg/L CaCO3 (GH from Ca+Mg, KH from alkalinity), TDS as mg/L.
+    // Consumed by the slim cards (recipe-card.ts, GH/KH), library cards/hero
+    // (recipe-browser.js, GH/KH), the Add-From-Library picker
+    // (library-picker.js, GH/KH), and the library detail modal (GH/KH/TDS).
+    recipeMetricsSummary?: (recipe: {
+      calcium?: number | null;
+      magnesium?: number | null;
+      alkalinity?: number | null;
+      potassium?: number | null;
+      sodium?: number | null;
+      sulfate?: number | null;
+      chloride?: number | null;
+      bicarbonate?: number | null;
+    }) => { gh: number; kh: number; tds: number };
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;
