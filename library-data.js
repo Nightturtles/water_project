@@ -20,7 +20,11 @@
   //   v4 — forced re-fetch after migrations added stock_formula + 12 Coffee
   //        ad Astra recipes. Pre-v4 snapshots have stockFormula:null on every
   //        row and miss the new entries entirely.
-  var CACHE_KEY = "cw_library_public_recipes_v4";
+  //   v5 — forced re-fetch after migration 20260606060755 recategorized
+  //        eaf-rpavlis to espresso and renamed the "and" recipes to "&".
+  //        Pre-v5 snapshots carry the old brew_method/labels and would show
+  //        RPavlis under filter with stale names until the session ends.
+  var CACHE_KEY = "cw_library_public_recipes_v5";
   // Set (not Array) so re-registering the same function reference doesn't
   // duplicate firings — defends against bfcache restore and other scenarios
   // where the same classic-script evaluates twice against the same module

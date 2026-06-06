@@ -616,7 +616,7 @@ test.describe("library.html — Wave D recipe browser", () => {
       ];
       // Cache key tracks library-data.js's CACHE_KEY constant. Bump alongside
       // it whenever a schema change forces a re-fetch (e.g. v4 added stock_formula).
-      sessionStorage.setItem("cw_library_public_recipes_v4", JSON.stringify(fake));
+      sessionStorage.setItem("cw_library_public_recipes_v5", JSON.stringify(fake));
     });
 
     await page.goto("/library.html");
