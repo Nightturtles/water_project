@@ -831,6 +831,10 @@
             const remaining = loadSelectedConcentrates().filter((id) => id !== "stock:" + slug);
             saveSelectedConcentrates(remaining);
             renderStockConcentrates();
+            // Deleting the last selected stock empties the Selected group, so
+            // restore its "nothing selected" hint (renderStockConcentrates alone
+            // doesn't touch it).
+            refreshConcentrateEmptyStates();
             showSaved();
           });
           return;
