@@ -295,15 +295,15 @@ function initSourceWaterSection(options) {
       return;
     }
     const btn = e.target.closest(".preset-btn");
-    if (!btn) return;
+    // Ignore action buttons that share this container but aren't presets: the
+    // estimate-from-ZIP button has class "preset-btn" but no data-preset, so
+    // activating with an undefined key would fall back to another preset and
+    // clobber the user's selection. (It has its own click handler.)
+    if (!btn || !btn.dataset.preset) return;
     activateSourcePreset(btn.dataset.preset);
-    // Picking a real preset collapses back to just that selection. Guard on
-    // data-preset so the estimate-from-ZIP action button (no data-preset, it
-    // shares this container) doesn't trigger a collapse.
-    if (btn.dataset.preset) {
-      sourcePresetsExpanded = false;
-      applySourcePresetsCollapsed();
-    }
+    // Picking a preset collapses the rail back to just that selection.
+    sourcePresetsExpanded = false;
+    applySourcePresetsCollapsed();
     onChanged();
   });
 

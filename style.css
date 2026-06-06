@@ -925,8 +925,8 @@ select:focus {
   content: "";
   width: 0.45rem;
   height: 0.45rem;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
+  border-right: 2px solid currentcolor;
+  border-bottom: 2px solid currentcolor;
   transform: rotate(45deg);
   margin-top: -0.18rem;
   transition: transform 0.15s ease;
