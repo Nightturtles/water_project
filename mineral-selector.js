@@ -132,18 +132,247 @@
 
   // ---- Concentrate save helpers (preserve other categories) ----
 
-  function writeDiyIds(diyIds) {
-    var others = loadSelectedConcentrates().filter(function (id) {
-      return typeof id === "string" && !id.startsWith("diy:");
-    });
-    saveSelectedConcentrates(others.concat(diyIds));
+  // Per-id enable/disable. Used by every concentrate toggle (Selected group
+  // + the three type groups) so enabling one item never rewrites the rest of
+  // its category. Stock routes through setStockEnabled (its own idempotent
+  // add/remove); diy/brand add or drop the single id.
+  function setConcentrateEnabled(concId, enabled) {
+    if (typeof concId !== "string") return;
+    if (concId.indexOf("stock:") === 0) {
+      setStockEnabled(concId, enabled);
+      return;
+    }
+    var ids = loadSelectedConcentrates();
+    var has = ids.indexOf(concId) !== -1;
+    if (enabled && !has) saveSelectedConcentrates(ids.concat([concId]));
+    else if (!enabled && has)
+      saveSelectedConcentrates(
+        ids.filter(function (id) {
+          return id !== concId;
+        }),
+      );
   }
 
-  function writeBrandIds(brandIds) {
-    var others = loadSelectedConcentrates().filter(function (id) {
-      return typeof id === "string" && !id.startsWith("brand:");
-    });
-    saveSelectedConcentrates(others.concat(brandIds));
+  // In the mixed "Selected Concentrates" group a type badge tells diy/stock
+  // rows apart (matches the chip-strip convention: "DIY" / "Recipe").
+  function appendConcentrateTypeBadge(row, label) {
+    var nameSpan = row.querySelector(".mineral-name");
+    if (!nameSpan) return;
+    var badge = document.createElement("span");
+    badge.className = "badge badge-concentrate";
+    badge.textContent = label;
+    nameSpan.appendChild(badge);
+  }
+
+  // ---- Row builders (shared by the type groups and the Selected group) ----
+
+  function buildDiyConcentrateRow(id, checked) {
+    var concId = "diy:" + id;
+    var row = buildMineralRow(id, MINERAL_DB[id], checked);
+    row.classList.add("has-edit-actions");
+    // The row's checkbox value defaults to the mineral id; rewrite to the
+    // diy: prefixed concentrate id so the save handler reads it directly.
+    var input = row.querySelector("input[type='checkbox']");
+    if (input) input.value = concId;
+    // Pencil button sits outside the <label> so its click doesn't toggle
+    // the checkbox via implicit label association.
+    var actions = document.createElement("div");
+    actions.className = "mineral-selector-row-actions";
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "mineral-selector-edit-btn";
+    editBtn.setAttribute("aria-label", "Edit mineral concentrate");
+    editBtn.title = "Edit mineral concentrate";
+    editBtn.dataset.mineralId = id;
+    editBtn.innerHTML = "&#9998;";
+    actions.appendChild(editBtn);
+    row.appendChild(actions);
+    return row;
+  }
+
+  function buildStockConcentrateRow(slug, spec, checked) {
+    spec = spec || {};
+    var concId = "stock:" + slug;
+    var label = spec.label || spec.name || slug;
+
+    var item = document.createElement("div");
+    item.className = "mineral-item has-edit-actions" + (checked ? " selected" : "");
+    var lbl = document.createElement("label");
+    lbl.className = "mineral-label";
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = concId;
+    input.checked = checked;
+    var info = document.createElement("div");
+    info.className = "mineral-info";
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "mineral-name";
+    nameSpan.textContent = label;
+    info.appendChild(nameSpan);
+    if (Array.isArray(spec.minerals) && spec.minerals.length > 0) {
+      var sumSpan = document.createElement("span");
+      sumSpan.className = "mineral-desc";
+      var names = [];
+      for (var j = 0; j < spec.minerals.length; j++) {
+        var m = spec.minerals[j];
+        var def = m && m.mineralId ? MINERAL_DB[m.mineralId] : null;
+        if (def) names.push(def.name);
+      }
+      sumSpan.textContent = names.join(", ");
+      info.appendChild(sumSpan);
+    }
+    lbl.appendChild(input);
+    lbl.appendChild(info);
+    item.appendChild(lbl);
+
+    var actions = document.createElement("div");
+    actions.className = "mineral-selector-row-actions";
+    var editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "mineral-selector-edit-btn";
+    editBtn.setAttribute("aria-label", "Edit recipe concentrate");
+    editBtn.title = "Edit recipe concentrate";
+    editBtn.dataset.stockSlug = slug;
+    editBtn.innerHTML = "&#9998;";
+    actions.appendChild(editBtn);
+
+    var delBtn = document.createElement("button");
+    delBtn.type = "button";
+    delBtn.className = "mineral-selector-delete-btn";
+    delBtn.setAttribute("aria-label", "Delete recipe concentrate");
+    delBtn.title = "Delete recipe concentrate";
+    delBtn.dataset.stockSlug = slug;
+    delBtn.innerHTML = "&times;";
+    actions.appendChild(delBtn);
+    item.appendChild(actions);
+    return item;
+  }
+
+  function buildBrandConcentrateRow(bid, brand, checked) {
+    brand = brand || {};
+    var item = document.createElement("div");
+    item.className = "mineral-item" + (checked ? " selected" : "");
+    var lbl = document.createElement("label");
+    lbl.className = "mineral-label";
+    var input = document.createElement("input");
+    input.type = "checkbox";
+    input.value = bid;
+    if (checked) input.checked = true;
+    var info = document.createElement("div");
+    info.className = "mineral-info";
+    var nameSpan = document.createElement("span");
+    nameSpan.className = "mineral-name";
+    nameSpan.textContent = brand.name || bid;
+    var badge = brandBadgeFor(bid);
+    if (badge) {
+      var badgeSpan = document.createElement("span");
+      badgeSpan.className = badge.className;
+      badgeSpan.textContent = badge.label;
+      nameSpan.appendChild(badgeSpan);
+    }
+    info.appendChild(nameSpan);
+    if (brand.formula) {
+      var formulaSpan = document.createElement("span");
+      formulaSpan.className = "mineral-formula";
+      formulaSpan.textContent = brand.formula;
+      info.appendChild(formulaSpan);
+    }
+    lbl.appendChild(input);
+    lbl.appendChild(info);
+    item.appendChild(lbl);
+    return item;
+  }
+
+  function confirmDeleteStock(slug) {
+    if (!slug) return;
+    var allSpecs = loadStockConcentrateSpecs();
+    var delLabel = (allSpecs[slug] && allSpecs[slug].label) || slug;
+    var runDelete = function () {
+      var cur = loadStockConcentrateSpecs();
+      delete cur[slug];
+      saveStockConcentrateSpecs(cur);
+      var remaining = loadSelectedConcentrates().filter(function (id) {
+        return id !== "stock:" + slug;
+      });
+      saveSelectedConcentrates(remaining);
+      rebuildConcentratesTab();
+      dispatchChanged({ scope: "concentrates", category: "stock", deletedSlug: slug });
+    };
+    if (typeof showConfirm === "function") {
+      showConfirm('Delete recipe concentrate "' + delLabel + '"?', runDelete);
+    } else if (
+      typeof window.confirm === "function" &&
+      window.confirm('Delete recipe concentrate "' + delLabel + '"?')
+    ) {
+      runDelete();
+    }
+  }
+
+  // ---- Unified row handlers (attached to every concentrate list) ----
+
+  // Type groups render only unselected rows, so a checkbox change there means
+  // "enable"; the Selected group renders only selected rows, so a change there
+  // means "disable". One handler covers both: enable/disable the single id,
+  // then rebuild so the row jumps to the right group.
+  function handleConcentrateRowChange(e) {
+    if (!e.target || e.target.type !== "checkbox") return;
+    var checkbox = e.target;
+    var concId = checkbox.value;
+
+    // Enabling a DIY without a valid spec would silently dose 0 of that
+    // mineral. Intercept: revert the checkbox and open the editor so the user
+    // configures bottleMl + gramsPerBottle. The editor's save path persists
+    // the spec AND adds the diy:* id, then onSaved rebuilds with it checked.
+    if (checkbox.checked && concId.indexOf("diy:") === 0) {
+      var mineralId = concId.slice(4);
+      var specs = typeof loadDiyConcentrateSpecs === "function" ? loadDiyConcentrateSpecs() : {};
+      var spec = specs[mineralId];
+      var hasValidSpec = spec && Number(spec.bottleMl) > 0 && Number(spec.gramsPerBottle) > 0;
+      if (!hasValidSpec) {
+        checkbox.checked = false;
+        var revertItem = checkbox.closest(".mineral-item");
+        if (revertItem) revertItem.classList.remove("selected");
+        if (typeof window.openDiyEditor === "function") {
+          window.openDiyEditor({ mineralId: mineralId, onSaved: rebuildConcentratesTab });
+        }
+        return;
+      }
+    }
+
+    setConcentrateEnabled(concId, checkbox.checked);
+    dispatchChanged({ scope: "concentrates", toggledId: concId, enabled: checkbox.checked });
+    rebuildConcentratesTab();
+  }
+
+  function handleConcentrateRowClick(e) {
+    var el = e.target instanceof HTMLElement ? e.target : null;
+    if (!el) return;
+    var editBtn = el.closest(".mineral-selector-edit-btn");
+    if (editBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (editBtn.dataset.mineralId) {
+        if (typeof window.openDiyEditor === "function")
+          window.openDiyEditor({
+            mineralId: editBtn.dataset.mineralId,
+            onSaved: rebuildConcentratesTab,
+          });
+      } else if (editBtn.dataset.stockSlug) {
+        if (typeof window.openStockEditor === "function")
+          window.openStockEditor({
+            mode: "edit",
+            slug: editBtn.dataset.stockSlug,
+            onSaved: rebuildConcentratesTab,
+          });
+      }
+      return;
+    }
+    var delBtn = el.closest(".mineral-selector-delete-btn");
+    if (delBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      confirmDeleteStock(delBtn.dataset.stockSlug);
+    }
   }
 
   // setStockEnabled lives in storage.js (top-level export) so the
@@ -167,87 +396,14 @@
     for (var i = 0; i < selected.length; i++) selectedSet[selected[i]] = true;
     for (var id in MINERAL_DB) {
       if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, id)) continue;
-      var concId = "diy:" + id;
-      var row = buildMineralRow(id, MINERAL_DB[id], !!selectedSet[concId]);
-      row.classList.add("has-edit-actions");
-      // The row's checkbox value defaults to the mineral id; rewrite to the
-      // diy: prefixed concentrate id so the save handler reads it directly.
-      var input = row.querySelector("input[type='checkbox']");
-      if (input) input.value = concId;
-      // Pencil button sits outside the <label> so its click doesn't toggle
-      // the checkbox via implicit label association.
-      var actions = document.createElement("div");
-      actions.className = "mineral-selector-row-actions";
-      var editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "mineral-selector-edit-btn";
-      editBtn.setAttribute("aria-label", "Edit mineral concentrate");
-      editBtn.title = "Edit mineral concentrate";
-      editBtn.dataset.mineralId = id;
-      editBtn.innerHTML = "&#9998;";
-      actions.appendChild(editBtn);
-      row.appendChild(actions);
-      list.appendChild(row);
+      // Selected diy concentrates render in the "Selected Concentrates" group.
+      if (selectedSet["diy:" + id]) continue;
+      list.appendChild(buildDiyConcentrateRow(id, false));
     }
     targetEl.appendChild(list);
 
-    list.addEventListener("change", function (e) {
-      if (!e.target || e.target.type !== "checkbox") return;
-      var checkbox = e.target;
-
-      // Enabling a DIY without a valid spec would silently dose 0 of that
-      // mineral. Intercept: revert the checkbox and open the editor so the
-      // user configures bottleMl + gramsPerBottle. The editor's save path
-      // both persists the spec AND adds the diy:* id to selected
-      // concentrates, then onSaved rebuilds the list with the row checked.
-      if (checkbox.checked) {
-        var concId = checkbox.value;
-        var mineralId = concId.indexOf("diy:") === 0 ? concId.slice(4) : "";
-        if (mineralId) {
-          var specs =
-            typeof loadDiyConcentrateSpecs === "function" ? loadDiyConcentrateSpecs() : {};
-          var spec = specs[mineralId];
-          var hasValidSpec = spec && Number(spec.bottleMl) > 0 && Number(spec.gramsPerBottle) > 0;
-          if (!hasValidSpec) {
-            checkbox.checked = false;
-            var revertItem = checkbox.closest(".mineral-item");
-            if (revertItem) revertItem.classList.remove("selected");
-            if (typeof window.openDiyEditor === "function") {
-              window.openDiyEditor({
-                mineralId: mineralId,
-                onSaved: function () {
-                  rebuildConcentratesTab();
-                },
-              });
-            }
-            return;
-          }
-        }
-      }
-
-      var item = checkbox.closest(".mineral-item");
-      if (item) item.classList.toggle("selected", checkbox.checked);
-      var checked = list.querySelectorAll("input[type='checkbox']:checked");
-      var ids = [];
-      for (var i = 0; i < checked.length; i++) ids.push(checked[i].value);
-      writeDiyIds(ids);
-      dispatchChanged({ scope: "concentrates", category: "diy", ids: ids });
-    });
-
-    list.addEventListener("click", function (e) {
-      var btn =
-        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-edit-btn") : null;
-      if (!btn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof window.openDiyEditor !== "function") return;
-      window.openDiyEditor({
-        mineralId: btn.dataset.mineralId,
-        onSaved: function () {
-          rebuildConcentratesTab();
-        },
-      });
-    });
+    list.addEventListener("change", handleConcentrateRowChange);
+    list.addEventListener("click", handleConcentrateRowClick);
   }
 
   // ---- Stock subsection ----
@@ -299,127 +455,14 @@
 
     for (var i = 0; i < stockIds.length; i++) {
       var slug = stockIds[i];
-      var concId = "stock:" + slug;
-      var spec = specs[slug] || {};
-      var label = (spec && (spec.label || spec.name)) || slug;
-      var isActive = !!activeIdSet[concId];
-
-      var item = document.createElement("div");
-      item.className = "mineral-item has-edit-actions" + (isActive ? " selected" : "");
-      var lbl = document.createElement("label");
-      lbl.className = "mineral-label";
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = concId;
-      input.checked = isActive;
-      var info = document.createElement("div");
-      info.className = "mineral-info";
-      var nameSpan = document.createElement("span");
-      nameSpan.className = "mineral-name";
-      nameSpan.textContent = label;
-      info.appendChild(nameSpan);
-      if (Array.isArray(spec.minerals) && spec.minerals.length > 0) {
-        var sumSpan = document.createElement("span");
-        sumSpan.className = "mineral-desc";
-        var names = [];
-        for (var j = 0; j < spec.minerals.length; j++) {
-          var m = spec.minerals[j];
-          var def = m && m.mineralId ? MINERAL_DB[m.mineralId] : null;
-          if (def) names.push(def.name);
-        }
-        sumSpan.textContent = names.join(", ");
-        info.appendChild(sumSpan);
-      }
-      lbl.appendChild(input);
-      lbl.appendChild(info);
-      item.appendChild(lbl);
-
-      var actions = document.createElement("div");
-      actions.className = "mineral-selector-row-actions";
-      var editBtn = document.createElement("button");
-      editBtn.type = "button";
-      editBtn.className = "mineral-selector-edit-btn";
-      editBtn.setAttribute("aria-label", "Edit recipe concentrate");
-      editBtn.title = "Edit recipe concentrate";
-      editBtn.dataset.stockSlug = slug;
-      editBtn.innerHTML = "&#9998;";
-      actions.appendChild(editBtn);
-
-      var delBtn = document.createElement("button");
-      delBtn.type = "button";
-      delBtn.className = "mineral-selector-delete-btn";
-      delBtn.setAttribute("aria-label", "Delete recipe concentrate");
-      delBtn.title = "Delete recipe concentrate";
-      delBtn.dataset.stockSlug = slug;
-      delBtn.innerHTML = "&times;";
-      actions.appendChild(delBtn);
-      item.appendChild(actions);
-
-      list.appendChild(item);
+      // Enabled recipe concentrates render in the "Selected Concentrates" group.
+      if (activeIdSet["stock:" + slug]) continue;
+      list.appendChild(buildStockConcentrateRow(slug, specs[slug], false));
     }
     targetEl.appendChild(list);
 
-    list.addEventListener("change", function (e) {
-      if (!e.target || e.target.type !== "checkbox") return;
-      var clicked = e.target;
-      // Multi-Recipe-Concentrate: each checkbox toggles its own stock
-      // independently. Update only this row's selected class; other rows
-      // keep their state.
-      var rowItem = clicked.closest(".mineral-item");
-      if (rowItem) rowItem.classList.toggle("selected", clicked.checked);
-      setStockEnabled(clicked.value, clicked.checked);
-      dispatchChanged({
-        scope: "concentrates",
-        category: "stock",
-        toggledId: clicked.value,
-        enabled: clicked.checked,
-      });
-    });
-
-    list.addEventListener("click", function (e) {
-      var editBtn =
-        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-edit-btn") : null;
-      if (editBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        if (typeof window.openStockEditor !== "function") return;
-        window.openStockEditor({
-          mode: "edit",
-          slug: editBtn.dataset.stockSlug,
-          onSaved: function () {
-            rebuildConcentratesTab();
-          },
-        });
-        return;
-      }
-      var delBtn =
-        e.target instanceof HTMLElement ? e.target.closest(".mineral-selector-delete-btn") : null;
-      if (!delBtn) return;
-      e.preventDefault();
-      e.stopPropagation();
-      var delSlug = delBtn.dataset.stockSlug;
-      var allSpecs = loadStockConcentrateSpecs();
-      var delLabel = (allSpecs[delSlug] && allSpecs[delSlug].label) || delSlug;
-      var runDelete = function () {
-        var cur = loadStockConcentrateSpecs();
-        delete cur[delSlug];
-        saveStockConcentrateSpecs(cur);
-        var remaining = loadSelectedConcentrates().filter(function (id) {
-          return id !== "stock:" + delSlug;
-        });
-        saveSelectedConcentrates(remaining);
-        rebuildConcentratesTab();
-        dispatchChanged({ scope: "concentrates", category: "stock", deletedSlug: delSlug });
-      };
-      if (typeof showConfirm === "function") {
-        showConfirm('Delete recipe concentrate "' + delLabel + '"?', runDelete);
-      } else if (
-        typeof window.confirm === "function" &&
-        window.confirm('Delete recipe concentrate "' + delLabel + '"?')
-      ) {
-        runDelete();
-      }
-    });
+    list.addEventListener("change", handleConcentrateRowChange);
+    list.addEventListener("click", handleConcentrateRowClick);
   }
 
   // ---- Brand subsection ----
@@ -490,58 +533,76 @@
     var brandDb = typeof BRAND_CONCENTRATES !== "undefined" ? BRAND_CONCENTRATES : {};
     for (var k = 0; k < brandIds.length; k++) {
       var bid = brandIds[k];
-      var brand = brandDb[bid] || {};
-      var checked = !!selectedSet[bid];
-      var item = document.createElement("div");
-      item.className = "mineral-item" + (checked ? " selected" : "");
-      var lbl = document.createElement("label");
-      lbl.className = "mineral-label";
-      var input = document.createElement("input");
-      input.type = "checkbox";
-      input.value = bid;
-      if (checked) input.checked = true;
-      var info = document.createElement("div");
-      info.className = "mineral-info";
-      var nameSpan = document.createElement("span");
-      nameSpan.className = "mineral-name";
-      nameSpan.textContent = brand.name || bid;
-      var badge = brandBadgeFor(bid);
-      if (badge) {
-        var badgeSpan = document.createElement("span");
-        badgeSpan.className = badge.className;
-        badgeSpan.textContent = badge.label;
-        nameSpan.appendChild(badgeSpan);
-      }
-      info.appendChild(nameSpan);
-      if (brand.formula) {
-        var formulaSpan = document.createElement("span");
-        formulaSpan.className = "mineral-formula";
-        formulaSpan.textContent = brand.formula;
-        info.appendChild(formulaSpan);
-      }
-      lbl.appendChild(input);
-      lbl.appendChild(info);
-      item.appendChild(lbl);
-      list.appendChild(item);
+      // Selected brand concentrates render in the "Selected Concentrates" group.
+      if (selectedSet[bid]) continue;
+      list.appendChild(buildBrandConcentrateRow(bid, brandDb[bid], false));
     }
     targetEl.appendChild(list);
 
-    list.addEventListener("change", function (e) {
-      if (!e.target || e.target.type !== "checkbox") return;
-      var item = e.target.closest(".mineral-item");
-      if (item) item.classList.toggle("selected", e.target.checked);
-      var checkedNodes = list.querySelectorAll("input[type='checkbox']:checked");
-      var ids = [];
-      for (var i = 0; i < checkedNodes.length; i++) ids.push(checkedNodes[i].value);
-      writeBrandIds(ids);
-      dispatchChanged({ scope: "concentrates", category: "brand", ids: ids });
-    });
+    list.addEventListener("change", handleConcentrateRowChange);
+    list.addEventListener("click", handleConcentrateRowClick);
+  }
+
+  // ---- Selected Concentrates group (mirrors "Selected Minerals") ----
+
+  // The user's enabled concentrates across all three types, shown first and
+  // expanded. The type groups below hold only the unselected ones. Rebuilt on
+  // every toggle (via rebuildConcentratesTab) so rows move groups live.
+  function renderSelectedConcentratesInto(targetEl) {
+    targetEl.innerHTML = "";
+
+    var selected = loadSelectedConcentrates();
+    var stockSpecs =
+      typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
+    var brandDb = typeof BRAND_CONCENTRATES !== "undefined" ? BRAND_CONCENTRATES : {};
+
+    var list = document.createElement("div");
+    list.className = "mineral-list mineral-selector-sublist";
+    var count = 0;
+
+    for (var i = 0; i < selected.length; i++) {
+      var concId = selected[i];
+      if (typeof concId !== "string") continue;
+      var row = null;
+      if (concId.indexOf("diy:") === 0) {
+        var mineralId = concId.slice(4);
+        if (!MINERAL_DB[mineralId]) continue;
+        row = buildDiyConcentrateRow(mineralId, true);
+        appendConcentrateTypeBadge(row, "DIY");
+      } else if (concId.indexOf("stock:") === 0) {
+        var slug = concId.slice(6);
+        if (!stockSpecs[slug]) continue; // orphaned id (spec deleted) — skip
+        row = buildStockConcentrateRow(slug, stockSpecs[slug], true);
+        appendConcentrateTypeBadge(row, "Recipe");
+      } else if (concId.indexOf("brand:") === 0) {
+        if (!brandDb[concId]) continue;
+        row = buildBrandConcentrateRow(concId, brandDb[concId], true);
+      }
+      if (row) {
+        list.appendChild(row);
+        count++;
+      }
+    }
+
+    if (count === 0) {
+      var empty = document.createElement("p");
+      empty.className = "hint mineral-group-empty";
+      empty.textContent = "No concentrates selected. Add some from the groups below.";
+      targetEl.appendChild(empty);
+      return;
+    }
+
+    targetEl.appendChild(list);
+    list.addEventListener("change", handleConcentrateRowChange);
+    list.addEventListener("click", handleConcentrateRowClick);
   }
 
   // ---- Tabbed modal (shared across all chip mounts) ----
 
   var modalEl = null;
   var directListEl = null;
+  var concSelectedContentEl = null;
+  var concSelectedSummaryEl = null;
   var concDiyContentEl = null;
   var concStockContentEl = null;
   var concBrandContentEl = null;
@@ -601,6 +662,7 @@
   function rebuildConcentratesTab() {
     // Only the content divs rebuild — the collapsible summary wrappers
     // stay put so the user's open/closed state survives each rebuild.
+    if (concSelectedContentEl) renderSelectedConcentratesInto(concSelectedContentEl);
     if (concDiyContentEl) renderDiyContentInto(concDiyContentEl);
     if (concStockContentEl) renderStockContentInto(concStockContentEl);
     if (concBrandContentEl) renderBrandContentInto(concBrandContentEl);
@@ -690,7 +752,13 @@
     concPanelEl.setAttribute("role", "tabpanel");
     concPanelEl.setAttribute("aria-labelledby", "mineral-selector-tab-concentrates");
 
-    // Created collapsed; openModal expands any group that already has content.
+    // "Selected Concentrates" first and expanded; the type groups below hold
+    // only the unselected items and start collapsed (openModal sets state).
+    var selectedWrap = makeCollapsibleSubsection("Selected Concentrates", true);
+    concSelectedContentEl = selectedWrap.content;
+    concSelectedSummaryEl = selectedWrap.summary;
+    concPanelEl.appendChild(selectedWrap.section);
+
     var diyWrap = makeCollapsibleSubsection("Mineral Concentrates", false);
     concDiyContentEl = diyWrap.content;
     concDiySummaryEl = diyWrap.summary;
@@ -724,24 +792,12 @@
     modalPreviousFocus = document.activeElement;
     buildMineralListInto(directListEl, loadSelectedMinerals());
     rebuildConcentratesTab();
-    // Concentrate groups start collapsed (calm), but auto-expand any that
-    // already have content so a configured concentrate is never hidden.
-    var selectedConc =
-      typeof loadSelectedConcentrates === "function" ? loadSelectedConcentrates() : [];
-    var stockSpecs =
-      typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
-    var hasDiy = selectedConc.some(function (id) {
-      return typeof id === "string" && id.indexOf("diy:") === 0;
-    });
-    var hasBrand = selectedConc.some(function (id) {
-      return typeof id === "string" && id.indexOf("brand:") === 0;
-    });
-    var hasStock = stockSpecs && Object.keys(stockSpecs).length > 0;
-    if (concDiySummaryEl) concDiySummaryEl.setAttribute("aria-expanded", hasDiy ? "true" : "false");
-    if (concStockSummaryEl)
-      concStockSummaryEl.setAttribute("aria-expanded", hasStock ? "true" : "false");
-    if (concBrandSummaryEl)
-      concBrandSummaryEl.setAttribute("aria-expanded", hasBrand ? "true" : "false");
+    // "Selected Concentrates" is the calm default: expanded up top, with the
+    // three type groups collapsed below (the user expands one to add more).
+    if (concSelectedSummaryEl) concSelectedSummaryEl.setAttribute("aria-expanded", "true");
+    if (concDiySummaryEl) concDiySummaryEl.setAttribute("aria-expanded", "false");
+    if (concStockSummaryEl) concStockSummaryEl.setAttribute("aria-expanded", "false");
+    if (concBrandSummaryEl) concBrandSummaryEl.setAttribute("aria-expanded", "false");
     setActiveTab(readActiveTab());
     modalEl.style.display = "";
 

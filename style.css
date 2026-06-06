@@ -512,10 +512,17 @@ main > .card:last-child {
 #diy-concentrates-summary[aria-expanded="false"] ~ #diy-concentrates-content {
   display: none;
 }
+#selected-concentrates-summary[aria-expanded="true"] ~ #selected-concentrates-content,
 #diy-concentrates-summary[aria-expanded="true"] ~ #diy-concentrates-content,
 #stock-concentrates-summary[aria-expanded="true"] ~ #stock-concentrates-content,
 #brand-concentrates-summary[aria-expanded="true"] ~ #brand-concentrates-content {
   display: block;
+}
+/* "Selected Concentrates" sits first, so its collapsed state must not hide the
+   type groups below it — pin its own content with an explicit id pair (the
+   generic rule above would otherwise match every later .card-collapsible-content). */
+#selected-concentrates-summary[aria-expanded="false"] ~ #selected-concentrates-content {
+  display: none;
 }
 #stock-concentrates-summary[aria-expanded="false"] ~ #stock-concentrates-content {
   display: none;
