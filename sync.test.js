@@ -296,13 +296,8 @@ describe("buildSettingsPayload", () => {
     expect(payload.mineral_display_mode).toBe("standard");
     expect(payload.lotus_dropper_type).toBe("round");
     expect(payload.creator_display_name).toBe("");
-    // Default 4-mineral selection.
-    expect(payload.selected_minerals).toEqual([
-      "calcium-chloride",
-      "epsom-salt",
-      "baking-soda",
-      "potassium-bicarbonate",
-    ]);
+    // Default starter-kit selection (3 essentials; see DEFAULT_SELECTED_MINERALS).
+    expect(payload.selected_minerals).toEqual(["calcium-chloride", "epsom-salt", "baking-soda"]);
     // Empty volume_preferences when no cw_volume_* keys are present.
     expect(payload.volume_preferences).toEqual({});
   });
@@ -447,7 +442,7 @@ describe("isDefaultData", () => {
   test("default minerals in a different order → still true (order-insensitive)", () => {
     global.localStorage.setItem(
       "cw_selected_minerals",
-      JSON.stringify(["baking-soda", "potassium-bicarbonate", "calcium-chloride", "epsom-salt"]),
+      JSON.stringify(["baking-soda", "calcium-chloride", "epsom-salt"]),
     );
     expect(isDefaultData()).toBe(true);
   });

@@ -31,7 +31,7 @@
     <section class="card">
       <h2>Available Concentrates</h2>
 
-      <button type="button" class="card-collapsible-summary" id="diy-concentrates-summary" aria-expanded="true" aria-controls="diy-concentrates-content">
+      <button type="button" class="card-collapsible-summary" id="diy-concentrates-summary" aria-expanded="false" aria-controls="diy-concentrates-content">
         <span class="card-collapsible-title">Mineral Concentrates</span>
       </button>
       <p class="hint">All concentrates assumed to be made with Distilled / RO water</p>
@@ -41,7 +41,7 @@
         </div>
       </div>
 
-      <button type="button" class="card-collapsible-summary" id="stock-concentrates-summary" aria-expanded="true" aria-controls="stock-concentrates-content">
+      <button type="button" class="card-collapsible-summary" id="stock-concentrates-summary" aria-expanded="false" aria-controls="stock-concentrates-content">
         <span class="card-collapsible-title">Recipe Concentrates</span>
       </button>
       <p class="hint">Multi-mineral concentrates: dissolve several salts into one bottle, then dose by grams of concentrate per liter of brew water. Enable any number; each will appear in the recipe builder and the calculator sums their contributions.</p>
@@ -57,7 +57,7 @@
         </div>
       </div>
 
-      <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="true" aria-controls="brand-concentrates-content">
+      <button type="button" class="card-collapsible-summary" id="brand-concentrates-summary" aria-expanded="false" aria-controls="brand-concentrates-content">
         <span class="card-collapsible-title">Brand Name Concentrates</span>
       </button>
       <p class="hint">Pre-made concentrates with fixed concentration. Select the ones you have; they appear on the calculator and recipe pages.</p>
@@ -151,10 +151,7 @@
 
     // --- Populate mineral list ---
     const mineralListEl = document.getElementById("mineral-list");
-    const selectedMinerals = loadSelectedMinerals();
-
-    for (const [id, mineral] of Object.entries(MINERAL_DB)) {
-      const checked = selectedMinerals.includes(id);
+    function buildMineralItem(id, mineral, checked) {
       const div = document.createElement("div");
       div.className = "mineral-item" + (checked ? " selected" : "");
       const label = document.createElement("label");
@@ -180,19 +177,84 @@
       label.appendChild(input);
       label.appendChild(info);
       div.appendChild(label);
-      mineralListEl.appendChild(div);
+      return div;
     }
 
-    // --- Handle mineral-source availability and auto-selection ---
+    // "Selected Minerals" lists what the user has on hand (the starter-kit
+    // defaults to begin with); everything else sits in a collapsed "More
+    // minerals" group. Re-rendered on each toggle so an item moves to the right
+    // group the moment it's checked or unchecked.
+    let moreMineralsExpanded = false;
+
+    function renderMineralList() {
+      const selectedSet = new Set(loadSelectedMinerals());
+      mineralListEl.innerHTML = "";
+
+      const selectedLabel = document.createElement("div");
+      selectedLabel.className = "mineral-group-label";
+      selectedLabel.textContent = "Selected Minerals";
+      mineralListEl.appendChild(selectedLabel);
+
+      const selectedGroup = document.createElement("div");
+      selectedGroup.className = "mineral-list-group";
+      mineralListEl.appendChild(selectedGroup);
+
+      const moreContent = document.createElement("div");
+      moreContent.className = "card-collapsible-content mineral-list-group";
+      moreContent.id = "more-minerals-content";
+
+      let selectedCount = 0;
+      let moreCount = 0;
+      for (const [id, mineral] of Object.entries(MINERAL_DB)) {
+        const checked = selectedSet.has(id);
+        const item = buildMineralItem(id, mineral, checked);
+        if (checked) {
+          selectedGroup.appendChild(item);
+          selectedCount++;
+        } else {
+          moreContent.appendChild(item);
+          moreCount++;
+        }
+      }
+
+      if (selectedCount === 0) {
+        const empty = document.createElement("p");
+        empty.className = "hint mineral-group-empty";
+        empty.textContent = "No minerals selected. Pick some from More minerals below.";
+        selectedGroup.appendChild(empty);
+        moreMineralsExpanded = true; // don't strand the user with nothing to pick
+      }
+
+      if (moreCount > 0) {
+        const moreSummary = document.createElement("button");
+        moreSummary.type = "button";
+        moreSummary.className = "card-collapsible-summary mineral-more-summary";
+        moreSummary.id = "more-minerals-summary";
+        moreSummary.setAttribute("aria-controls", "more-minerals-content");
+        moreSummary.setAttribute("aria-expanded", moreMineralsExpanded ? "true" : "false");
+        const moreTitle = document.createElement("span");
+        moreTitle.className = "card-collapsible-title";
+        moreTitle.textContent = "More minerals";
+        moreSummary.appendChild(moreTitle);
+        moreSummary.addEventListener("click", () => {
+          moreMineralsExpanded = moreSummary.getAttribute("aria-expanded") !== "true";
+          moreSummary.setAttribute("aria-expanded", moreMineralsExpanded ? "true" : "false");
+        });
+        mineralListEl.appendChild(moreSummary);
+        mineralListEl.appendChild(moreContent);
+      }
+    }
+
+    renderMineralList();
+
+    // Persist + re-group on toggle (the delegated listener survives re-render
+    // since it's bound to mineralListEl, not the rebuilt children).
     mineralListEl.addEventListener("change", (e) => {
       if (e.target.type !== "checkbox") return;
-      const item = e.target.closest(".mineral-item");
-      item.classList.toggle("selected", e.target.checked);
-
-      const checked = mineralListEl.querySelectorAll("input:checked");
-      const ids = Array.from(checked).map(cb => cb.value);
+      const ids = Array.from(mineralListEl.querySelectorAll("input:checked")).map((cb) => cb.value);
       saveSelectedMinerals(ids);
       showSaved();
+      renderMineralList();
     });
 
     // --- DIY concentrates ---
@@ -1316,6 +1378,21 @@
         brandSummary.setAttribute("aria-expanded", expanded);
       });
     }
+
+    // Concentrate groups start collapsed for a calm first impression, but a
+    // group auto-expands when the user already has content in it so we never
+    // hide their configured concentrates behind a closed section.
+    const selectedConcentratesForExpand = loadSelectedConcentrates();
+    const hasDiy = selectedConcentratesForExpand.some(
+      (id) => typeof id === "string" && id.startsWith("diy:")
+    );
+    const hasBrand = selectedConcentratesForExpand.some(
+      (id) => typeof id === "string" && id.startsWith("brand:")
+    );
+    const hasStock = Object.keys(loadStockConcentrateSpecs() || {}).length > 0;
+    if (hasDiy && diySummary) diySummary.setAttribute("aria-expanded", "true");
+    if (hasStock && stockSummary) stockSummary.setAttribute("aria-expanded", "true");
+    if (hasBrand && brandSummary) brandSummary.setAttribute("aria-expanded", "true");
 
     // --- Brand concentrates: Lotus Coffee Water Drops ---
     const lotusDropperToggle = document.getElementById("lotus-dropper-toggle");

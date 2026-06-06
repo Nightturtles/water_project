@@ -281,10 +281,125 @@ function renderResultItems() {
 }
 
 // --- Dynamic profile buttons (Inefficiency 1: cleaned up redundant if/else) ---
+// --- Target Profile rail filters (Roast + Flavor; Method = the brew toggle) ---
+// Reuses the Library's filter vocabulary + the shared window.recipeMatches
+// predicate so the calculator narrows profiles exactly like library.html does.
+const TARGET_ROAST_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "light", label: "Light" },
+  { value: "medium", label: "Medium" },
+  { value: "dark", label: "Dark" },
+];
+let targetFilterRoast = "all";
+const targetFilterTags = [];
+
+function buildTargetFilters() {
+  const container = document.getElementById("target-filters");
+  if (!container) return;
+  // Capture the brew-method toggle (it lives in the markup before this box, or
+  // already inside it on a re-run) BEFORE wiping, so its once-bound click
+  // wiring survives the relocation into the Method row below.
+  const brewToggle = document.getElementById("brew-method-toggle");
+  container.innerHTML = "";
+
+  // Method row — the existing Filter/Espresso toggle, relocated into the box.
+  if (brewToggle) {
+    const methodRow = document.createElement("div");
+    methodRow.className = "rx-filter-row";
+    const methodLabel = document.createElement("div");
+    methodLabel.className = "rx-filter-row-label";
+    methodLabel.textContent = "Method";
+    methodRow.appendChild(methodLabel);
+    methodRow.appendChild(brewToggle);
+    container.appendChild(methodRow);
+  }
+
+  // Roast (segmented, single-select). Divided from the Method row above.
+  const roastRow = document.createElement("div");
+  roastRow.className = "rx-filter-row rx-filter-row-divided";
+  const roastLabel = document.createElement("div");
+  roastLabel.className = "rx-filter-row-label";
+  roastLabel.textContent = "Roast";
+  roastRow.appendChild(roastLabel);
+  const roastSeg = document.createElement("div");
+  roastSeg.className = "rx-segmented";
+  const roastBtns = [];
+  TARGET_ROAST_OPTIONS.forEach((opt) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "rx-segmented-button";
+    b.dataset.value = opt.value;
+    b.textContent = opt.label;
+    b.addEventListener("click", () => {
+      targetFilterRoast = opt.value;
+      roastBtns.forEach((x) =>
+        x.classList.toggle("is-active", x.dataset.value === targetFilterRoast),
+      );
+      renderProfileButtons();
+    });
+    roastSeg.appendChild(b);
+    roastBtns.push(b);
+  });
+  roastBtns.forEach((x) => x.classList.toggle("is-active", x.dataset.value === targetFilterRoast));
+  roastRow.appendChild(roastSeg);
+  container.appendChild(roastRow);
+
+  // Flavor (chips, multi-select / AND).
+  const tagList =
+    typeof LIBRARY_TAGS !== "undefined" && Array.isArray(LIBRARY_TAGS) ? LIBRARY_TAGS : [];
+  if (tagList.length) {
+    const flavorRow = document.createElement("div");
+    flavorRow.className = "rx-filter-row rx-filter-row-divided";
+    const flavorLabel = document.createElement("div");
+    flavorLabel.className = "rx-filter-row-label";
+    flavorLabel.textContent = "Flavor";
+    flavorRow.appendChild(flavorLabel);
+    const chipGroup = document.createElement("div");
+    chipGroup.className = "rx-chip-group";
+    tagList.forEach((tag) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "rx-chip";
+      chip.dataset.tag = tag;
+      chip.textContent = tag;
+      chip.addEventListener("click", () => {
+        const idx = targetFilterTags.indexOf(tag);
+        if (idx === -1) targetFilterTags.push(tag);
+        else targetFilterTags.splice(idx, 1);
+        chip.classList.toggle("is-active", targetFilterTags.indexOf(tag) !== -1);
+        renderProfileButtons();
+      });
+      chipGroup.appendChild(chip);
+    });
+    flavorRow.appendChild(chipGroup);
+    container.appendChild(flavorRow);
+  }
+}
+
 function renderProfileButtons() {
   profileButtonsContainer.innerHTML = "";
   const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
+  const filterActive = targetFilterRoast !== "all" || targetFilterTags.length > 0;
+  const filters = {
+    method: "all",
+    roast: targetFilterRoast,
+    tags: targetFilterTags,
+    mine: false,
+    q: "",
+  };
+  const matchesFilter = (profile) =>
+    typeof window.recipeMatches !== "function" || window.recipeMatches(profile, filters);
+
+  let shownReal = 0;
   for (const [key, profile] of Object.entries(allProfiles)) {
+    // "+ Custom"/"+ From Library" actions and the active selection always show;
+    // everything else is subject to the Roast/Flavor filter. Presets without
+    // roast/tags metadata (shim/custom) fall out only when a filter is active.
+    const isSentinel = key === "custom" || key === "library";
+    if (filterActive && !isSentinel && key !== currentProfile && !matchesFilter(profile)) {
+      continue;
+    }
+    if (!isSentinel) shownReal++;
     const btn = document.createElement("button");
     btn.className = "profile-btn";
     btn.dataset.profile = key;
@@ -297,6 +412,13 @@ function renderProfileButtons() {
       btn.appendChild(del);
     }
     profileButtonsContainer.appendChild(btn);
+  }
+
+  if (filterActive && shownReal === 0) {
+    const empty = document.createElement("p");
+    empty.className = "hint target-filter-empty";
+    empty.textContent = "No profiles match these filters.";
+    profileButtonsContainer.insertBefore(empty, profileButtonsContainer.firstChild);
   }
   highlightProfile(currentProfile);
 }
@@ -1507,6 +1629,7 @@ resultsContainer.addEventListener("change", (e) => {
   calculate();
 });
 renderResultItems();
+buildTargetFilters();
 renderProfileButtons();
 updateTargetModeUI();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
@@ -1559,72 +1682,6 @@ if (typeof window.ensurePublicRecipesLoaded === "function") {
 }
 // Cross-device sync: re-render when sync.js Realtime pull writes new data.
 window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
-
-// --- Welcome modal (one-time, Calculator page only) ---
-(function initWelcomeModal() {
-  const overlay = document.getElementById("welcome-modal-overlay");
-  const closeBtn = document.getElementById("welcome-modal-close");
-  const okBtn = document.getElementById("welcome-modal-ok");
-  if (!overlay || !closeBtn || !okBtn) return;
-
-  let keyHandler = null;
-
-  function getFocusReturnTarget() {
-    const main = document.querySelector("main");
-    if (!main) return null;
-    const focusable = main.querySelector(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    return focusable || null;
-  }
-
-  function closeWelcomeModal() {
-    overlay.style.display = "none";
-    document.body.classList.remove("welcome-modal-open");
-    saveCalculatorWelcomeDismissed();
-    if (keyHandler) {
-      document.removeEventListener("keydown", keyHandler);
-      keyHandler = null;
-    }
-    closeBtn.removeEventListener("click", closeWelcomeModal);
-    okBtn.removeEventListener("click", closeWelcomeModal);
-    const returnTarget = getFocusReturnTarget();
-    if (returnTarget && returnTarget.focus) {
-      returnTarget.focus();
-    }
-  }
-
-  function showWelcomeModal() {
-    if (loadCalculatorWelcomeDismissed()) return;
-    overlay.style.display = "flex";
-    document.body.classList.add("welcome-modal-open");
-    closeBtn.focus();
-
-    keyHandler = function (e) {
-      if (e.key === "Escape") {
-        closeWelcomeModal();
-        return;
-      }
-      if (e.key === "Tab") {
-        const focusable = [closeBtn, okBtn];
-        const idx = focusable.indexOf(document.activeElement);
-        if (idx === -1) return;
-        e.preventDefault();
-        if (e.shiftKey) {
-          focusable[(idx <= 0 ? focusable.length : idx) - 1].focus();
-        } else {
-          focusable[(idx + 1) % focusable.length].focus();
-        }
-      }
-    };
-
-    document.addEventListener("keydown", keyHandler);
-    closeBtn.addEventListener("click", closeWelcomeModal);
-    okBtn.addEventListener("click", closeWelcomeModal);
-  }
-
-  showWelcomeModal();
-})();
 
 // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
 if (typeof onStorageKeysChanged === "function") {

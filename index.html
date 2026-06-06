@@ -10,24 +10,17 @@
   <header>
     <div class="save-status-indicator" id="save-status-indicator" role="status" aria-live="polite"></div>
     <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Coffee Water Calculator</h1>
-    <p class="subtitle">Choose a target profile and see which minerals to add to your water.</p>
+    <p class="subtitle">Choose a target profile and see which minerals to add to your water. <a class="subtitle-link" href="start.html">New here? See the beginner guide.</a></p>
   </header>
 
   <main>
-    <section class="start-banner" id="start-banner" style="display:none;" role="region" aria-label="Beginner guide">
-      <div class="start-banner-text">
-        New to coffee water? <a class="start-banner-link" href="start.html">Read the beginner guide →</a>
-      </div>
-      <button type="button" class="start-banner-close" id="start-banner-close" aria-label="Dismiss beginner banner">×</button>
-    </section>
-
     <!-- Starting water (profile = main, volume = secondary) -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Starting Water</h2>
+        <h2><span class="step-num" aria-hidden="true">1</span>Starting Water</h2>
         <button type="button" id="source-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Starting Water</button>
       </div>
-      <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
+      <p class="hint">Select your starting water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
       <div class="source-presets" id="source-presets">
         <!-- Populated by JS. The estimate-open button below is preserved across
              re-renders by renderSourcePresetButtons in source-water-ui.js. -->
@@ -137,14 +130,20 @@
     <!-- Target Profile -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Target Water Profile</h2>
+        <h2><span class="step-num" aria-hidden="true">2</span>Target Water Profile</h2>
         <div class="section-header-buttons">
           <button type="button" id="target-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
       </div>
-      <div class="brew-method-toggle" id="brew-method-toggle">
-        <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
-        <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
+      <!-- Method (brew toggle) + Roast + Flavor filters for the profile rail.
+           buildTargetFilters() in script.js wraps the brew toggle in a "Method"
+           row and adds the Roast/Flavor rows. The toggle starts inside this box
+           so it doesn't flash in a different spot before the script runs. -->
+      <div class="target-filters" id="target-filters">
+        <div class="brew-method-toggle" id="brew-method-toggle">
+          <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
+          <button type="button" class="preset-btn brew-method-btn" data-brew-method="espresso">Espresso</button>
+        </div>
       </div>
       <div class="profile-buttons" id="profile-buttons">
         <!-- Populated by JS -->
@@ -229,8 +228,8 @@
     <!-- Results -->
     <section class="card results-card">
       <div class="section-header-actions">
-        <h2>Add to Your Water</h2>
-        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit minerals</button>
+        <h2><span class="step-num" aria-hidden="true">3</span>Add to Your Water</h2>
+        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit Minerals</button>
       </div>
       <p class="hint" id="results-hint">Using distilled/RO water as your base, add these mineral salts:</p>
       <div class="results" id="results-container">
@@ -347,25 +346,6 @@
     </div>
   </div>
 
-  <div class="welcome-overlay" id="welcome-modal-overlay" style="display:none;">
-    <div class="welcome-dialog" role="dialog" aria-modal="true" aria-labelledby="welcome-modal-title" aria-describedby="welcome-modal-desc">
-      <button type="button" class="welcome-modal-close" aria-label="Close" id="welcome-modal-close">×</button>
-      <h2 id="welcome-modal-title" class="welcome-modal-title">
-        <span class="welcome-modal-title-row">Welcome to the</span>
-        <span class="welcome-modal-title-row welcome-modal-title-row--brand"><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Coffee Water Calculator</span>
-      </h2>
-      <div id="welcome-modal-desc" class="welcome-modal-body">
-        <p>New to coffee water? <a href="start.html">Read the beginner guide →</a></p>
-        <p>Select the minerals you'll be using from the Settings page, then you'll be ready to get started!</p>
-        <p></p>
-        <p>Send questions to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
-      </div>
-      <div class="welcome-modal-actions">
-        <button type="button" class="preset-btn" id="welcome-modal-ok">Okay</button>
-      </div>
-    </div>
-  </div>
-
   <footer>
     <p>Start with distilled or RO water for best results. Use a 0.01g precision scale.</p>
     <p>For feedback or questions send an email to <a href="mailto:info@cafelytic.com">info@cafelytic.com</a></p>
@@ -396,25 +376,11 @@
     // The cross-tab storage listener in script.js calls renderResultItems +
     // calculate when cw_selected_minerals changes; mirror that for in-tab
     // edits made via the picker modal. (Both functions are exposed by
-    // script.js; only the welcome modal lives in its own IIFE.)
+    // script.js.)
     window.addEventListener("cw:minerals-changed", function () {
       if (typeof renderResultItems === "function") renderResultItems();
       if (typeof calculate === "function") calculate();
     });
-
-    (function () {
-      var banner = document.getElementById("start-banner");
-      var closeBtn = document.getElementById("start-banner-close");
-      if (!banner || !closeBtn) return;
-      var KEY = "cw_start_banner_dismissed";
-      var dismissed = false;
-      try { dismissed = localStorage.getItem(KEY) === "1"; } catch (e) {}
-      if (!dismissed) banner.style.display = "";
-      closeBtn.addEventListener("click", function () {
-        banner.style.display = "none";
-        try { localStorage.setItem(KEY, "1"); } catch (e) {}
-      });
-    })();
   </script>
 </body>
 </html>

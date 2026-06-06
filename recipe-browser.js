@@ -873,6 +873,7 @@
     // Chevrons — visible only on desktop via CSS. Scroll the carousel
     // container by one card-width on click.
     var chevrons = el("div", "rx-carousel-chevrons");
+    var scrollWrap = el("div", "rx-carousel-wrap");
     var scrollEl = el("div", "rx-carousel");
 
     function makeChevron(direction, label, symbol) {
@@ -906,7 +907,29 @@
         ),
       );
     });
-    section.appendChild(scrollEl);
+    // Edge-fade affordance: the chevrons (desktop-only) were the sole cue that
+    // a row scrolls. Toggle fade overlays from scroll position so the overflow
+    // is visible on every viewport. ResizeObserver gives a correct first read
+    // once the carousel is laid out (scrollWidth is 0 at build time, before the
+    // section is inserted into the DOM).
+    function updateCarouselScrollState() {
+      var max = scrollEl.scrollWidth - scrollEl.clientWidth;
+      scrollWrap.classList.toggle("can-scroll-left", scrollEl.scrollLeft > 4);
+      scrollWrap.classList.toggle("can-scroll-right", scrollEl.scrollLeft < max - 4);
+    }
+    scrollEl.addEventListener("scroll", updateCarouselScrollState, { passive: true });
+    if (typeof ResizeObserver !== "undefined") {
+      new ResizeObserver(updateCarouselScrollState).observe(scrollEl);
+    }
+    // Initial read: this section isn't in the DOM yet (the caller appends it
+    // after we return), so scrollWidth/clientWidth are 0 here. A 0ms timeout
+    // fires after the caller's synchronous insertion; reading scrollWidth then
+    // forces layout, so the fade is correct on first paint without waiting for
+    // a scroll — and it fires even when the tab is backgrounded (unlike rAF).
+    setTimeout(updateCarouselScrollState, 0);
+
+    scrollWrap.appendChild(scrollEl);
+    section.appendChild(scrollWrap);
 
     return section;
   }

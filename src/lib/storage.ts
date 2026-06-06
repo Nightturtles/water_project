@@ -713,6 +713,14 @@ export function getSourceWaterByPreset(presetName: string) {
 }
 
 // --- Selected minerals + cache ---
+// Default "starter kit" for new users: the three essentials featured on the
+// Settings page (CaCl2 dihydrate, Epsom, baking soda). Baking soda covers
+// alkalinity, so the calculator still produces a recipe out of the box;
+// everything else (incl. potassium bicarbonate) is opt-in under "More
+// minerals". Shared with sync.isDefaultData so the loader default and the
+// "untouched data" check never drift apart.
+export const DEFAULT_SELECTED_MINERALS = ["calcium-chloride", "epsom-salt", "baking-soda"];
+
 let selectedMineralsCache: string[] | null = null;
 
 export function saveSelectedMinerals(mineralIds: string[]): void {
@@ -724,9 +732,9 @@ export function saveSelectedMinerals(mineralIds: string[]): void {
 export function loadSelectedMinerals(): string[] {
   if (selectedMineralsCache) return selectedMineralsCache;
   const parsed = safeParse(_getTransient(KEYS.SELECTED_MINERALS), null);
-  selectedMineralsCache = Array.isArray(parsed)
-    ? parsed
-    : ["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"];
+  // Existing users keep their saved selection (parsed != null); new users get
+  // the starter kit. .slice() so callers can't mutate the shared default.
+  selectedMineralsCache = Array.isArray(parsed) ? parsed : DEFAULT_SELECTED_MINERALS.slice();
   return selectedMineralsCache;
 }
 
@@ -1258,6 +1266,11 @@ export function getAllTargetPresets(): Record<string, TargetProfile> {
       bicarbonate: row.bicarbonate,
       description: row.description || "",
       creatorDisplayName: row.creatorDisplayName || "",
+      // Carry roast/flavor metadata through the merge so the Calculator's
+      // Target Profile filter (and any other rail consumer) can narrow by them.
+      // Shim/custom presets without these fields degrade to "shows under All".
+      roast: Array.isArray(row.roast) ? row.roast : ["all"],
+      tags: Array.isArray(row.tags) ? row.tags : [],
     };
   }
 
@@ -1330,27 +1343,49 @@ export function targetProfileSupportsBrewMethod(
   return inferTargetProfileBrewMethod(key, profile) === brewMethod;
 }
 
+// Display-order priority for the in-house Cafelytic recipes. Cafelytic Filter
+// always leads its rail, Cafelytic Espresso always leads the espresso rail, and
+// when both ever appear in one list Cafelytic Filter precedes Cafelytic
+// Espresso. Every other preset keeps its prior relative order (stable sort), so
+// this only floats the house recipes to the front without reshuffling the rest.
+const TARGET_PRESET_PRIORITY: Record<string, number> = {
+  "cafelytic-filter": 0,
+  "cafelytic-espresso": 1,
+};
+
+/**
+ * Comparator for target-preset slugs that floats the in-house Cafelytic recipes
+ * to the front (Filter before Espresso) and leaves all other slugs equal-ranked
+ * so a stable sort preserves their incoming order. Exported for reuse + unit
+ * testing.
+ */
+export function compareTargetPresetKeys(a: string, b: string): number {
+  const ra = TARGET_PRESET_PRIORITY[a] ?? Number.MAX_SAFE_INTEGER;
+  const rb = TARGET_PRESET_PRIORITY[b] ?? Number.MAX_SAFE_INTEGER;
+  return ra - rb;
+}
+
 export function getTargetPresetsForBrewMethod(
   method: string | null | undefined,
 ): Record<string, TargetProfile> {
   const brewMethod = normalizeBrewMethod(method);
   const allPresets = getAllTargetPresets();
-  const filtered: Record<string, TargetProfile> = {};
+  const matching: Array<[string, TargetProfile]> = [];
   for (const [key, profile] of Object.entries(allPresets)) {
-    if (key === "custom" || key === "library") {
-      filtered[key] = profile;
-      continue;
-    }
+    if (key === "custom" || key === "library") continue;
     if (targetProfileSupportsBrewMethod(key, profile, brewMethod)) {
-      filtered[key] = profile;
+      matching.push([key, profile]);
     }
   }
-  if (!filtered.custom) {
-    filtered.custom = { label: "+ Custom" };
+  // Stable sort: Cafelytic recipes lead, everyone else keeps merge order.
+  matching.sort((a, b) => compareTargetPresetKeys(a[0], b[0]));
+  const filtered: Record<string, TargetProfile> = {};
+  for (const [key, profile] of matching) {
+    filtered[key] = profile;
   }
-  if (!filtered.library) {
-    filtered.library = { label: "+ From Library" };
-  }
+  // The two add-actions are always appended last, after the real presets.
+  filtered.custom = allPresets.custom || { label: "+ Custom" };
+  filtered.library = allPresets.library || { label: "+ From Library" };
   return filtered;
 }
 
@@ -1449,17 +1484,6 @@ export function loadCreatorDisplayName(): string {
 export function saveCreatorDisplayName(name: string): void {
   _setGated(KEYS.CREATOR_DISPLAY_NAME, name);
   if (typeof scheduleSyncToCloud === "function") scheduleSyncToCloud();
-}
-
-// --- Calculator welcome modal (one-time) ---
-const WELCOME_MODAL_DISMISSED_KEY = "cw_calculator_welcome_dismissed";
-
-export function loadCalculatorWelcomeDismissed(): boolean {
-  return safeGetItem(WELCOME_MODAL_DISMISSED_KEY) === "true";
-}
-
-export function saveCalculatorWelcomeDismissed(): void {
-  safeSetItem(WELCOME_MODAL_DISMISSED_KEY, "true");
 }
 
 // --- Multi-tab cache invalidation (Inefficiency 4) ---
@@ -1648,8 +1672,6 @@ if (typeof window !== "undefined") {
     saveThemePreference,
     loadCreatorDisplayName,
     saveCreatorDisplayName,
-    loadCalculatorWelcomeDismissed,
-    saveCalculatorWelcomeDismissed,
     ensureStarterBackfill,
   });
 }

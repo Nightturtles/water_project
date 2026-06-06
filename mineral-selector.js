@@ -65,26 +65,68 @@
     return div;
   }
 
+  // "Selected Minerals" (what's on hand) up top; the rest under a collapsed
+  // "More minerals" group (mirrors the Settings page). Both stay inside listEl
+  // so the bindMineralListToggle change handler still sees every checkbox.
+  var directMoreExpanded = false;
+
   function buildMineralListInto(listEl, selectedIds) {
     listEl.innerHTML = "";
     var selected = {};
     for (var i = 0; i < selectedIds.length; i++) selected[selectedIds[i]] = true;
+
+    var selectedLabel = document.createElement("div");
+    selectedLabel.className = "mineral-group-label";
+    selectedLabel.textContent = "Selected Minerals";
+    listEl.appendChild(selectedLabel);
+
+    var selectedCount = 0;
+    var moreCount = 0;
     for (var id in MINERAL_DB) {
       if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, id)) continue;
-      listEl.appendChild(buildMineralRow(id, MINERAL_DB[id], !!selected[id]));
+      if (selected[id]) {
+        listEl.appendChild(buildMineralRow(id, MINERAL_DB[id], true));
+        selectedCount++;
+      } else {
+        moreCount++;
+      }
+    }
+
+    if (selectedCount === 0) {
+      var empty = document.createElement("p");
+      empty.className = "hint mineral-group-empty";
+      empty.textContent = "No minerals selected. Pick some from More minerals below.";
+      listEl.appendChild(empty);
+      directMoreExpanded = true;
+    }
+
+    if (moreCount > 0) {
+      var more = makeCollapsibleSubsection("More minerals", directMoreExpanded);
+      more.section.classList.add("mineral-more-subsection");
+      for (var id2 in MINERAL_DB) {
+        if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, id2)) continue;
+        if (!selected[id2]) {
+          more.content.appendChild(buildMineralRow(id2, MINERAL_DB[id2], false));
+        }
+      }
+      // Track expanded state so it survives the re-render on each toggle.
+      more.summary.addEventListener("click", function () {
+        directMoreExpanded = more.summary.getAttribute("aria-expanded") === "true";
+      });
+      listEl.appendChild(more.section);
     }
   }
 
   function bindMineralListToggle(listEl) {
     listEl.addEventListener("change", function (e) {
       if (!e.target || e.target.type !== "checkbox") return;
-      var item = e.target.closest(".mineral-item");
-      if (item) item.classList.toggle("selected", e.target.checked);
       var checked = listEl.querySelectorAll("input[type='checkbox']:checked");
       var ids = [];
       for (var i = 0; i < checked.length; i++) ids.push(checked[i].value);
       saveSelectedMinerals(ids);
       dispatchChanged({ scope: "minerals", ids: ids });
+      // Re-group so the toggled mineral moves between Selected and More.
+      buildMineralListInto(listEl, ids);
     });
   }
 
@@ -503,6 +545,9 @@
   var concDiyContentEl = null;
   var concStockContentEl = null;
   var concBrandContentEl = null;
+  var concDiySummaryEl = null;
+  var concStockSummaryEl = null;
+  var concBrandSummaryEl = null;
   var directPanelEl = null;
   var concPanelEl = null;
   var directTabBtn = null;
@@ -516,14 +561,14 @@
   // summary button and a content div as direct siblings, so the existing
   // .card-collapsible-summary[aria-expanded="false"] ~ .card-collapsible-content
   // CSS rule scopes naturally to that section without per-id rules.
-  function makeCollapsibleSubsection(title) {
+  function makeCollapsibleSubsection(title, expanded) {
     var section = document.createElement("section");
     section.className = "mineral-selector-subsection card-collapsible";
 
     var summary = document.createElement("button");
     summary.type = "button";
     summary.className = "card-collapsible-summary";
-    summary.setAttribute("aria-expanded", "true");
+    summary.setAttribute("aria-expanded", expanded ? "true" : "false");
     var titleSpan = document.createElement("span");
     titleSpan.className = "card-collapsible-title";
     titleSpan.textContent = title;
@@ -539,7 +584,7 @@
       summary.setAttribute("aria-expanded", open ? "false" : "true");
     });
 
-    return { section: section, content: content };
+    return { section: section, content: content, summary: summary };
   }
 
   function setActiveTab(tab) {
@@ -645,16 +690,20 @@
     concPanelEl.setAttribute("role", "tabpanel");
     concPanelEl.setAttribute("aria-labelledby", "mineral-selector-tab-concentrates");
 
-    var diyWrap = makeCollapsibleSubsection("Mineral Concentrates");
+    // Created collapsed; openModal expands any group that already has content.
+    var diyWrap = makeCollapsibleSubsection("Mineral Concentrates", false);
     concDiyContentEl = diyWrap.content;
+    concDiySummaryEl = diyWrap.summary;
     concPanelEl.appendChild(diyWrap.section);
 
-    var stockWrap = makeCollapsibleSubsection("Recipe Concentrates");
+    var stockWrap = makeCollapsibleSubsection("Recipe Concentrates", false);
     concStockContentEl = stockWrap.content;
+    concStockSummaryEl = stockWrap.summary;
     concPanelEl.appendChild(stockWrap.section);
 
-    var brandWrap = makeCollapsibleSubsection("Brand Name Concentrates");
+    var brandWrap = makeCollapsibleSubsection("Brand Name Concentrates", false);
     concBrandContentEl = brandWrap.content;
+    concBrandSummaryEl = brandWrap.summary;
     concPanelEl.appendChild(brandWrap.section);
 
     var manageLink = document.createElement("a");
@@ -675,6 +724,24 @@
     modalPreviousFocus = document.activeElement;
     buildMineralListInto(directListEl, loadSelectedMinerals());
     rebuildConcentratesTab();
+    // Concentrate groups start collapsed (calm), but auto-expand any that
+    // already have content so a configured concentrate is never hidden.
+    var selectedConc =
+      typeof loadSelectedConcentrates === "function" ? loadSelectedConcentrates() : [];
+    var stockSpecs =
+      typeof loadStockConcentrateSpecs === "function" ? loadStockConcentrateSpecs() : {};
+    var hasDiy = selectedConc.some(function (id) {
+      return typeof id === "string" && id.indexOf("diy:") === 0;
+    });
+    var hasBrand = selectedConc.some(function (id) {
+      return typeof id === "string" && id.indexOf("brand:") === 0;
+    });
+    var hasStock = stockSpecs && Object.keys(stockSpecs).length > 0;
+    if (concDiySummaryEl) concDiySummaryEl.setAttribute("aria-expanded", hasDiy ? "true" : "false");
+    if (concStockSummaryEl)
+      concStockSummaryEl.setAttribute("aria-expanded", hasStock ? "true" : "false");
+    if (concBrandSummaryEl)
+      concBrandSummaryEl.setAttribute("aria-expanded", hasBrand ? "true" : "false");
     setActiveTab(readActiveTab());
     modalEl.style.display = "";
 
@@ -743,7 +810,8 @@
   // on the just-toggled checkbox.
 
   function chipLabelFor(mineral) {
-    return mineral.formula || mineral.name;
+    // Human-readable name (e.g. "Epsom Salt"), not the scientific formula.
+    return mineral.name || mineral.formula;
   }
 
   // ---- Public mount: chip strip + "Edit minerals" button ----
@@ -768,8 +836,11 @@
 
     var editBtn = document.createElement("button");
     editBtn.type = "button";
-    editBtn.className = "mineral-edit-link";
-    editBtn.textContent = "Edit minerals";
+    // Same design + copy as the "Edit Minerals" button on the Calculator and
+    // Builder (a standard preset button), not a bespoke link style.
+    editBtn.className = "preset-btn mineral-selector-chips-edit";
+    editBtn.textContent = "Edit Minerals";
+    editBtn.setAttribute("aria-label", "Edit the minerals and concentrates you have available");
 
     function appendBadge(chip, label, className) {
       var badge = document.createElement("span");

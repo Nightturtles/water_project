@@ -61,7 +61,7 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test('"Edit minerals" button in the "Add to Your Water" header opens the mineral picker modal', async ({
+  test('"Edit Minerals" button in the "Add to Your Water" header opens the mineral picker modal', async ({
     page,
   }) => {
     // The button replaced a legacy stock-creation affordance (formerly "+ Make a stock") in the
@@ -81,7 +81,7 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
 
     const btn = page.locator("#edit-minerals-btn");
     await expect(btn).toBeVisible();
-    await expect(btn).toHaveText("Edit minerals");
+    await expect(btn).toHaveText("Edit Minerals");
 
     // No standalone #mineral-selector-mount widget on this page anymore —
     // the section-header button is the only entry point.

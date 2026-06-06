@@ -41,7 +41,21 @@ function initSourceWaterSection(options) {
 
   let activeSourcePreset = loadSourcePresetName();
   let isSourceEditMode = false;
+  // Starting Water collapses to just the active preset; "More options" reveals
+  // the full categorized list. Collapse is CSS-driven (.presets-collapsed), so
+  // moving the .active class is enough to keep the collapsed view correct.
+  let sourcePresetsExpanded = false;
   const showSourceSaveStatus = createStatusHandler(sourceSaveStatus);
+
+  function applySourcePresetsCollapsed() {
+    if (!sourcePresetsContainer) return;
+    sourcePresetsContainer.classList.toggle("presets-collapsed", !sourcePresetsExpanded);
+    const toggle = sourcePresetsContainer.querySelector(".source-more-toggle");
+    if (toggle) {
+      toggle.setAttribute("aria-expanded", sourcePresetsExpanded ? "true" : "false");
+      toggle.textContent = sourcePresetsExpanded ? "Fewer options" : "More options";
+    }
+  }
 
   function getSourceWater() {
     const water = {};
@@ -179,14 +193,18 @@ function initSourceWaterSection(options) {
       sourcePresetsContainer.appendChild(btn);
     }
 
+    // Render the full categorized list. Collapsed (.presets-collapsed), CSS
+    // hides everything except the .active preset + the "More options" toggle,
+    // so only the current selection shows (Distilled / RO by default) until the
+    // user expands. Estimate-from-ZIP sits in the Tap Water (generic) section;
+    // "+ Add Custom" goes at the very end.
     let estimateAppended = false;
     for (const cat of renderOrder) {
       const entries = buckets[cat];
       if (!entries || entries.length === 0) continue;
-      const labelText = categoryLabels[cat] || cat;
       const heading = document.createElement("span");
       heading.className = "preset-category-label";
-      heading.textContent = labelText;
+      heading.textContent = categoryLabels[cat] || cat;
       sourcePresetsContainer.appendChild(heading);
       for (const [key, preset] of entries) appendButton(key, preset);
       if (estimateBtn && cat === "generic") {
@@ -194,14 +212,24 @@ function initSourceWaterSection(options) {
         estimateAppended = true;
       }
     }
-    // Fallback when the generic bucket is empty (e.g. all generic presets
-    // were deleted by the user). Without this the captured node would be
-    // dropped along with the original innerHTML wipe, losing the bound
-    // click + auth-gate listeners.
+    // Fallback when the generic bucket is empty \u2014 keep the preserved estimate
+    // node (and its once-bound listeners) in the DOM.
     if (estimateBtn && !estimateAppended) {
       sourcePresetsContainer.appendChild(estimateBtn);
     }
     for (const [key, preset] of customEntries) appendButton(key, preset);
+
+    // "More options" toggle \u2014 the single collapse control. Sits last so it
+    // trails the active preset when collapsed and the full list when expanded.
+    const moreToggle = document.createElement("button");
+    moreToggle.type = "button";
+    moreToggle.className = "source-more-toggle";
+    moreToggle.addEventListener("click", function () {
+      sourcePresetsExpanded = !sourcePresetsExpanded;
+      applySourcePresetsCollapsed();
+    });
+    sourcePresetsContainer.appendChild(moreToggle);
+    applySourcePresetsCollapsed();
 
     highlightSourcePreset(activeSourcePreset);
   }
@@ -269,6 +297,13 @@ function initSourceWaterSection(options) {
     const btn = e.target.closest(".preset-btn");
     if (!btn) return;
     activateSourcePreset(btn.dataset.preset);
+    // Picking a real preset collapses back to just that selection. Guard on
+    // data-preset so the estimate-from-ZIP action button (no data-preset, it
+    // shares this container) doesn't trigger a collapse.
+    if (btn.dataset.preset) {
+      sourcePresetsExpanded = false;
+      applySourcePresetsCollapsed();
+    }
     onChanged();
   });
 

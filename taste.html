@@ -14,13 +14,19 @@
   </header>
 
   <main>
-    <!-- Inline mineral selector (panel or chips, per ?mineral-ui= query param). -->
-    <div id="mineral-selector-mount"></div>
+    <!-- Your Minerals (step 1): inline mineral selector (chips + Edit Minerals). -->
+    <section class="card">
+      <div class="section-header-actions">
+        <h2><span class="step-num" aria-hidden="true">1</span>Your Minerals</h2>
+      </div>
+      <p class="hint">The minerals and concentrates you have on hand.</p>
+      <div id="mineral-selector-mount"></div>
+    </section>
 
     <!-- Current Water Profile -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Current Water Profile</h2>
+        <h2><span class="step-num" aria-hidden="true">2</span>Current Water Profile</h2>
         <div class="section-header-buttons">
           <button type="button" id="taste-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Profiles</button>
         </div>
@@ -112,7 +118,7 @@
 
     <!-- Taste Sliders -->
     <section class="card">
-      <h2>How do you want to change it?</h2>
+      <h2><span class="step-num" aria-hidden="true">3</span>How do you want to change it?</h2>
       <p class="hint">Move the sliders based on what you want more or less of in the cup. Center = no change.</p>
       <button class="reset-btn" id="reset-sliders-btn">Reset sliders</button>
 
