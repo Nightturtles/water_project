@@ -97,12 +97,24 @@ async function dismissWelcomeModal(page: Page): Promise<void> {
   }
 }
 
+// The Starting Water rail collapses to just the active preset; "Estimate from
+// my ZIP" now lives under the "More options" toggle, so expand it before
+// asserting/clicking the estimate button.
+async function expandSourcePresets(page: Page): Promise<void> {
+  const toggle = page.locator(".source-more-toggle");
+  if ((await toggle.count()) === 0) return;
+  if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+    await toggle.click();
+  }
+}
+
 test.describe("estimate-water UI", () => {
   test("anonymous users see the button locked in the source-water rail", async ({ page }) => {
     await stubLogin(page, false);
     const { invocations } = await stubFunctions(page, defaultStubHandler);
     await page.goto("/");
     await dismissWelcomeModal(page);
+    await expandSourcePresets(page);
 
     // The open button now lives inside #source-presets alongside the preset
     // buttons; the card only wraps the form/status/result and stays collapsed
@@ -127,6 +139,7 @@ test.describe("estimate-water UI", () => {
       await stubFunctions(page, defaultStubHandler);
       await page.goto(path);
       await dismissWelcomeModal(page);
+      await expandSourcePresets(page);
 
       const openBtn = page.locator("#estimate-open-btn");
       await expect(openBtn).toBeVisible();
@@ -157,6 +170,7 @@ test.describe("estimate-water UI", () => {
 
     await page.goto("/");
     await dismissWelcomeModal(page);
+    await expandSourcePresets(page);
     // The button is visible at load; the wrapping card only becomes visible
     // once the user opens the form (it contains nothing else with rendered
     // height until then).
@@ -183,6 +197,7 @@ test.describe("estimate-water UI", () => {
 
     await page.goto("/");
     await dismissWelcomeModal(page);
+    await expandSourcePresets(page);
 
     await page.locator("#estimate-open-btn").click();
     await page.locator("#estimate-zip").fill("94107");

@@ -119,13 +119,13 @@ test.describe("recipe.html — Recipe Builder smoke (anonymous)", () => {
 
   test("page loads with Recipe Builder h1 and four section headings", async ({ page }) => {
     await expect(page.locator("h1")).toContainText("Recipe Builder");
-    await expect(page.getByRole("heading", { name: /^Base Water$/ })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /^Starting Water$/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Brew Method$/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Add Minerals$/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: /^Final Water Profile$/ })).toBeVisible();
   });
 
-  test('"Edit minerals" button in the "Add Minerals" header opens the mineral picker modal', async ({
+  test('"Edit Minerals" button in the "Add Minerals" header opens the mineral picker modal', async ({
     page,
   }) => {
     // The button replaced the standalone #mineral-selector-mount chip-strip
@@ -137,7 +137,7 @@ test.describe("recipe.html — Recipe Builder smoke (anonymous)", () => {
     // becomes a dead button.
     const btn = page.locator("#edit-minerals-btn");
     await expect(btn).toBeVisible();
-    await expect(btn).toHaveText("Edit minerals");
+    await expect(btn).toHaveText("Edit Minerals");
     await expect(page.locator("#mineral-selector-mount")).toHaveCount(0);
 
     await btn.click();
@@ -161,6 +161,12 @@ test.describe("recipe.html — Recipe Builder smoke (anonymous)", () => {
     // perspective — only the underlying store differs.
 
     // Switch to custom mode first so the post-reload init doesn't overwrite.
+    // "+ Add Custom" lives under the Starting Water "More options" toggle now,
+    // so expand the rail before clicking it.
+    const sourceMoreToggle = page.locator(".source-more-toggle");
+    if ((await sourceMoreToggle.getAttribute("aria-expanded")) !== "true") {
+      await sourceMoreToggle.click();
+    }
     await page.locator('#source-presets [data-preset="custom"]').click();
 
     // Edit Calcium and wait for the 300ms debounce to flush to sessionStorage.

@@ -25,6 +25,7 @@ import {
   getAllTargetPresets,
   getTargetProfileByKey,
   getTargetPresetsForBrewMethod,
+  compareTargetPresetKeys,
   targetProfileSupportsBrewMethod,
   invalidateTargetPresetsCache,
   addDeletedTargetPreset,
@@ -535,5 +536,79 @@ describe("brewMethod='all' cross-method support", () => {
     const espressoRail = getTargetPresetsForBrewMethod("espresso");
     expect(filterRail["cross-method"]).toBeUndefined();
     expect(espressoRail["cross-method"]).toBeUndefined();
+  });
+
+  // --- Cafelytic-first ordering (design-review polish) ---------------------
+
+  test("compareTargetPresetKeys: Cafelytic Filter < Cafelytic Espresso < everyone else", () => {
+    expect(compareTargetPresetKeys("cafelytic-filter", "cafelytic-espresso")).toBeLessThan(0);
+    expect(compareTargetPresetKeys("cafelytic-espresso", "sca")).toBeLessThan(0);
+    expect(compareTargetPresetKeys("cafelytic-filter", "lotus-light-bright")).toBeLessThan(0);
+    // Two non-house slugs are equal-ranked so a stable sort keeps their order.
+    expect(compareTargetPresetKeys("sca", "lotus-light-bright")).toBe(0);
+  });
+
+  test("getTargetPresetsForBrewMethod: Cafelytic Filter leads the filter rail", () => {
+    invalidateTargetPresetsCache();
+    const rail = getTargetPresetsForBrewMethod("filter");
+    const keys = Object.keys(rail).filter((k) => k !== "custom" && k !== "library");
+    expect(keys[0]).toBe("cafelytic-filter");
+  });
+
+  test("getTargetPresetsForBrewMethod: Cafelytic Espresso leads the espresso rail", () => {
+    invalidateTargetPresetsCache();
+    const rail = getTargetPresetsForBrewMethod("espresso");
+    const keys = Object.keys(rail).filter((k) => k !== "custom" && k !== "library");
+    expect(keys[0]).toBe("cafelytic-espresso");
+  });
+
+  test("getTargetPresetsForBrewMethod: custom/library add-actions stay last", () => {
+    invalidateTargetPresetsCache();
+    const keys = Object.keys(getTargetPresetsForBrewMethod("filter"));
+    expect(keys[keys.length - 2]).toBe("custom");
+    expect(keys[keys.length - 1]).toBe("library");
+  });
+
+  // --- roast/tags carried through the merge (powers the Calculator filter) ---
+
+  test("getAllTargetPresets: preserves roast + tags from library rows", () => {
+    fakeLibraryRows = [
+      {
+        slug: "roasty",
+        label: "Roasty",
+        brewMethod: "filter",
+        calcium: 30,
+        magnesium: 10,
+        alkalinity: 20,
+        userId: null,
+        isStarter: true,
+        roast: ["dark"],
+        tags: ["Sweet", "Full Body"],
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const all = getAllTargetPresets();
+    expect(all["roasty"]).toBeDefined();
+    expect(all["roasty"].roast).toEqual(["dark"]);
+    expect(all["roasty"].tags).toEqual(["Sweet", "Full Body"]);
+  });
+
+  test("getAllTargetPresets: library row without roast/tags degrades to ['all'] / []", () => {
+    fakeLibraryRows = [
+      {
+        slug: "bare",
+        label: "Bare",
+        brewMethod: "filter",
+        calcium: 30,
+        magnesium: 10,
+        alkalinity: 20,
+        userId: null,
+        isStarter: true,
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const all = getAllTargetPresets();
+    expect(all["bare"].roast).toEqual(["all"]);
+    expect(all["bare"].tags).toEqual([]);
   });
 });

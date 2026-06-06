@@ -9,6 +9,7 @@ import {
   loadBrewMethod,
   loadLotusDropperType,
   loadSelectedMinerals,
+  DEFAULT_SELECTED_MINERALS,
   loadSelectedConcentrates,
   loadDiyConcentrateSpecs,
   loadStockConcentrateSpecs,
@@ -778,12 +779,7 @@ export function isDefaultData(): boolean {
   const noDeletedSource = loadDeletedPresets().length === 0;
   const noDeletedTarget = loadDeletedTargetPresets().length === 0;
 
-  const defaultMinerals = [
-    "calcium-chloride",
-    "epsom-salt",
-    "baking-soda",
-    "potassium-bicarbonate",
-  ];
+  const defaultMinerals = DEFAULT_SELECTED_MINERALS;
   const minerals = loadSelectedMinerals();
   const mineralsAreDefault =
     minerals.length === defaultMinerals.length &&

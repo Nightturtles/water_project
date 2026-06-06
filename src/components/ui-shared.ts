@@ -785,15 +785,11 @@ export function injectNav(): void {
     | { type: "group"; label: string; children: Array<{ href: string; label: string }> }
     | { type: "link"; href: string; label: string }
   > = [
-    {
-      type: "group",
-      label: "Tools",
-      children: [
-        { href: "index.html", label: "Calculator" },
-        { href: "recipe.html", label: "Recipe Builder" },
-        { href: "taste.html", label: "Taste Tuner" },
-      ],
-    },
+    // Flat top-level tabs (no "Tools" dropdown) — mirrors the native bottom bar
+    // labels (Calculator / Builder / Tuner) so web and native read the same.
+    { type: "link", href: "index.html", label: "Calculator" },
+    { type: "link", href: "recipe.html", label: "Builder" },
+    { type: "link", href: "taste.html", label: "Tuner" },
     { type: "link", href: "library.html", label: "Library" },
     { type: "link", href: "start.html", label: "Beginners Guide" },
     { type: "link", href: "minerals.html", label: "Settings" },

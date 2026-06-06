@@ -364,6 +364,19 @@ header h1 {
   margin-top: 0.25rem;
 }
 
+/* Quiet inline pointer to the beginner guide (replaces the old welcome
+   modal + banner). Calm, not a call-to-action. */
+.subtitle-link {
+  color: var(--blue-700);
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.subtitle-link:hover {
+  text-decoration: underline;
+}
+
 /* ========================
    Layout
    ======================== */
@@ -405,6 +418,30 @@ main > .card:last-child {
 .section-header-actions h2 {
   margin-bottom: 0;
   min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+/* Step badge (1-2-3 wayfinding across Calculator / Builder / Taste Tuner).
+   Decorative; the heading text carries the meaning, so the badge is
+   aria-hidden in the markup. Self-aligning (margin + vertical-align) so it
+   works both in flex .section-header-actions h2 and in a plain block h2
+   (e.g. Builder's "Brew Method"). */
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--blue-600);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
 }
 
 /* Collapsible card (e.g. Available Minerals on Settings); hint stays visible when collapsed */
@@ -655,6 +692,44 @@ select:focus {
   margin-bottom: 1rem;
 }
 
+/* Target Profile rail filters (Calculator) — Method + Roast + Flavor, reusing
+   the Library .rx-* filter styles. Outlined so it reads as a distinct "narrow
+   the profiles" control, while still living inside the Target Water Profile
+   card. */
+.target-filters {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--gray-50);
+}
+
+/* The brew-method toggle is relocated into the Method row, so drop its own
+   box (border/background/padding/margin) and let it fill the row like the
+   Roast/Flavor controls (which get flex:1 on desktop). */
+.target-filters .brew-method-toggle {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: none;
+  flex: 1;
+}
+
+/* Method buttons fill the row in equal halves at every width (they used to
+   size to their text, leaving them small on wide screens). */
+.target-filters .brew-method-btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.target-filter-empty {
+  flex: 0 0 100%;
+  margin: 0;
+}
+
 .profile-edit-toggle {
   margin: 0;
   flex-shrink: 0;
@@ -815,6 +890,55 @@ select:focus {
   color: var(--gray-500);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Starting Water collapse: collapsed shows only the active preset + the
+   "More options" toggle; expanding reveals the full categorized list. Driven by
+   the .presets-collapsed class, so moving the .active class (on selection) keeps
+   the collapsed view correct without a re-render. */
+.source-presets.presets-collapsed .preset-category-label,
+.source-presets.presets-collapsed .preset-btn:not(.active) {
+  display: none;
+}
+
+.source-more-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.35rem;
+  /* Full-row so it wraps onto its own line below the selected preset (not
+     beside it); text stays left-aligned. grid-column covers the mobile
+     2-col grid layout of .source-presets. */
+  flex: 0 0 100%;
+  grid-column: 1 / -1;
+  padding: 0.4rem 0.2rem;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--blue-600);
+  cursor: pointer;
+}
+
+.source-more-toggle::after {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentcolor;
+  border-bottom: 2px solid currentcolor;
+  transform: rotate(45deg);
+  margin-top: -0.18rem;
+  transition: transform 0.15s ease;
+}
+
+.source-more-toggle[aria-expanded="true"]::after {
+  transform: rotate(-135deg);
+  margin-top: 0.12rem;
+}
+
+.source-more-toggle:hover {
+  text-decoration: underline;
 }
 
 .source-presets > .preset-category-label:first-child {
@@ -1075,6 +1199,27 @@ select:focus {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+}
+
+/* Starter-kit / More-minerals grouping inside the Available Minerals list. */
+.mineral-list-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.mineral-group-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--gray-500);
+}
+
+/* "More minerals" toggle reads as a sub-group header, not a card title. */
+.mineral-more-summary {
+  font-size: 1rem;
+  margin-top: 0.25rem;
 }
 
 .mineral-item {
@@ -1848,93 +1993,6 @@ select:focus {
 
 .account-deleted-flash--leaving {
   opacity: 0;
-}
-
-/* Welcome modal (Calculator page, one-time) */
-body.welcome-modal-open {
-  overflow: hidden;
-}
-
-.welcome-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.welcome-dialog {
-  position: relative;
-  background: var(--surface);
-  border: 1px solid var(--gray-200);
-  border-radius: var(--radius);
-  padding: 1.5rem;
-  padding-top: 2.5rem;
-  max-width: 400px;
-  width: 90%;
-}
-
-.welcome-modal-close {
-  position: absolute;
-  top: 0.75rem;
-  right: 0.75rem;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  font-size: 1.5rem;
-  line-height: 1;
-  color: var(--gray-600);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  border-radius: var(--radius);
-}
-
-.welcome-modal-close:hover {
-  color: var(--gray-800);
-  background: var(--gray-100);
-}
-
-.welcome-dialog h2,
-.welcome-modal-title {
-  margin: 0 0 1rem;
-  font-size: 1.25rem;
-  font-weight: bold;
-}
-
-.welcome-modal-title-row {
-  display: block;
-  text-align: center;
-}
-
-.welcome-modal-title-row--brand {
-  margin-top: 0.35rem;
-  font-weight: 700;
-}
-
-.welcome-modal-body {
-  margin-bottom: 1.25rem;
-  font-size: 0.95rem;
-}
-
-.welcome-modal-body p {
-  margin: 0 0 0.75rem;
-}
-
-.welcome-modal-body p:last-child {
-  margin-bottom: 0;
-}
-
-.welcome-modal-actions {
-  display: flex;
-  justify-content: center;
-}
-
-.welcome-modal-actions .preset-btn {
-  min-height: 44px;
-  min-width: 88px;
 }
 
 /* Library picker overlay (Add From Library button on Calculator + Taste Tuner) */
@@ -4146,6 +4204,48 @@ footer {
   display: none;
 }
 
+.rx-carousel-wrap {
+  position: relative;
+}
+
+/* Edge-fade cues that a row scrolls horizontally; each side shows only when
+   there is off-screen content that way (classes toggled in recipe-browser.js).
+   Fades to the page background (--gray-50) so cards melt into the page; the
+   token re-maps in dark mode, so this works in both themes. */
+.rx-carousel-wrap::before,
+.rx-carousel-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2.5rem;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 1;
+}
+
+/* Offset by the carousel's own negative margin (.rx-carousel has
+   margin: 0 -0.25rem) so the fade reaches the cards' true edges. Without this
+   the fade stops 0.25rem short, leaving a hard sliver of card past the fade. */
+.rx-carousel-wrap::before {
+  left: -0.25rem;
+  background: linear-gradient(to right, var(--gray-50), transparent);
+}
+
+.rx-carousel-wrap::after {
+  right: -0.25rem;
+  background: linear-gradient(to left, var(--gray-50), transparent);
+}
+
+.rx-carousel-wrap.can-scroll-left::before {
+  opacity: 1;
+}
+
+.rx-carousel-wrap.can-scroll-right::after {
+  opacity: 1;
+}
+
 @media (min-width: 768px) {
   /* Filter bar (D2): labels in a fixed left column, segmented rows fill the rest. */
   .rx-filter-row {
@@ -4530,56 +4630,6 @@ footer {
   color: #ffffff;
 }
 
-/* ========================
-   Start banner (Calculator)
-   ======================== */
-.start-banner {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1rem;
-  border: 1px solid var(--blue-500);
-  border-radius: var(--radius);
-  background: var(--blue-50);
-}
-
-.start-banner-text {
-  flex: 1 1 auto;
-  font-size: 0.9rem;
-  color: var(--gray-700);
-  line-height: 1.45;
-}
-
-.start-banner-link {
-  color: var(--blue-700);
-  font-weight: 600;
-  text-decoration: none;
-  white-space: nowrap;
-}
-
-.start-banner-link:hover {
-  text-decoration: underline;
-}
-
-.start-banner-close {
-  flex-shrink: 0;
-  min-width: 44px;
-  min-height: 44px;
-  border: none;
-  background: transparent;
-  color: var(--gray-500);
-  font-size: 1.25rem;
-  line-height: 1;
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.start-banner-close:hover {
-  background: var(--blue-100);
-  color: var(--gray-700);
-}
-
 /* =============================================================================
    Inline mineral selector widget (mineral-selector.js)
    Chip strip + "Edit minerals" button that opens a modal.
@@ -4625,22 +4675,10 @@ footer {
   border-style: dashed;
 }
 
-.mineral-edit-link {
+/* The chip-strip "Edit Minerals" button is a standard .preset-btn (matching
+   the Calculator / Builder); just keep it from shrinking beside the chips. */
+.mineral-selector-chips-edit {
   flex-shrink: 0;
-  background: transparent;
-  border: 1px solid var(--blue-500);
-  color: var(--blue-700);
-  cursor: pointer;
-  font-size: 0.88rem;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  min-height: 36px;
-}
-
-.mineral-edit-link:hover,
-.mineral-edit-link:focus-visible {
-  background: var(--blue-50);
-  outline: none;
 }
 
 .mineral-selector-modal-list {

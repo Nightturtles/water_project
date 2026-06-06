@@ -10,17 +10,17 @@
   <header>
     <div class="save-status-indicator" id="save-status-indicator" role="status" aria-live="polite"></div>
     <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Recipe Builder</h1>
-    <p class="subtitle">Add minerals to your base water and see the full ion breakdown</p>
+    <p class="subtitle">Add minerals to your starting water and see the full ion breakdown</p>
   </header>
 
   <main>
-    <!-- Base Water (profile = main, volume = secondary) -->
+    <!-- Starting Water (profile = main, volume = secondary) -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Base Water</h2>
+        <h2><span class="step-num" aria-hidden="true">1</span>Starting Water</h2>
         <button type="button" id="source-edit-mode-btn" class="preset-btn profile-edit-toggle" aria-pressed="false">Edit Starting Water</button>
       </div>
-      <p class="hint">Select your base water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
+      <p class="hint">Select your starting water profile used across pages. If using distilled or RO water, leave everything at 0.</p>
       <div class="source-presets" id="source-presets">
         <!-- Populated by JS. The estimate-open button below is preserved across
              re-renders by renderSourcePresetButtons in source-water-ui.js. -->
@@ -129,7 +129,7 @@
 
     <!-- Brew Method -->
     <section class="card brew-method-card">
-      <h2>Brew Method</h2>
+      <h2><span class="step-num" aria-hidden="true">2</span>Brew Method</h2>
       <p class="hint">Select your intended brew method for this recipe.</p>
       <div class="brew-method-toggle" id="recipe-brew-method-toggle">
         <button type="button" class="preset-btn brew-method-btn" data-brew-method="filter">Filter</button>
@@ -140,8 +140,8 @@
     <!-- Mineral Additions -->
     <section class="card">
       <div class="section-header-actions">
-        <h2>Add Minerals</h2>
-        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit minerals</button>
+        <h2><span class="step-num" aria-hidden="true">3</span>Add Minerals</h2>
+        <button type="button" id="edit-minerals-btn" class="preset-btn" aria-label="Edit the minerals and concentrates you have available">Edit Minerals</button>
       </div>
       <p class="hint" id="mineral-inputs-hint">Enter total grams of each mineral to add (for the volume above). Only your selected minerals are shown.</p>
       <div class="brew-method-toggle dispense-mode-toggle" id="dispense-mode-toggle" style="display:none;">
@@ -165,7 +165,7 @@
       <div class="section-header-actions">
         <h2>Final Water Profile</h2>
       </div>
-      <p class="hint">Total PPM including your base water + mineral additions:</p>
+      <p class="hint">Total PPM including your starting water + mineral additions:</p>
 
       <div class="metrics-row">
         <div class="metric highlight metric-box">
@@ -1122,24 +1122,40 @@
 
       const rangeWarningsEl = document.getElementById("recipe-range-warnings");
       if (rangeWarningsEl) {
-        const inferredSources =
-          typeof inferEffectiveSourcesFromMineralGrams === "function"
-            ? inferEffectiveSourcesFromMineralGrams(mineralGramsPerLiter, {
-                calciumSource: getEffectiveCalciumSource(),
-                magnesiumSource: getEffectiveMagnesiumSource(),
-              })
-            : {
-                calciumSource: getEffectiveCalciumSource(),
-                magnesiumSource: getEffectiveMagnesiumSource(),
-              };
-        const evaluation = evaluateWaterProfileRanges(totalIons, {
-          includeAdvanced: isAdvancedMineralDisplayMode(),
-          alkalinitySources: getEffectiveAlkalinitySources(),
-          calciumSource: inferredSources.calciumSource,
-          magnesiumSource: inferredSources.magnesiumSource,
-          brewMethod: activeBrewMethod
-        });
-        renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+        // Hold range feedback until there's something to judge. On an untouched
+        // page (distilled/zero base water + no mineral additions) every metric
+        // reads "too low", which looks broken rather than empty. Show a calm
+        // invitation instead of a stack of red/amber warnings.
+        const hasMineralAdditions = Object.keys(mineralGramsPerLiter).some(
+          (id) => (mineralGramsPerLiter[id] || 0) > 0
+        );
+        const hasBaseWater = ION_FIELDS.some((ion) => (baseWater[ion] || 0) > 0);
+        if (!hasMineralAdditions && !hasBaseWater) {
+          rangeWarningsEl.innerHTML = "";
+          const hint = document.createElement("p");
+          hint.className = "hint range-empty-hint";
+          hint.textContent = "Add minerals to see how your water measures up.";
+          rangeWarningsEl.appendChild(hint);
+        } else {
+          const inferredSources =
+            typeof inferEffectiveSourcesFromMineralGrams === "function"
+              ? inferEffectiveSourcesFromMineralGrams(mineralGramsPerLiter, {
+                  calciumSource: getEffectiveCalciumSource(),
+                  magnesiumSource: getEffectiveMagnesiumSource(),
+                })
+              : {
+                  calciumSource: getEffectiveCalciumSource(),
+                  magnesiumSource: getEffectiveMagnesiumSource(),
+                };
+          const evaluation = evaluateWaterProfileRanges(totalIons, {
+            includeAdvanced: isAdvancedMineralDisplayMode(),
+            alkalinitySources: getEffectiveAlkalinitySources(),
+            calciumSource: inferredSources.calciumSource,
+            magnesiumSource: inferredSources.magnesiumSource,
+            brewMethod: activeBrewMethod
+          });
+          renderRangeGuidance(rangeWarningsEl, evaluation.findings);
+        }
       }
     }
 
