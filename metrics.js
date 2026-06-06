@@ -57,10 +57,10 @@ function calculateMetrics(ions) {
 /**
  * Headline water metrics for a recipe's display surfaces, rounded to integers:
  * GH and KH as mg/L CaCO3, TDS as mg/L (ppm). GH is the Ca + Mg hardness; KH
- * comes from the recipe's alkalinity, which is already CaCO3 and therefore
- * equals carbonate hardness (reading alkalinity rather than the bicarbonate
- * path in calculateMetrics means rows that carry alkalinity but no bicarbonate,
- * e.g. the SCA preset shim, still report a correct KH). TDS is the sum of all
+ * comes from the recipe's alkalinity (already CaCO3, so it equals carbonate
+ * hardness), falling back to bicarbonate x HCO3_TO_CACO3 when alkalinity is
+ * absent so both alkalinity-only rows (e.g. the SCA preset shim) and
+ * bicarbonate-only rows report a correct KH. TDS is the sum of all
  * ion concentrations, matching calculateMetrics. Used by the slim cards (GH/KH)
  * and the library detail modal (GH/KH/TDS).
  * @param {{ calcium?: number | null, magnesium?: number | null, alkalinity?: number | null, potassium?: number | null, sodium?: number | null, sulfate?: number | null, chloride?: number | null, bicarbonate?: number | null }} [recipe]
@@ -70,7 +70,13 @@ function recipeMetricsSummary(recipe) {
   recipe = recipe || {};
   var gh =
     (Number(recipe.calcium) || 0) * CA_TO_CACO3 + (Number(recipe.magnesium) || 0) * MG_TO_CACO3;
-  var kh = Number(recipe.alkalinity) || 0;
+  // Prefer alkalinity (already CaCO3 = KH); fall back to deriving KH from
+  // bicarbonate when alkalinity is absent, mirroring calculateMetrics.
+  var alk = Number(recipe.alkalinity);
+  var kh =
+    recipe.alkalinity != null && Number.isFinite(alk)
+      ? alk
+      : (Number(recipe.bicarbonate) || 0) * HCO3_TO_CACO3;
   var tds =
     (Number(recipe.calcium) || 0) +
     (Number(recipe.magnesium) || 0) +

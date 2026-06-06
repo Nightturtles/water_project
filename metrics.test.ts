@@ -97,6 +97,13 @@ describe("recipeMetricsSummary", () => {
     );
   });
 
+  test("KH falls back to bicarbonate-derived CaCO3 when alkalinity is absent", () => {
+    // bicarbonate 61 ppm -> ~50 mg/L CaCO3 (x HCO3_TO_CACO3 = 50.045 / 61.017).
+    expect(metrics.recipeMetricsSummary({ bicarbonate: 61 }).kh).toBe(
+      Math.round(61 * (50.045 / 61.017)),
+    );
+  });
+
   test("missing or empty input defaults to zero", () => {
     expect(metrics.recipeMetricsSummary({})).toEqual({ gh: 0, kh: 0, tds: 0 });
     expect(metrics.recipeMetricsSummary(undefined)).toEqual({ gh: 0, kh: 0, tds: 0 });

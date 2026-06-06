@@ -128,7 +128,17 @@ export function buildSlimRecipeCard(recipe: SlimRecipe, opts: SlimRecipeCardOpti
     const del = el("span", "preset-delete", "×");
     del.dataset.delete = opts.slug;
     del.setAttribute("role", "button");
+    del.setAttribute("tabindex", "0");
     del.setAttribute("aria-label", "Delete profile");
+    // Keyboard parity: Enter/Space on the focused badge fires the same delegated
+    // delete handler the click path uses (it reads data-delete). stopPropagation
+    // keeps the key event from also reaching the card-level keydown (select).
+    del.addEventListener("keydown", (e: KeyboardEvent) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      e.stopPropagation();
+      del.click();
+    });
     card.appendChild(del);
   }
 

@@ -673,7 +673,9 @@
       ].forEach(function (m) {
         var cell = el("div", "rx-detail-metric");
         cell.appendChild(el("span", "rx-detail-metric-label", m.label));
-        cell.appendChild(el("span", "rx-detail-metric-value", String(m.value)));
+        cell.appendChild(
+          el("span", "rx-detail-metric-value", m.value != null ? String(m.value) : "-"),
+        );
         metricsGrid.appendChild(cell);
       });
       metricsSection.appendChild(metricsGrid);
