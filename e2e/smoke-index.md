@@ -23,7 +23,7 @@
 
 ### 3. Target profile buttons render
 - Assert an `<h2>` with text `Target Water Profile` is visible.
-- Assert the profile buttons container (`profile-buttons`) has at least 3 buttons.
+- Assert the profile buttons container (`profile-buttons`) has at least 3 preset items (elements with `data-profile`).
 
 ### 4. Volume unit toggle
 - The volume input (`#volume`) + unit select (`#volume-unit`) are present.

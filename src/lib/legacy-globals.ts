@@ -40,5 +40,6 @@ import * as sync from "./sync";
 import "../components/ui-shared";
 import "../components/login-modal";
 import "./creator-display";
+import "../components/recipe-card";
 
 Object.assign(window, storage, sync);

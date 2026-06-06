@@ -51,9 +51,9 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 
 ### 7. Add-from-library propagates to the other device's rail
 - Context A: navigate to `/library.html`. Confirm the recipe browser mounts (`main#rx-root` populated, `.rx-recipe-card` cards visible).
-- Context B: navigate to `/index.html`. Wait for `.profile-btn` to render. Snapshot the list of `data-profile` slugs into `bSlugsBefore`.
+- Context B: navigate to `/index.html`. Wait for `#profile-buttons [data-profile]` to render. Snapshot the list of `data-profile` slugs into `bSlugsBefore`.
 - Context A: pick a non-starter library card whose slug is **not** in `bSlugsBefore`. Click its `.rx-recipe-card-bookmark` (the heart). The button's `aria-label` flips from "Save recipe" → "Unsave recipe".
-- Context B: **without reloading**, wait for `.profile-btn[data-profile="<slug>"]` to appear. Timeout 4 s.
+- Context B: **without reloading**, wait for `#profile-buttons [data-profile="<slug>"]` to appear. Timeout 4 s.
 - Regression guard: if Context B's rail still doesn't have the slug after 4 s but a manual reload makes it appear, the Realtime subscription isn't firing → check `subscribeToCloudChanges` ran (look for `[sync] realtime channel status: ...` warnings) and that migration 012 added the table to `supabase_realtime`.
 
 ### 8. Edit propagates to the other device's library card
@@ -67,7 +67,7 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: navigate to `/index.html`. Click `#target-edit-mode-btn` to enter edit mode. The custom-recipe buttons gain a `.preset-delete` × handle.
 - Context B: on `/index.html`, snapshot the list of `data-profile` slugs into `bSlugsBefore`.
 - Context A: pick a custom-only profile (one created by this test user, not a canonical starter). Click its `.preset-delete[data-delete="<slug>"]`. Confirm the deletion when the confirm-dialog appears.
-- Context B: **without reloading**, wait for `.profile-btn[data-profile="<slug>"]` to disappear. Timeout 4 s.
+- Context B: **without reloading**, wait for `#profile-buttons [data-profile="<slug>"]` to disappear. Timeout 4 s.
 - **Resurrection regression guard** (this is the load-bearing assertion): after Step 9 succeeds, do NOT reload. On Context B, assert all three:
   - `await page.evaluate(() => loadCustomTargetProfiles()[<slug>] || null)` returns `null` (B's local custom dict cleared by pullFromCloud's empty-array-is-authoritative branch).
   - `await page.evaluate(() => loadDeletedTargetPresets().includes(<slug>))` returns `true`.

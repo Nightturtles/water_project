@@ -3917,6 +3917,106 @@ footer {
   flex-shrink: 0;
 }
 
+/* ---- Slim recipe card ----
+   Trimmed recipe card used by the calculator (#profile-buttons) and taste
+   tuner (#taste-presets) profile rails; built by src/components/recipe-card.ts.
+   Reuses the shared .rx-card-title / .rx-mineral-* / .rx-card-tags /
+   .rx-card-tag classes above. Only the card root + rail layout differ from the
+   library card: that one is fixed carousel-width, this one flows in a grid. */
+
+/* Rails become a responsive grid: 2 columns on phones, more on wider screens.
+   Scoped by id so the library's .rx-recipe-card carousels and the source-water
+   .source-presets rail are untouched, and the old .profile-buttons @media
+   overrides no longer apply to these two rails (auto-fill handles reflow). */
+#profile-buttons,
+#taste-presets {
+  display: grid;
+  /* 140px min yields 2 columns on phones (down to ~360px viewport, where the
+     container is ~290px inside the .card padding), 1 column only on very
+     narrow screens, and 4-5 columns on desktop. */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+/* "No profiles match these filters." hint spans the whole grid row. */
+.target-filter-empty {
+  grid-column: 1 / -1;
+}
+
+.rx-slim-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.rx-slim-card:hover {
+  border-color: var(--gray-300);
+}
+
+/* Selected state — reuses the .active class the rails already toggle. */
+.rx-slim-card.active {
+  border-color: var(--blue-500);
+  background: var(--blue-50);
+}
+
+.rx-slim-card.active .rx-card-title {
+  color: var(--blue-700);
+}
+
+.rx-slim-card-header {
+  min-width: 0; /* lets .rx-card-title ellipsis kick in */
+}
+
+.rx-slim-card[role="button"]:focus-visible {
+  outline: 2px solid var(--blue-600);
+  outline-offset: 2px;
+}
+
+/* Method/roast line, always shown; its own row below the chips. */
+.rx-slim-meta {
+  font-size: 0.65rem;
+  color: var(--gray-500);
+  text-transform: lowercase;
+}
+
+/* Edit-mode delete badge reuses .preset-delete, which is vertically centered
+   for the old pill buttons; pin it to the top-right on the taller card. */
+.rx-slim-card .preset-delete {
+  top: 0.5rem;
+  transform: none;
+}
+
+/* "+ Custom" / "+ From Library" action tiles: dashed, fill the grid cell. */
+.rx-slim-action-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100%;
+  padding: 0.75rem;
+  border: 1px dashed var(--blue-500);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--blue-600);
+  font-size: 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background-color 0.12s ease;
+}
+
+.rx-slim-action-tile:hover,
+.rx-slim-action-tile.active {
+  background: var(--blue-50);
+  border-color: var(--blue-500);
+}
+
 /* Clickable card affordance — whole card opens the detail modal. The inner
    bookmark / owner / stock buttons stopPropagation so they still work on
    their own. */
@@ -4059,6 +4159,39 @@ footer {
 
 .rx-detail-mineral-value {
   font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-900);
+}
+
+/* Headline GH/KH/TDS metrics row at the top of the detail modal. Always three
+   columns (including mobile) per the 3-up layout; styled like the per-ion boxes
+   below but with a larger value so the three read as headline stats. */
+.rx-detail-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem;
+}
+
+.rx-detail-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.55rem 0.6rem;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.rx-detail-metric-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--gray-500);
+}
+
+.rx-detail-metric-value {
+  font-size: 1.1rem;
   font-weight: 600;
   color: var(--gray-900);
 }

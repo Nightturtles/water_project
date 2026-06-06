@@ -44,7 +44,10 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     page,
   }) => {
     await expect(page.getByRole("heading", { name: /^Target Water Profile$/ })).toBeVisible();
-    const profileButtons = page.locator("#profile-buttons button");
+    // Recipes render as slim cards (<article data-profile>); the "+ Custom" /
+    // "+ From Library" actions are <button data-profile> tiles. Count all
+    // selectable rail items via the data-profile attribute they share.
+    const profileButtons = page.locator("#profile-buttons [data-profile]");
     expect(await profileButtons.count()).toBeGreaterThanOrEqual(3);
   });
 

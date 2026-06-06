@@ -316,21 +316,24 @@
     return parts + bottleLabel + doseLabel;
   }
 
+  // GH / KH summary row (replaces the raw Ca/Mg/Alk triplet). Values from
+  // metrics.js's recipeMetricsSummary (on window): GH from Ca + Mg, KH from
+  // alkalinity, mg/L as CaCO3. extraClass is preserved for the featured-hero
+  // variant (.rx-featured-mineral-triplet).
   function createMineralTriplet(recipe, extraClass) {
     var wrap = el("div", "rx-mineral-triplet" + (extraClass ? " " + extraClass : ""));
+    var summary =
+      typeof window.recipeMetricsSummary === "function"
+        ? window.recipeMetricsSummary(recipe)
+        : { gh: null, kh: null };
     [
-      { field: "calcium", label: "Ca" },
-      { field: "magnesium", label: "Mg" },
-      { field: "alkalinity", label: "Alk" },
+      { label: "GH", value: summary.gh },
+      { label: "KH", value: summary.kh },
     ].forEach(function (pair) {
       var item = el("span", "rx-mineral-item");
       item.appendChild(el("span", "rx-mineral-label", pair.label));
       item.appendChild(
-        el(
-          "span",
-          "rx-mineral-value",
-          recipe[pair.field] != null ? String(recipe[pair.field]) : "-",
-        ),
+        el("span", "rx-mineral-value", pair.value != null ? String(pair.value) : "-"),
       );
       wrap.appendChild(item);
     });
@@ -651,6 +654,33 @@
     }
 
     detailScroll.appendChild(header);
+
+    // Headline metrics (GH / KH / TDS) - derived summary numbers shown above the
+    // raw per-ion breakdown. recipeMetricsSummary is bridged on window by
+    // metrics.js. Rendered as a 3-up grid (.rx-detail-metrics) in the user's
+    // stated order so it stays readable on small screens.
+    var summary =
+      typeof window.recipeMetricsSummary === "function"
+        ? window.recipeMetricsSummary(recipe)
+        : null;
+    if (summary) {
+      var metricsSection = el("div", "rx-detail-section");
+      var metricsGrid = el("div", "rx-detail-metrics");
+      [
+        { label: "GH", value: summary.gh },
+        { label: "KH", value: summary.kh },
+        { label: "TDS", value: summary.tds },
+      ].forEach(function (m) {
+        var cell = el("div", "rx-detail-metric");
+        cell.appendChild(el("span", "rx-detail-metric-label", m.label));
+        cell.appendChild(
+          el("span", "rx-detail-metric-value", m.value != null ? String(m.value) : "-"),
+        );
+        metricsGrid.appendChild(cell);
+      });
+      metricsSection.appendChild(metricsGrid);
+      detailScroll.appendChild(metricsSection);
+    }
 
     // Description
     if (recipe.description) {
