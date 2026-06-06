@@ -264,10 +264,9 @@ const SOURCE_PRESETS = {
 // The eight entries below are the default starter set every user sees on a
 // cold load. Their KEY ORDER also sets the taste-page rail order, which
 // renderTastePresets iterates in insertion order (no sort), filtered by brew
-// method — so the filter rail reads top-to-bottom 1-4 and the espresso rail 5-8
-// (sca is brew_method 'all', so it also surfaces in the espresso rail):
+// method — so the filter rail reads top-to-bottom 1-4 and the espresso rail 5-8:
 //   1. cafelytic-filter             — Cafelytic in-house filter (featured pick)
-//   2. sca                          — canonical industry reference ('all'; both rails)
+//   2. sca                          — canonical industry reference (no brewMethod; defaults to filter)
 //   3. lotus-light-bright           — clarity-forward filter
 //   4. lotus-simple-sweet           — rounded-sweetness filter
 //   5. cafelytic-espresso           — Cafelytic in-house espresso (espresso featured)
