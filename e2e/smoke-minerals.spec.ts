@@ -55,6 +55,11 @@ test.describe("minerals.html — Recipe Concentrates multi-select", () => {
     });
 
     await page.goto("/minerals.html");
+
+    // Enabled concentrates now live in a "Selected Concentrates" group; the
+    // three type groups (incl. Recipe Concentrates) start collapsed. The seeded
+    // stocks begin unselected, so expand the Recipe group to interact with them.
+    await page.locator("#stock-concentrates-summary").click();
   });
 
   test.afterEach(() => {
