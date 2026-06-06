@@ -262,41 +262,24 @@ const SOURCE_PRESETS = {
 // even when the user is offline.
 //
 // The eight entries below are the default starter set every user sees on a
-// cold load:
-//   * sca                             — canonical industry filter reference
-//   * eaf-rpavlis                     — buffer-only no-scale water
-//   * cafelytic-filter                — Cafelytic in-house filter (featured pick)
-//   * cafelytic-espresso              — Cafelytic in-house espresso (espresso featured)
-//   * lotus-light-bright              — clarity-forward filter
-//   * lotus-simple-sweet              — rounded-sweetness filter
-//   * lotus-light-bright-espresso     — clarity-forward espresso
-//   * lotus-simple-sweet-espresso     — rounded-sweetness espresso
+// cold load. Their KEY ORDER also sets the taste-page rail order, which
+// renderTastePresets iterates in insertion order (no sort), filtered by brew
+// method — so the filter rail reads top-to-bottom 1-4 and the espresso rail 5-8:
+//   1. cafelytic-filter             — Cafelytic in-house filter (featured pick)
+//   2. sca                          — canonical industry reference (no brewMethod; defaults to filter)
+//   3. lotus-light-bright           — clarity-forward filter
+//   4. lotus-simple-sweet           — rounded-sweetness filter
+//   5. cafelytic-espresso           — Cafelytic in-house espresso (espresso featured)
+//   6. eaf-rpavlis                  — buffer-only no-scale water (espresso)
+//   7. lotus-light-bright-espresso  — clarity-forward espresso
+//   8. lotus-simple-sweet-espresso  — rounded-sweetness espresso
 //
-// Slugs and ion values here MUST stay byte-identical to the corresponding
-// Supabase rows in migrations 002/006/007/010 so the shim and the loaded
-// library don't disagree. If you change a value here, update the migration
-// too.
+// Slugs, ion values, labels, AND brew methods here MUST stay byte-identical to
+// the corresponding Supabase rows (migrations 002/006/007/010 seed/refresh them;
+// 20260606060755 recategorizes eaf-rpavlis to espresso and renames the "and"
+// recipes to "&") so the shim and the loaded library don't disagree. If you
+// change a value or the key order here, update the migration too.
 const TARGET_PRESETS = {
-  sca: {
-    label: "SCA Standard",
-    calcium: 51,
-    magnesium: 17,
-    alkalinity: 40,
-    description: "SCA recommended range for brewing water. Balanced body and clarity.",
-  },
-  "eaf-rpavlis": {
-    label: "RPavlis",
-    brewMethod: "filter",
-    calcium: 0,
-    magnesium: 0,
-    alkalinity: 50,
-    potassium: 39,
-    sodium: 0,
-    sulfate: 0,
-    chloride: 0,
-    bicarbonate: 60.9,
-    description: "Espresso Aficionados direct dosing: 1.000g KHCO3 per 10L.",
-  },
   "cafelytic-filter": {
     label: "Cafelytic Filter",
     brewMethod: "filter",
@@ -312,6 +295,39 @@ const TARGET_PRESETS = {
       "Cafelytic in-house light-roast filter recipe. Direct dosing per 1.85L: " +
       "0.024g CaCl\u2082\u00b72H\u2082O + 0.148g MgCl\u2082\u00b76H\u2082O + 0.040g KHCO\u2083. " +
       "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
+  },
+  sca: {
+    label: "SCA Standard",
+    calcium: 51,
+    magnesium: 17,
+    alkalinity: 40,
+    description: "SCA recommended range for brewing water. Balanced body and clarity.",
+  },
+  "lotus-light-bright": {
+    label: "Light & Bright",
+    brewMethod: "filter",
+    calcium: 22.832,
+    magnesium: 0,
+    alkalinity: 24.245,
+    potassium: 18.941,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 40.395,
+    bicarbonate: 29.56,
+    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
+  },
+  "lotus-simple-sweet": {
+    label: "Simple & Sweet",
+    brewMethod: "filter",
+    calcium: 22.832,
+    magnesium: 7.882,
+    alkalinity: 40.476,
+    potassium: 12.628,
+    sodium: 11.169,
+    sulfate: 0,
+    chloride: 63.389,
+    bicarbonate: 49.35,
+    description: "Lotus balanced profile with added sweetness and approachable acidity.",
   },
   "cafelytic-espresso": {
     label: "Cafelytic Espresso",
@@ -330,34 +346,21 @@ const TARGET_PRESETS = {
       "Preserves the Cafelytic house character (Cl-heavy, no SO\u2084, sodium-free, " +
       "K-buffered) at espresso concentrations.",
   },
-  "lotus-light-bright": {
-    label: "Light and Bright",
-    brewMethod: "filter",
-    calcium: 22.832,
+  "eaf-rpavlis": {
+    label: "RPavlis",
+    brewMethod: "espresso",
+    calcium: 0,
     magnesium: 0,
-    alkalinity: 24.245,
-    potassium: 18.941,
+    alkalinity: 50,
+    potassium: 39,
     sodium: 0,
     sulfate: 0,
-    chloride: 40.395,
-    bicarbonate: 29.56,
-    description: "Lotus recipe emphasizing high clarity and acidity for lighter coffees.",
-  },
-  "lotus-simple-sweet": {
-    label: "Simple and Sweet",
-    brewMethod: "filter",
-    calcium: 22.832,
-    magnesium: 7.882,
-    alkalinity: 40.476,
-    potassium: 12.628,
-    sodium: 11.169,
-    sulfate: 0,
-    chloride: 63.389,
-    bicarbonate: 49.35,
-    description: "Lotus balanced profile with added sweetness and approachable acidity.",
+    chloride: 0,
+    bicarbonate: 60.9,
+    description: "Espresso Aficionados direct dosing: 1.000g KHCO3 per 10L.",
   },
   "lotus-light-bright-espresso": {
-    label: "Light and Bright (espresso)",
+    label: "Light & Bright (espresso)",
     brewMethod: "espresso",
     calcium: 0,
     magnesium: 3.941,
@@ -370,7 +373,7 @@ const TARGET_PRESETS = {
     description: "Lotus espresso profile for clarity-forward shots with restrained hardness.",
   },
   "lotus-simple-sweet-espresso": {
-    label: "Simple and Sweet (espresso)",
+    label: "Simple & Sweet (espresso)",
     brewMethod: "espresso",
     calcium: 0,
     magnesium: 3.941,

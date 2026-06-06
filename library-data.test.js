@@ -28,7 +28,7 @@ const {
 // collision check) must seed sessionStorage with this key, because the IIFE
 // captures getPublicRecipesSync lexically — overriding globalThis doesn't
 // reach it.
-const LIBRARY_CACHE_KEY = "cw_library_public_recipes_v4";
+const LIBRARY_CACHE_KEY = "cw_library_public_recipes_v5";
 
 // Test-local stub for getPublicRecipesSync — same pattern as
 // library-merge.test.js. This override is read by storage.js (which looks
