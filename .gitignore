@@ -27,6 +27,10 @@ ios/build/
 # without churning the repo. Optionally included from ios/debug.xcconfig.
 ios/team.xcconfig
 
+# IPA export options for scripts/upload-testflight.sh. Contains the team ID
+# (per-developer, mildly sensitive); created by hand per store/UPLOAD.md step 3.
+ios/ExportOptions.plist
+
 android/.gradle/
 android/.idea/
 android/app/build/

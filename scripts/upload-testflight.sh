@@ -86,13 +86,29 @@ fi
 
 rm -rf "$ARCHIVE_PATH" "$EXPORT_PATH"
 
+# The Release configuration has no base xcconfig, so the team ID that
+# debug.xcconfig pulls in via `#include? team.xcconfig` never reaches a
+# Release archive. Read it straight from the (gitignored) team.xcconfig and
+# pass it explicitly, so automatic signing can resolve a team without baking
+# the ID into this committed script.
+DEVELOPMENT_TEAM=$(awk -F'=' '/^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=/{gsub(/[[:space:];]/,"",$2); print $2; exit}' ios/team.xcconfig 2>/dev/null || true)
+if [[ -z "$DEVELOPMENT_TEAM" ]]; then
+  echo "ERROR: DEVELOPMENT_TEAM not found in ios/team.xcconfig." >&2
+  echo "Copy ios/team.xcconfig.example to ios/team.xcconfig and fill in your" >&2
+  echo "10-char Apple Team ID (developer.apple.com/account -> Membership)." >&2
+  exit 71
+fi
+echo "==> Using DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
+
 echo "==> Archiving (this takes ~5-10 minutes)"
 xcodebuild archive \
   -project ios/App/App.xcodeproj \
   -scheme App \
   -configuration Release \
   -destination 'generic/platform=iOS' \
-  -archivePath "$ARCHIVE_PATH"
+  -archivePath "$ARCHIVE_PATH" \
+  -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM"
 
 # ----- 4. Export the IPA ---------------------------------------------------
 
@@ -111,6 +127,17 @@ fi
 echo "==> Exported IPA: $IPA_PATH"
 
 # ----- 5. Upload to App Store Connect --------------------------------------
+
+# altool does NOT honor APP_STORE_CONNECT_API_KEY_PATH. It loads the key by
+# name (AuthKey_<KEYID>.p8) from a fixed set of directories only:
+#   ./private_keys, ~/private_keys, ~/.private_keys, ~/.appstoreconnect/private_keys
+# Stage a copy in the last of those so altool finds it wherever the user keeps
+# the original. The .p8 itself is not a secret beyond the account it signs for;
+# 600 perms keep it owner-only.
+ALTOOL_KEY_DIR="$HOME/.appstoreconnect/private_keys"
+mkdir -p "$ALTOOL_KEY_DIR"
+cp -f "$APP_STORE_CONNECT_API_KEY_PATH" "$ALTOOL_KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
+chmod 600 "$ALTOOL_KEY_DIR/AuthKey_${APP_STORE_CONNECT_API_KEY_ID}.p8"
 
 echo "==> Uploading to App Store Connect"
 # xcrun altool is deprecated in favor of notarytool for notarization, but for
