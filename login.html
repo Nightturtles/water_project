@@ -90,20 +90,10 @@
     const modeToggle = document.querySelector('.login-mode-toggle');
     const divider = document.querySelector('.login-divider');
 
-    // Apple Guideline 4.8 requires Sign in with Apple parity for any third-party
-    // social sign-in on iOS. The Apple button below satisfies that, so it shows
-    // on web and native alike. Google stays web-only on native (hidden here) --
-    // Apple owns the native social slot; drop this hide to show Google there too.
-    // Capacitor exposes window.Capacitor only when running inside the native
-    // shell; on the web build the property is undefined and this is a no-op.
-    const isNativePlatform = !!(
-      window.Capacitor &&
-      typeof window.Capacitor.isNativePlatform === 'function' &&
-      window.Capacitor.isNativePlatform()
-    );
-    if (isNativePlatform) {
-      googleBtn.style.display = 'none';
-    }
+    // Both social providers show on web and native. Sign in with Apple
+    // satisfies App Store Guideline 4.8 (which requires Apple parity wherever a
+    // third-party social login is offered on iOS), so Google appears on native
+    // too -- matching the login modal, which has always shown both.
 
     let mode = 'signin';
 
@@ -125,13 +115,9 @@
       } else {
         passwordGroup.style.display = '';
         modeToggle.style.display = '';
-        // Divider + Apple always return; only Google stays hidden on native
-        // (see the 4.8 note above) when toggling sign-in/create-account.
         divider.style.display = '';
+        googleBtn.style.display = '';
         appleBtn.style.display = '';
-        if (!isNativePlatform) {
-          googleBtn.style.display = '';
-        }
         forgotLink.style.display = '';
         backToSigninLink.style.display = 'none';
         signinTab.classList.toggle('active', isSignin);
