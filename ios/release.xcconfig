@@ -1,0 +1,9 @@
+// Apple Developer Team ID for Release builds (TestFlight / App Store archives).
+//
+// The Release configuration has no other base xcconfig, so this file exists
+// only to pull in the Team ID, mirroring how debug.xcconfig does it for Debug.
+// The `?` makes the include a no-op when team.xcconfig is absent (e.g. CI,
+// which builds with CODE_SIGNING_ALLOWED=NO and needs no team), keeping this
+// safe for contributors without an Apple account. It intentionally sets
+// nothing else, so Release behavior is unchanged apart from gaining the team.
+#include? "team.xcconfig"

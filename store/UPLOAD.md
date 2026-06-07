@@ -12,6 +12,15 @@ The upload scripts under `scripts/` are written but **blocked on accounts** unti
 4. Locally: `cp ios/team.xcconfig.example ios/team.xcconfig` and fill in the Team ID.
 5. Open the project in Xcode at least once: `npx cap open ios`. Xcode will provision a development certificate and matching profile automatically.
 
+## 1a. Register the App ID and create the App Store Connect app record (one-time)
+
+Before the first upload, the bundle ID must exist both as a registered App ID and as an app record in App Store Connect, or `altool` rejects the upload with "No suitable application records were found."
+
+1. **Register the App ID.** https://developer.apple.com/account → Certificates, Identifiers & Profiles → Identifiers → **+** → "App IDs" → "App". Description: `Cafelytic` (letters, numbers, and spaces only). Bundle ID: **Explicit**, `com.cafelytic.app`. Under Capabilities, enable **Sign in with Apple** (the Supabase Apple OAuth depends on it); leave the rest unchecked.
+2. **Create the app record.** https://appstoreconnect.apple.com → **Apps** → **+** → **New App**. Platform: iOS. Name: `Cafelytic`. Primary language: English (U.S.). Bundle ID: pick `com.cafelytic.app` from the dropdown. SKU: any unique string, e.g. `cafelytic-ios`.
+
+One-time only; later uploads reuse the same record.
+
 ## 2. App Store Connect API key (one-time)
 
 The upload script uses an API key rather than your Apple ID, so it works headless without 2FA.
