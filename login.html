@@ -52,6 +52,13 @@
         </svg>
         Continue with Google
       </button>
+
+      <button type="button" class="login-apple-btn" id="apple-btn">
+        <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="currentColor" d="M12.152 6.896c-.948 0-2.415-1.078-3.96-1.04-2.04.027-3.91 1.183-4.961 3.014-2.117 3.675-.546 9.103 1.519 12.09 1.013 1.454 2.208 3.09 3.792 3.039 1.52-.065 2.09-.987 3.935-.987 1.831 0 2.35.987 3.96.948 1.637-.026 2.676-1.48 3.676-2.948 1.156-1.688 1.636-3.325 1.662-3.415-.039-.013-3.182-1.221-3.22-4.857-.026-3.04 2.48-4.494 2.597-4.559-1.429-2.09-3.623-2.324-4.39-2.376-2-.156-3.675 1.09-4.61 1.09zM15.53 3.83c.843-1.012 1.4-2.427 1.245-3.83-1.207.052-2.662.805-3.532 1.818-.78.896-1.454 2.338-1.273 3.714 1.338.104 2.715-.688 3.559-1.701"/>
+        </svg>
+        Continue with Apple
+      </button>
     </div>
   </main>
 
@@ -77,14 +84,16 @@
     const errorEl = document.getElementById('login-error');
     const successEl = document.getElementById('login-success');
     const googleBtn = document.getElementById('google-btn');
+    const appleBtn = document.getElementById('apple-btn');
     const forgotLink = document.getElementById('forgot-link');
     const backToSigninLink = document.getElementById('back-to-signin');
     const modeToggle = document.querySelector('.login-mode-toggle');
     const divider = document.querySelector('.login-divider');
 
     // Apple Guideline 4.8 requires Sign in with Apple parity for any third-party
-    // social sign-in on iOS. v1 sidesteps this by hiding Google sign-in on
-    // native builds (web is unchanged). Sign in with Apple may follow in v1.1.
+    // social sign-in on iOS. The Apple button below satisfies that, so it shows
+    // on web and native alike. Google stays web-only on native (hidden here) --
+    // Apple owns the native social slot; drop this hide to show Google there too.
     // Capacitor exposes window.Capacitor only when running inside the native
     // shell; on the web build the property is undefined and this is a no-op.
     const isNativePlatform = !!(
@@ -94,7 +103,6 @@
     );
     if (isNativePlatform) {
       googleBtn.style.display = 'none';
-      divider.style.display = 'none';
     }
 
     let mode = 'signin';
@@ -109,6 +117,7 @@
         modeToggle.style.display = 'none';
         divider.style.display = 'none';
         googleBtn.style.display = 'none';
+        appleBtn.style.display = 'none';
         forgotLink.style.display = 'none';
         backToSigninLink.style.display = '';
         submitBtn.textContent = 'Send reset link';
@@ -116,10 +125,11 @@
       } else {
         passwordGroup.style.display = '';
         modeToggle.style.display = '';
-        // Skip the Google/divider reset on native so the 4.8 hide above sticks
-        // when toggling between sign-in and create-account modes.
+        // Divider + Apple always return; only Google stays hidden on native
+        // (see the 4.8 note above) when toggling sign-in/create-account.
+        divider.style.display = '';
+        appleBtn.style.display = '';
         if (!isNativePlatform) {
-          divider.style.display = '';
           googleBtn.style.display = '';
         }
         forgotLink.style.display = '';
@@ -202,6 +212,22 @@
       } catch (err) {
         showError('Something went wrong. Please try again.');
         googleBtn.disabled = false;
+      }
+    });
+
+    appleBtn.addEventListener('click', async () => {
+      appleBtn.disabled = true;
+      clearMessages();
+      try {
+        const { error } = await signInWithApple();
+        if (error) {
+          showError(error.message);
+          appleBtn.disabled = false;
+        }
+        // On success, OAuth redirect happens automatically
+      } catch (err) {
+        showError('Something went wrong. Please try again.');
+        appleBtn.disabled = false;
       }
     });
 
