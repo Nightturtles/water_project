@@ -3133,6 +3133,42 @@ footer {
   cursor: not-allowed;
 }
 
+.login-apple-btn {
+  width: 100%;
+  margin-top: 0.625rem;
+  padding: 0.625rem 1rem;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #000;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.login-apple-btn:hover {
+  opacity: 0.85;
+}
+
+.login-apple-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Apple HIG: black button on light backgrounds, white on dark. The mark uses
+   fill="currentColor" so it tracks the text color in both themes. */
+[data-theme="dark"] .login-apple-btn {
+  background: #fff;
+  color: #000;
+  border-color: #fff;
+}
+
 /* ===== Share to Library prompt ===== */
 
 .share-prompt-dialog p:first-child {
@@ -4981,7 +5017,8 @@ body.login-modal-open {
 .login-modal-card .login-mode-toggle,
 .login-modal-card .login-form,
 .login-modal-card .login-divider,
-.login-modal-card .login-google-btn {
+.login-modal-card .login-google-btn,
+.login-modal-card .login-apple-btn {
   margin-left: 0;
   margin-right: 0;
 }
