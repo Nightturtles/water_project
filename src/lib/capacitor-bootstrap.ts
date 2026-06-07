@@ -192,12 +192,21 @@ async function handleDeepLink(url: string): Promise<void> {
     return;
   }
 
-  // Navigate to reset-password.html with #type=recovery so its
-  // isRecoveryHash() fallback fires immediately on the next page load —
-  // the PASSWORD_RECOVERY event from the SDK has already been delivered to
-  // the previous page's listener at this point and won't re-fire on
-  // subscription from the new page.
-  if (isRecovery && !window.location.pathname.endsWith("reset-password.html")) {
-    window.location.href = "reset-password.html#type=recovery";
+  if (isRecovery) {
+    // Navigate to reset-password.html with #type=recovery so its
+    // isRecoveryHash() fallback fires immediately on the next page load —
+    // the PASSWORD_RECOVERY event from the SDK has already been delivered to
+    // the previous page's listener at this point and won't re-fire on
+    // subscription from the new page.
+    if (!window.location.pathname.endsWith("reset-password.html")) {
+      window.location.href = "reset-password.html#type=recovery";
+    }
+  } else {
+    // OAuth sign-in: the session is set, but the page that launched the flow
+    // (login modal or login.html) was rendered logged-out and does not
+    // re-render on a deep-link-driven SIGNED_IN, so it hangs on the logged-out
+    // view until manually refreshed. Reload to pick up the session; this is the
+    // native analog of the web OAuth flow's full-page redirect to login.html.
+    window.location.reload();
   }
 }
