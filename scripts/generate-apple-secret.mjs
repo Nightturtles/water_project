@@ -27,8 +27,10 @@ const fail = (m) => {
   process.exit(1);
 };
 
-// Team ID from ios/team.xcconfig (or APPLE_TEAM_ID override).
-let teamId = process.env.APPLE_TEAM_ID;
+// Team ID from ios/team.xcconfig (or APPLE_TEAM_ID override). Trim env/file
+// values so a pasted space or newline does not slip into the signed JWT and
+// surface only later as an opaque "invalid_client" from Apple.
+let teamId = process.env.APPLE_TEAM_ID?.trim();
 if (!teamId) {
   try {
     const xc = readFileSync(resolve(here, "..", "ios", "team.xcconfig"), "utf8");
@@ -38,21 +40,29 @@ if (!teamId) {
     /* fall through to the error below */
   }
 }
-if (!teamId) fail("Team ID not found. Set APPLE_TEAM_ID or fill ios/team.xcconfig.");
+if (!/^[A-Za-z0-9]{10}$/.test(teamId ?? "")) {
+  fail(
+    "Team ID must be the 10-character Apple Team ID. Set APPLE_TEAM_ID or fill ios/team.xcconfig.",
+  );
+}
 
-const servicesId = process.env.APPLE_SERVICES_ID;
+const servicesId = process.env.APPLE_SERVICES_ID?.trim();
 if (!servicesId) fail("Set APPLE_SERVICES_ID (your Services ID, e.g. com.cafelytic.signin).");
 
 let p8Path = process.env.APPLE_P8;
 if (!p8Path) fail("Set APPLE_P8 to the path of your Sign in with Apple .p8 key.");
 p8Path = p8Path.replace(/^~(?=$|\/)/, homedir());
 
-let keyId = process.env.APPLE_KEY_ID;
+let keyId = process.env.APPLE_KEY_ID?.trim();
 if (!keyId) {
   const m = basename(p8Path).match(/AuthKey_([A-Za-z0-9]+)\.p8$/);
   if (m) keyId = m[1];
 }
-if (!keyId) fail("Key ID not found. Set APPLE_KEY_ID or name the file AuthKey_<KEYID>.p8.");
+if (!/^[A-Za-z0-9]{10}$/.test(keyId ?? "")) {
+  fail(
+    "Key ID must be the 10-character Apple key ID. Set APPLE_KEY_ID or name the file AuthKey_<KEYID>.p8.",
+  );
+}
 
 let privateKey;
 try {
@@ -83,4 +93,7 @@ console.error("Services ID (sub): " + servicesId);
 console.error("Key ID (kid):      " + keyId);
 console.error("Expires:           " + new Date(exp * 1000).toISOString());
 console.error("---------------------------");
-console.log(signingInput + "." + sig.toString("base64url"));
+// No trailing newline when piped (e.g. `... | pbcopy`) so the copied secret is
+// exactly the token; add one only for interactive (TTY) readability.
+const jwt = signingInput + "." + sig.toString("base64url");
+process.stdout.write(process.stdout.isTTY ? jwt + "\n" : jwt);
