@@ -50,24 +50,9 @@ function initStatusBar(): void {
 }
 
 function hideSplashAfterPaint(): void {
-  const hide = () => SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {});
-
-  // Dismiss only once the app has actually rendered, not on the first frame.
-  // A single requestAnimationFrame fires before the heavy first-launch work
-  // finishes (parsing the ~630 KB bundle, then the classic scripts building the
-  // UI), so on a cold start the cream splash was dropping into a blank, dark
-  // WebView for a few seconds. Waiting for full load plus two painted frames
-  // keeps the splash up as the loading screen until real content is on screen.
-  const dismissWhenPainted = () => requestAnimationFrame(() => requestAnimationFrame(hide));
-  if (document.readyState === "complete") {
-    dismissWhenPainted();
-  } else {
-    window.addEventListener("load", dismissWhenPainted, { once: true });
-  }
-
-  // Safety net: never strand the splash if `load` somehow never fires. hide()
-  // is idempotent, so this is harmless when the listener above already ran.
-  setTimeout(hide, 6000);
+  requestAnimationFrame(() => {
+    SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {});
+  });
 }
 
 function exposeGlobals(): void {

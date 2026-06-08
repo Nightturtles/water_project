@@ -5,8 +5,105 @@
   <!-- @partial:head-top -->
   <title>Cafelytic Coffee Water Calculator</title>
   <!-- @partial:head-bottom -->
+  <style>
+    /* Launch loading screen (#app-splash), shown on the native shell only.
+       The WebView cold-starts behind the native splash; this branded overlay
+       covers the multi-second JS-parse gap so users never see a dark blank.
+       style.css + theme-init are render-blocking in the head, so the app's CSS
+       variables are already themed on the first paint. */
+    #app-splash {
+      position: fixed;
+      inset: 0;
+      z-index: 100000;
+      display: none; /* the inline script in <body> shows it on native */
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 1.5rem;
+      background: var(--gray-50);
+      transition: opacity 0.3s ease;
+    }
+    #app-splash.is-hiding {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .app-splash__mark {
+      font-size: 1.875rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .app-splash__mark .cafe {
+      color: var(--brand-cafe);
+    }
+    .app-splash__mark .lytic {
+      color: var(--brand-lytic);
+    }
+    .app-splash__spinner {
+      width: 30px;
+      height: 30px;
+      border: 3px solid var(--gray-200);
+      border-top-color: var(--blue-600);
+      border-radius: 50%;
+      animation: app-splash-spin 0.7s linear infinite;
+    }
+    @keyframes app-splash-spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
 </head>
 <body>
+  <!-- Native launch loading screen. The WebView cold-starts behind the native
+       splash; show this branded overlay, dismiss the native splash so the
+       overlay (not the dark WebView) covers the JS-parse gap, then remove it
+       once the app has rendered. A no-op on the web build (no window.Capacitor). -->
+  <div id="app-splash" aria-hidden="true">
+    <div class="app-splash__mark"><span class="cafe">cafe</span><span class="lytic">lytic</span></div>
+    <div class="app-splash__spinner"></div>
+  </div>
+  <script>
+    (function () {
+      var el = document.getElementById("app-splash");
+      var cap = window.Capacitor;
+      if (el && cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) {
+        el.style.display = "flex";
+        // Hand off from the native splash on the next frame, after this overlay
+        // has painted, so there is no dark gap between them.
+        requestAnimationFrame(function () {
+          try {
+            if (cap.Plugins && cap.Plugins.SplashScreen) {
+              cap.Plugins.SplashScreen.hide({ fadeOutDuration: 0 });
+            }
+          } catch (e) {
+            /* native splash already gone */
+          }
+        });
+      }
+      // Remove the overlay once the app has rendered (a frame after load), with
+      // a safety net so a stalled load can never strand it on screen.
+      function removeSplash() {
+        var node = document.getElementById("app-splash");
+        if (!node) return;
+        node.classList.add("is-hiding");
+        setTimeout(function () {
+          if (node.parentNode) node.parentNode.removeChild(node);
+        }, 350);
+      }
+      if (document.readyState === "complete") {
+        requestAnimationFrame(removeSplash);
+      } else {
+        window.addEventListener(
+          "load",
+          function () {
+            requestAnimationFrame(removeSplash);
+          },
+          { once: true },
+        );
+      }
+      setTimeout(removeSplash, 8000);
+    })();
+  </script>
   <header>
     <div class="save-status-indicator" id="save-status-indicator" role="status" aria-live="polite"></div>
     <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Coffee Water Calculator</h1>
