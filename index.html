@@ -7,10 +7,12 @@
   <!-- @partial:head-bottom -->
   <style>
     /* Launch loading screen (#app-splash), shown on the native shell only.
-       The WebView cold-starts behind the native splash; this branded overlay
-       covers the multi-second JS-parse gap so users never see a dark blank.
-       style.css + theme-init are render-blocking in the head, so the app's CSS
-       variables are already themed on the first paint. */
+       Colors are hard-coded rather than CSS variables so the overlay is fully
+       painted on the very first frame, even before style.css resolves on a cold
+       WebView start (a var that has not loaded yet renders transparent, which is
+       what made an earlier version show through as a dark blank). It follows the
+       system color scheme immediately and the in-app data-theme once theme-init
+       sets it. */
     #app-splash {
       position: fixed;
       inset: 0;
@@ -20,7 +22,7 @@
       align-items: center;
       justify-content: center;
       gap: 1.5rem;
-      background: var(--gray-50);
+      background: #f8fafc;
       transition: opacity 0.3s ease;
     }
     #app-splash.is-hiding {
@@ -28,21 +30,22 @@
       pointer-events: none;
     }
     .app-splash__mark {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: 1.875rem;
       font-weight: 700;
       letter-spacing: -0.01em;
     }
     .app-splash__mark .cafe {
-      color: var(--brand-cafe);
+      color: #4b8fe0;
     }
     .app-splash__mark .lytic {
-      color: var(--brand-lytic);
+      color: #0d1421;
     }
     .app-splash__spinner {
       width: 30px;
       height: 30px;
-      border: 3px solid var(--gray-200);
-      border-top-color: var(--blue-600);
+      border: 3px solid #e2e8f0;
+      border-top-color: #2563eb;
       border-radius: 50%;
       animation: app-splash-spin 0.7s linear infinite;
     }
@@ -50,6 +53,38 @@
       to {
         transform: rotate(360deg);
       }
+    }
+    @media (prefers-color-scheme: dark) {
+      #app-splash {
+        background: #0f172a;
+      }
+      .app-splash__mark .lytic {
+        color: #e8eef8;
+      }
+      .app-splash__spinner {
+        border-color: #334155;
+        border-top-color: #60a5fa;
+      }
+    }
+    html[data-theme="light"] #app-splash {
+      background: #f8fafc;
+    }
+    html[data-theme="light"] .app-splash__mark .lytic {
+      color: #0d1421;
+    }
+    html[data-theme="light"] .app-splash__spinner {
+      border-color: #e2e8f0;
+      border-top-color: #2563eb;
+    }
+    html[data-theme="dark"] #app-splash {
+      background: #0f172a;
+    }
+    html[data-theme="dark"] .app-splash__mark .lytic {
+      color: #e8eef8;
+    }
+    html[data-theme="dark"] .app-splash__spinner {
+      border-color: #334155;
+      border-top-color: #60a5fa;
     }
   </style>
 </head>
@@ -66,7 +101,17 @@
     (function () {
       var el = document.getElementById("app-splash");
       var cap = window.Capacitor;
-      if (el && cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform()) {
+      var native = !!(cap && typeof cap.isNativePlatform === "function" && cap.isNativePlatform());
+      // Temporary launch diagnostic. If the loading screen still does not show,
+      // read window.__splashDebug in Safari Web Inspector to see what was
+      // available the moment this ran at launch.
+      window.__splashDebug = {
+        capType: typeof cap,
+        native: native,
+        hasSplashPlugin: !!(cap && cap.Plugins && cap.Plugins.SplashScreen),
+        overlayBg: el ? getComputedStyle(el).backgroundColor : "no-el",
+      };
+      if (el && native) {
         el.style.display = "flex";
         // Hand off from the native splash on the next frame, after this overlay
         // has painted, so there is no dark gap between them.
@@ -74,9 +119,12 @@
           try {
             if (cap.Plugins && cap.Plugins.SplashScreen) {
               cap.Plugins.SplashScreen.hide({ fadeOutDuration: 0 });
+              window.__splashDebug.hide = "called";
+            } else {
+              window.__splashDebug.hide = "no-plugin";
             }
           } catch (e) {
-            /* native splash already gone */
+            window.__splashDebug.hide = "error: " + e;
           }
         });
       }
