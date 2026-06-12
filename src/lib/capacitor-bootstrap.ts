@@ -50,9 +50,22 @@ function initStatusBar(): void {
 }
 
 function hideSplashAfterPaint(): void {
-  requestAnimationFrame(() => {
+  let hidden = false;
+  const hide = () => {
+    if (hidden) return;
+    hidden = true;
     SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {});
-  });
+  };
+  // By the time this module runs, the document is fully parsed (classic
+  // scripts execute during parse, modules after), so the first paint
+  // opportunity already has the complete UI. The rAF defers the hide to
+  // that paint so the splash fades into rendered content.
+  requestAnimationFrame(hide);
+  // Android 12+ holds the launch splash by suspending the view hierarchy's
+  // first draw (onPreDraw returns false until hide() releases it), and rAF
+  // may never fire while drawing is suspended -- without this fallback the
+  // splash and the page would deadlock waiting on each other.
+  window.setTimeout(hide, 250);
 }
 
 function exposeGlobals(): void {
