@@ -208,6 +208,14 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
   let context: BrowserContext;
   let page: Page;
   const consoleErrors: { msg: string }[] = [];
+  // Native dialogs (window.confirm/alert) are auto-dismissed by Playwright,
+  // which silently CANCELS the action that raised them. That bit us hard:
+  // a stale synced draft made the page dirty at load, the "Discard unsaved
+  // changes?" confirm on profile switch got auto-dismissed, the test kept
+  // editing the still-active built-in profile, and Save Changes planted a
+  // creator-owned shadow copy of `cafelytic-filter` in the cloud — poisoning
+  // every subsequent run. Record every dialog so assertions can fail loudly.
+  const nativeDialogs: string[] = [];
 
   // Per-run unique tag so concurrent CI runs (and re-runs after a crash) can't
   // collide on slug. The cleanup helpers also operate on the smoke-recipe-
@@ -267,6 +275,29 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
       await ok.click();
       await expect(p.locator("#welcome-modal-overlay")).toBeHidden();
     }
+  }
+
+  // Activate a seeded profile tile and PROVE it took. The profile-switch
+  // click path in script.js raises window.confirm("Discard unsaved changes?")
+  // when the page considers the active profile dirty (e.g. a stale synced
+  // draft restored on load, or a cloud row drifting from the rendered
+  // values). Playwright dismisses that confirm, which cancels the switch —
+  // and every subsequent edit/save in the test then mutates the WRONG
+  // (real, durable) profile. Assert aria-pressed so that failure mode dies
+  // here with a diagnosis instead of corrupting the test account.
+  async function activateSeededProfile(p: Page, slug: string) {
+    const tile = p.locator(`#profile-buttons [data-profile="${slug}"]`);
+    await tile.click();
+    expect(
+      nativeDialogs,
+      "a native dialog fired during profile activation — likely 'Discard unsaved changes?', " +
+        "meaning the page loaded dirty (stale synced draft or cloud-row drift). " +
+        "The dismissed confirm cancels the profile switch.",
+    ).toEqual([]);
+    await expect(
+      tile,
+      `seeded profile "${slug}" did not become the active tile after click`,
+    ).toHaveAttribute("aria-pressed", "true");
   }
 
   // #target-edit-mode-btn is a toggle. In serial mode, isTargetEditMode in
@@ -377,6 +408,22 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
         if (res.error) {
           throw new Error("cleanup delete failed: " + (res.error.message || String(res.error)));
         }
+        // Reset the synced WIP-drafts blob. A stale target_draft_ions entry
+        // left by manual use of the test account restores "Modified" UI on
+        // load, which raises the discard-confirm on profile switch — the
+        // root trigger of the 2026-06-11 shadow-row incident (see the
+        // activateSeededProfile comment). The e2e account has no real WIP
+        // to preserve, so a clean slate per run is correct.
+        // @ts-expect-error - global from supabase-client.js
+        const draftsRes = await window.supabaseClient
+          .from("user_settings")
+          .update({ drafts: {} })
+          .eq("user_id", userId);
+        if (draftsRes.error) {
+          throw new Error(
+            "cleanup drafts reset failed: " + (draftsRes.error.message || String(draftsRes.error)),
+          );
+        }
         return res.count || 0;
       });
       if (deleted > 0) {
@@ -398,6 +445,12 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
       if (m.type() === "error") consoleErrors.push({ msg: m.text() });
     });
     page.on("pageerror", (e) => consoleErrors.push({ msg: e.message }));
+    page.on("dialog", (d) => {
+      nativeDialogs.push(`${d.type()}: ${d.message()}`);
+      // Same outcome as Playwright's default (dismiss), but recorded so
+      // activateSeededProfile can fail loudly instead of drifting silently.
+      d.dismiss().catch(() => {});
+    });
     await signIn(page);
   });
 
@@ -453,7 +506,7 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
 
     // Activate the seeded profile, enter edit mode, dirty Calcium so the
     // edit-bar (containing #target-save-changes-btn) becomes visible.
-    await page.locator(`#profile-buttons [data-profile="${CREATOR_SLUG}"]`).click();
+    await activateSeededProfile(page, CREATOR_SLUG);
     await ensureTargetEditMode(page, true);
     const ca = page.locator("#target-calcium");
     await expect(ca).toBeVisible();
@@ -494,7 +547,7 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
       creatorUserId: null,
     });
 
-    await page.locator(`#profile-buttons [data-profile="${NONCREATOR_SLUG}"]`).click();
+    await activateSeededProfile(page, NONCREATOR_SLUG);
     await ensureTargetEditMode(page, true);
     const ca = page.locator("#target-calcium");
     await expect(ca).toBeVisible();
