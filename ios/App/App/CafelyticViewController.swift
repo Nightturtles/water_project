@@ -28,9 +28,22 @@ class CafelyticViewController: CAPBridgeViewController, WKScriptMessageHandler {
         // theme-init.js can post.
         webView?.isOpaque = false
         webView?.configuration.userContentController.add(self, name: "cwTheme")
+        webView?.configuration.userContentController.add(self, name: "cwNavGate")
         super.viewDidLoad()
         applyThemedBackground()
         applyInterfaceStyle(UserDefaults.standard.string(forKey: cafelyticThemeKey))
+        // Restore Safari-like rubber-banding. Capacitor's prepareWebView sets
+        // bounces = false once at webview creation; it is never reapplied, so
+        // re-enabling here sticks for the lifetime of the webview.
+        webView?.scrollView.bounces = true
+        // Keep the scroll indicator above the fixed bottom tab bar. 62pt = the
+        // bar's height above the safe area (6+32+5+11+6 padding/content + 1px
+        // border, see .bottom-nav in style.css). The safe-area portion is added
+        // automatically (automaticallyAdjustsScrollIndicatorInsets defaults true).
+        // Every page injects the bar on native (injectBottomNav in ui-shared.ts
+        // runs unconditionally when isNativeApp()), so a static inset is correct
+        // on all pages and survives cross-page navigations.
+        webView?.scrollView.verticalScrollIndicatorInsets.bottom = 62
     }
 
     override func viewDidAppear(_ animated: Bool) {
@@ -48,11 +61,57 @@ class CafelyticViewController: CAPBridgeViewController, WKScriptMessageHandler {
     }
 
     // Receives the in-app theme ("system" | "light" | "dark") from theme-init.js
-    // / applyTheme() so the native appearance follows the app, not the system.
+    // / applyTheme() so the native appearance follows the app, not the system,
+    // and the navigation paint-hold gate ("hold" | "release"), also from
+    // theme-init.js.
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        guard message.name == "cwTheme", let pref = message.body as? String else { return }
-        UserDefaults.standard.set(pref, forKey: cafelyticThemeKey)
-        applyInterfaceStyle(pref)
+        switch message.name {
+        case "cwTheme":
+            guard let pref = message.body as? String else { return }
+            UserDefaults.standard.set(pref, forKey: cafelyticThemeKey)
+            applyInterfaceStyle(pref)
+        case "cwNavGate":
+            guard let action = message.body as? String else { return }
+            if action == "hold" { beginNavHold() } else if action == "release" { endNavHold() }
+        default:
+            break
+        }
+    }
+
+    // MARK: Navigation paint-hold
+
+    // WKWebView does not paint-hold across full-page navigations the way
+    // Safari does: between the old document's teardown and the new document's
+    // first render it composites a blank (themed) frame, which reads as a
+    // flash even though the cross-document view transition then crossfades
+    // from the correct old pixels. The web layer (theme-init.js) posts "hold"
+    // on pageswap, while the old content is still on screen; we cover the
+    // WebView with a render-server snapshot of exactly those pixels. It posts
+    // "release" two rAFs into the new page's reveal, once the transition's
+    // first frame is up; removing the snapshot then is seamless because the
+    // crossfade starts from the same image. The watchdog catches the cases
+    // where the release can never arrive (navigation failed, page died).
+    private var navHoldView: UIView?
+    private var navHoldWatchdog: Timer?
+
+    private func beginNavHold() {
+        guard navHoldView == nil,
+              let webView = webView,
+              let snapshot = webView.snapshotView(afterScreenUpdates: false) else { return }
+        snapshot.frame = webView.frame
+        snapshot.isUserInteractionEnabled = false
+        webView.superview?.addSubview(snapshot)
+        navHoldView = snapshot
+        navHoldWatchdog = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: false) { [weak self] _ in
+            self?.endNavHold()
+        }
+    }
+
+    private func endNavHold() {
+        navHoldWatchdog?.invalidate()
+        navHoldWatchdog = nil
+        navHoldView?.removeFromSuperview()
+        navHoldView = nil
     }
 
     private func applyInterfaceStyle(_ pref: String?) {
