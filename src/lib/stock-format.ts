@@ -30,7 +30,14 @@ export const STOCK_MINERAL_SHORT: Record<string, string> = {
   "sodium-chloride": "NaCl",
 };
 
-type MineralEntry = { minerals?: Array<{ mineralId?: string; grams?: number }>; bottleMl?: number; doseGramsPerL?: number } | null | undefined;
+type MineralEntry =
+  | {
+      minerals?: Array<{ mineralId?: string; grams?: number }>;
+      bottleMl?: number;
+      doseGramsPerL?: number;
+    }
+  | null
+  | undefined;
 
 /**
  * Unified stock-formula formatter that reproduces both classic implementations.

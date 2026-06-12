@@ -161,10 +161,7 @@ describe("formatStockSpec — labelMode:formula", () => {
 
   test("entry without mineralId is skipped", () => {
     const spec = {
-      minerals: [
-        { grams: 5 },
-        { mineralId: "calcium-chloride", grams: 3 },
-      ],
+      minerals: [{ grams: 5 }, { mineralId: "calcium-chloride", grams: 3 }],
     };
     expect(formatStockSpec(spec, opts)).toBe("3g CaCl₂·2H₂O");
   });

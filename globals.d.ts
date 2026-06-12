@@ -198,7 +198,14 @@ declare global {
   // Two classic files (recipe-browser.js, script.js) delegate to this.
   const STOCK_MINERAL_SHORT: Record<string, string>;
   function formatStockSpec(
-    spec: { minerals?: Array<{ mineralId?: string; grams?: number }>; bottleMl?: number; doseGramsPerL?: number } | null | undefined,
+    spec:
+      | {
+          minerals?: Array<{ mineralId?: string; grams?: number }>;
+          bottleMl?: number;
+          doseGramsPerL?: number;
+        }
+      | null
+      | undefined,
     opts: { labelMode: "short" | "formula"; includeBottleDose: boolean },
   ): string;
 
@@ -209,7 +216,14 @@ declare global {
     // From src/lib/stock-format.ts — unified stock-formula formatter and label map.
     STOCK_MINERAL_SHORT?: Record<string, string>;
     formatStockSpec?: (
-      spec: { minerals?: Array<{ mineralId?: string; grams?: number }>; bottleMl?: number; doseGramsPerL?: number } | null | undefined,
+      spec:
+        | {
+            minerals?: Array<{ mineralId?: string; grams?: number }>;
+            bottleMl?: number;
+            doseGramsPerL?: number;
+          }
+        | null
+        | undefined,
       opts: { labelMode: "short" | "formula"; includeBottleDose: boolean },
     ) => string;
     // From src/lib/html.ts — shared HTML-escaper (see the global above).
