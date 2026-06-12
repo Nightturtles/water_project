@@ -177,21 +177,8 @@
     return formatMethod(recipe) + " · " + formatRoast(recipe);
   }
 
-  // Compact label for a MINERAL_DB id used in stock-formula chips. Falls back
-  // to the formula notation when shorter than the full name (KHCO₃ vs.
-  // "Potassium Bicarbonate"); falls back to the raw id for unknown salts so
-  // future additions still render.
-  var STOCK_MINERAL_SHORT = {
-    "epsom-salt": "epsom",
-    "magnesium-chloride": "MgCl₂·6H₂O",
-    "calcium-chloride": "CaCl₂·2H₂O",
-    "calcium-chloride-anhydrous": "CaCl₂",
-    "baking-soda": "NaHCO₃",
-    "potassium-bicarbonate": "KHCO₃",
-    gypsum: "gypsum",
-    "potassium-chloride": "KCl",
-    "sodium-chloride": "NaCl",
-  };
+  // The compact mineral-label map has moved to src/lib/stock-format.ts and is
+  // bridged onto window via legacy-globals.ts. Use window.formatStockSpec directly.
 
   // Tags that are metadata, not user-facing display. Convention: any value
   // matching /^via:/ identifies the catalogued source the recipe came from
@@ -294,26 +281,7 @@
   }
 
   function formatStockFormula(formula) {
-    if (!formula || !Array.isArray(formula.minerals) || formula.minerals.length === 0) {
-      return "";
-    }
-    var parts = formula.minerals
-      .map(function (m) {
-        if (!m || typeof m !== "object") return "";
-        var label = STOCK_MINERAL_SHORT[m.mineralId] || m.mineralId || "?";
-        var grams = Number(m.grams);
-        if (!Number.isFinite(grams)) return "";
-        // Trim a trailing .0 so "5.0 g epsom" reads as "5 g epsom".
-        var gramsStr = grams === Math.round(grams) ? String(grams) : String(grams);
-        return gramsStr + " g " + label;
-      })
-      .filter(Boolean)
-      .join(" · ");
-    var bottle = Number(formula.bottleMl);
-    var dose = Number(formula.doseGramsPerL);
-    var bottleLabel = Number.isFinite(bottle) && bottle > 0 ? " in " + bottle + " mL" : "";
-    var doseLabel = Number.isFinite(dose) && dose > 0 ? " - " + dose + " g/L" : "";
-    return parts + bottleLabel + doseLabel;
+    return window.formatStockSpec(formula, { labelMode: "short", includeBottleDose: true });
   }
 
   // GH / KH summary row (replaces the raw Ca/Mg/Alk triplet). Values from

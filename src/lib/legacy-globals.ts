@@ -1,8 +1,8 @@
-// Bridge module: re-exports every public function from storage.ts and sync.ts
-// onto `window` so the not-yet-converted UI files (script.js,
-// source-water-ui.js, recipe-browser.js, my-recipes-ui.js, library-picker.js,
-// stock-editor.js, diy-editor.js, estimate-water-ui.js, mineral-selector.js,
-// library-data.js) keep working without per-file changes.
+// Bridge module: re-exports every public function from storage.ts, sync.ts,
+// and stock-format.ts onto `window` so the not-yet-converted UI files
+// (script.js, source-water-ui.js, recipe-browser.js, my-recipes-ui.js,
+// library-picker.js, stock-editor.js, diy-editor.js, estimate-water-ui.js,
+// mineral-selector.js, library-data.js) keep working without per-file changes.
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
 // own module bodies — that side-effect is what keeps unit tests working
@@ -37,9 +37,10 @@ import "./supabase-client";
 import "./capacitor-bootstrap";
 import * as storage from "./storage";
 import * as sync from "./sync";
+import * as stockFormat from "./stock-format";
 import "../components/ui-shared";
 import "../components/login-modal";
 import "./creator-display";
 import "../components/recipe-card";
 
-Object.assign(window, storage, sync);
+Object.assign(window, storage, sync, stockFormat);

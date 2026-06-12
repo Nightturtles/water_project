@@ -194,10 +194,24 @@ declare global {
   // SENTRY_RELEASE is injected at build time by @sentry/vite-plugin (see
   // vite.config.mts) and read by src/lib/sentry-init.ts. Undefined on local
   // dev / PR builds where SENTRY_AUTH_TOKEN is unset.
+  // From src/lib/stock-format.ts — unified formatter bridged onto window.
+  // Two classic files (recipe-browser.js, script.js) delegate to this.
+  const STOCK_MINERAL_SHORT: Record<string, string>;
+  function formatStockSpec(
+    spec: { minerals?: Array<{ mineralId?: string; grams?: number }>; bottleMl?: number; doseGramsPerL?: number } | null | undefined,
+    opts: { labelMode: "short" | "formula"; includeBottleDose: boolean },
+  ): string;
+
   interface Window {
     supabaseClient: import("@supabase/supabase-js").SupabaseClient;
     Sentry?: typeof import("@sentry/browser");
     SENTRY_RELEASE?: { id?: string };
+    // From src/lib/stock-format.ts — unified stock-formula formatter and label map.
+    STOCK_MINERAL_SHORT?: Record<string, string>;
+    formatStockSpec?: (
+      spec: { minerals?: Array<{ mineralId?: string; grams?: number }>; bottleMl?: number; doseGramsPerL?: number } | null | undefined,
+      opts: { labelMode: "short" | "formula"; includeBottleDose: boolean },
+    ) => string;
     // From src/lib/html.ts — shared HTML-escaper (see the global above).
     escapeHtml?: (s: unknown) => string;
     // From metrics.js - headline water metrics (rounded) for recipe surfaces:
