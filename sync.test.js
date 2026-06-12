@@ -34,6 +34,7 @@ import {
   buildSelectionsPayload,
   isDefaultData,
   migrateAnonTransientToLocal,
+  enqueueSerialized,
 } from "./src/lib/sync";
 
 const { invalidateAllCaches } = storage;
@@ -534,5 +535,86 @@ describe("migrateAnonTransientToLocal", () => {
   test("no anonymous work → no-op", () => {
     migrateAnonTransientToLocal();
     expect(global.localStorage.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// enqueueSerialized — serialization gate for realtime-triggered pulls
+// ---------------------------------------------------------------------------
+
+describe("enqueueSerialized", () => {
+  test("1. no overlap: task B does not start while task A is unresolved", async () => {
+    let resolveA;
+    const taskAPromise = new Promise((resolve) => {
+      resolveA = resolve;
+    });
+
+    let bStarted = false;
+
+    const aEnqueued = enqueueSerialized(function () {
+      return taskAPromise;
+    });
+    const bEnqueued = enqueueSerialized(function () {
+      bStarted = true;
+      return Promise.resolve();
+    });
+
+    // Yield to the microtask queue — B should not have started yet.
+    await Promise.resolve();
+    expect(bStarted).toBe(false);
+
+    // Resolve A, then await B.
+    resolveA();
+    await bEnqueued;
+
+    expect(bStarted).toBe(true);
+    await aEnqueued; // no unhandled-rejection
+  });
+
+  test("2. order preserved: three tasks execute in enqueue order", async () => {
+    const order = [];
+
+    const a = enqueueSerialized(function () {
+      order.push(0);
+      return Promise.resolve();
+    });
+    const b = enqueueSerialized(function () {
+      order.push(1);
+      return Promise.resolve();
+    });
+    const c = enqueueSerialized(function () {
+      order.push(2);
+      return Promise.resolve();
+    });
+
+    await c;
+    expect(order).toEqual([0, 1, 2]);
+    await a;
+    await b;
+  });
+
+  test("3. rejection does not wedge the chain: task B still runs after task A rejects", async () => {
+    let bRan = false;
+
+    const aEnqueued = enqueueSerialized(function () {
+      return Promise.reject(new Error("task A failed"));
+    });
+    // Catch A so vitest doesn't flag an unhandled rejection.
+    aEnqueued.catch(function () {});
+
+    const bEnqueued = enqueueSerialized(function () {
+      bRan = true;
+      return Promise.resolve();
+    });
+
+    await bEnqueued;
+    expect(bRan).toBe(true);
+  });
+
+  test("4. return value passthrough: resolves with the task's resolved value", async () => {
+    const result = await enqueueSerialized(function () {
+      return Promise.resolve(42);
+    });
+    expect(result).toBe(42);
   });
 });

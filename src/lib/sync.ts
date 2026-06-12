@@ -91,6 +91,25 @@ const realtimeSubscribedPromise: Promise<void> = new Promise(function (resolve) 
   realtimeSubscribedResolve = resolve;
 });
 
+// Serialization gate for realtime-triggered pulls. Each enqueued task runs
+// only after every previously-enqueued task has settled, so two
+// pullFromCloud calls can never overlap (a burst of realtime events while a
+// pull is in flight previously re-armed the debounce timer and could start
+// a second, concurrent pull). The chain never rejects: each task's errors
+// are the task's own responsibility (scheduleRealtimePull's catch), and the
+// recovery arms below are belt-and-suspenders so one rejected task can't
+// wedge every later pull. Exported for unit tests only — NOT published on
+// window.
+let realtimePullChain: Promise<unknown> = Promise.resolve();
+export function enqueueSerialized(task: () => Promise<unknown>): Promise<unknown> {
+  const next = realtimePullChain.then(task, task);
+  realtimePullChain = next.then(
+    function () {},
+    function () {},
+  );
+  return next;
+}
+
 // Dirty-tracking storage keys. Each holds the last-successfully-pushed
 // snapshot for one table. `pushAllToCloud` / `syncCustomProfiles` compare
 // current localStorage state to these snapshots and skip upserts when
@@ -1093,32 +1112,36 @@ function scheduleRealtimeReconnect(): void {
 // table) folds into a single pull. Push any pending local write first so
 // the pull reads cloud state that already includes our own write —
 // otherwise we'd briefly overwrite local with stale cloud (same rationale
-// as initSync's push-then-pull ordering).
+// as initSync's push-then-pull ordering). Pulls are serialized via
+// enqueueSerialized so a second realtime event arriving while a pull is
+// in flight can't start a concurrent pull.
 function scheduleRealtimePull(): void {
   clearTimeout(pullDebounceTimer);
   pullDebounceTimer = setTimeout(function () {
     pullDebounceTimer = undefined;
-    const pendingPush = syncTimer ? syncNow() : Promise.resolve();
-    Promise.resolve(pendingPush)
-      .then(function () {
-        return pullFromCloud({ skipIfLocalWriteDuringPull: true });
-      })
-      .then(function (applied) {
-        if (applied === false) {
-          // pullFromCloud bailed because a local write landed mid-pull. Re-arm
-          // so the remote change still lands once that write has been pushed
-          // (the debounce throttles this, and the push-first step above sends
-          // the local write up before the retry reads cloud again).
-          scheduleRealtimePull();
-          return;
-        }
-        if (typeof window.dispatchEvent === "function") {
-          window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
-        }
-      })
-      .catch(function (err) {
-        reportError("sync.realtime-pull", err);
-      });
+    enqueueSerialized(function () {
+      const pendingPush = syncTimer ? syncNow() : Promise.resolve();
+      return Promise.resolve(pendingPush)
+        .then(function () {
+          return pullFromCloud({ skipIfLocalWriteDuringPull: true });
+        })
+        .then(function (applied) {
+          if (applied === false) {
+            // pullFromCloud bailed because a local write landed mid-pull. Re-arm
+            // so the remote change still lands once that write has been pushed
+            // (the debounce throttles this, and the push-first step above sends
+            // the local write up before the retry reads cloud again).
+            scheduleRealtimePull();
+            return;
+          }
+          if (typeof window.dispatchEvent === "function") {
+            window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+          }
+        })
+        .catch(function (err) {
+          reportError("sync.realtime-pull", err);
+        });
+    });
   }, PULL_DEBOUNCE_MS);
 }
 
