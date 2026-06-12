@@ -31,6 +31,7 @@ import {
   TRANSIENT_KEYS,
   TRANSIENT_KEYS_PREFIX,
 } from "./storage-keys";
+import { reportError } from "./report";
 
 // ============================================
 // Sync — Cloud sync layer (localStorage-first)
@@ -169,7 +170,7 @@ export function scheduleSyncToCloud(): void {
         dispatchSaveStatus("saved");
       })
       .catch(function (err) {
-        console.warn("[sync] push failed:", err);
+        reportError("sync.push", err);
         dispatchSaveStatus("error", err);
       });
   }, SYNC_DEBOUNCE_MS);
@@ -185,7 +186,7 @@ export function syncNow(): Promise<void> {
       dispatchSaveStatus("saved");
     })
     .catch(function (err) {
-      console.warn("[sync] immediate push failed:", err);
+      reportError("sync.push-immediate", err);
       dispatchSaveStatus("error", err);
     });
 }
@@ -347,7 +348,7 @@ export async function pushAllToCloud(): Promise<void> {
       const u = upserts[idx];
       if (!u) return;
       if (r.error) {
-        console.warn("[sync] " + u.table + " upsert failed:", r.error);
+        reportError("sync.upsert", r.error, { table: u.table });
         pushErrors.push(r.error);
       } else {
         safeSetItem(u.key, u.snapshot);
@@ -466,7 +467,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
     if (deletedSourcesPending) {
       const srcDel = delResults[nextIdx++];
       if (srcDel && srcDel.error) {
-        console.warn("[sync] tombstone delete failed:", srcDel.error);
+        reportError("sync.tombstone-delete", srcDel.error);
         deleteErrors.push(srcDel.error);
       } else {
         deletedSources.forEach(function (s) {
@@ -477,7 +478,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
     if (deletedTargetsPending) {
       const tgtDel = delResults[nextIdx];
       if (tgtDel && tgtDel.error) {
-        console.warn("[sync] tombstone delete failed:", tgtDel.error);
+        reportError("sync.tombstone-delete", tgtDel.error);
         deleteErrors.push(tgtDel.error);
       } else {
         deletedTargets.forEach(function (s) {
@@ -511,7 +512,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
       .from("source_profiles")
       .upsert(sourceRows, { onConflict: "user_id,slug" });
     if (srcResult.error) {
-      console.warn("[sync] source_profiles upsert failed:", srcResult.error);
+      reportError("sync.profile-upsert", srcResult.error, { table: "source_profiles" });
       throw srcResult.error;
     } else {
       sourceChanged.forEach(function (e) {
@@ -538,7 +539,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
       .from("target_profiles")
       .upsert(targetRows, { onConflict: "user_id,slug" });
     if (tgtResult.error) {
-      console.warn("[sync] target_profiles upsert failed:", tgtResult.error);
+      reportError("sync.profile-upsert", tgtResult.error, { table: "target_profiles" });
       throw tgtResult.error;
     } else {
       targetChanged.forEach(function (e) {
@@ -578,7 +579,7 @@ export async function pullFromCloud(options?: {
     return !!(r && r.error);
   });
   if (errored && errored.error) {
-    console.warn("[sync] pull failed:", errored.error);
+    reportError("sync.pull", errored.error);
     throw errored.error;
   }
 
@@ -833,7 +834,7 @@ export function isDefaultData(): boolean {
  * defaults (the same data-loss shape as commits 6d8cd63 / 9f89a2e). Callers
  * already handle the rejection: handleFirstLoginMerge wraps in mergeInFlight
  * which propagates the error up, and the onAuthStateChange SIGNED_IN handler
- * catches it with `console.warn("[sync] post-signin merge failed:", err)` —
+ * catches it with `reportError("sync.first-login-merge", err)` —
  * the merge is skipped on this attempt and retried on the next sign-in or
  * page reload.
  */
@@ -856,7 +857,7 @@ async function hasCloudData(userId: string): Promise<boolean> {
     return !!(r && r.error);
   });
   if (errored && errored.error) {
-    console.warn("[sync] hasCloudData probe failed:", errored.error);
+    reportError("sync.has-cloud-data", errored.error);
     throw errored.error;
   }
   return !!(
@@ -1053,7 +1054,7 @@ function unsubscribeFromCloudChanges(): void {
         window.supabaseClient.removeChannel(channel);
       }
     } catch (err) {
-      console.warn("[sync] removeChannel threw:", err);
+      reportError("sync.remove-channel", err);
     }
   });
   realtimeChannels = [];
@@ -1116,7 +1117,7 @@ function scheduleRealtimePull(): void {
         }
       })
       .catch(function (err) {
-        console.warn("[sync] realtime pull failed:", err);
+        reportError("sync.realtime-pull", err);
       });
   }, PULL_DEBOUNCE_MS);
 }
@@ -1144,7 +1145,7 @@ async function initSync(): Promise<void> {
       window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
     }
   } catch (err) {
-    console.warn("[sync] initSync failed:", err);
+    reportError("sync.init", err);
   } finally {
     // Bind Realtime even if the initial push/pull failed so a transient
     // network blip doesn't leave the tab without cloud updates for the
@@ -1219,7 +1220,7 @@ export function clearLocalUserContent(): void {
 // ui-shared.js) treats a rejection as a signal to abort sign-out.
 function flushPendingSyncQuiet(): void {
   flushPendingSync().catch(function (err) {
-    console.warn("[sync] background flush failed:", err);
+    reportError("sync.flush", err);
   });
 }
 
@@ -1317,7 +1318,7 @@ if (window.supabaseClient && window.supabaseClient.auth) {
           }
         })
         .catch(function (err) {
-          console.warn("[sync] post-signin merge failed:", err);
+          reportError("sync.first-login-merge", err);
         });
     }
   });

@@ -5,6 +5,7 @@
 // are declared in globals.d.ts.
 
 import { KEYS, VOLUME_PREFIX } from "./storage-keys";
+import { reportError } from "./report";
 
 interface SourceProfile {
   label?: string;
@@ -64,6 +65,7 @@ export function safeGetItem(key: string): string | null {
   try {
     return localStorage.getItem(key);
   } catch (e) {
+    reportError("storage.get", e, { key });
     return null;
   }
 }
@@ -72,13 +74,16 @@ export function safeSetItem(key: string, value: string): boolean {
     localStorage.setItem(key, value);
     return true;
   } catch (e) {
+    reportError("storage.set", e, { key });
     return false;
   }
 }
 export function safeRemoveItem(key: string): void {
   try {
     localStorage.removeItem(key);
-  } catch (e) {}
+  } catch (e) {
+    reportError("storage.remove", e, { key });
+  }
 }
 
 // --- Auth-aware storage helpers ---
