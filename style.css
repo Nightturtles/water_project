@@ -5044,7 +5044,10 @@ body.is-capacitor .nav-hamburger {
    clearance lives on the footer (every page has one directly after main),
    so the footer text sits in the gap between the last card and the bar
    instead of hiding behind the bar, where it only peeked out during
-   rubber-band overscroll. */
+   rubber-band overscroll. 68px = the bar's 61px height above the safe area
+   (see .bottom-nav) + 7px breathing room below the footer text; the native
+   scroll-indicator inset in CafelyticViewController.swift mirrors the same
+   61px (as 62pt with a 1pt buffer). */
 body.is-capacitor footer {
   padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
 }

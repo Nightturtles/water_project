@@ -36,9 +36,10 @@ class CafelyticViewController: CAPBridgeViewController, WKScriptMessageHandler {
         // bounces = false once at webview creation; it is never reapplied, so
         // re-enabling here sticks for the lifetime of the webview.
         webView?.scrollView.bounces = true
-        // Keep the scroll indicator above the fixed bottom tab bar. 62pt = the
-        // bar's height above the safe area (6+32+5+11+6 padding/content + 1px
-        // border, see .bottom-nav in style.css). The safe-area portion is added
+        // Keep the scroll indicator above the fixed bottom tab bar. The bar is
+        // 61px above the safe area (6+32+5+11+6 padding/content + 1px border,
+        // see .bottom-nav in style.css); 62pt adds a 1pt buffer so the
+        // indicator tip never touches the border. The safe-area portion is added
         // automatically (automaticallyAdjustsScrollIndicatorInsets defaults true).
         // Every page injects the bar on native (injectBottomNav in ui-shared.ts
         // runs unconditionally when isNativeApp()), so a static inset is correct
