@@ -11,13 +11,26 @@ const config: CapacitorConfig = {
   // load-order issues PR h just fixed.
   plugins: {
     SplashScreen: {
-      // We hide the splash manually after first paint (see
-      // src/lib/capacitor-bootstrap.ts -> hideSplashAfterPaint). Disabling
-      // the launch-time auto-hide keeps the splash up until the WebView has
-      // actually rendered, avoiding the flash of white that happens when
-      // the WebView is still parking and the splash has already dismissed.
-      launchShowDuration: 0,
-      launchAutoHide: false,
+      // The splash must outlive the cold-start JS parse (a fresh install
+      // spends multi-second parsing the legacy-globals bundle with no warm
+      // WebView caches, and nothing can paint until that finishes).
+      // hideSplashAfterPaint() in src/lib/capacitor-bootstrap.ts dismisses
+      // the splash as soon as the page can paint, so launchShowDuration is
+      // only the watchdog ceiling: if the web layer dies before calling
+      // hide(), launchAutoHide tears the splash down at 6s instead of
+      // leaving it stuck forever.
+      //
+      // launchShowDuration MUST be nonzero: both native implementations
+      // short-circuit showOnLaunch() when it is 0 and never create the
+      // splash view at all, turning the manual hide() into a no-op and
+      // leaving the cold-start gap as a blank themed screen (the "dark
+      // screen on first install" bug).
+      launchShowDuration: 6000,
+      launchAutoHide: true,
+      // Android 12+ ignores hide()'s fadeOutDuration for the launch splash;
+      // the exit fade comes from this option instead. Matches the 200ms
+      // fade hideSplashAfterPaint() requests on iOS.
+      launchFadeOutDuration: 200,
       backgroundColor: "#fafaf7",
       // CENTER_CROP scales the 2732x2732 splash PNG to fill the screen
       // (cropping the excess in the short dimension) instead of the
