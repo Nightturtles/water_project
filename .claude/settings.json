@@ -11,15 +11,12 @@
       "Bash(xcrun *)",
       "Bash(plutil *)",
       "Bash(set -o pipefail)",
-      "Bash(cd /Users/kyleanderson/Documents/water_project *)",
       "Skill(build-ios)",
       "Skill(build-ios:*)",
       "Skill(build-android)",
       "Skill(build-android:*)",
       "Skill(pr-babysit-merge)",
       "Skill(pr-babysit-merge:*)",
-      "Skill(update-config)",
-      "Skill(update-config:*)",
       "mcp__playwright",
       "mcp__Claude_Preview",
       "WebFetch(domain:api.anthropic.com)",
@@ -84,7 +81,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*(src/lib/sync\\.ts|src/lib/storage\\.ts|supabase/migrations/)'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"You just edited a user-data-critical file (sync.ts, storage.ts, or a migration). Per CLAUDE.md Supabase safety: run the FULL e2e suite (not just the smoke-sync subset) before any push; re-read the affected migration end-to-end rather than trusting diffs; never run supabase db push (human gate). Past bugs in these files cost users recipes.\"}}'; fi"
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*(src/lib/sync\\.ts|src/lib/storage\\.ts|supabase/migrations/)'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"You just edited a user-data-critical file (sync.ts, storage.ts, or a migration). Per CLAUDE.md Supabase safety: before any push, run the full Playwright suite (npm run test:e2e — not only the smoke-sync subset) and use e2e/smoke-sync.md as the manual full-coverage runbook; re-read any affected supabase/migrations file end-to-end rather than trusting diffs; supabase db push is the user-only human gate (denied in this config). Past bugs in these files cost users recipes.\"}}'; fi"
           }
         ]
       }

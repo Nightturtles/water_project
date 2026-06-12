@@ -11,7 +11,7 @@
     {
       "name": "dist-preview",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["vite", "preview", "--port", "4173"],
+      "runtimeArgs": ["vite", "preview", "--port", "4173", "--strictPort"],
       "port": 4173,
       "autoPort": false
     }
