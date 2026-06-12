@@ -1,5 +1,9 @@
 .DS_Store
-.claude/
+# Claude Code: shared config (.claude/settings.json, .claude/skills/) is
+# committed so worktree sessions and fresh clones inherit permissions, hooks,
+# and skills. Personal/machine-specific state stays ignored.
+.claude/settings.local.json
+.claude/worktrees/
 node_modules/
 coverage/
 test-results/
