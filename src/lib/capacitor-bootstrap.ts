@@ -49,6 +49,15 @@ function initStatusBar(): void {
   StatusBar.setBackgroundColor({ color: NATIVE_BG }).catch(() => {});
 }
 
+// Minimum splash visibility. On fast devices the page is ready ~250ms after
+// the WebView starts, which made the splash blink in and out; holding it
+// briefly reads as a deliberate branded intro instead. Measured from the
+// WebView's navigation start (performance.now() origin), which begins
+// ~200-300ms after the splash actually appears, so the on-screen time is
+// slightly longer than this floor. Slow cold starts are unaffected: once the
+// page takes longer than the floor, the hide fires at first paint as before.
+const MIN_SPLASH_VISIBLE_MS = 1000;
+
 function hideSplashAfterPaint(): void {
   let hidden = false;
   const hide = () => {
@@ -56,16 +65,20 @@ function hideSplashAfterPaint(): void {
     hidden = true;
     SplashScreen.hide({ fadeOutDuration: 200 }).catch(() => {});
   };
+  // Hide at first paint or at the visibility floor, whichever is later.
+  const scheduleHide = () => {
+    window.setTimeout(hide, Math.max(0, MIN_SPLASH_VISIBLE_MS - performance.now()));
+  };
   // By the time this module runs, the document is fully parsed (classic
   // scripts execute during parse, modules after), so the first paint
   // opportunity already has the complete UI. The rAF defers the hide to
   // that paint so the splash fades into rendered content.
-  requestAnimationFrame(hide);
+  requestAnimationFrame(scheduleHide);
   // Android 12+ holds the launch splash by suspending the view hierarchy's
   // first draw (onPreDraw returns false until hide() releases it), and rAF
   // may never fire while drawing is suspended -- without this fallback the
   // splash and the page would deadlock waiting on each other.
-  window.setTimeout(hide, 250);
+  window.setTimeout(scheduleHide, 250);
 }
 
 function exposeGlobals(): void {
