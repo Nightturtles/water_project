@@ -5,14 +5,16 @@
 //   node scripts/generate-asset-pngs.cjs
 //
 // Re-run this whenever you edit one of the resources/*.svg files, then run
-//   npx capacitor-assets generate --ios --android
+//   npx --yes @capacitor/assets generate --ios --android
+//   (@capacitor/assets is intentionally NOT a devDependency — its transitive
+//   tree pins vulnerable tar/minimatch; npx fetches it on demand.)
 // to fan the PNGs out to ios/App/App/Assets.xcassets and
 // android/app/src/main/res/. Both commands write into the committed
 // platform trees, so verify the diff before committing.
 //
-// Sharp is pulled in transitively via @capacitor/assets (devDep). The
-// flatten step on opaque outputs removes the alpha channel, which iOS
-// requires for app-icon PNGs (Apple rejects icons with transparency).
+// sharp is a direct devDependency, required below. The flatten step on
+// opaque outputs removes the alpha channel, which iOS requires for
+// app-icon PNGs (Apple rejects icons with transparency).
 
 const path = require("node:path");
 const sharp = require("sharp");
