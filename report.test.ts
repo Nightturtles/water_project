@@ -72,7 +72,9 @@ describe("reportError", () => {
     const orig = global.localStorage;
     global.localStorage = {
       ...orig,
-      setItem: () => { throw new Error("QuotaExceededError"); },
+      setItem: () => {
+        throw new Error("QuotaExceededError");
+      },
     } as any;
 
     try {
