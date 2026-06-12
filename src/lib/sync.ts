@@ -1054,7 +1054,7 @@ function unsubscribeFromCloudChanges(): void {
         window.supabaseClient.removeChannel(channel);
       }
     } catch (err) {
-      console.warn("[sync] removeChannel threw:", err);
+      reportError("sync.remove-channel", err);
     }
   });
   realtimeChannels = [];
@@ -1220,7 +1220,7 @@ export function clearLocalUserContent(): void {
 // ui-shared.js) treats a rejection as a signal to abort sign-out.
 function flushPendingSyncQuiet(): void {
   flushPendingSync().catch(function (err) {
-    console.warn("[sync] background flush failed:", err);
+    reportError("sync.flush", err);
   });
 }
 
