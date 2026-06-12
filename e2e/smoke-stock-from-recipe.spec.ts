@@ -155,7 +155,7 @@ test.describe("library.html — Recipe to Concentrate handoff", () => {
     // The derivation must have produced at least one mineral row and a
     // positive bottle volume.
     const mineralRows = page.locator(".stock-editor-form .stock-mineral-row");
-    await expect(mineralRows).toHaveCount(await mineralRows.count());
+    await expect(mineralRows.first()).toBeVisible();
     expect(await mineralRows.count()).toBeGreaterThan(0);
 
     const bottleMl = await page.locator("#stock-editor-bottle-ml").inputValue();
