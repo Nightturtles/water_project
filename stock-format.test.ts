@@ -69,6 +69,13 @@ describe("formatStockSpec — labelMode:short", () => {
     expect(formatStockSpec(spec, opts)).toBe("2 g unknown-salt");
   });
 
+  test("prototype-chain ids (e.g. 'toString') fall back to the raw id, not Object.prototype members", () => {
+    const spec = {
+      minerals: [{ mineralId: "toString", grams: 2 }],
+    };
+    expect(formatStockSpec(spec, opts)).toBe("2 g toString");
+  });
+
   test("missing mineralId falls back to '?'", () => {
     const spec = {
       minerals: [{ grams: 2 }],

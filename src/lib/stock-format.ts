@@ -66,7 +66,12 @@ export function formatStockSpec(
     if (opts.labelMode === "short") {
       // Keep zero-gram entries; only skip non-finite.
       if (!Number.isFinite(grams)) continue;
-      const label = STOCK_MINERAL_SHORT[m.mineralId ?? ""] || m.mineralId || "?";
+      // Own-property check so ids like "toString" fall back to the raw id
+      // instead of resolving to Object.prototype members.
+      const short = Object.hasOwn(STOCK_MINERAL_SHORT, m.mineralId ?? "")
+        ? STOCK_MINERAL_SHORT[m.mineralId ?? ""]
+        : undefined;
+      const label = short || m.mineralId || "?";
       parts.push(grams + " g " + label);
     } else {
       // formula mode: drop entries with no mineralId, or grams <= 0 / non-finite.
