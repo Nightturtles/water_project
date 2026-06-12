@@ -18,11 +18,14 @@ export function reportError(area: string, err: unknown, extra?: Record<string, u
   if (err instanceof Error && typeof sentry.captureException === "function") {
     sentry.captureException(err, { tags: { area }, extra });
   } else if (typeof sentry.captureMessage === "function") {
-    sentry.captureMessage(area + ": " + String((err && (err as { message?: string }).message) || err), {
-      level: "warning",
-      tags: { area },
-      extra,
-    });
+    sentry.captureMessage(
+      area + ": " + String((err && (err as { message?: string }).message) || err),
+      {
+        level: "warning",
+        tags: { area },
+        extra,
+      },
+    );
   }
 }
 
