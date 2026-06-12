@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "--port", "8080", "--strictPort"],
+      "port": 8080,
+      "autoPort": true
+    },
+    {
+      "name": "dist-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["vite", "preview", "--port", "4173", "--strictPort"],
+      "port": 4173,
+      "autoPort": false
+    }
+  ]
+}

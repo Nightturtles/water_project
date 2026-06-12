@@ -75,6 +75,16 @@ When adding a migration:
 3. **User:** runs `supabase db push` against prod. **Claude does not push.** Production schema changes have cost users recipes before; the human gate is intentional.
 4. **Claude:** `supabase migration list` to confirm the new version appears on both Local and Remote, then run `e2e/smoke-sync.md` against the live site (local DB doesn't catch prod-only issues like extension availability or RLS edge cases).
 
+## Claude Code config
+
+Three layers, least-specific first:
+
+- `~/.claude/settings.json` (machine-global, not in this repo) — broad trust for everyday tools (`git`, `gh`, `npm`, `node`, coreutils) plus ask/deny rails for destructive commands (force-push, `sudo`, recursive deletes).
+- `.claude/settings.json` (committed) — project permissions and hooks. Hooks: a SessionStart context primer (branch, recent commits, open PRs), a PreToolUse gate that runs lint/typecheck/format/test before any `git push` and **blocks** the push on failure, a PostToolUse watcher prompt after `gh pr create`, and a PostToolUse reminder when sync.ts/storage.ts/migrations are edited (see Supabase safety). `supabase db push` is **denied** here — that's the human gate, not an oversight.
+- `.claude/settings.local.json` (gitignored) — machine-specific paths only. Don't accumulate permissions here; broad rules belong in one of the two files above.
+
+Project skills live in `.claude/skills/` (committed): `build-ios`, `build-android`, `pr-babysit-merge`. They travel with worktrees and clones; keep them here, not in `~/.claude/skills/`.
+
 ## Related docs
 
 - [SENTRY_SETUP.md](SENTRY_SETUP.md) — error telemetry setup, DSN, runbook.
