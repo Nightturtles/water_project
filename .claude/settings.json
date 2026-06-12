@@ -1,0 +1,93 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(supabase *)",
+      "Bash(docker *)",
+      "Bash(psql *)",
+      "Bash(PGPASSWORD=*)",
+      "Bash(ffmpeg *)",
+      "Bash(xcodebuild *)",
+      "Bash(xcrun *)",
+      "Bash(plutil *)",
+      "Bash(set -o pipefail)",
+      "Bash(cd /Users/kyleanderson/Documents/water_project *)",
+      "Skill(build-ios)",
+      "Skill(build-ios:*)",
+      "Skill(build-android)",
+      "Skill(build-android:*)",
+      "Skill(pr-babysit-merge)",
+      "Skill(pr-babysit-merge:*)",
+      "Skill(update-config)",
+      "Skill(update-config:*)",
+      "mcp__playwright",
+      "mcp__Claude_Preview",
+      "WebFetch(domain:api.anthropic.com)",
+      "WebFetch(domain:empiricalwater.com)",
+      "WebFetch(domain:lotuscoffeeproducts.com)",
+      "WebFetch(domain:www.scottrao.com)",
+      "WebFetch(domain:thebasicbarista.com)",
+      "WebFetch(domain:www.home-barista.com)",
+      "WebFetch(domain:prima-coffee.com)",
+      "WebFetch(domain:amatterofconcrete.com)",
+      "WebFetch(domain:finewaters.com)",
+      "WebFetch(domain:srlwgayrxzamxlodpsrq.supabase.co)"
+    ],
+    "ask": [
+      "Bash(supabase migration repair *)",
+      "Bash(supabase projects delete *)"
+    ],
+    "deny": [
+      "Bash(supabase db push)",
+      "Bash(supabase db push *)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" 2>/dev/null || exit 0; echo '[session context]'; git status -sb 2>/dev/null | head -15; echo '--- recent commits ---'; git log --oneline -5 2>/dev/null; echo '--- open PRs ---'; gh pr list --limit 5 2>/dev/null || echo '(gh unavailable)'",
+            "timeout": 15,
+            "statusMessage": "Loading branch + PR context"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*git push'; then cd \"$CLAUDE_PROJECT_DIR\" || exit 0; [ -d node_modules ] || { echo '[gate] node_modules missing; skipping local CI gates (CI still runs on the PR)' >&2; exit 0; }; npm run lint && npm run typecheck && npm run format:check && npm test || { echo 'CI gates failed (lint/typecheck/format/test). Fix before pushing.' >&2; exit 2; }; fi",
+            "timeout": 180,
+            "statusMessage": "Running CI gates before git push"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*gh pr create'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"gh pr create just completed. Start a watcher now: invoke /loop with this prompt — watch PR #<N> CI + CodeRabbit status; report when all checks are terminal. Self-pace the polling. Read the PR number from the output URL (format: https://github.com/OWNER/REPO/pull/<N>).\"}}'; fi"
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"file_path\"[[:space:]]*:[[:space:]]*\"[^\"]*(src/lib/sync\\.ts|src/lib/storage\\.ts|supabase/migrations/)'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"You just edited a user-data-critical file (sync.ts, storage.ts, or a migration). Per CLAUDE.md Supabase safety: run the FULL e2e suite (not just the smoke-sync subset) before any push; re-read the affected migration end-to-end rather than trusting diffs; never run supabase db push (human gate). Past bugs in these files cost users recipes.\"}}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
