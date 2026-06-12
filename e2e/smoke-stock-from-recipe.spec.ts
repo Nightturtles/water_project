@@ -100,7 +100,9 @@ test.describe("library.html — Recipe to Concentrate handoff", () => {
     // Persistence: the spec is stored under the library slug.
     const spec = await page.evaluate((s) => {
       const raw = localStorage.getItem("cw_stock_concentrate_specs");
-      return raw ? (JSON.parse(raw) as Record<string, { label: string; minerals: unknown[] }>)[s!] : null;
+      return raw
+        ? (JSON.parse(raw) as Record<string, { label: string; minerals: unknown[] }>)[s!]
+        : null;
     }, slug);
     expect(spec).toBeTruthy();
     expect(spec!.label).toBe("E2E Import Concentrate");
