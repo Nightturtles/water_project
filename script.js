@@ -1576,22 +1576,10 @@ function updateStockValues(valuesByStock) {
 }
 
 // Compact "5g MgSO4·7H2O · 2g MgCl2·6H2O · ..." string for the calculator's
-// stock result row. Uses MINERAL_DB.formula as the salt label (already a
-// short notation like "CaCl2·2H2O") so the row stays scannable.
+// stock result row. Delegates to src/lib/stock-format.ts (formatStockSpec)
+// via the window bridge. Uses MINERAL_DB.formula as the salt label.
 function formatStockResultDetail(spec) {
-  if (!spec || !Array.isArray(spec.minerals)) return "";
-  const parts = spec.minerals
-    .map((m) => {
-      if (!m || typeof m !== "object" || !m.mineralId) return "";
-      const grams = Number(m.grams);
-      if (!Number.isFinite(grams) || grams <= 0) return "";
-      const mineral = MINERAL_DB[m.mineralId];
-      const label = mineral && mineral.formula ? mineral.formula : m.mineralId;
-      return grams + "g " + label;
-    })
-    .filter(Boolean);
-  if (parts.length === 0) return "";
-  return parts.join(" · ");
+  return window.formatStockSpec(spec, { labelMode: "formula", includeBottleDose: false });
 }
 
 // `computeStockMineralGramsPerL` lives in storage.js next to other stock-spec
