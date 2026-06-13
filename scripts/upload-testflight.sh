@@ -53,6 +53,33 @@ if ! command -v xcodebuild >/dev/null 2>&1; then
   exit 69
 fi
 
+# ----- 0. Preflight: fail fast on signing setup BEFORE the long archive ----
+#
+# The archive step is ~5-10 minutes; the export/sign step that follows is
+# seconds. Historically every signing-setup problem (missing distribution
+# cert, API key without cloud-signing permission) only surfaced at export,
+# after the full archive had already been paid for. These cheap checks move
+# those failures to the front so a misconfigured run dies in seconds.
+#
+# 1) An "Apple Distribution" codesigning identity must exist in the keychain.
+#    Create it via Xcode (Settings -> Accounts -> Manage Certificates -> + ->
+#    Apple Distribution) or the developer portal. Without it, exportArchive
+#    fails with: No signing certificate "iOS Distribution" found.
+if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "Apple Distribution"; then
+  echo "ERROR: no 'Apple Distribution' signing identity in the keychain." >&2
+  echo "Create one in Xcode (Settings -> Accounts -> your team -> Manage" >&2
+  echo "Certificates -> + -> Apple Distribution), then re-run. See store/UPLOAD.md." >&2
+  exit 74
+fi
+# 2) The App Store Connect API key must have the Admin role: xcodebuild uses
+#    it below for cloud-managed signing (regenerating the App Store profile to
+#    include the distribution cert), which a non-Admin key cannot do. We can't
+#    cheaply assert the role from the CLI, so this is a loud reminder rather
+#    than a hard gate; a non-Admin key fails at export with "Cloud signing
+#    permission error". See store/UPLOAD.md step 2.
+echo "==> Preflight OK (Apple Distribution identity present)."
+echo "    Note: the API key must have the Admin role for cloud signing."
+
 # ----- 1. Build a fresh web bundle and sync into the native shell ----------
 
 echo "==> Building dist/ and syncing iOS native shell"
@@ -100,6 +127,20 @@ if [[ -z "$DEVELOPMENT_TEAM" ]]; then
 fi
 echo "==> Using DEVELOPMENT_TEAM=$DEVELOPMENT_TEAM"
 
+# -allowProvisioningUpdates lets xcodebuild create/refresh the managed
+# App Store provisioning profile (e.g. after a new distribution cert is
+# issued). It needs to authenticate to do so: without the App Store Connect
+# API key it falls back to an Xcode GUI account session, which a headless
+# run does not have ("No Accounts" -> "profile doesn't include signing
+# certificate ..."). Passing the same key used for the upload below keeps
+# the whole flow GUI-free. altool ignores these flags; only xcodebuild uses
+# them.
+AUTH_KEY_ARGS=(
+  -authenticationKeyPath "$APP_STORE_CONNECT_API_KEY_PATH"
+  -authenticationKeyID "$APP_STORE_CONNECT_API_KEY_ID"
+  -authenticationKeyIssuerID "$APP_STORE_CONNECT_API_KEY_ISSUER"
+)
+
 echo "==> Archiving (this takes ~5-10 minutes)"
 xcodebuild archive \
   -project ios/App/App.xcodeproj \
@@ -108,6 +149,7 @@ xcodebuild archive \
   -destination 'generic/platform=iOS' \
   -archivePath "$ARCHIVE_PATH" \
   -allowProvisioningUpdates \
+  "${AUTH_KEY_ARGS[@]}" \
   DEVELOPMENT_TEAM="$DEVELOPMENT_TEAM"
 
 # ----- 4. Export the IPA ---------------------------------------------------
@@ -117,7 +159,8 @@ xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \
   -exportOptionsPlist "$EXPORT_OPTIONS" \
   -exportPath "$EXPORT_PATH" \
-  -allowProvisioningUpdates
+  -allowProvisioningUpdates \
+  "${AUTH_KEY_ARGS[@]}"
 
 IPA_PATH=$(find "$EXPORT_PATH" -name '*.ipa' -maxdepth 2 | head -1)
 if [[ -z "$IPA_PATH" ]]; then

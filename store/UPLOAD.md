@@ -11,6 +11,7 @@ The upload scripts under `scripts/` are written but **blocked on accounts** unti
 3. Once approved, your Team ID appears at https://developer.apple.com/account → Membership. It's a 10-character alphanumeric string (e.g. `ABCDE12345`).
 4. Locally: `cp ios/team.xcconfig.example ios/team.xcconfig` and fill in the Team ID.
 5. Open the project in Xcode at least once: `npx cap open ios`. Xcode will provision a development certificate and matching profile automatically.
+6. **Create an Apple Distribution certificate.** The development cert from step 5 signs on-device test builds but cannot sign an App Store archive. In Xcode → Settings → Accounts → your team → **Manage Certificates** → **+** → **Apple Distribution** (or via the developer portal). The TestFlight script preflight checks for this and fails fast if it's missing; without it `xcodebuild -exportArchive` errors with `No signing certificate "iOS Distribution" found`.
 
 ## 1a. Register the App ID and create the App Store Connect app record (one-time)
 
@@ -26,7 +27,7 @@ One-time only; later uploads reuse the same record.
 The upload script uses an API key rather than your Apple ID, so it works headless without 2FA.
 
 1. https://appstoreconnect.apple.com/access/api → Generate API Key.
-2. Name it "Cafelytic Upload." Access: "App Manager" (or "Developer" if you don't need full edits).
+2. Name it "Cafelytic Upload." Access: **Admin**. This is required, not optional: `xcodebuild` uses this same key for cloud-managed signing (regenerating the App Store provisioning profile so it includes your distribution cert), and only an **Admin** key is permitted to do that. A lower role (App Manager, Developer) authenticates fine for the upload itself but fails the signing step with "Cloud signing permission error." The Access role is shown in the "Access" column of the key table on that page; switch a key with Edit, or generate a fresh Admin key with **+**.
 3. Download the `.p8` private key. Apple lets you download it ONCE; lose it and you have to revoke and regenerate.
 4. Note the Key ID (10 chars) and Issuer ID (UUID) shown next to the key.
 5. Store the `.p8` somewhere outside the repo, e.g. `~/Documents/cafelytic-secrets/AuthKey_<KEYID>.p8`.
@@ -139,5 +140,9 @@ This split is deliberate: TestFlight builds for the same "1.0" can have build nu
 **Play upload returns 400 with "APK has already been uploaded"**: `versionCode` wasn't actually incremented. Check that the `sed` step in the script ran (look for the `==> Bumping Android versionCode` line). If you re-ran after a partial failure, you may need to bump manually.
 
 **Xcode complains about provisioning profile**: open the project in Xcode (`npx cap open ios`), confirm the team is selected on the App target's Signing & Capabilities tab, and click "Try Again" if the profile needs regenerating.
+
+**`exportArchive No signing certificate "iOS Distribution" found`**: there's no Apple Distribution cert in your keychain. Create one (see step 1, item 6). The script preflight now catches this before the archive, so you should see it in seconds rather than after a 10-minute build.
+
+**`exportArchive Cloud signing permission error` / `Provisioning profile ... doesn't include signing certificate "Apple Distribution: ..."`**: the App Store profile predates your current distribution cert and `xcodebuild` tried to regenerate it via cloud signing, but the API key isn't **Admin**. Generate or switch to an Admin API key (see step 2) and re-run. The script passes the key to `xcodebuild` (`-authenticationKey*` flags) precisely so this regeneration is headless — it only works with an Admin key.
 
 **`xcrun altool` deprecation warning**: as of Xcode 16 altool still works for App Store uploads. Apple has been threatening to remove it for years. If a future Xcode actually removes it, the replacement for App Store uploads is `xcrun iTMSTransporter`. The script will need a swap then.
