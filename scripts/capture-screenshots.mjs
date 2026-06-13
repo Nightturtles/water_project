@@ -39,14 +39,25 @@ const PREVIEW_PORT = 4173;
 const PREVIEW_URL = `http://localhost:${PREVIEW_PORT}`;
 
 // Device specs match the sizes the store consoles accept.
-// iOS 6.7" is the modern required size; 6.5" remains in the catalog as the
-// fallback for older review templates. Pixel 6 covers Play's phone requirement.
+//
+// width/height are CSS *points* (the logical viewport the page lays out
+// against) and `scale` is the device pixel ratio. The emitted PNG is
+// width*scale x height*scale, which is the pixel size the store wants, while
+// the page renders at the real device point-width so it shows the same
+// responsive layout a user sees (mobile nav, stacked cards) rather than the
+// desktop layout a 1290px-wide viewport would trigger.
+//
+// iOS 6.7" is the modern required iPhone size; 6.5" remains as the fallback
+// for older review templates; iPad Pro 12.9" covers the required tablet set
+// for the Universal build. Pixel 6 covers Play's phone requirement (kept at
+// scale 1 / full pixel dims to preserve the already-shipped Android assets).
 const DEVICES = {
   ios: [
-    { name: "iphone-15-pro-max-6.7", width: 1290, height: 2796 },
-    { name: "iphone-14-plus-6.5", width: 1284, height: 2778 },
+    { name: "iphone-15-pro-max-6.7", width: 430, height: 932, scale: 3 },
+    { name: "iphone-14-plus-6.5", width: 428, height: 926, scale: 3 },
+    { name: "ipad-pro-12.9", width: 1024, height: 1366, scale: 2 },
   ],
-  android: [{ name: "pixel-6", width: 1080, height: 2400 }],
+  android: [{ name: "pixel-6", width: 1080, height: 2400, scale: 1 }],
 };
 
 // Five canonical scenes. Each entry: file prefix, URL path, the localStorage
@@ -160,14 +171,44 @@ function startPreviewServer() {
 }
 
 async function captureScene(browser, device, scene, platform) {
+  const scale = device.scale || 1;
   const context = await browser.newContext({
     viewport: { width: device.width, height: device.height },
-    deviceScaleFactor: 1,
+    deviceScaleFactor: scale,
     // Setting hasTouch + isMobile makes :hover/:active styles match what
     // the native shell would render — store reviewers see this version.
     hasTouch: true,
     isMobile: true,
   });
+
+  // Render the Capacitor (native) view, not the plain web view. The native
+  // shell injects a bottom tab bar, slims the top nav to a brand-only strip,
+  // and adds the is-capacitor / platform-ios body classes — all gated on
+  // Capacitor.isNativePlatform() (see ui-shared.ts injectBottomNav). The web
+  // build leaves those off, so a plain capture looks like cafelytic.com.
+  //
+  // @capacitor/core reassigns window.Capacitor during module init, clobbering
+  // a naive stub, so intercept the assignment with a getter/setter and patch
+  // isNativePlatform/getPlatform onto whatever it sets (documented in CLAUDE.md
+  // "Preview native-only UI on web"). The native bootstrap's plugin calls are
+  // all .catch()-guarded, so forcing the flag is render-safe on web.
+  await context.addInitScript((plat) => {
+    let real;
+    Object.defineProperty(window, "Capacitor", {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return real;
+      },
+      set(v) {
+        if (v && typeof v === "object") {
+          v.isNativePlatform = () => true;
+          v.getPlatform = () => plat;
+        }
+        real = v;
+      },
+    });
+  }, platform);
 
   // Seed localStorage before the page script runs so the renderer reads the
   // canonical state on first load. Mirrors the pattern used by e2e/_auth-stub.ts.
@@ -199,7 +240,7 @@ async function captureScene(browser, device, scene, platform) {
   await context.close();
 
   console.log(
-    `[${platform}/${device.name}] ${scene.id} → ${outputPath} (${device.width}×${device.height})`,
+    `[${platform}/${device.name}] ${scene.id} → ${outputPath} (${device.width * scale}×${device.height * scale})`,
   );
 }
 
