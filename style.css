@@ -3033,7 +3033,8 @@ footer {
   margin-bottom: 0.375rem;
 }
 
-.login-form input {
+.login-form input,
+.login-form textarea {
   width: 100%;
   padding: 0.625rem 0.75rem;
   border: 1px solid var(--gray-300);
@@ -3045,10 +3046,17 @@ footer {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.login-form input:focus {
+.login-form input:focus,
+.login-form textarea:focus {
   outline: none;
   border-color: var(--blue-500);
   box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+.login-form textarea {
+  resize: vertical;
+  min-height: 7rem;
+  line-height: 1.5;
 }
 
 .login-error {
