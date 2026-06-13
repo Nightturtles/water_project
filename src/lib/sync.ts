@@ -374,7 +374,14 @@ export async function pushAllToCloud(): Promise<void> {
       }
     });
     if (pushErrors.length > 0) {
-      throw new Error("[sync] failed to upsert one or more cloud rows");
+      // Carry the underlying upsert errors so reportError can tell a transient
+      // network blip (self-heals on the next push) apart from a real Postgrest
+      // rejection. The throw stays load-bearing: logout's flushPendingSync
+      // await relies on it to abort and preserve unsynced edits, so this
+      // enriches the error without swallowing it.
+      throw new Error("[sync] failed to upsert one or more cloud rows", {
+        cause: pushErrors,
+      });
     }
   }
 

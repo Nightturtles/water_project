@@ -89,4 +89,86 @@ describe("reportError", () => {
       global.localStorage = orig;
     }
   });
+
+  test("6. transient network error is downgraded to a breadcrumb, not an event", () => {
+    const captureException = vi.fn();
+    const captureMessage = vi.fn();
+    const addBreadcrumb = vi.fn();
+    (window as any).Sentry = { captureException, captureMessage, addBreadcrumb };
+
+    reportError("sync.upsert", { code: "", message: "TypeError: Failed to fetch" });
+
+    expect(captureException).not.toHaveBeenCalled();
+    expect(captureMessage).not.toHaveBeenCalled();
+    expect(addBreadcrumb).toHaveBeenCalledTimes(1);
+    expect(addBreadcrumb).toHaveBeenCalledWith(
+      expect.objectContaining({ category: "sync.upsert", level: "info" }),
+    );
+  });
+
+  test("7. generic re-throw whose cause is all network errors is suppressed (the sync.init shape)", () => {
+    const captureException = vi.fn();
+    const addBreadcrumb = vi.fn();
+    (window as any).Sentry = { captureException, captureMessage: vi.fn(), addBreadcrumb };
+
+    const wrapped = new Error("[sync] failed to upsert one or more cloud rows", {
+      cause: [{ code: "", message: "TypeError: Failed to fetch" }],
+    });
+    reportError("sync.init", wrapped);
+
+    expect(captureException).not.toHaveBeenCalled();
+    expect(addBreadcrumb).toHaveBeenCalledTimes(1);
+  });
+
+  test("8. mixed cause (network + real DB error) is still reported as an event", () => {
+    const captureException = vi.fn();
+    (window as any).Sentry = {
+      captureException,
+      captureMessage: vi.fn(),
+      addBreadcrumb: vi.fn(),
+    };
+
+    const wrapped = new Error("[sync] failed to upsert one or more cloud rows", {
+      cause: [
+        { code: "", message: "TypeError: Failed to fetch" },
+        { code: "42501", message: "new row violates row-level security policy" },
+      ],
+    });
+    reportError("sync.init", wrapped);
+
+    expect(captureException).toHaveBeenCalledTimes(1);
+  });
+
+  test("9. Postgrest code/details/hint are folded into Sentry extra", () => {
+    const captureMessage = vi.fn();
+    (window as any).Sentry = {
+      captureException: vi.fn(),
+      captureMessage,
+      addBreadcrumb: vi.fn(),
+    };
+
+    reportError(
+      "sync.upsert",
+      {
+        code: "23505",
+        details: "Key (user_id) already exists",
+        hint: "",
+        message: "duplicate key value violates unique constraint",
+      },
+      { table: "user_settings" },
+    );
+
+    expect(captureMessage).toHaveBeenCalledTimes(1);
+    expect(captureMessage).toHaveBeenCalledWith(
+      expect.stringContaining("sync.upsert"),
+      expect.objectContaining({
+        tags: { area: "sync.upsert" },
+        extra: expect.objectContaining({
+          table: "user_settings",
+          code: "23505",
+          details: "Key (user_id) already exists",
+        }),
+      }),
+    );
+  });
 });
