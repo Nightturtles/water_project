@@ -5040,8 +5040,15 @@ body.is-capacitor .nav-links,
 body.is-capacitor .nav-hamburger {
   display: none;
 }
-/* Clear the fixed bottom bar so page content isn't hidden behind it. */
-body.is-capacitor main {
+/* Clear the fixed bottom bar so page content isn't hidden behind it. The
+   clearance lives on the footer (every page has one directly after main),
+   so the footer text sits in the gap between the last card and the bar
+   instead of hiding behind the bar, where it only peeked out during
+   rubber-band overscroll. 68px = the bar's 61px height above the safe area
+   (see .bottom-nav) + 7px breathing room below the footer text; the native
+   scroll-indicator inset in CafelyticViewController.swift mirrors the same
+   61px (as 62pt with a 1pt buffer). */
+body.is-capacitor footer {
   padding-bottom: calc(68px + env(safe-area-inset-bottom, 0px));
 }
 
@@ -5278,4 +5285,33 @@ div.more-sheet__row {
 }
 [data-theme="dark"] .more-sheet__row:active {
   background: var(--gray-200);
+}
+
+/* ========================
+   Cross-document view transitions
+   ======================== */
+/* Crossfade between full-page navigations so the native MPA shell reads as a
+   single app (no blank frame between pages). Scoped to touch devices so
+   desktop web keeps instant navigation; mobile Safari / Android Chrome web
+   users get the same polish for free. Old OS webviews (pre iOS 18.2 /
+   Chromium 126) ignore @view-transition and keep the themed-blank-frame
+   fallback (head-top.html inline CSS + isOpaque handling in
+   CafelyticViewController). */
+@media (hover: none) and (pointer: coarse) {
+  @view-transition {
+    navigation: auto;
+  }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 180ms;
+  }
+}
+/* Reduced motion: keep the transition (it's what holds the old frame and
+   prevents the blank-frame flash) but drop the crossfade animation, so the
+   swap is an instant cut instead of a fade. */
+@media (hover: none) and (pointer: coarse) and (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
 }
