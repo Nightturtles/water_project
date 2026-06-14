@@ -783,13 +783,15 @@ export function injectNav(): void {
   const currentPage = window.location.pathname.split("/").pop() || "index.html";
   const navItems: Array<
     | { type: "group"; label: string; children: Array<{ href: string; label: string }> }
-    | { type: "link"; href: string; label: string }
+    | { type: "link"; href: string; label: string; tool?: boolean }
   > = [
-    // Flat top-level tabs (no "Tools" dropdown) — mirrors the native bottom bar
-    // labels (Calculator / Builder / Tuner) so web and native read the same.
-    { type: "link", href: "index.html", label: "Calculator" },
-    { type: "link", href: "recipe.html", label: "Builder" },
-    { type: "link", href: "taste.html", label: "Tuner" },
+    // Top-level tabs. Labels mirror the native bottom bar (Calculator / Builder /
+    // Tuner) so web and native read the same. On desktop they render as one flat
+    // row; in the mobile hamburger menu the `tool` items are nested under a
+    // "Tools" subheading (see .nav-tools-heading / .nav-tool-link in style.css).
+    { type: "link", href: "index.html", label: "Calculator", tool: true },
+    { type: "link", href: "recipe.html", label: "Builder", tool: true },
+    { type: "link", href: "taste.html", label: "Tuner", tool: true },
     { type: "link", href: "library.html", label: "Library" },
     { type: "link", href: "start.html", label: "Beginners Guide" },
     { type: "link", href: "minerals.html", label: "Settings" },
@@ -825,16 +827,28 @@ export function injectNav(): void {
   // Nav links
   const linksWrap = document.createElement("div");
   linksWrap.className = "nav-links";
+  let toolsHeadingInserted = false;
   navItems.forEach((item) => {
     if (item.type === "group") {
       const built = _buildNavGroup(item, currentPage);
       linksWrap.appendChild(built.wrap);
       _wireNavGroupBehavior(built.wrap, built.trigger, built.menu);
     } else {
+      // Mobile only: drop a "Tools" subheading in front of the first tool tab.
+      // It's display:none on desktop, so the desktop row stays flat and unchanged.
+      if (item.tool && !toolsHeadingInserted) {
+        const heading = document.createElement("div");
+        heading.className = "nav-tools-heading";
+        heading.setAttribute("aria-hidden", "true");
+        heading.textContent = "Tools";
+        linksWrap.appendChild(heading);
+        toolsHeadingInserted = true;
+      }
       const a = document.createElement("a");
       a.href = item.href;
       a.textContent = item.label;
-      if (currentPage === item.href) a.className = "active";
+      if (item.tool) a.classList.add("nav-tool-link");
+      if (currentPage === item.href) a.classList.add("active");
       linksWrap.appendChild(a);
     }
   });
