@@ -164,6 +164,13 @@ body {
   font-weight: 600;
 }
 
+/* "Tools" subheading for the nested calculator tabs — shown only in the mobile
+   hamburger menu (revealed in the max-width: 768px block). Hidden on desktop so
+   the top row stays flat. */
+.nav-tools-heading {
+  display: none;
+}
+
 /* Grouped nav dropdown (e.g. "Tools") */
 .nav-group {
   position: relative;
@@ -2824,6 +2831,25 @@ footer {
     padding: 0.6rem 0.75rem 0.6rem 1.25rem;
     font-size: 0.9rem;
     width: 100%;
+  }
+
+  /* Nest the calculator tabs (Calculator / Builder / Tuner) under a "Tools"
+     subheading in the open menu. Mirrors the .nav-group subheading treatment.
+     width:100% defeats the parent .nav-links `align-items: center` (same trick
+     the links use) so "Tools" left-aligns with Library and the other tabs. */
+  .nav-tools-heading {
+    display: block;
+    width: 100%;
+    padding: 0.5rem 0.75rem 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--gray-500);
+  }
+
+  .nav-links a.nav-tool-link {
+    padding-left: 1.25rem;
   }
 
   .metrics-row {
