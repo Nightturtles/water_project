@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- @partial:head-top -->
+  <title>Support - Cafelytic</title>
+  <!-- @partial:head-bottom -->
+</head>
+<body class="login-page support-page">
+  <header>
+    <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Support</h1>
+  </header>
+
+  <main>
+    <div class="login-card">
+      <h2 style="margin:0 0 0.5rem;font-size:1.1rem;">Send us a message</h2>
+      <p style="margin:0 0 1.25rem;font-size:0.9rem;color:var(--gray-500);line-height:1.5;">
+        Have a question, found a bug, or want to share feedback? Fill out the form below and we'll reply to the email you provide.
+      </p>
+      <form class="login-form" id="support-form" novalidate>
+        <div class="input-group">
+          <label for="support-name">Name</label>
+          <input type="text" id="support-name" name="name" autocomplete="name" maxlength="100" placeholder="Your name" required>
+        </div>
+        <div class="input-group">
+          <label for="support-email">Email</label>
+          <input type="email" id="support-email" name="email" autocomplete="email" maxlength="254" placeholder="you@example.com" required>
+        </div>
+        <div class="input-group">
+          <label for="support-message">Message</label>
+          <textarea id="support-message" name="message" rows="6" maxlength="5000" placeholder="How can we help?" required></textarea>
+        </div>
+        <!-- Honeypot: hidden from humans (off-screen, tab-skipped, aria-hidden).
+             A bot that fills every field trips it and the submission is silently
+             dropped server-side. -->
+        <div aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden;">
+          <label for="support-company">Company</label>
+          <input type="text" id="support-company" name="company" tabindex="-1" autocomplete="off">
+        </div>
+        <div class="login-error" id="support-error" role="alert" aria-live="polite"></div>
+        <div class="login-success" id="support-success" role="status" aria-live="polite" style="display:none;"></div>
+        <button type="submit" class="login-submit-btn" id="support-submit">Send message</button>
+      </form>
+    </div>
+  </main>
+
+  <footer>
+    <p><a href="index.html">Back to the calculator</a></p>
+  </footer>
+
+  <script defer src="constants.js"></script>
+  <script type="module" src="/src/lib/legacy-globals.ts"></script>
+  <script>
+    // Body wrapped in DOMContentLoaded so the legacy-globals.ts module bridge
+    // (which creates window.supabaseClient) and the deferred classic scripts
+    // have run before we wire the form. The submit itself happens on user click,
+    // well after load, so the client is always ready by then.
+    document.addEventListener("DOMContentLoaded", function () {
+      const form = document.getElementById("support-form");
+      const nameInput = document.getElementById("support-name");
+      const emailInput = document.getElementById("support-email");
+      const messageInput = document.getElementById("support-message");
+      const honeypotInput = document.getElementById("support-company");
+      const submitBtn = document.getElementById("support-submit");
+      const errorEl = document.getElementById("support-error");
+      const successEl = document.getElementById("support-success");
+
+      function showError(msg) {
+        errorEl.textContent = msg;
+        successEl.style.display = "none";
+        successEl.textContent = "";
+      }
+      function showSuccess(msg) {
+        successEl.textContent = msg;
+        successEl.style.display = "";
+        errorEl.textContent = "";
+      }
+
+      const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const name = nameInput.value.trim();
+        const email = emailInput.value.trim();
+        const message = messageInput.value.trim();
+
+        if (!name) { showError("Please enter your name."); nameInput.focus(); return; }
+        if (!EMAIL_RE.test(email)) { showError("Please enter a valid email address."); emailInput.focus(); return; }
+        if (!message) { showError("Please enter a message."); messageInput.focus(); return; }
+
+        const prevLabel = submitBtn.textContent;
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Sending…";
+        errorEl.textContent = "";
+
+        try {
+          const { data, error } = await window.supabaseClient.functions.invoke("submit-support", {
+            body: { name: name, email: email, message: message, company: honeypotInput.value },
+          });
+          if (error || !data || data.ok !== true) throw (error || new Error("send failed"));
+          form.reset();
+          showSuccess("Thanks! Your message has been sent. We'll reply to the email you provided.");
+        } catch (err) {
+          console.error("Support form submit failed:", err);
+          showError("Sorry, we couldn't send your message. Please try again, or email info@cafelytic.com directly.");
+        } finally {
+          submitBtn.disabled = false;
+          submitBtn.textContent = prevLabel;
+        }
+      });
+    });
+  </script>
+</body>
+</html>

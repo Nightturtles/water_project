@@ -36,6 +36,7 @@ const htmlEntries = [
   "minerals.html",
   "start.html",
   "reset-password.html",
+  "support.html",
   // Directory form so the public URL is cafelytic.com/privacy (no .html
   // suffix). The path we'll register with App Store Connect and Google
   // Play needs to be clean and stable, since it ends up on the store

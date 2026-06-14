@@ -375,6 +375,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Public contact form (support.html -> submit-support). The Support page must
+# work for logged-out / locked-out users, so this function is invocable without
+# a JWT; it does its own input validation + honeypot in lieu of auth. (Other
+# functions such as estimate-water keep the default verify_jwt = true.)
+[functions.submit-support]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327

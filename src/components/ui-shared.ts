@@ -793,6 +793,7 @@ export function injectNav(): void {
     { type: "link", href: "library.html", label: "Library" },
     { type: "link", href: "start.html", label: "Beginners Guide" },
     { type: "link", href: "minerals.html", label: "Settings" },
+    { type: "link", href: "support.html", label: "Support" },
   ];
 
   const nav = document.createElement("nav");
@@ -1066,6 +1067,10 @@ const BN_ICONS = {
   logout:
     '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>',
   chevron: '<path d="M9 5l7 7-7 7"/>',
+  help:
+    '<circle cx="12" cy="12" r="9.5"/>' +
+    '<path d="M9.2 9.3a3 3 0 0 1 5.7 1c0 2-3 3-3 3"/>' +
+    '<path d="M12 17h.01"/>',
 };
 
 function _bnSvg(inner: string): string {
@@ -1188,7 +1193,7 @@ function injectBottomNav(): void {
 
   // Pages that live behind the More sheet rather than a bar tab. On these the
   // More tab carries the active treatment.
-  const SHEET_PAGES = ["minerals.html", "start.html", "login.html"];
+  const SHEET_PAGES = ["minerals.html", "start.html", "login.html", "support.html"];
   const moreActive = SHEET_PAGES.indexOf(currentPage) !== -1;
 
   let sheetOpen = false;
@@ -1259,6 +1264,14 @@ function injectBottomNav(): void {
       icon: BN_ICONS.lightbulb,
       label: "Beginners Guide",
       sub: "New to coffee water? Start here",
+    }),
+  );
+  list.appendChild(
+    _buildSheetRow({
+      href: "support.html",
+      icon: BN_ICONS.help,
+      label: "Support",
+      sub: "Get help or send us a message",
     }),
   );
 
