@@ -1320,27 +1320,47 @@ export function migrateAnonTransientToLocal(): void {
 // SIGNED_OUT tears the channel down; SIGNED_IN subscribes for the new
 // user. TOKEN_REFRESHED is a no-op — supabase-js v2 keeps the existing
 // channel alive across token refreshes.
+//
+// `knownSignedIn` tracks whether we already believe the user is signed in, so
+// the SIGNED_IN branch can tell a genuine logged-out -> logged-in transition
+// from a re-fire. auth-js emits SIGNED_IN not only on a real sign-in but on
+// every page-load session recovery, tab refocus, and some token refreshes
+// (GoTrueClient _recoverAndRefresh). On a normal logged-in load that SIGNED_IN
+// even arrives BEFORE INITIAL_SESSION, so only a synchronous load-time seed
+// classifies it right: we read the auth cache that supabase-client.ts primes
+// (legacy-globals.ts evaluates supabase-client before this module, so the prime
+// has already run). If the optimistic prime ever misses, the seed is false and
+// a logged-in load just merges as it does today — never worse.
+let knownSignedIn = !!(typeof window !== "undefined" && window._cachedAuthUserId);
 if (window.supabaseClient && window.supabaseClient.auth) {
   window.supabaseClient.auth.onAuthStateChange(function (event: string, session: any) {
     if (event === "SIGNED_OUT") {
+      knownSignedIn = false;
       unsubscribeFromCloudChanges();
       // Defense-in-depth: covers session expiry, OAuth edge cases, or any
       // SIGNED_OUT path that doesn't route through the logout button.
       // Idempotent with the button's explicit clearLocalUserContent call.
       clearLocalUserContent();
     } else if (event === "SIGNED_IN" && session && session.user) {
+      const wasSignedIn = knownSignedIn;
+      knownSignedIn = true;
       // Promote any work the user did while logged out (transient keys live in
       // sessionStorage when anonymous) into localStorage BEFORE the merge runs,
       // so handleFirstLoginMerge sees it as local data instead of silently
-      // discarding it when the storage namespace flips to localStorage.
+      // discarding it when the storage namespace flips to localStorage. This
+      // and the (idempotent) subscribe run on every SIGNED_IN, including
+      // recovery re-fires, so Realtime stays bound regardless.
       migrateAnonTransientToLocal();
       subscribeToCloudChanges(session.user.id);
-      // Without this call, modal-based sign-ins succeed but the user's
-      // saved recipes/profiles don't appear until the next page navigation
-      // (which is when the existing login.html call site would have fired).
-      // TOKEN_REFRESHED reuses the same session and does NOT enter this
-      // branch — Supabase emits it as a distinct event — so we don't risk
-      // re-pulling on token rotation.
+      // Run the first-login merge ONLY on a real logged-out -> logged-in
+      // transition. On a session-recovery / refocus / token-refresh re-fire
+      // (wasSignedIn), the page-load initSync already owns the push+pull, and a
+      // second pull here would race initSync's push-before-pull ordering — the
+      // stale-cloud-clobbers-fresh-local data-loss shape behind 9f89a2e.
+      // Modal-based sign-ins still merge here (the user was logged out when the
+      // page loaded, so wasSignedIn is false); without it their saved recipes
+      // and profiles wouldn't appear until the next page navigation.
+      if (wasSignedIn) return;
       handleFirstLoginMerge()
         .then(function () {
           if (typeof window.dispatchEvent === "function") {
