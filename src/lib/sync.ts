@@ -1321,29 +1321,25 @@ export function migrateAnonTransientToLocal(): void {
 // user. TOKEN_REFRESHED is a no-op — supabase-js v2 keeps the existing
 // channel alive across token refreshes.
 //
-// `knownSignedIn` tracks whether we already believe the user is signed in, so
-// the SIGNED_IN branch can tell a genuine logged-out -> logged-in transition
-// from a re-fire. auth-js emits SIGNED_IN not only on a real sign-in but on
-// every page-load session recovery, tab refocus, and some token refreshes
-// (GoTrueClient _recoverAndRefresh). On a normal logged-in load that SIGNED_IN
-// even arrives BEFORE INITIAL_SESSION, so only a synchronous load-time seed
-// classifies it right: we read the auth cache that supabase-client.ts primes
-// (legacy-globals.ts evaluates supabase-client before this module, so the prime
-// has already run). If the optimistic prime ever misses, the seed is false and
-// a logged-in load just merges as it does today — never worse.
-let knownSignedIn = !!(typeof window !== "undefined" && window._cachedAuthUserId);
+// auth-js emits SIGNED_IN not only on a real sign-in but on every page-load
+// session recovery, tab refocus, and some token refreshes (GoTrueClient
+// _recoverAndRefresh), so the handler must decide when handleFirstLoginMerge is
+// actually needed vs. redundant. `wasLoggedInAtLoad` captures whether a session
+// already existed when the page loaded — i.e. whether initSync is doing this
+// load's push+pull. It's read synchronously from the auth cache supabase-client
+// primes (legacy-globals.ts evaluates supabase-client before this module); a
+// synchronous read is required because on a logged-in load auth-js emits
+// SIGNED_IN BEFORE INITIAL_SESSION.
+const wasLoggedInAtLoad = !!(typeof window !== "undefined" && window._cachedAuthUserId);
 if (window.supabaseClient && window.supabaseClient.auth) {
   window.supabaseClient.auth.onAuthStateChange(function (event: string, session: any) {
     if (event === "SIGNED_OUT") {
-      knownSignedIn = false;
       unsubscribeFromCloudChanges();
       // Defense-in-depth: covers session expiry, OAuth edge cases, or any
       // SIGNED_OUT path that doesn't route through the logout button.
       // Idempotent with the button's explicit clearLocalUserContent call.
       clearLocalUserContent();
     } else if (event === "SIGNED_IN" && session && session.user) {
-      const wasSignedIn = knownSignedIn;
-      knownSignedIn = true;
       // Promote any work the user did while logged out (transient keys live in
       // sessionStorage when anonymous) into localStorage BEFORE the merge runs,
       // so handleFirstLoginMerge sees it as local data instead of silently
@@ -1352,15 +1348,25 @@ if (window.supabaseClient && window.supabaseClient.auth) {
       // recovery re-fires, so Realtime stays bound regardless.
       migrateAnonTransientToLocal();
       subscribeToCloudChanges(session.user.id);
-      // Run the first-login merge ONLY on a real logged-out -> logged-in
-      // transition. On a session-recovery / refocus / token-refresh re-fire
-      // (wasSignedIn), the page-load initSync already owns the push+pull, and a
-      // second pull here would race initSync's push-before-pull ordering — the
-      // stale-cloud-clobbers-fresh-local data-loss shape behind 9f89a2e.
-      // Modal-based sign-ins still merge here (the user was logged out when the
-      // page loaded, so wasSignedIn is false); without it their saved recipes
-      // and profiles wouldn't appear until the next page navigation.
-      if (wasSignedIn) return;
+      // Skip the first-login merge ONLY when it would be pure redundant work:
+      // the user was already signed in at load (initSync owns this load's
+      // push+pull) AND the merge has already completed for this user on this
+      // device. SYNCED_USER_ID === uid is exactly that "completed" signal —
+      // handleFirstLoginMerge sets it only after a successful merge, and its
+      // repeat-login fast path is then just another pullFromCloud, which here
+      // would race initSync's push-before-pull ordering (the stale-cloud-
+      // clobbers-fresh-local shape behind 9f89a2e).
+      //
+      // Otherwise run it. A modal/login sign-in (logged out at load, so initSync
+      // bailed) needs the merge to surface the user's cloud data. And a device
+      // whose merge has NOT completed — a fresh device, or one whose first
+      // attempt failed before setting SYNCED_USER_ID (e.g. a transient network
+      // error) — must keep retrying the guarded merge rather than fall back to
+      // initSync's blind push-pull, which would push local defaults over the
+      // user's cloud settings. Gating on "session exists" instead would suppress
+      // that retry.
+      const mergeAlreadyDone = safeGetItem(KEYS.SYNCED_USER_ID) === session.user.id;
+      if (wasLoggedInAtLoad && mergeAlreadyDone) return;
       handleFirstLoginMerge()
         .then(function () {
           if (typeof window.dispatchEvent === "function") {
