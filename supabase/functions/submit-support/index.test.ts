@@ -298,3 +298,148 @@ Deno.test("Resend generic network error returns 502", async () => {
     globalThis.fetch = origFetch;
   }
 });
+
+// ---------------------------------------------------------------------------
+// Rate-limit tests (14–17)
+// These tests set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY so the quota
+// branch is active. The fetch stub branches on URL:
+//   - URL contains /rpc/increment_support_quota → quota RPC
+//   - URL === https://api.resend.com/emails → Resend send
+// ---------------------------------------------------------------------------
+
+function makeQuotaAndResendFetch(
+  quotaResponse: Response,
+  onResendCalled: () => void,
+): typeof globalThis.fetch {
+  return (input: string | Request | URL): Promise<Response> => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.includes("/rpc/increment_support_quota")) {
+      return Promise.resolve(quotaResponse);
+    }
+    onResendCalled();
+    return Promise.resolve(new Response(null, { status: 200 }));
+  };
+}
+
+// 14. Under limit: quota returns count 3 (≤ 10) → 200, Resend WAS called
+Deno.test("rate limit: under limit sends email and returns 200", async () => {
+  Deno.env.set("RESEND_API_KEY", "test-key");
+  Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  const origFetch = globalThis.fetch;
+  let resendCalled = false;
+  globalThis.fetch = makeQuotaAndResendFetch(
+    new Response("3", { status: 200 }),
+    () => { resendCalled = true; },
+  );
+  try {
+    const res = await handler(postReq(VALID_BODY));
+    assert.equal(res.status, 200);
+    const data = await res.json() as { ok: boolean };
+    assert.equal(data.ok, true);
+    assert.equal(resendCalled, true, "Resend should have been called for under-limit request");
+  } finally {
+    Deno.env.delete("SUPABASE_URL");
+    Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    globalThis.fetch = origFetch;
+  }
+});
+
+// 15. Over limit: quota returns count 11 (> 10) → 429, Resend NOT called
+Deno.test("rate limit: over limit returns 429 and does not send email", async () => {
+  Deno.env.set("RESEND_API_KEY", "test-key");
+  Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  const origFetch = globalThis.fetch;
+  let resendCalled = false;
+  globalThis.fetch = makeQuotaAndResendFetch(
+    new Response("11", { status: 200 }),
+    () => { resendCalled = true; },
+  );
+  try {
+    const res = await handler(postReq(VALID_BODY));
+    assert.equal(res.status, 429);
+    const data = await res.json() as { ok: boolean; error: string };
+    assert.equal(data.ok, false);
+    assert.equal(data.error, "rate_limited");
+    assert.equal(resendCalled, false, "Resend must not be called when over limit");
+  } finally {
+    Deno.env.delete("SUPABASE_URL");
+    Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    globalThis.fetch = origFetch;
+  }
+});
+
+// 16. Quota infra down (fail open): quota RPC returns 500 → still sends, returns 200
+Deno.test("rate limit: quota RPC 500 fails open and still sends email", async () => {
+  Deno.env.set("RESEND_API_KEY", "test-key");
+  Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  const origFetch = globalThis.fetch;
+  let resendCalled = false;
+  globalThis.fetch = makeQuotaAndResendFetch(
+    new Response("err", { status: 500 }),
+    () => { resendCalled = true; },
+  );
+  try {
+    const res = await handler(postReq(VALID_BODY));
+    assert.equal(res.status, 200);
+    const data = await res.json() as { ok: boolean };
+    assert.equal(data.ok, true);
+    assert.equal(resendCalled, true, "Resend must still be called when quota RPC fails");
+  } finally {
+    Deno.env.delete("SUPABASE_URL");
+    Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    globalThis.fetch = origFetch;
+  }
+});
+
+// 17. Distinct IPs get distinct hashes; same IP gets stable hash
+Deno.test("rate limit: distinct IPs produce distinct stable hashes", async () => {
+  Deno.env.set("RESEND_API_KEY", "test-key");
+  Deno.env.set("SUPABASE_URL", "https://example.supabase.co");
+  Deno.env.set("SUPABASE_SERVICE_ROLE_KEY", "service-key");
+  const origFetch = globalThis.fetch;
+  const capturedHashes: string[] = [];
+  globalThis.fetch = (input: string | Request | URL, init?: RequestInit): Promise<Response> => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (url.includes("/rpc/increment_support_quota")) {
+      const reqBody = JSON.parse(init?.body as string) as { p_ip_hash: string };
+      capturedHashes.push(reqBody.p_ip_hash);
+      return Promise.resolve(new Response("1", { status: 200 }));
+    }
+    return Promise.resolve(new Response(null, { status: 200 }));
+  };
+  try {
+    const reqIp1a = new Request("http://localhost/submit-support", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      body: JSON.stringify(VALID_BODY),
+    });
+    const reqIp1b = new Request("http://localhost/submit-support", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "1.2.3.4" },
+      body: JSON.stringify(VALID_BODY),
+    });
+    const reqIp2 = new Request("http://localhost/submit-support", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-forwarded-for": "5.6.7.8" },
+      body: JSON.stringify(VALID_BODY),
+    });
+    await handler(reqIp1a);
+    await handler(reqIp1b);
+    await handler(reqIp2);
+
+    assert.equal(capturedHashes.length, 3, "Expected 3 quota RPC calls");
+    const [hash1a, hash1b, hash2] = capturedHashes;
+    assert.equal(hash1a, hash1b, "Same IP should produce the same hash");
+    assert.notEqual(hash1a, hash2, "Different IPs should produce different hashes");
+    // SHA-256 hex is always 64 chars
+    assert.equal(hash1a.length, 64, "Hash should be a 64-char hex string");
+    assert.equal(hash2.length, 64, "Hash should be a 64-char hex string");
+  } finally {
+    Deno.env.delete("SUPABASE_URL");
+    Deno.env.delete("SUPABASE_SERVICE_ROLE_KEY");
+    globalThis.fetch = origFetch;
+  }
+});
