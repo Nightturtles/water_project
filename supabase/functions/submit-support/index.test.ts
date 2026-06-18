@@ -27,9 +27,9 @@ const VALID_BODY = {
 Deno.test("OPTIONS returns 200 with CORS", async () => {
   let fetchCalled = false;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
+  globalThis.fetch = () => {
     fetchCalled = true;
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   try {
     const req = new Request("http://localhost/submit-support", { method: "OPTIONS" });
@@ -50,9 +50,9 @@ Deno.test("OPTIONS returns 200 with CORS", async () => {
 Deno.test("GET returns 405 method_not_allowed", async () => {
   let fetchCalled = false;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
+  globalThis.fetch = () => {
     fetchCalled = true;
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   try {
     const req = new Request("http://localhost/submit-support", { method: "GET" });
@@ -97,9 +97,9 @@ Deno.test("JSON array body returns 400", async () => {
 Deno.test("honeypot tripped returns 200 without sending", async () => {
   let fetchCalled = false;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
+  globalThis.fetch = () => {
     fetchCalled = true;
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   try {
     const res = await handler(postReq({ ...VALID_BODY, company: "spambot" }));
@@ -169,9 +169,9 @@ Deno.test("message over 5000 chars returns 400", async () => {
 Deno.test("missing RESEND_API_KEY returns 500", async () => {
   let fetchCalled = false;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
+  globalThis.fetch = () => {
     fetchCalled = true;
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   const savedKey = Deno.env.get("RESEND_API_KEY");
   Deno.env.delete("RESEND_API_KEY");
@@ -194,9 +194,9 @@ Deno.test("happy path sends to Resend and returns 200", async () => {
   Deno.env.set("RESEND_API_KEY", "test-key");
   let capturedRequest: Request | null = null;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async (input: string | Request | URL, _init?: RequestInit) => {
+  globalThis.fetch = (input: string | Request | URL, _init?: RequestInit) => {
     capturedRequest = new Request(input instanceof Request ? input : String(input), _init);
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   try {
     const res = await handler(postReq(VALID_BODY));
@@ -230,9 +230,9 @@ Deno.test("HTML escaping: <script> in name is escaped in html field", async () =
   const xssName = "<script>alert(1)</script>";
   let capturedRequest: Request | null = null;
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async (input: string | Request | URL, _init?: RequestInit) => {
+  globalThis.fetch = (input: string | Request | URL, _init?: RequestInit) => {
     capturedRequest = new Request(input instanceof Request ? input : String(input), _init);
-    return new Response(null, { status: 200 });
+    return Promise.resolve(new Response(null, { status: 200 }));
   };
   try {
     const res = await handler(postReq({ ...VALID_BODY, name: xssName }));
@@ -254,7 +254,7 @@ Deno.test("HTML escaping: <script> in name is escaped in html field", async () =
 Deno.test("Resend non-OK response returns 502", async () => {
   Deno.env.set("RESEND_API_KEY", "test-key");
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => new Response("boom", { status: 500 });
+  globalThis.fetch = () => Promise.resolve(new Response("boom", { status: 500 }));
   try {
     const res = await handler(postReq(VALID_BODY));
     assert.equal(res.status, 502);
@@ -271,9 +271,7 @@ Deno.test("Resend non-OK response returns 502", async () => {
 Deno.test("Resend TimeoutError returns 504", async () => {
   Deno.env.set("RESEND_API_KEY", "test-key");
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    throw new DOMException("timed out", "TimeoutError");
-  };
+  globalThis.fetch = () => Promise.reject(new DOMException("timed out", "TimeoutError"));
   try {
     const res = await handler(postReq(VALID_BODY));
     assert.equal(res.status, 504);
@@ -290,9 +288,7 @@ Deno.test("Resend TimeoutError returns 504", async () => {
 Deno.test("Resend generic network error returns 502", async () => {
   Deno.env.set("RESEND_API_KEY", "test-key");
   const origFetch = globalThis.fetch;
-  globalThis.fetch = async () => {
-    throw new Error("ECONNREFUSED");
-  };
+  globalThis.fetch = () => Promise.reject(new Error("ECONNREFUSED"));
   try {
     const res = await handler(postReq(VALID_BODY));
     assert.equal(res.status, 502);
