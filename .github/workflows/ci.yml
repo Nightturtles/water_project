@@ -79,11 +79,25 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  edge-functions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno lint
+        working-directory: supabase/functions
+      - run: deno check submit-support/index.ts
+        working-directory: supabase/functions
+      - run: deno test --allow-env
+        working-directory: supabase/functions
+
   # Builds dist/ with Vite and publishes to GitHub Pages.
   # Gated to push-to-main; PRs never deploy. Depends on the full PR-gating
   # suite so a red typecheck/test/build or red e2e blocks the publish.
   deploy:
-    needs: [typecheck-and-test, e2e]
+    needs: [typecheck-and-test, e2e, edge-functions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
