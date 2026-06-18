@@ -90,7 +90,11 @@ jobs:
         working-directory: supabase/functions
       - run: deno check submit-support/index.ts
         working-directory: supabase/functions
-      - run: deno test --allow-env
+      # --no-check: the handler is type-checked by the `deno check` step above;
+      # the test file imports `node:assert`, whose type-check pulls @types/node,
+      # which isn't present in this node_modules-free job. Tests still run
+      # (node:assert works at runtime), so this keeps the gate without an install.
+      - run: deno test --allow-env --no-check
         working-directory: supabase/functions
 
   # Builds dist/ with Vite and publishes to GitHub Pages.
