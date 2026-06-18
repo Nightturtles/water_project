@@ -19,6 +19,7 @@
 // @ts-nocheck — Deno runtime; the project's tsconfig targets the browser JS
 //               files and tries to resolve these `https://` imports.
 
+// deno-lint-ignore no-import-prefix -- legacy esm.sh remote import; plan 008 will migrate to deno.json import map
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";

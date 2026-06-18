@@ -18,9 +18,6 @@
 // No database writes: this is email-only, so there's no migration and no row to
 // leak if the table policies were ever wrong.
 
-// @ts-nocheck — Deno runtime; the project's tsconfig targets the browser JS
-//               files and doesn't carry Deno's globals or the https:// imports.
-
 const RESEND_URL = "https://api.resend.com/emails";
 const SUPPORT_INBOX = "info@cafelytic.com";
 // Verified Resend sender on the cafelytic.com domain. reply_to is set to the
@@ -62,7 +59,7 @@ function escapeHtml(s: string): string {
     .replace(/'/g, "&#39;");
 }
 
-Deno.serve(async (req: Request): Promise<Response> => {
+export async function handler(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") {
     return json({ ok: false, error: "method_not_allowed" }, 405);
@@ -161,4 +158,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   }
 
   return json({ ok: true });
-});
+}
+
+// Only start the server when this module is the program entry point.
+if (import.meta.main) {
+  Deno.serve(handler);
+}
