@@ -2649,6 +2649,65 @@ footer {
   color: var(--gray-500);
 }
 
+/* App Store / Google Play callout — injected into the footer on web only
+   (injectAppStoreCallout() in src/components/ui-shared.ts); never shown inside
+   the native app. */
+.app-store-callout {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+.app-store-callout__label {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--gray-500);
+}
+.app-store-callout__badges {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.app-store-badge {
+  display: inline-flex;
+  align-items: center;
+  line-height: 0;
+}
+.app-store-badge .badge-art {
+  height: 40px;
+  width: auto;
+  display: block;
+}
+
+/* Theme swap: light-surface art by default, dark-surface art under
+   [data-theme="dark"]. Driven by the attribute applyTheme() sets on the
+   document, so a live theme toggle updates the badge with no re-injection. */
+.app-store-badge .badge-art--dark {
+  display: none;
+}
+[data-theme="dark"] .app-store-badge .badge-art--light {
+  display: none;
+}
+[data-theme="dark"] .app-store-badge .badge-art--dark {
+  display: block;
+}
+
+/* Bigger tap target on touch devices (mirrors the pointer: coarse rule above). */
+@media (pointer: coarse) {
+  .app-store-badge .badge-art {
+    height: 44px;
+  }
+}
+/* Small phones: stack so badges never shrink below brand-minimum size. */
+@media (max-width: 480px) {
+  .app-store-callout__badges {
+    flex-direction: column;
+  }
+}
+
 /* ========================
    Responsive
    ======================== */
