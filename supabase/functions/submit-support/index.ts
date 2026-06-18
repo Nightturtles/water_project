@@ -15,8 +15,12 @@
 //                     cafelytic.com domain (the same domain already used for
 //                     Supabase Auth SMTP; see SUPABASE_SMTP.md).
 //
-// No database writes: this is email-only, so there's no migration and no row to
-// leak if the table policies were ever wrong.
+// Database writes: a per-IP daily counter is stored in support_submission_quota
+// via the increment_support_quota(text) RPC (service role only, SECURITY
+// DEFINER). See migration 20260618051513_add_support_submission_quota.sql. The
+// raw client IP is never stored; only its SHA-256 hash is written. The quota
+// check fails open: if the RPC is unavailable or the env vars are missing, the
+// email is still sent so support stays reachable.
 
 const RESEND_URL = "https://api.resend.com/emails";
 const SUPPORT_INBOX = "info@cafelytic.com";
@@ -28,6 +32,7 @@ const NAME_MAX = 100;
 const EMAIL_MAX = 254; // RFC 5321 local+domain ceiling
 const MESSAGE_MAX = 5000;
 const SEND_TIMEOUT_MS = 15000;
+const SUPPORT_DAILY_LIMIT = 10; // per IP per day; tunable (see migration note)
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -57,6 +62,14 @@ function escapeHtml(s: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+async function sha256Hex(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 export async function handler(req: Request): Promise<Response> {
@@ -108,6 +121,46 @@ export async function handler(req: Request): Promise<Response> {
   const resendKey = Deno.env.get("RESEND_API_KEY");
   if (!resendKey) {
     return json({ ok: false, error: "server_misconfigured" }, 500);
+  }
+
+  // Per-IP daily rate limit. submit-support is unauthenticated, so we bucket by
+  // a hash of the client IP. Counting happens here (after validation) so only
+  // would-be sends consume quota.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (supabaseUrl && serviceKey) {
+    try {
+      const xff = req.headers.get("x-forwarded-for") ?? "";
+      const ip = xff.split(",")[0].trim() || "unknown";
+      const ipHash = await sha256Hex(ip);
+      const quotaResp = await fetch(`${supabaseUrl}/rest/v1/rpc/increment_support_quota`, {
+        method: "POST",
+        headers: {
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ p_ip_hash: ipHash }),
+      });
+      if (quotaResp.ok) {
+        const count = await quotaResp.json(); // scalar integer from the RPC
+        if (typeof count === "number" && count > SUPPORT_DAILY_LIMIT) {
+          return json(
+            {
+              ok: false,
+              error: "rate_limited",
+              message:
+                "You've sent several messages today. Please try again tomorrow, or email info@cafelytic.com directly.",
+            },
+            429,
+          );
+        }
+      } else {
+        console.error("[submit-support] quota RPC non-OK:", quotaResp.status);
+      }
+    } catch (e) {
+      console.error("[submit-support] quota check failed; failing open:", e);
+    }
   }
 
   const subject = `Cafelytic support: message from ${name}`;
