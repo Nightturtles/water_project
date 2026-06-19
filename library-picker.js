@@ -328,6 +328,7 @@
     render();
 
     overlay.style.display = "flex";
+    if (window.lockBodyScroll) window.lockBodyScroll("library-picker");
     // Auto-focus the search input — better UX given the new affordance.
     searchInput.focus();
 
@@ -442,6 +443,7 @@
 
     function close() {
       overlay.style.display = "none";
+      if (window.unlockBodyScroll) window.unlockBodyScroll("library-picker");
       overlay.removeEventListener("click", overlayClick);
       filtersWrap.removeEventListener("click", onFiltersClick);
       resultsWrap.removeEventListener("click", onResultsClick);

@@ -5068,8 +5068,30 @@ footer {
   justify-content: center;
   padding: 1rem;
 }
-body.login-modal-open {
+/* Lock the document behind any open modal. Toggled (token-keyed, reference
+   counted) by lockBodyScroll()/unlockBodyScroll() in src/components/ui-shared.ts.
+   Without this, the native iOS WebView keeps the page a live scroller behind
+   the overlay (CafelyticViewController.swift restores scrollView.bounces=true),
+   so a drag inside a modal scroll-chains to the page underneath and the
+   background scrolls instead of the modal. */
+body.modal-scroll-lock {
   overflow: hidden;
+}
+
+/* Keep a drag inside a modal's scrollable region from chaining out to the
+   document once it hits the top/bottom (honored on WebKit iOS 16+; the body
+   lock above is the floor for older engines). One rule covers every modal
+   scroll container so new modals only need to add their selector here. */
+.rx-detail-scroll,
+.library-picker-list,
+.mineral-selector-tab-panels,
+.mineral-selector-modal-list,
+.stock-editor-form,
+.diy-editor-form,
+.rx-edit-overlay,
+.rx-edit-dialog,
+.login-modal-card {
+  overscroll-behavior: contain;
 }
 .login-modal-card {
   /* Mirror .login-card so the modal reads identically to login.html.  The

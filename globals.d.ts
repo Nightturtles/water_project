@@ -279,6 +279,14 @@ declare global {
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
     applyAuthGate?: (el: HTMLElement | null | undefined, opts?: { reason?: string }) => void;
+    // Body scroll lock for modals, exposed from ui-shared.ts. Classic modal
+    // scripts call lockBodyScroll(token) on open and unlockBodyScroll(token)
+    // on close to stop a drag inside the modal from scroll-chaining to the
+    // page behind it on native iOS. Token-keyed so the lock is idempotent and
+    // survives stacked modals (see ui-shared.ts). Optional only because the
+    // window bridge populates them after first module load.
+    lockBodyScroll?: (token?: string) => void;
+    unlockBodyScroll?: (token?: string) => void;
     // Native capability shims published by src/lib/capacitor-bootstrap.ts on
     // iOS / Android only. Undefined on web, so call sites use optional
     // chaining (`window.cwHaptic?.("light")`). Classic JS files (script.js,

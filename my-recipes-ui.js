@@ -258,6 +258,7 @@
 
     function close() {
       window._cwEditModalOpenSlug = null;
+      if (window.unlockBodyScroll) window.unlockBodyScroll("edit-recipe");
       document.removeEventListener("keydown", keyHandler);
       overlay.removeEventListener("click", overlayClickHandler);
       overlay.remove();
@@ -301,6 +302,7 @@
     overlay.addEventListener("click", overlayClickHandler);
 
     document.body.appendChild(overlay);
+    if (window.lockBodyScroll) window.lockBodyScroll("edit-recipe");
     nameInput.focus();
     nameInput.select();
 

@@ -257,6 +257,7 @@
 
     previousFocus = document.activeElement;
     overlayEl.style.display = "";
+    if (window.lockBodyScroll) window.lockBodyScroll("diy-editor");
 
     overlayClickHandler = function (e) {
       if (e.target === overlayEl) closeEditor();
@@ -298,6 +299,7 @@
   function closeEditor() {
     if (!overlayEl) return;
     overlayEl.style.display = "none";
+    if (window.unlockBodyScroll) window.unlockBodyScroll("diy-editor");
     if (overlayClickHandler) {
       overlayEl.removeEventListener("click", overlayClickHandler);
       overlayClickHandler = null;
