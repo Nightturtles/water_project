@@ -1,7 +1,7 @@
 // Bridge module: re-exports every public function from storage.ts, sync.ts,
 // and stock-format.ts onto `window` so the not-yet-converted UI files
 // (script.js, source-water-ui.js, recipe-browser.js, my-recipes-ui.js,
-// library-picker.js, stock-editor.js, diy-editor.js, estimate-water-ui.js,
+// library-picker.js, diy-editor.js, estimate-water-ui.js,
 // mineral-selector.js, library-data.js) keep working without per-file changes.
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
@@ -42,5 +42,6 @@ import "../components/ui-shared";
 import "../components/login-modal";
 import "./creator-display";
 import "../components/recipe-card";
+import "../components/stock-editor";
 
 Object.assign(window, storage, sync, stockFormat);
