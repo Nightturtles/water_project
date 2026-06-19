@@ -287,6 +287,12 @@ declare global {
     openStockEditor?: (
       opts?: import("./src/components/stock-editor").OpenStockEditorOptions,
     ) => void;
+    // Single-mineral DIY concentrate editor modal, exposed from
+    // src/components/diy-editor.ts. Opened from the edit-pencil affordance on
+    // each DIY row in the mineral selector. Loads any existing spec for the
+    // mineral, saves bottleMl + gramsPerBottle, and auto-enables the
+    // "diy:<mineralId>" concentrate. onSaved fires with the saved mineralId.
+    openDiyEditor?: (opts?: import("./src/components/diy-editor").OpenDiyEditorOptions) => void;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
