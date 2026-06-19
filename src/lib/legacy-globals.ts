@@ -1,8 +1,8 @@
 // Bridge module: re-exports every public function from storage.ts, sync.ts,
 // and stock-format.ts onto `window` so the not-yet-converted UI files
 // (script.js, source-water-ui.js, recipe-browser.js, my-recipes-ui.js,
-// library-picker.js, estimate-water-ui.js,
-// mineral-selector.js, library-data.js) keep working without per-file changes.
+// library-picker.js, mineral-selector.js, library-data.js) keep working
+// without per-file changes.
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
 // own module bodies — that side-effect is what keeps unit tests working
@@ -44,5 +44,6 @@ import "./creator-display";
 import "../components/recipe-card";
 import "../components/stock-editor";
 import "../components/diy-editor";
+import "../components/estimate-water-ui";
 
 Object.assign(window, storage, sync, stockFormat);

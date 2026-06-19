@@ -293,6 +293,12 @@ declare global {
     // mineral, saves bottleMl + gramsPerBottle, and auto-enables the
     // "diy:<mineralId>" concentrate. onSaved fires with the saved mineralId.
     openDiyEditor?: (opts?: import("./src/components/diy-editor").OpenDiyEditorOptions) => void;
+    // "Estimate from my ZIP" feature init, exposed from
+    // src/components/estimate-water-ui.ts. Called once per page that hosts the
+    // card (script.js on index.html; the recipe.html inline DOMContentLoaded
+    // block) to wire up the open/submit/cancel flow; no-ops if the card markup
+    // is absent.
+    initEstimateWaterUI?: () => void;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
