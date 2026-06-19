@@ -77,6 +77,9 @@ declare global {
   const LIBRARY_TAGS: readonly string[];
   const BUILTIN_TARGET_KEYS: readonly string[];
   const RESERVED_TARGET_KEYS: Set<string>;
+  // Library-recipe slugs reserved so user-defined stocks can't shadow them
+  // (constants.js). Read by src/components/stock-editor.ts's uniqueStockSlug.
+  const RESERVED_LIBRARY_STOCK_SLUGS: readonly string[];
   const BUILTIN_TARGET_LABELS: Record<string, string>;
   const GALLONS_TO_LITERS: number;
   const CA_TO_CACO3: number;
@@ -275,6 +278,15 @@ declare global {
     // "save-recipe", "save-profile", "save-stock", "publish", "bookmark").
     openLoginModal?: (opts?: { reason?: string }) => void;
     closeLoginModal?: () => void;
+    // Stock concentrate editor modal, exposed from src/components/stock-editor.ts.
+    // Opened from the mineral selector ("+ Create Concentrate" / edit pencil) and
+    // from library recipe cards (import an authored stock formula, or derive one
+    // from the recipe's ion targets). mode "edit" loads an existing spec by slug;
+    // any other mode seeds the form from prefill. onSaved fires with the saved
+    // slug, or null after a delete.
+    openStockEditor?: (
+      opts?: import("./src/components/stock-editor").OpenStockEditorOptions,
+    ) => void;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.

@@ -63,7 +63,7 @@ module.exports = tseslint.config(
   //   type-checked as ES modules; ui-shared and login-modal moved to
   //   src/components/*.ts via PR (e).)
   // - The remaining files (script.js, analytics-init.js, recipe-browser.js,
-  //   my-recipes-ui.js, mineral-selector.js, stock-editor.js, diy-editor.js,
+  //   my-recipes-ui.js, mineral-selector.js, diy-editor.js,
   //   estimate-water-ui.js) are NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
@@ -94,12 +94,6 @@ module.exports = tseslint.config(
       // load/saveSelectedConcentrates, load/saveLotusDropperType,
       // loadStockConcentrateSpecs, getActiveStockIds, setStockEnabled).
       "mineral-selector.js",
-      // stock-editor: modal editor for stock concentrate solutions.
-      // Depends on globals from constants.js (MINERAL_DB,
-      // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
-      // (load/saveStockConcentrateSpecs, load/saveSelectedConcentrates,
-      // setStockEnabled, slugify), plus showConfirm from ui-shared.ts.
-      "stock-editor.js",
       // diy-editor: modal editor for single-mineral DIY concentrate specs.
       // Depends on globals from constants.js (MINERAL_DB,
       // MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) and storage.js
