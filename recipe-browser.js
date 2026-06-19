@@ -803,6 +803,9 @@
 
     detailPreviousFocus = document.activeElement;
     detailOverlay.style.display = "";
+    // Lock the page behind the modal so a drag inside .rx-detail-scroll can't
+    // scroll-chain to the document on native iOS (see lockBodyScroll).
+    if (window.lockBodyScroll) window.lockBodyScroll("recipe-detail");
 
     detailOverlayClickHandler = function (e) {
       if (e.target === detailOverlay) closeRecipeDetailModal();
@@ -843,6 +846,7 @@
   function closeRecipeDetailModal() {
     if (!detailOverlay) return;
     detailOverlay.style.display = "none";
+    if (window.unlockBodyScroll) window.unlockBodyScroll("recipe-detail");
     if (detailOverlayClickHandler) {
       detailOverlay.removeEventListener("click", detailOverlayClickHandler);
       detailOverlayClickHandler = null;

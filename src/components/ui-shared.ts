@@ -260,6 +260,7 @@ export function showConfirm(
   }
 
   overlay.style.display = "flex";
+  lockBodyScroll("confirm");
   if (input) {
     input.focus();
   } else {
@@ -268,6 +269,7 @@ export function showConfirm(
 
   function close() {
     overlay.style.display = "none";
+    unlockBodyScroll("confirm");
     yesBtn.removeEventListener("click", yesHandler);
     noBtn.removeEventListener("click", noHandler);
     document.removeEventListener("keydown", keyHandler);
@@ -487,6 +489,7 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
   }
 
   overlay.style.display = "flex";
+  lockBodyScroll("share-prompt");
   if (!existingName) {
     nameInput.focus();
   } else {
@@ -495,6 +498,7 @@ export async function showSharePrompt(profileKey: string): Promise<void> {
 
   function close() {
     overlay!.style.display = "none";
+    unlockBodyScroll("share-prompt");
     yesBtn.removeEventListener("click", yesHandler);
     noBtn.removeEventListener("click", noHandler);
     document.removeEventListener("keydown", keyHandler);
@@ -1493,6 +1497,33 @@ export function initSaveStatusIndicator(): void {
   });
 }
 
+// --- Body scroll lock for modals (native scroll-chaining fix) ---
+// On iOS the Capacitor shell keeps the WebView's scrollView bouncing
+// (CafelyticViewController.swift re-enables `scrollView.bounces = true`), so
+// the document behind an overlay stays a live scroller. A drag that starts in
+// a modal's inner overflow:auto container then scroll-chains to that document
+// once it reaches a boundary (or immediately, when the inner container has
+// little to scroll) and the page behind the modal moves instead of the modal.
+// Locking `overflow: hidden` on <body> collapses the document scroller while a
+// modal is up; `overscroll-behavior: contain` on the inner containers stops
+// the chain on newer WebKit (see style.css). We track open modals by token in
+// a Set rather than a bare counter so the lock is idempotent per modal (a
+// double open() or double close() can't unbalance it) and survives stacking —
+// the login modal can open over the recipe detail modal, and the
+// recipe-concentrate / DIY editors open over the mineral selector; the body
+// stays locked until the last overlay closes.
+const openModalTokens = new Set<string>();
+export function lockBodyScroll(token?: string): void {
+  openModalTokens.add(token || "modal");
+  document.body.classList.add("modal-scroll-lock");
+}
+export function unlockBodyScroll(token?: string): void {
+  openModalTokens.delete(token || "modal");
+  if (openModalTokens.size === 0) {
+    document.body.classList.remove("modal-scroll-lock");
+  }
+}
+
 // --- Window/global population ---
 // Classic-script consumers (script.js, recipe-browser.js, source-water-ui.js,
 // mineral-selector.js, stock-editor.js, estimate-water-ui.js, plus several
@@ -1531,6 +1562,8 @@ if (typeof window !== "undefined") {
     selectRadioByValue,
     debounce,
     initSaveStatusIndicator,
+    lockBodyScroll,
+    unlockBodyScroll,
   });
 }
 

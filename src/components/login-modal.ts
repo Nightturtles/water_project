@@ -15,6 +15,8 @@
 // (the bridge module imports this file as a side-effect). The original IIFE
 // wrapper is dropped — ES module scope already isolates internals.
 
+import { lockBodyScroll, unlockBodyScroll } from "./ui-shared";
+
 const REASON_HEADINGS: Record<string, string> = {
   save: "Sign in to save",
   "save-recipe": "Sign in to save this recipe",
@@ -280,7 +282,7 @@ function openModal(opts?: { reason?: string }): void {
   if ((root as any)._setHeading) (root as any)._setHeading(opts.reason);
   if ((root as any)._reset) (root as any)._reset();
   root.style.display = "flex";
-  document.body.classList.add("login-modal-open");
+  lockBodyScroll("login");
   const emailInput = $(root, "#login-modal-email") as HTMLInputElement | null;
   if (emailInput) {
     setTimeout(function () {
@@ -292,7 +294,7 @@ function openModal(opts?: { reason?: string }): void {
 function closeModal(): void {
   if (!modalEl) return;
   modalEl.style.display = "none";
-  document.body.classList.remove("login-modal-open");
+  unlockBodyScroll("login");
 }
 
 window.openLoginModal = openModal;

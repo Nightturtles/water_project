@@ -800,6 +800,7 @@
     if (concBrandSummaryEl) concBrandSummaryEl.setAttribute("aria-expanded", "false");
     setActiveTab(readActiveTab());
     modalEl.style.display = "";
+    if (window.lockBodyScroll) window.lockBodyScroll("mineral-selector");
 
     modalOverlayClickHandler = function (e) {
       if (e.target === modalEl) closeModal();
@@ -841,6 +842,7 @@
   function closeModal() {
     if (!modalEl) return;
     modalEl.style.display = "none";
+    if (window.unlockBodyScroll) window.unlockBodyScroll("mineral-selector");
     if (modalOverlayClickHandler) {
       modalEl.removeEventListener("click", modalOverlayClickHandler);
       modalOverlayClickHandler = null;
