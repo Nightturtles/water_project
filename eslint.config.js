@@ -33,8 +33,8 @@ module.exports = tseslint.config(
       // script.js is now linted.
       // ui-shared.js is now linted.
       // source-water-ui.js migrated to src/components/source-water-ui.ts.
+      // library-picker.js migrated to src/components/library-picker.ts.
       "library-data.js",
-      "library-picker.js",
       "theme-init.js",
     ],
   },

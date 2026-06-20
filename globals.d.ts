@@ -179,7 +179,13 @@ declare global {
   // creatorDisplayName) are covered by TargetProfile & { slug: string }.
   interface LibraryRecipeRow extends TargetProfile {
     slug: string;
+    // Supabase row id (uuid string in prod; loosely typed since library-data.js
+    // isn't @ts-checked). Read by the Add-From-Library picker to key its cards.
+    id?: string | number;
     userId?: string | null;
+    // Authoritative creator check (creator_user_id). Null when the original
+    // creator's account was deleted; see src/lib/creator-display.ts.
+    creatorUserId?: string | null;
     tags?: string[];
     // `category` is the client-side name for the DB column `tray`. The
     // recipe-browser spec uses `category`; the DB keeps `tray` for
@@ -193,6 +199,18 @@ declare global {
     isStarter?: boolean;
   }
   var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
+
+  // Filter state shared by the library page (recipe-browser.js) and the
+  // Add-From-Library picker (src/components/library-picker.ts). The picker
+  // never sets `mine` — that filter is library-page-only — so it stays
+  // optional here.
+  interface LibraryFilterState {
+    method: string;
+    roast: string;
+    tags: string[];
+    q: string;
+    mine?: boolean;
+  }
 
   // Supabase — bundled via Vite from @supabase/supabase-js (a runtime
   // dependency since Phase A PR h). src/lib/supabase-client.ts creates the
@@ -318,6 +336,33 @@ declare global {
     initSourceWaterSection?: (
       options?: import("./src/components/source-water-ui").InitSourceWaterOptions,
     ) => import("./src/components/source-water-ui").SourceWaterSection;
+    // Recipe Library data layer (library-data.js — still a classic script).
+    // The Add-From-Library picker (src/components/library-picker.ts) reaches
+    // these via window.* with the same typeof guards the original used;
+    // recipe-browser.js / my-recipes-ui.js also call them but aren't
+    // @ts-checked yet. Tighten/relocate when library-data.js migrates.
+    getPublicRecipesSync?: () => LibraryRecipeRow[];
+    fetchPublicRecipes?: (forceRefresh?: boolean) => Promise<LibraryRecipeRow[]>;
+    copyRecipeToMyProfiles?: (recipe: LibraryRecipeRow) => string | null;
+    isRecipeInMyProfiles?: (recipe: LibraryRecipeRow) => boolean;
+    LIBRARY_TRAYS?: ReadonlyArray<{ key: string; title: string; subtitle?: string }>;
+    applyFilters?: (
+      filters: LibraryFilterState,
+      recipes: LibraryRecipeRow[],
+      options?: { isSaved?: (recipe: LibraryRecipeRow) => boolean },
+    ) => LibraryRecipeRow[];
+    hasAnyActiveFilter?: (filters: LibraryFilterState) => boolean;
+    partitionByCategory?: (recipes: LibraryRecipeRow[]) => Record<string, LibraryRecipeRow[]>;
+    pickFeaturedFromFiltered?: (
+      filtered: LibraryRecipeRow[],
+      method: string,
+    ) => LibraryRecipeRow | null;
+    // Add-From-Library modal picker, exposed from src/components/library-picker.ts.
+    // Opened from the "+ Add From Library" affordance on the target/current
+    // water rails (script.js on index.html; the taste.html inline block).
+    showLibraryPicker?: (
+      options?: import("./src/components/library-picker").ShowLibraryPickerOptions,
+    ) => void;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
