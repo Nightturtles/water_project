@@ -346,6 +346,9 @@ declare global {
     fetchPublicRecipes?: (forceRefresh?: boolean) => Promise<LibraryRecipeRow[]>;
     copyRecipeToMyProfiles?: (recipe: LibraryRecipeRow) => string | null;
     isRecipeInMyProfiles?: (recipe: LibraryRecipeRow) => boolean;
+    // Drops the cached public-recipes snapshot so the next render refetches.
+    // Called after an owner edits/unpublishes a row (my-recipes-ui.ts).
+    invalidatePublicRecipesCache?: () => void;
     LIBRARY_TRAYS?: ReadonlyArray<{ key: string; title: string; subtitle?: string }>;
     applyFilters?: (
       filters: LibraryFilterState,
@@ -364,6 +367,22 @@ declare global {
     showLibraryPicker?: (
       options?: import("./src/components/library-picker").ShowLibraryPickerOptions,
     ) => void;
+    // Owner edit/unpublish affordances on library cards, exposed from
+    // src/components/my-recipes-ui.ts. recipe-browser.js opens these when the
+    // signed-in user is the row creator. openEditRecipeModal returns a close()
+    // handle; both fire their option callback after a successful write.
+    openEditRecipeModal?: (
+      recipe: LibraryRecipeRow,
+      options?: import("./src/components/my-recipes-ui").EditRecipeOptions,
+    ) => () => void;
+    confirmUnpublish?: (
+      recipe: LibraryRecipeRow,
+      options?: import("./src/components/my-recipes-ui").ConfirmUnpublishOptions,
+    ) => void;
+    // Slug of the recipe whose edit modal is currently open, or null. Set by
+    // my-recipes-ui.ts on open/close; recipe-browser.js reads it to suppress
+    // Realtime-driven re-renders of the rail/library while the user edits.
+    _cwEditModalOpenSlug?: string | null;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
