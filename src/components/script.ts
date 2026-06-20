@@ -1,6 +1,69 @@
 // ============================================
 // Coffee Water Chemistry Calculator
 // ============================================
+//
+// Phase A: converted from script.js (the index.html calculator orchestrator).
+// Unlike the other migrated UI files, this one is NOT imported by
+// legacy-globals.ts — it must run AFTER the classic metrics.js / library-data.js
+// scripts (which load after the legacy-globals module). So it stays its own
+// module entry: index.html loads it via `<script type="module"
+// src="/src/components/script.ts">` at the last position, and deferred scripts
+// (classic `defer` + module) execute in document order, so it still runs last.
+// It publishes nothing on window (it's a pure top-level orchestrator); storage
+// and ui-shared helpers are imported directly, metrics.js / constants.js stay
+// ambient globals, and the cross-module bridge (showLibraryPicker, recipeMatches,
+// cwHaptic, formatStockSpec, init{Source,Estimate}…) is reached via window.* /
+// the migrated modules with the same guards as the original.
+// ============================================
+
+import { buildSlimRecipeCard } from "./recipe-card";
+import {
+  bindEnterToClick,
+  createStatusHandler,
+  debounce,
+  findFallbackPreset,
+  maybeOfferSharePrompt,
+  onStorageKeysChanged,
+  readNonNegative,
+  renderRangeGuidance,
+  setDeltaText,
+  showConfirm,
+} from "./ui-shared";
+import {
+  clearTargetDraftIons,
+  computeStockMineralGramsPerL,
+  deleteCustomTargetProfile,
+  getActiveStockSpecs,
+  getAllPresets,
+  getConcentrateGramsPerMl,
+  getConcentrateMineralId,
+  getLotusDropMl,
+  getTargetPresetsForBrewMethod,
+  getTargetProfileByKey,
+  isAdvancedMineralDisplayMode,
+  loadCustomTargetProfiles,
+  loadLotusConcentrateUnitFor,
+  loadSelectedMinerals,
+  loadTargetDraftIonsFor,
+  loadTargetPresetName,
+  loadValidSelectedConcentrates,
+  loadVolumePreference,
+  normalizeLotusConcentrateUnit,
+  saveBrewMethod,
+  saveCustomTargetProfiles,
+  saveLotusConcentrateUnitFor,
+  saveSelectedMinerals,
+  saveTargetDraftIons,
+  saveTargetPresetName,
+  saveVolumePreference,
+  validateTargetProfileName,
+} from "../lib/storage";
+
+// Storage's StockConcentrateSpec (the one getActiveStockSpecs returns) is
+// module-internal and structurally distinct from the ambient global of the same
+// name (which carries an index signature). Recover it from the return type so
+// the calculator's stock-spec values line up with what storage hands back.
+type StockSpec = ReturnType<typeof getActiveStockSpecs>[number]["spec"];
 
 // --- State ---
 // Load brew method first so loadTargetPresetName() can pick the
@@ -10,27 +73,29 @@ let activeBrewMethod = loadBrewMethod();
 let currentProfile = loadTargetPresetName(activeBrewMethod);
 
 // --- DOM elements ---
-const volumeInput = document.getElementById("volume");
-const volumeUnit = document.getElementById("volume-unit");
-const targetCa = document.getElementById("target-calcium");
-const targetMg = document.getElementById("target-magnesium");
-const targetAlk = document.getElementById("target-alkalinity");
-const targetK = document.getElementById("target-potassium");
-const targetNa = document.getElementById("target-sodium");
-const targetSO4 = document.getElementById("target-sulfate");
-const targetCl = document.getElementById("target-chloride");
-const targetHCO3 = document.getElementById("target-bicarbonate");
-const profileDesc = document.getElementById("profile-description");
-const resultsContainer = document.getElementById("results-container");
-const profileButtonsContainer = document.getElementById("profile-buttons");
+const volumeInput = document.getElementById("volume") as HTMLInputElement;
+const volumeUnit = document.getElementById("volume-unit") as HTMLSelectElement;
+const targetCa = document.getElementById("target-calcium") as HTMLInputElement;
+const targetMg = document.getElementById("target-magnesium") as HTMLInputElement;
+const targetAlk = document.getElementById("target-alkalinity") as HTMLInputElement;
+const targetK = document.getElementById("target-potassium") as HTMLInputElement;
+const targetNa = document.getElementById("target-sodium") as HTMLInputElement;
+const targetSO4 = document.getElementById("target-sulfate") as HTMLInputElement;
+const targetCl = document.getElementById("target-chloride") as HTMLInputElement;
+const targetHCO3 = document.getElementById("target-bicarbonate") as HTMLInputElement;
+const profileDesc = document.getElementById("profile-description") as HTMLElement;
+const resultsContainer = document.getElementById("results-container") as HTMLElement;
+const profileButtonsContainer = document.getElementById("profile-buttons") as HTMLElement;
 const brewMethodToggle = document.getElementById("brew-method-toggle");
-const targetSaveBar = document.getElementById("target-save-bar");
-const targetEditBar = document.getElementById("target-edit-bar");
+const targetSaveBar = document.getElementById("target-save-bar") as HTMLElement;
+const targetEditBar = document.getElementById("target-edit-bar") as HTMLElement;
 const targetEditModeBtn = document.getElementById("target-edit-mode-btn");
 const targetReadonlyTags = document.getElementById("target-readonly-tags");
-const targetProfileNameInput = document.getElementById("target-profile-name");
-const targetSaveBtn = document.getElementById("target-save-btn");
-const targetSaveChangesBtn = document.getElementById("target-save-changes-btn");
+const targetProfileNameInput = document.getElementById("target-profile-name") as HTMLInputElement;
+const targetSaveBtn = document.getElementById("target-save-btn") as HTMLButtonElement;
+const targetSaveChangesBtn = document.getElementById(
+  "target-save-changes-btn",
+) as HTMLButtonElement;
 const targetSaveStatus = document.getElementById("target-save-status");
 
 // Gate the named-target-profile save affordances when the user is anonymous.
@@ -46,7 +111,11 @@ if (typeof window.applyAuthGate === "function") {
   if (targetSaveChangesBtn) window.applyAuthGate(targetSaveChangesBtn, { reason: "save-recipe" });
 }
 
-let lastCalculatedIons = null;
+// Retained verbatim from script.js: assigned on every calculate() pass but
+// never read (write-only in the original too). Kept as-is for this mechanical
+// port rather than dropped; eslint would otherwise flag the unused binding.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+let lastCalculatedIons: Record<string, number> | null = null;
 let isTargetEditMode = false;
 
 // --- Debounced calculate (Inefficiency 6) ---
@@ -60,7 +129,7 @@ volumeInput.value = savedVolume.value;
 volumeUnit.value = savedVolume.unit;
 
 // --- Source water section (shared module) ---
-function updateSourceHintLabel(presetName) {
+function updateSourceHintLabel(presetName: string): void {
   const resultsHint = document.getElementById("results-hint");
   if (resultsHint) {
     const preset = getAllPresets()[presetName];
@@ -69,18 +138,27 @@ function updateSourceHintLabel(presetName) {
   }
 }
 
-const sourceSection = initSourceWaterSection({
+const sourceSection = window.initSourceWaterSection!({
   onChanged: calculate,
   onActivated: updateSourceHintLabel,
 });
 
-if (typeof initEstimateWaterUI === "function") {
-  initEstimateWaterUI();
+if (typeof window.initEstimateWaterUI === "function") {
+  window.initEstimateWaterUI();
 }
 
 // --- Result items: show only minerals selected in Settings ---
 
-function renderResultItems() {
+interface ShowItem {
+  kind: "stock" | "mineral" | "concentrate";
+  id: string;
+  label?: string;
+  spec?: StockSpec;
+  mineralId?: string;
+  order: number;
+}
+
+function renderResultItems(): void {
   const alkalinitySources = getEffectiveAlkalinitySources();
   if (alkalinitySources.length === 0) {
     resultsContainer.innerHTML =
@@ -96,12 +174,10 @@ function renderResultItems() {
   // Active Recipe Concentrates: each dispenses a fixed-ratio multi-mineral mix
   // at its prescribed dose. When any are enabled, the calculator suppresses
   // per-mineral / single-mineral concentrate rows and shows one row per
-  // enabled concentrate; their ion contributions are summed. Mixed
-  // concentrate + supplemental dosing is deferred to PR 3; revisit if users
-  // ask for gap-fill suggestions.
+  // enabled concentrate; their ion contributions are summed.
   const activeStockEntries = getActiveStockSpecs(selectedConcentrates);
 
-  const toShow = [];
+  const toShow: ShowItem[] = [];
   if (activeStockEntries.length > 0) {
     activeStockEntries.forEach((entry, idx) => {
       toShow.push({
@@ -169,7 +245,7 @@ function renderResultItems() {
       resultInfo.className = "result-info";
       const nameSpan = document.createElement("span");
       nameSpan.className = "result-name";
-      nameSpan.textContent = item.label;
+      nameSpan.textContent = item.label ?? "";
       const stockBadge = document.createElement("span");
       stockBadge.className = "badge badge-concentrate";
       stockBadge.textContent = "CONCENTRATE";
@@ -198,12 +274,12 @@ function renderResultItems() {
       continue;
     }
 
-    const mineralId = item.kind === "concentrate" ? item.mineralId : item.id;
+    const mineralId = item.kind === "concentrate" ? item.mineralId! : item.id;
+    const brandEntry =
+      typeof BRAND_CONCENTRATES !== "undefined" ? BRAND_CONCENTRATES[item.id] : undefined;
     const mineral =
-      item.kind === "concentrate" &&
-      typeof BRAND_CONCENTRATES !== "undefined" &&
-      BRAND_CONCENTRATES[item.id]
-        ? { name: BRAND_CONCENTRATES[item.id].name, formula: BRAND_CONCENTRATES[item.id].formula }
+      item.kind === "concentrate" && brandEntry
+        ? { name: brandEntry.name, formula: brandEntry.formula }
         : MINERAL_DB[mineralId];
     if (!mineral) continue;
     const div = document.createElement("div");
@@ -269,10 +345,8 @@ function renderResultItems() {
     resultsContainer.appendChild(div);
   }
   // When Recipe Concentrates are active, calculate() fills this container with
-  // the gap-fill section (Supplements heading, supplement rows, and one-click
-  // "Enable {mineral}" rows). Built empty here; the contents are target-
-  // dependent and rebuilt on every calculate(), which runs on target changes
-  // (renderResultItems does not).
+  // the gap-fill section. Built empty here; the contents are target-dependent
+  // and rebuilt on every calculate(), which runs on target changes.
   if (activeStockEntries.length > 0) {
     const supplementsContainer = document.createElement("div");
     supplementsContainer.id = "stock-supplements";
@@ -280,7 +354,7 @@ function renderResultItems() {
   }
 }
 
-// --- Dynamic profile buttons (Inefficiency 1: cleaned up redundant if/else) ---
+// --- Dynamic profile buttons ---
 // --- Target Profile rail filters (Roast + Flavor; Method = the brew toggle) ---
 // Reuses the Library's filter vocabulary + the shared window.recipeMatches
 // predicate so the calculator narrows profiles exactly like library.html does.
@@ -291,9 +365,9 @@ const TARGET_ROAST_OPTIONS = [
   { value: "dark", label: "Dark" },
 ];
 let targetFilterRoast = "all";
-const targetFilterTags = [];
+const targetFilterTags: string[] = [];
 
-function buildTargetFilters() {
+function buildTargetFilters(): void {
   const container = document.getElementById("target-filters");
   if (!container) return;
   // Capture the brew-method toggle (it lives in the markup before this box, or
@@ -323,7 +397,7 @@ function buildTargetFilters() {
   roastRow.appendChild(roastLabel);
   const roastSeg = document.createElement("div");
   roastSeg.className = "rx-segmented";
-  const roastBtns = [];
+  const roastBtns: HTMLButtonElement[] = [];
   TARGET_ROAST_OPTIONS.forEach((opt) => {
     const b = document.createElement("button");
     b.type = "button";
@@ -376,7 +450,7 @@ function buildTargetFilters() {
   }
 }
 
-function renderProfileButtons() {
+function renderProfileButtons(): void {
   profileButtonsContainer.innerHTML = "";
   const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
   const filterActive = targetFilterRoast !== "all" || targetFilterTags.length > 0;
@@ -387,14 +461,13 @@ function renderProfileButtons() {
     mine: false,
     q: "",
   };
-  const matchesFilter = (profile) =>
+  const matchesFilter = (profile: TargetProfile) =>
     typeof window.recipeMatches !== "function" || window.recipeMatches(profile, filters);
 
   let shownReal = 0;
   for (const [key, profile] of Object.entries(allProfiles)) {
     // "+ Custom"/"+ From Library" actions and the active selection always show;
-    // everything else is subject to the Roast/Flavor filter. Presets without
-    // roast/tags metadata (shim/custom) fall out only when a filter is active.
+    // everything else is subject to the Roast/Flavor filter.
     const isSentinel = key === "custom" || key === "library";
     if (filterActive && !isSentinel && key !== currentProfile && !matchesFilter(profile)) {
       continue;
@@ -402,8 +475,8 @@ function renderProfileButtons() {
     if (!isSentinel) shownReal++;
     if (isSentinel) {
       // "+ Custom" / "+ From Library" stay as compact dashed action tiles, not
-      // recipe cards (they have no minerals/tags). data-profile keeps the
-      // existing delegated click handler dispatching them (custom flow / picker).
+      // recipe cards. data-profile keeps the delegated click handler dispatching
+      // them (custom flow / picker).
       const tile = document.createElement("button");
       tile.type = "button";
       tile.className = "rx-slim-action-tile";
@@ -411,9 +484,8 @@ function renderProfileButtons() {
       tile.textContent = profile.label;
       profileButtonsContainer.appendChild(tile);
     } else {
-      // buildSlimRecipeCard is bridged via legacy-globals.ts (same as
-      // getTargetPresetsForBrewMethod above), so it's safe to call directly.
-      const card = window.buildSlimRecipeCard(profile, {
+      // buildSlimRecipeCard is imported from recipe-card.ts.
+      const card = buildSlimRecipeCard(profile, {
         slug: key,
         attrName: "profile",
         selected: key === currentProfile,
@@ -432,13 +504,13 @@ function renderProfileButtons() {
   highlightProfile(currentProfile);
 }
 
-function renderTargetReadonlyTags() {
+function renderTargetReadonlyTags(): void {
   if (!targetReadonlyTags) return;
   targetReadonlyTags.innerHTML = "";
   const ca = parseFloat(targetCa.value) || 0;
   const mg = parseFloat(targetMg.value) || 0;
   const alk = parseFloat(targetAlk.value) || 0;
-  const tags = [
+  const tags: Array<[string, number, string]> = [
     ["Ca", Math.round(ca), "mg/L"],
     ["Mg", Math.round(mg), "mg/L"],
     ["Alkalinity", Math.round(alk), "mg/L as CaCO3"],
@@ -447,7 +519,7 @@ function renderTargetReadonlyTags() {
     tags.push(
       ["K", Math.round(parseFloat(targetK.value) || 0), "mg/L"],
       ["Na", Math.round(parseFloat(targetNa.value) || 0), "mg/L"],
-      ["SO\u2084", Math.round(parseFloat(targetSO4.value) || 0), "mg/L"],
+      ["SO₄", Math.round(parseFloat(targetSO4.value) || 0), "mg/L"],
       ["Cl", Math.round(parseFloat(targetCl.value) || 0), "mg/L"],
     );
   }
@@ -459,8 +531,8 @@ function renderTargetReadonlyTags() {
   });
 }
 
-function updateTargetModeUI() {
-  const targetInputs = document.querySelector(".target-inputs");
+function updateTargetModeUI(): void {
+  const targetInputs = document.querySelector<HTMLElement>(".target-inputs");
   const customSelected = currentProfile === "custom";
   const showInputs = isTargetEditMode || customSelected;
   if (targetInputs) targetInputs.style.display = showInputs ? "" : "none";
@@ -477,7 +549,7 @@ function updateTargetModeUI() {
   renderTargetReadonlyTags();
 }
 
-function highlightProfile(profileName) {
+function highlightProfile(profileName: string): void {
   profileButtonsContainer.querySelectorAll(".active").forEach((b) => {
     b.classList.remove("active");
     b.setAttribute("aria-pressed", "false");
@@ -492,7 +564,7 @@ function highlightProfile(profileName) {
   updateTargetModeUI();
 }
 
-function activateProfile(profileName) {
+function activateProfile(profileName: string): void {
   const visibleProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
   if (!visibleProfiles[profileName]) {
     profileName = findFallbackPreset(visibleProfiles);
@@ -524,31 +596,30 @@ function activateProfile(profileName) {
 
   const profile = getTargetProfileByKey(profileName);
   if (profile) {
-    targetCa.value = profile.calcium;
-    targetMg.value = profile.magnesium;
-    targetAlk.value = profile.alkalinity;
-    targetK.value = profile.potassium || 0;
-    targetNa.value = profile.sodium || 0;
-    targetSO4.value = profile.sulfate || 0;
-    targetCl.value = profile.chloride || 0;
-    targetHCO3.value = profile.bicarbonate || 0;
+    targetCa.value = String(profile.calcium);
+    targetMg.value = String(profile.magnesium);
+    targetAlk.value = String(profile.alkalinity);
+    targetK.value = String(profile.potassium || 0);
+    targetNa.value = String(profile.sodium || 0);
+    targetSO4.value = String(profile.sulfate || 0);
+    targetCl.value = String(profile.chloride || 0);
+    targetHCO3.value = String(profile.bicarbonate || 0);
     profileDesc.textContent = profile.description || "";
   }
   // Overlay any persisted draft for this slug. Drafts are written by the
-  // target-input listener (see above) and survive reload + cross-device sync,
-  // so a user who tuned ions on their phone and reopened on their laptop sees
-  // the in-progress values, not the saved profile's clean values.
-  const draftIons =
-    typeof loadTargetDraftIonsFor === "function" ? loadTargetDraftIonsFor(profileName) : null;
+  // target-input listener and survive reload + cross-device sync.
+  const draftIons = loadTargetDraftIonsFor(profileName);
   if (draftIons && typeof draftIons === "object") {
-    if (Number.isFinite(Number(draftIons.calcium))) targetCa.value = draftIons.calcium;
-    if (Number.isFinite(Number(draftIons.magnesium))) targetMg.value = draftIons.magnesium;
-    if (Number.isFinite(Number(draftIons.alkalinity))) targetAlk.value = draftIons.alkalinity;
-    if (Number.isFinite(Number(draftIons.potassium))) targetK.value = draftIons.potassium;
-    if (Number.isFinite(Number(draftIons.sodium))) targetNa.value = draftIons.sodium;
-    if (Number.isFinite(Number(draftIons.sulfate))) targetSO4.value = draftIons.sulfate;
-    if (Number.isFinite(Number(draftIons.chloride))) targetCl.value = draftIons.chloride;
-    if (Number.isFinite(Number(draftIons.bicarbonate))) targetHCO3.value = draftIons.bicarbonate;
+    if (Number.isFinite(Number(draftIons.calcium))) targetCa.value = String(draftIons.calcium);
+    if (Number.isFinite(Number(draftIons.magnesium))) targetMg.value = String(draftIons.magnesium);
+    if (Number.isFinite(Number(draftIons.alkalinity)))
+      targetAlk.value = String(draftIons.alkalinity);
+    if (Number.isFinite(Number(draftIons.potassium))) targetK.value = String(draftIons.potassium);
+    if (Number.isFinite(Number(draftIons.sodium))) targetNa.value = String(draftIons.sodium);
+    if (Number.isFinite(Number(draftIons.sulfate))) targetSO4.value = String(draftIons.sulfate);
+    if (Number.isFinite(Number(draftIons.chloride))) targetCl.value = String(draftIons.chloride);
+    if (Number.isFinite(Number(draftIons.bicarbonate)))
+      targetHCO3.value = String(draftIons.bicarbonate);
     if (NON_EDITABLE_TARGET_KEYS.includes(profileName)) {
       // Mirror the non-editable branch of the input handler so the UI reflects
       // the restored draft state on first paint.
@@ -566,13 +637,14 @@ function activateProfile(profileName) {
     } else {
       targetEditBar.style.display = "flex";
       const label = profile && profile.label ? profile.label : profileName;
-      document.getElementById("target-edit-bar-label").textContent = "Editing: " + label;
+      (document.getElementById("target-edit-bar-label") as HTMLElement).textContent =
+        "Editing: " + label;
     }
   }
   calculate();
 }
 
-function hasUnsavedTargetChanges() {
+function hasUnsavedTargetChanges(): boolean {
   if (currentProfile === "custom") return false;
   const profile = getTargetProfileByKey(currentProfile);
   if (!profile) return false;
@@ -594,7 +666,8 @@ function hasUnsavedTargetChanges() {
 
 // --- Event delegation for profile buttons ---
 profileButtonsContainer.addEventListener("click", (e) => {
-  const deleteKey = e.target.dataset.delete;
+  const target = e.target as HTMLElement;
+  const deleteKey = target.dataset.delete;
   if (deleteKey) {
     if (!isTargetEditMode) return;
     e.stopPropagation();
@@ -609,13 +682,11 @@ profileButtonsContainer.addEventListener("click", (e) => {
     return;
   }
 
-  const btn = e.target.closest("[data-profile]");
+  const btn = target.closest<HTMLElement>("[data-profile]");
   if (!btn) return;
-  const nextProfile = btn.dataset.profile;
-  // Warn before discarding in-progress edits. confirm() is the simplest
-  // first cut; a nicer dialog can replace this later. "library" is the
-  // picker pseudo-tile and shouldn't trigger the prompt — picking from the
-  // library doesn't switch the active preset.
+  const nextProfile = btn.dataset.profile!;
+  // Warn before discarding in-progress edits. "library" is the picker
+  // pseudo-tile and shouldn't trigger the prompt.
   if (
     nextProfile !== currentProfile &&
     nextProfile !== "library" &&
@@ -623,21 +694,18 @@ profileButtonsContainer.addEventListener("click", (e) => {
     hasUnsavedTargetChanges()
   ) {
     if (!window.confirm("Discard unsaved changes?")) return;
-    if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
+    clearTargetDraftIons(currentProfile);
   }
   activateProfile(nextProfile);
   // Light haptic on the deliberate "switch profile" tap (native only — web
   // call sites see window.cwHaptic as undefined and the optional chain
-  // no-ops). activateProfile also runs on page init and Realtime refresh
-  // paths; gating the haptic at the click handler keeps it tied to user
-  // intent rather than every internal call.
+  // no-ops).
   if (typeof window.cwHaptic === "function") window.cwHaptic("light");
 });
 
 // Snapshot the current target inputs as an ion object. Used by the draft-
-// persistence path below so an in-progress edit survives reload and a second
-// device. Mirrors the field set the calculator reads from elsewhere.
-function readCurrentTargetIons() {
+// persistence path so an in-progress edit survives reload and a second device.
+function readCurrentTargetIons(): Record<string, number> {
   return {
     calcium: parseFloat(targetCa.value) || 0,
     magnesium: parseFloat(targetMg.value) || 0,
@@ -650,21 +718,21 @@ function readCurrentTargetIons() {
   };
 }
 
-function getCurrentTargetProfileForCalculations() {
+function getCurrentTargetProfileForCalculations(): Record<string, number> {
   const ions = readCurrentTargetIons();
   return {
-    calcium: ions.calcium,
-    magnesium: ions.magnesium,
-    alkalinity: ions.alkalinity,
-    potassium: ions.potassium,
-    sodium: ions.sodium,
-    sulfate: ions.sulfate,
-    chloride: ions.chloride,
-    bicarbonate: ions.bicarbonate,
+    calcium: ions.calcium!,
+    magnesium: ions.magnesium!,
+    alkalinity: ions.alkalinity!,
+    potassium: ions.potassium!,
+    sodium: ions.sodium!,
+    sulfate: ions.sulfate!,
+    chloride: ions.chloride!,
+    bicarbonate: ions.bicarbonate!,
   };
 }
 
-// --- Target input handling (Inefficiency 6: debounced) ---
+// --- Target input handling (debounced) ---
 [targetCa, targetMg, targetAlk, targetK, targetNa, targetSO4, targetCl].forEach((input) => {
   input.addEventListener("input", () => {
     renderTargetReadonlyTags();
@@ -672,9 +740,7 @@ function getCurrentTargetProfileForCalculations() {
       const hasChanges = hasUnsavedTargetChanges();
       const isNonEditable = NON_EDITABLE_TARGET_KEYS.includes(currentProfile);
       // Persist edits as a per-slug draft so a reload / second-device session
-      // doesn't lose them. Previously NON_EDITABLE_TARGET_KEYS edits silently
-      // flipped currentProfile to "custom" and synced that switch — a
-      // cross-device surprise.
+      // doesn't lose them.
       if (hasChanges) {
         saveTargetDraftIons(currentProfile, readCurrentTargetIons());
       } else {
@@ -695,7 +761,7 @@ function getCurrentTargetProfileForCalculations() {
         targetEditBar.style.display = hasChanges ? "flex" : "none";
         if (hasChanges) {
           const profile = getTargetProfileByKey(currentProfile);
-          document.getElementById("target-edit-bar-label").textContent =
+          (document.getElementById("target-edit-bar-label") as HTMLElement).textContent =
             "Editing: " + (profile && profile.label ? profile.label : currentProfile);
         }
       }
@@ -707,14 +773,19 @@ function getCurrentTargetProfileForCalculations() {
 // --- Persist edits to the currently-loaded target profile.
 // Returns { saved, profile, wasCreator } so callers can trigger follow-up
 // actions (render refresh, share prompt) consistently. ---
-function persistTargetProfileEdits() {
+interface PersistResult {
+  saved: boolean;
+  profile?: TargetProfile;
+}
+
+function persistTargetProfileEdits(): PersistResult {
   calculate();
   const allProfiles = getTargetPresetsForBrewMethod(activeBrewMethod);
   const existing = allProfiles[currentProfile];
   if (!existing) return { saved: false };
   const orig = getTargetProfileByKey(currentProfile);
   const hasExplicitIons = orig && ION_FIELDS.every((ion) => Number.isFinite(Number(orig[ion])));
-  let profile;
+  let profile: TargetProfile;
   if (hasExplicitIons) {
     const editIons = {
       calcium: parseFloat(targetCa.value) || 0,
@@ -759,15 +830,15 @@ function persistTargetProfileEdits() {
   }
   // Save Changes committed the draft into the profile — drop the draft so a
   // reload doesn't re-show stale "modified" UI.
-  if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
+  clearTargetDraftIons(currentProfile);
   targetEditBar.style.display = "none";
-  if (typeof syncNow === "function") syncNow();
+  if (typeof window.syncNow === "function") window.syncNow();
   return { saved: true, profile: profile };
 }
 
 // Offer the share prompt after an edit-save, but only to the recipe's creator.
-function offerShareAfterEdit(profileKey, profile) {
-  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(profileKey, profile);
+function offerShareAfterEdit(profileKey: string, profile: TargetProfile | undefined): void {
+  maybeOfferSharePrompt(profileKey, profile);
 }
 
 if (targetEditModeBtn) {
@@ -786,7 +857,7 @@ if (targetEditModeBtn) {
   });
 }
 
-// --- Save changes to existing target profile (Bug 1: alkalinity drift fix) ---
+// --- Save changes to existing target profile ---
 targetSaveChangesBtn.addEventListener("click", () => {
   showConfirm("Are you sure you want to change this profile?", () => {
     const key = currentProfile;
@@ -799,16 +870,16 @@ targetSaveChangesBtn.addEventListener("click", () => {
 });
 
 // --- Duplicate name error below name input (target profile) ---
-function updateTargetProfileNameError() {
-  const errEl = document.getElementById("target-profile-name-error");
+function updateTargetProfileNameError(): void {
+  const errEl = document.getElementById("target-profile-name-error") as HTMLElement;
   const validation = validateTargetProfileName(targetProfileNameInput.value, { allowEmpty: true });
-  if (validation.empty) {
+  if (validation.ok && validation.empty) {
     errEl.textContent = "";
     targetSaveBtn.disabled = false;
     return;
   }
   if (!validation.ok) {
-    errEl.textContent = validation.message;
+    errEl.textContent = validation.message ?? "";
     targetSaveBtn.disabled = true;
     return;
   }
@@ -819,7 +890,7 @@ function updateTargetProfileNameError() {
 targetProfileNameInput.addEventListener("input", updateTargetProfileNameError);
 bindEnterToClick(targetProfileNameInput, targetSaveBtn);
 
-// --- Save new custom target profile (Bug 1: alkalinity drift fix) ---
+// --- Save new custom target profile ---
 targetSaveBtn.addEventListener("click", () => {
   const validation = validateTargetProfileName(targetProfileNameInput.value);
   if (!validation.ok) {
@@ -827,8 +898,8 @@ targetSaveBtn.addEventListener("click", () => {
       updateTargetProfileNameError();
       return;
     }
-    document.getElementById("target-profile-name-error").textContent = "";
-    showTargetSaveStatus(validation.message, true);
+    (document.getElementById("target-profile-name-error") as HTMLElement).textContent = "";
+    showTargetSaveStatus(validation.message ?? "", true);
     return;
   }
   const { key, name } = validation;
@@ -837,7 +908,7 @@ targetSaveBtn.addEventListener("click", () => {
     return;
   }
 
-  document.getElementById("target-profile-name-error").textContent = "";
+  (document.getElementById("target-profile-name-error") as HTMLElement).textContent = "";
   calculate();
 
   const profiles = loadCustomTargetProfiles();
@@ -850,7 +921,7 @@ targetSaveBtn.addEventListener("click", () => {
     chloride: parseFloat(targetCl.value) || 0,
     bicarbonate: parseFloat(targetHCO3.value) || 0,
   };
-  var profile = buildStoredTargetProfile(name, targetIons, "", {
+  const profile = buildStoredTargetProfile(name, targetIons, "", {
     alkalinity: parseFloat(targetAlk.value) || 0,
     brewMethod: activeBrewMethod,
   });
@@ -864,7 +935,7 @@ targetSaveBtn.addEventListener("click", () => {
   // The user named + saved a new profile from in-progress edits on the active
   // preset (currentProfile). Clear that draft so revisiting the source preset
   // shows its clean values rather than the now-committed edits.
-  if (typeof clearTargetDraftIons === "function") clearTargetDraftIons(currentProfile);
+  clearTargetDraftIons(currentProfile);
 
   renderProfileButtons();
   activateProfile(key);
@@ -873,17 +944,17 @@ targetSaveBtn.addEventListener("click", () => {
   showTargetSaveStatus("Saved!", false);
 
   // Sync immediately so the save persists even if the user navigates away
-  if (typeof syncNow === "function") syncNow();
+  if (typeof window.syncNow === "function") window.syncNow();
 
   // Offer to share to Recipe Library (only if logged in)
-  if (typeof maybeOfferSharePrompt === "function") maybeOfferSharePrompt(key, profile);
+  maybeOfferSharePrompt(key, profile);
   if (typeof window.cwHaptic === "function") window.cwHaptic("medium");
 });
 
 const showTargetSaveStatus = createStatusHandler(targetSaveStatus);
 
-// --- Recalculate on any input change (Inefficiency 6: debounced volume input) ---
-function onVolumeChanged() {
+// --- Recalculate on any input change (debounced volume input) ---
+function onVolumeChanged(): void {
   saveVolumePreference("calculator", volumeInput.value, volumeUnit.value);
   debouncedCalculate();
 }
@@ -893,13 +964,19 @@ volumeUnit.addEventListener("change", () => {
   calculate();
 });
 
+interface StockDosingPlan {
+  entries: ReturnType<typeof getActiveStockSpecs>;
+  solve: { concentrateGramsPerL: Record<string, number>; residualIons: Record<string, number> };
+  supplementGramsPerL: Record<string, number>;
+  enableSuggestions: Array<{ ion: string; mineralId: string }>;
+}
+
 // Calculator dosing plan for the active Recipe Concentrates. Stage 1 solves
 // each concentrate's best-fit dose against the target (snapped to prescribed
 // when it matches); Stage 2 sizes individual-mineral supplements for the
 // leftover residual and flags ions that need a mineral the user hasn't enabled
-// individually. Pure given selections + source + target inputs. Returns null
-// when no concentrate is active. Called from calculate() (which owns volume).
-function computeStockDosingPlan(sourceWater) {
+// individually. Returns null when no concentrate is active.
+function computeStockDosingPlan(sourceWater: IonMap): StockDosingPlan | null {
   const selectedConcentrates = loadValidSelectedConcentrates();
   const entries = getActiveStockSpecs(selectedConcentrates);
   if (entries.length === 0) return null;
@@ -909,40 +986,42 @@ function computeStockDosingPlan(sourceWater) {
   // The solver matches on bicarbonate (ION_FIELDS), but the user edits the
   // Alkalinity input and the hidden bicarbonate field isn't synced from it.
   // Derive a consistent bicarbonate so a hand-typed custom Alkalinity isn't
-  // read as zero. toStableBicarbonateFromAlkalinity keeps a preset's stored
-  // bicarbonate when it round-trips to the same alkalinity.
+  // read as zero.
   const solverTarget = Object.assign({}, targetProfile, {
     bicarbonate: toStableBicarbonateFromAlkalinity(targetAlkAsCaCO3, targetProfile.bicarbonate),
   });
 
   // Stage 1: best-fit concentrate doses (snapped). No mineral variables — the
   // concentrate is the primary, minerals only top up the residual in Stage 2.
-  const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, []);
+  // Cast bridges storage's spec type to metrics.js's ambient StockConcentrateSpec
+  // (same shape; they differ only by the ambient one's index signature).
+  const solve = solveCalculatorDosing(
+    sourceWater,
+    solverTarget,
+    entries as unknown as Array<{ id: string; spec: StockConcentrateSpec }>,
+    [],
+  );
 
   // Stage 2: residual after the concentrate contribution, gap-filled with
-  // individually-enabled minerals. residualIons is target − source − concentrate
-  // (post-snap), in mg/L per ion; bicarbonate converts to alkalinity-as-CaCO3.
+  // individually-enabled minerals.
   const SUPP_THRESHOLD = 1; // mg/L; ignore sub-1 residual noise
   const residualCa = Math.max(0, solve.residualIons.calcium || 0);
   const residualMg = Math.max(0, solve.residualIons.magnesium || 0);
   const residualAlkAsCaCO3 = Math.max(0, (solve.residualIons.bicarbonate || 0) * HCO3_TO_CACO3);
 
   // "Enabled" must mean individually selected — getEffective*Sources() also
-  // reports minerals that live INSIDE an active concentrate, which would make
-  // the gap-fill think a salt is dose-able when there's no row for it.
+  // reports minerals that live INSIDE an active concentrate.
   const selectedMinerals = loadSelectedMinerals();
-  /** @type {Record<string, number>} g/L per supplement mineral */
-  const supplementGramsPerL = {};
-  /** @type {Array<{ ion: string, mineralId: string }>} */
-  const enableSuggestions = [];
+  /** g/L per supplement mineral */
+  const supplementGramsPerL: Record<string, number> = {};
+  const enableSuggestions: Array<{ ion: string; mineralId: string }> = [];
 
   if (residualCa > SUPP_THRESHOLD) {
     const caId = ["calcium-chloride", "calcium-chloride-anhydrous", "gypsum"].find((id) =>
       selectedMinerals.includes(id),
     );
     if (caId) {
-      const frac =
-        (MINERAL_DB[caId] && MINERAL_DB[caId].ions && MINERAL_DB[caId].ions.calcium) || 0;
+      const frac = MINERAL_DB[caId]?.ions?.calcium || 0;
       if (frac > 0) supplementGramsPerL[caId] = residualCa / frac / 1000;
     } else {
       enableSuggestions.push({ ion: "calcium", mineralId: "calcium-chloride" });
@@ -952,8 +1031,7 @@ function computeStockDosingPlan(sourceWater) {
   if (residualMg > SUPP_THRESHOLD) {
     const mgId = ["epsom-salt", "magnesium-chloride"].find((id) => selectedMinerals.includes(id));
     if (mgId) {
-      const frac =
-        (MINERAL_DB[mgId] && MINERAL_DB[mgId].ions && MINERAL_DB[mgId].ions.magnesium) || 0;
+      const frac = MINERAL_DB[mgId]?.ions?.magnesium || 0;
       if (frac > 0) supplementGramsPerL[mgId] = residualMg / frac / 1000;
     } else {
       enableSuggestions.push({ ion: "magnesium", mineralId: "epsom-salt" });
@@ -967,11 +1045,11 @@ function computeStockDosingPlan(sourceWater) {
     if (enabledAlk.length > 0) {
       const alloc = splitAlkalinityDelta(enabledAlk, residualAlkAsCaCO3, sourceWater, solverTarget);
       if ((alloc["baking-soda"] || 0) > 0) {
-        supplementGramsPerL["baking-soda"] = (alloc["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
+        supplementGramsPerL["baking-soda"] = (alloc["baking-soda"]! * ALK_TO_BAKING_SODA) / 1000;
       }
       if ((alloc["potassium-bicarbonate"] || 0) > 0) {
         supplementGramsPerL["potassium-bicarbonate"] =
-          (alloc["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
+          (alloc["potassium-bicarbonate"]! * ALK_TO_POTASSIUM_BICARB) / 1000;
       }
     } else {
       enableSuggestions.push({ ion: "bicarbonate", mineralId: "baking-soda" });
@@ -981,18 +1059,14 @@ function computeStockDosingPlan(sourceWater) {
   return { entries, solve, supplementGramsPerL, enableSuggestions };
 }
 
-// Populate the #stock-supplements container with the gap-fill section: a
-// "Supplements" heading, one row per individual-mineral supplement (with its
-// computed amount for the volume), and a one-click "Enable {mineral}" row for
-// each ion that needs a mineral the user hasn't enabled. Rebuilt on every
-// calculate() so it tracks the current target. No-op when nothing to suggest.
-function renderStockSupplements(plan, volumeL) {
+// Populate the #stock-supplements container with the gap-fill section.
+function renderStockSupplements(plan: StockDosingPlan | null, volumeL: number): void {
   const container = document.getElementById("stock-supplements");
   if (!container) return;
   container.innerHTML = "";
   if (!plan) return;
   const suppIds = Object.keys(plan.supplementGramsPerL).filter(
-    (id) => plan.supplementGramsPerL[id] > 0,
+    (id) => plan.supplementGramsPerL[id]! > 0,
   );
   if (suppIds.length === 0 && plan.enableSuggestions.length === 0) return;
 
@@ -1004,7 +1078,7 @@ function renderStockSupplements(plan, volumeL) {
   for (const mineralId of suppIds) {
     const mineral = MINERAL_DB[mineralId];
     if (!mineral) continue;
-    const grams = plan.supplementGramsPerL[mineralId] * volumeL;
+    const grams = plan.supplementGramsPerL[mineralId]! * volumeL;
     const div = document.createElement("div");
     div.className = "result-item";
     div.dataset.mineral = mineralId;
@@ -1026,7 +1100,11 @@ function renderStockSupplements(plan, volumeL) {
     container.appendChild(div);
   }
 
-  const GAP_ION_LABEL = { calcium: "Calcium", magnesium: "Magnesium", bicarbonate: "Alkalinity" };
+  const GAP_ION_LABEL: Record<string, string> = {
+    calcium: "Calcium",
+    magnesium: "Magnesium",
+    bicarbonate: "Alkalinity",
+  };
   for (const sugg of plan.enableSuggestions) {
     const mineral = MINERAL_DB[sugg.mineralId];
     if (!mineral) continue;
@@ -1067,7 +1145,7 @@ function renderStockSupplements(plan, volumeL) {
 }
 
 // --- Core calculation ---
-function calculate() {
+function calculate(): void {
   const warningsEl = document.getElementById("result-warnings");
 
   // Get volume in liters
@@ -1086,7 +1164,7 @@ function calculate() {
     const caSourceIds = getEffectiveCalciumSources();
     if (warningsEl) warningsEl.textContent = "";
     lastCalculatedIons = null;
-    const zeroValues = {};
+    const zeroValues: Record<string, number> = {};
     alkSources.forEach((id) => {
       zeroValues[id] = 0;
     });
@@ -1098,7 +1176,7 @@ function calculate() {
     });
     updateResultValues(zeroValues);
     if (activeStockEntriesEarly.length > 0) {
-      const zeroStockValues = {};
+      const zeroStockValues: Record<string, number> = {};
       for (const { id } of activeStockEntriesEarly) zeroStockValues[id] = 0;
       updateStockValues(zeroStockValues);
       renderStockSupplements(null, 0);
@@ -1134,23 +1212,18 @@ function calculate() {
   // Active Recipe Concentrates: bypass the per-mineral picker entirely. Each
   // concentrate dispenses a fixed-ratio mix at its prescribed dose; we
   // forward-compute the summed ion contribution and let the user compare to
-  // target visually. Source-exceeds-target warnings still apply because the
-  // user can't reduce ion concentrations by dosing more concentrate.
+  // target visually.
   if (activeStockEntriesEarly.length > 0) {
-    // Stage 1 + 2: solve each concentrate's best-fit dose against the target
-    // (snapped to prescribed when it matches), then size individual-mineral
-    // supplements for the residual and flag ions needing an unenabled mineral.
+    // Stage 1 + 2: solve each concentrate's best-fit dose against the target,
+    // then size individual-mineral supplements for the residual.
     const plan = computeStockDosingPlan(sourceWater);
     const concentrateGramsPerL = plan ? plan.solve.concentrateGramsPerL : {};
-    const residualIons = plan ? plan.solve.residualIons : {};
+    const residualIons: Record<string, number> = plan ? plan.solve.residualIons : {};
 
     // Stock row values: each concentrate's solved/snapped dose × volume. Also
-    // accumulate the per-mineral g/L the concentrates deliver AT THAT dose
-    // (scale the prescribed-dose contribution by solved/prescribed).
-    /** @type {Record<string, number>} */
-    const stockTotalsByStockId = {};
-    /** @type {Record<string, number>} */
-    const combinedStockMineralGramsPerL = {};
+    // accumulate the per-mineral g/L the concentrates deliver AT THAT dose.
+    const stockTotalsByStockId: Record<string, number> = {};
+    const combinedStockMineralGramsPerL: Record<string, number> = {};
     for (const { id, spec } of activeStockEntriesEarly) {
       const gPerL = concentrateGramsPerL[id] || 0;
       stockTotalsByStockId[id] = gPerL * volumeL;
@@ -1160,14 +1233,13 @@ function calculate() {
         const scale = gPerL / dosePerL;
         for (const mid of Object.keys(perLAtPrescribed)) {
           combinedStockMineralGramsPerL[mid] =
-            (combinedStockMineralGramsPerL[mid] || 0) + perLAtPrescribed[mid] * scale;
+            (combinedStockMineralGramsPerL[mid] || 0) + perLAtPrescribed[mid]! * scale;
         }
       }
     }
     updateStockValues(stockTotalsByStockId);
 
-    // Gap-fill section (Supplements heading + supplement rows + one-click
-    // Enable rows). Fold supplement minerals into the final ion profile too.
+    // Gap-fill section. Fold supplement minerals into the final ion profile too.
     renderStockSupplements(plan, volumeL);
     if (plan) {
       for (const [mid, gPerL] of Object.entries(plan.supplementGramsPerL)) {
@@ -1177,11 +1249,9 @@ function calculate() {
     }
 
     // Overshoot warnings: a negative residual means source + concentrate
-    // already exceed the target for that ion (the concentrate's fixed ratio
-    // forces excess the user can't dial back). Supplements only add, so no
-    // supplement is suggested for an overshot ion.
+    // already exceed the target for that ion.
     const OVERSHOOT_TOL = 1; // mg/L
-    const stockWarnings = [];
+    const stockWarnings: string[] = [];
     if ((residualIons.calcium || 0) < -OVERSHOOT_TOL) {
       const achieved = Math.round(targetCaMgL - (residualIons.calcium || 0));
       stockWarnings.push(
@@ -1204,7 +1274,7 @@ function calculate() {
     if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
 
     const stockAddedIons = calculateIonPPMs(combinedStockMineralGramsPerL);
-    const stockFinalIons = {};
+    const stockFinalIons: Record<string, number> = {};
     ION_FIELDS.forEach((ion) => {
       stockFinalIons[ion] = (sourceWater[ion] || 0) + (stockAddedIons[ion] || 0);
     });
@@ -1244,10 +1314,10 @@ function calculate() {
   // Warn when source exceeds target or when we need a source but none is enabled
   const hasMgSource = getEffectiveMagnesiumSources().length > 0;
   const hasCaSource = getEffectiveCalciumSources().length > 0;
-  const warnings = [];
+  const warnings: string[] = [];
   const selectedMinerals = loadSelectedMinerals();
   const selectedConcentrates = selectedConcentratesEarly;
-  const conflictMineralIds = new Set();
+  const conflictMineralIds = new Set<string>();
   selectedConcentrates.forEach((cid) => {
     const mineralId = getConcentrateMineralId(cid);
     if (!mineralId) return;
@@ -1268,7 +1338,7 @@ function calculate() {
     );
   if (rawDeltaAlk < 0)
     warnings.push(
-      `Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO\u2083).`,
+      `Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`,
     );
   if (!hasMgSource && deltaMg > 0)
     warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
@@ -1288,7 +1358,7 @@ function calculate() {
     sourceWater,
     targetProfile,
   );
-  const bufferGramsPerL = {};
+  const bufferGramsPerL: Record<string, number> = {};
   if (alkAllocation["baking-soda"] != null && alkAllocation["baking-soda"] > 0) {
     bufferGramsPerL["baking-soda"] = (alkAllocation["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
   }
@@ -1303,7 +1373,7 @@ function calculate() {
   // Warn when both alkalinity sources are enabled but the split is entirely one-sided
   if (alkalinitySources.length === 2 && deltaAlkAsCaCO3 > 0) {
     const usedSources = Object.keys(alkAllocation).filter(function (k) {
-      return alkAllocation[k] > 0;
+      return alkAllocation[k]! > 0;
     });
     if (usedSources.length === 1) {
       const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
@@ -1318,11 +1388,11 @@ function calculate() {
   // Total grams for the full volume; show 0 for unchosen Ca/Mg sources so UI indicates which were chosen
   const mgSaltTotal = mgSaltPerL * volumeL;
   const caSaltTotal = caSaltPerL * volumeL;
-  const bufferTotals = {};
+  const bufferTotals: Record<string, number> = {};
   for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
     bufferTotals[id] = gPerL * volumeL;
   }
-  const resultValues = { ...bufferTotals };
+  const resultValues: Record<string, number> = { ...bufferTotals };
   if (mgSource) resultValues[mgSource] = mgSaltTotal;
   if (caSource) resultValues[caSource] = caSaltTotal;
   const mgSourceIds = getEffectiveMagnesiumSources();
@@ -1334,13 +1404,13 @@ function calculate() {
     if (resultValues[id] == null) resultValues[id] = 0;
   });
 
-  const displayMineralGrams = { ...resultValues };
+  const displayMineralGrams: Record<string, number> = { ...resultValues };
   conflictMineralIds.forEach((mineralId) => {
     displayMineralGrams[mineralId] = 0;
   });
   updateResultValues(displayMineralGrams);
 
-  const concentrateValues = {};
+  const concentrateValues: Record<string, number> = {};
   selectedConcentrates.forEach((cid) => {
     const mineralId = getConcentrateMineralId(cid);
     if (!mineralId) return;
@@ -1358,14 +1428,14 @@ function calculate() {
   if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
   // Compute resulting ions (mg/L)
-  const mineralGramsPerL = {};
+  const mineralGramsPerL: Record<string, number> = {};
   if (mgSource && mgSaltPerL > 0) mineralGramsPerL[mgSource] = mgSaltPerL;
   if (caSource && caSaltPerL > 0) mineralGramsPerL[caSource] = caSaltPerL;
   for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
     if (gPerL > 0) mineralGramsPerL[id] = gPerL;
   }
   const addedIons = calculateIonPPMs(mineralGramsPerL);
-  const finalIons = {};
+  const finalIons: Record<string, number> = {};
   ION_FIELDS.forEach((ion) => {
     finalIons[ion] = (sourceWater[ion] || 0) + (addedIons[ion] || 0);
   });
@@ -1403,7 +1473,23 @@ function calculate() {
   });
 }
 
-function updateSummaryMetrics(payload) {
+interface SummaryPayload {
+  gh?: number;
+  kh?: number;
+  tds?: number;
+  ions?: Record<string, number>;
+  baselineIons?: Record<string, number> | null;
+  baselineMetrics?: { gh: number; kh: number; tds: number } | null;
+  so4ToCl?: number | null;
+  baselineRatio?: number | null;
+  advancedMode?: boolean;
+  alkalinitySources?: string[];
+  calciumSource?: string | null;
+  magnesiumSource?: string | null;
+  brewMethod?: string;
+}
+
+function updateSummaryMetrics(payload: SummaryPayload): void {
   const gh = payload.gh;
   const kh = payload.kh;
   const tds = payload.tds;
@@ -1415,12 +1501,18 @@ function updateSummaryMetrics(payload) {
   const advancedMode = !!payload.advancedMode;
   const brewMethod = payload.brewMethod === "espresso" ? "espresso" : "filter";
 
-  document.getElementById("calc-gh").textContent = Number.isFinite(gh) ? Math.round(gh) : 0;
-  document.getElementById("calc-kh").textContent = Number.isFinite(kh) ? Math.round(kh) : 0;
-  document.getElementById("calc-tds").textContent = Number.isFinite(tds) ? Math.round(tds) : 0;
+  (document.getElementById("calc-gh") as HTMLElement).textContent = String(
+    Number.isFinite(gh) ? Math.round(gh!) : 0,
+  );
+  (document.getElementById("calc-kh") as HTMLElement).textContent = String(
+    Number.isFinite(kh) ? Math.round(kh!) : 0,
+  );
+  (document.getElementById("calc-tds") as HTMLElement).textContent = String(
+    Number.isFinite(tds) ? Math.round(tds!) : 0,
+  );
   setDeltaText(
     document.getElementById("calc-delta-gh"),
-    baselineMetrics ? gh - baselineMetrics.gh : null,
+    baselineMetrics && gh != null ? gh - baselineMetrics.gh : null,
     {
       metricName: "GH",
       unit: "mg/L as CaCO3",
@@ -1429,7 +1521,7 @@ function updateSummaryMetrics(payload) {
   );
   setDeltaText(
     document.getElementById("calc-delta-kh"),
-    baselineMetrics ? kh - baselineMetrics.kh : null,
+    baselineMetrics && kh != null ? kh - baselineMetrics.kh : null,
     {
       metricName: "KH",
       unit: "mg/L as CaCO3",
@@ -1438,7 +1530,7 @@ function updateSummaryMetrics(payload) {
   );
   setDeltaText(
     document.getElementById("calc-delta-tds"),
-    baselineMetrics ? tds - baselineMetrics.tds : null,
+    baselineMetrics && tds != null ? tds - baselineMetrics.tds : null,
     {
       metricName: "TDS",
       unit: "mg/L",
@@ -1449,10 +1541,10 @@ function updateSummaryMetrics(payload) {
     const el = document.getElementById("calc-" + ion);
     if (!el) return;
     const v = ions[ion];
-    el.textContent = Number.isFinite(v) ? Math.round(v) : 0;
+    el.textContent = String(Number.isFinite(v) ? Math.round(v!) : 0);
     setDeltaText(
       document.getElementById("calc-delta-" + ion),
-      baselineIons ? v - (baselineIons[ion] || 0) : null,
+      baselineIons && v != null ? v - (baselineIons[ion] || 0) : null,
       {
         metricName: ion.charAt(0).toUpperCase() + ion.slice(1),
         unit: "mg/L",
@@ -1460,7 +1552,7 @@ function updateSummaryMetrics(payload) {
       },
     );
   });
-  document.getElementById("calc-so4cl").textContent = advancedMode
+  (document.getElementById("calc-so4cl") as HTMLElement).textContent = advancedMode
     ? so4ToCl == null
       ? "-"
       : so4ToCl.toFixed(2)
@@ -1498,11 +1590,11 @@ function updateSummaryMetrics(payload) {
   }
 }
 
-function setActiveBrewMethod(method) {
+function setActiveBrewMethod(method: string): void {
   activeBrewMethod = method === "espresso" ? "espresso" : "filter";
   saveBrewMethod(activeBrewMethod);
   if (brewMethodToggle) {
-    brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+    brewMethodToggle.querySelectorAll<HTMLElement>(".brew-method-btn").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
     });
   }
@@ -1516,18 +1608,18 @@ function setActiveBrewMethod(method) {
 }
 
 // --- Bug 3: Fixed formatGrams to handle sub-threshold display ---
-function formatGrams(g) {
+function formatGrams(g: number): string {
   if (!Number.isFinite(g) || g <= 0) return "0.00 g";
   if (g < 0.01) return "<0.01 g";
   return g.toFixed(2) + " g";
 }
 
-function formatMl(ml) {
+function formatMl(ml: number): string {
   if (!Number.isFinite(ml) || ml <= 0) return "0.000 mL";
   return ml.toFixed(3) + " mL";
 }
 
-function formatLotusConcentrateValue(ml, unit) {
+function formatLotusConcentrateValue(ml: number, unit: string): string {
   if (unit === "ml") {
     if (!Number.isFinite(ml) || ml <= 0) return "0.000";
     return ml.toFixed(3);
@@ -1537,7 +1629,7 @@ function formatLotusConcentrateValue(ml, unit) {
   return String(drops);
 }
 
-function updateResultValues(valuesByMineral) {
+function updateResultValues(valuesByMineral: Record<string, number>): void {
   for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
     const item = resultsContainer.querySelector(`[data-mineral="${CSS.escape(mineralId)}"]`);
     if (item) {
@@ -1559,7 +1651,7 @@ function updateResultValues(valuesByMineral) {
 
 // Stock dispense uses grams (not mL like single-mineral concentrates), so it
 // gets its own updater rather than reusing updateConcentrateValues.
-function updateStockValues(valuesByStock) {
+function updateStockValues(valuesByStock: Record<string, number>): void {
   for (const [stockId, grams] of Object.entries(valuesByStock)) {
     const item = resultsContainer.querySelector(`[data-stock="${CSS.escape(stockId)}"]`);
     if (!item) continue;
@@ -1578,16 +1670,15 @@ function updateStockValues(valuesByStock) {
 // Compact "5g MgSO4·7H2O · 2g MgCl2·6H2O · ..." string for the calculator's
 // stock result row. Delegates to src/lib/stock-format.ts (formatStockSpec)
 // via the window bridge. Uses MINERAL_DB.formula as the salt label.
-function formatStockResultDetail(spec) {
-  return window.formatStockSpec(spec, { labelMode: "formula", includeBottleDose: false });
+function formatStockResultDetail(spec: StockSpec | undefined): string {
+  return window.formatStockSpec!(spec, { labelMode: "formula", includeBottleDose: false });
 }
 
 // `computeStockMineralGramsPerL` lives in storage.js next to other stock-spec
 // helpers; classic-script load order makes it a global by the time this file
-// runs. Keeping the implementation in storage.js means it's reachable from
-// unit tests without requiring script.js to set up a DOM.
+// runs.
 
-function updateConcentrateValues(valuesByConcentrate) {
+function updateConcentrateValues(valuesByConcentrate: Record<string, number>): void {
   for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
     const item = resultsContainer.querySelector(
       `[data-concentrate="${CSS.escape(concentrateId)}"]`,
@@ -1595,7 +1686,9 @@ function updateConcentrateValues(valuesByConcentrate) {
     if (!item) continue;
     const valEl = item.querySelector(".result-value");
     const isLotus = concentrateId.startsWith("brand:lotus:");
-    const unitSelect = isLotus ? item.querySelector("[data-lotus-unit-for]") : null;
+    const unitSelect = isLotus
+      ? item.querySelector<HTMLSelectElement>("[data-lotus-unit-for]")
+      : null;
     const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
     const displayValue = isLotus ? formatLotusConcentrateValue(ml, unit) : formatMl(ml);
     if (valEl) valEl.textContent = displayValue;
@@ -1613,19 +1706,19 @@ function updateConcentrateValues(valuesByConcentrate) {
 // --- Initialize ---
 if (brewMethodToggle) {
   brewMethodToggle.addEventListener("click", (e) => {
-    const btn = e.target.closest(".brew-method-btn");
+    const btn = (e.target as HTMLElement).closest<HTMLElement>(".brew-method-btn");
     if (!btn) return;
     if (btn.dataset.brewMethod === activeBrewMethod) return;
-    setActiveBrewMethod(btn.dataset.brewMethod);
+    setActiveBrewMethod(btn.dataset.brewMethod!);
   });
-  brewMethodToggle.querySelectorAll(".brew-method-btn").forEach((btn) => {
+  brewMethodToggle.querySelectorAll<HTMLElement>(".brew-method-btn").forEach((btn) => {
     btn.classList.toggle("active", btn.dataset.brewMethod === activeBrewMethod);
   });
 }
 resultsContainer.addEventListener("change", (e) => {
-  const select = e.target.closest("[data-lotus-unit-for]");
+  const select = (e.target as HTMLElement).closest<HTMLSelectElement>("[data-lotus-unit-for]");
   if (!select) return;
-  const concentrateId = select.dataset.lotusUnitFor;
+  const concentrateId = select.dataset.lotusUnitFor!;
   saveLotusConcentrateUnitFor(concentrateId, select.value);
   calculate();
 });
@@ -1634,13 +1727,12 @@ buildTargetFilters();
 renderProfileButtons();
 updateTargetModeUI();
 const allTargetPresets = getTargetPresetsForBrewMethod(activeBrewMethod);
-// Saved slug may be a library row whose data hasn't lazy-loaded yet.
-// Falling back and persisting now would permanently overwrite the user's
-// last-selected library profile.  Defer the fallback's persistence until
-// refreshPresetRail() confirms the slug is truly missing after the
-// library load resolves.
+// Saved slug may be a library row whose data hasn't lazy-loaded yet. Falling
+// back and persisting now would permanently overwrite the user's last-selected
+// library profile. Defer the fallback's persistence until refreshPresetRail()
+// confirms the slug is truly missing after the library load resolves.
 const initialSavedSlug = currentProfile;
-let initialFallbackSlug = null;
+let initialFallbackSlug: string | null = null;
 if (!allTargetPresets[currentProfile]) {
   initialFallbackSlug = findFallbackPreset(allTargetPresets);
   currentProfile = initialFallbackSlug;
@@ -1649,15 +1741,13 @@ activateProfile(currentProfile);
 
 // When the public-recipes fetch resolves, the preset-rail cache is invalidated
 // by library-data.js. Re-render so the Supabase library rows appear without
-// requiring a page navigation. Also re-check currentProfile — a tombstoned
-// library slug that was previously absent from the shim could leave
-// currentProfile pointing at a preset that has disappeared.
-function refreshPresetRail() {
+// requiring a page navigation.
+function refreshPresetRail(): void {
   renderProfileButtons();
   const merged = getTargetPresetsForBrewMethod(activeBrewMethod);
-  // If we fell back at init because the saved slug looked unknown but
-  // it's actually a library row we hadn't loaded yet, and the user
-  // hasn't picked something else in the meantime, restore the saved slug.
+  // If we fell back at init because the saved slug looked unknown but it's
+  // actually a library row we hadn't loaded yet, and the user hasn't picked
+  // something else in the meantime, restore the saved slug.
   if (
     initialFallbackSlug &&
     initialSavedSlug !== initialFallbackSlug &&
@@ -1685,19 +1775,22 @@ if (typeof window.ensurePublicRecipesLoaded === "function") {
 window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
 
 // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
-if (typeof onStorageKeysChanged === "function") {
-  // Include cw_stock_concentrate_specs: the calculator reads concentrate specs
-  // for labels, formulas, orphan filtering, and dose totals, so editing a
-  // Recipe Concentrate in Settings (another tab) must refresh the rows + doses
-  // here, not just selection changes.
-  onStorageKeysChanged(
-    ["cw_selected_minerals", "cw_selected_concentrates", "cw_stock_concentrate_specs"],
-    function () {
-      renderResultItems();
-      calculate();
-    },
-  );
-}
+// Include cw_stock_concentrate_specs: the calculator reads concentrate specs
+// for labels, formulas, orphan filtering, and dose totals, so editing a Recipe
+// Concentrate in Settings (another tab) must refresh the rows + doses here.
+onStorageKeysChanged(
+  ["cw_selected_minerals", "cw_selected_concentrates", "cw_stock_concentrate_specs"],
+  function () {
+    renderResultItems();
+    calculate();
+  },
+);
+
+// Publish the two functions the index.html inline `cw:minerals-changed`
+// listener calls. As a classic script these were top-level globals; as an ES
+// module they're scoped, so expose them on window for that inline block.
+window.renderResultItems = renderResultItems;
+window.calculate = calculate;
 
 // --- Refresh on bfcache restore ---
 window.addEventListener("pageshow", (e) => {
