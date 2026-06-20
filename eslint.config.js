@@ -3,9 +3,8 @@
 //
 // Scope: only the files that have already opted into @ts-check, plus the
 // test + config files. The remaining untyped root .js files (script.js,
-// source-water-ui.js, library-data.js, theme-init.js) are deliberately
-// excluded — linting them is a separate cleanup, not part of this initial
-// rollout.
+// library-data.js, theme-init.js) are deliberately excluded — linting them
+// is a separate cleanup, not part of this initial rollout.
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -33,7 +32,7 @@ module.exports = tseslint.config(
       // Root-level .js files NOT under @ts-check — out of scope for this PR.
       // script.js is now linted.
       // ui-shared.js is now linted.
-      "source-water-ui.js",
+      // source-water-ui.js migrated to src/components/source-water-ui.ts.
       "library-data.js",
       "library-picker.js",
       "theme-init.js",
