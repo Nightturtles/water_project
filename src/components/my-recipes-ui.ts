@@ -475,12 +475,27 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
   // Promise) into a real Promise so the original .then(...).catch(...) chain —
   // and its semantics, where the catch also catches a throw from the success
   // handler — is preserved verbatim.
+  //
+  // .select("id").maybeSingle() makes the affected-row count observable: a v2
+  // UPDATE resolves with error:null even when zero rows matched (an RLS denial
+  // or a stale/nonexistent id), so without the select we'd mirror a change
+  // Supabase never accepted. The owner can still SELECT their own row after
+  // this write (the "select own rows" RLS policy is independent of is_public),
+  // so a genuine save returns the row and a no-op returns data:null.
   Promise.resolve(
-    window.supabaseClient.from("target_profiles").update(supabasePayload).eq("id", recipe.id),
+    window.supabaseClient
+      .from("target_profiles")
+      .update(supabasePayload)
+      .eq("id", recipe.id)
+      .select("id")
+      .maybeSingle(),
   )
     .then(function (result) {
-      if (result.error) {
-        console.warn("[my-recipes] edit update failed:", result.error);
+      if (result.error || !result.data) {
+        console.warn(
+          "[my-recipes] edit update failed:",
+          result.error || "no matching row (RLS or stale id)",
+        );
         ctx.errorEl.textContent = "Failed to save changes. Please try again.";
         ctx.saveBtn.disabled = false;
         ctx.saveBtn.textContent = "Save";
@@ -552,12 +567,27 @@ function confirmUnpublish(recipe: LibraryRecipeRow, options?: ConfirmUnpublishOp
 
   // Promise.resolve adopts the Postgrest builder (a PromiseLike) into a real
   // Promise so the original .then(...).catch(...) chain is preserved verbatim.
+  //
+  // .select("id").maybeSingle() is required for the same reason as the edit
+  // path: a v2 UPDATE resolves error:null even when zero rows matched (RLS
+  // denial or stale id), so a bare error check would mirror is_public=false
+  // locally while the row stays public in Supabase. The owner's "select own
+  // rows" RLS policy still returns the row after it flips to is_public=false,
+  // so a real unpublish returns data and a no-op returns data:null.
   Promise.resolve(
-    window.supabaseClient.from("target_profiles").update({ is_public: false }).eq("id", recipe.id),
+    window.supabaseClient
+      .from("target_profiles")
+      .update({ is_public: false })
+      .eq("id", recipe.id)
+      .select("id")
+      .maybeSingle(),
   )
     .then(function (result) {
-      if (result.error) {
-        console.warn("[my-recipes] unpublish failed:", result.error);
+      if (result.error || !result.data) {
+        console.warn(
+          "[my-recipes] unpublish failed:",
+          result.error || "no matching row (RLS or stale id)",
+        );
         return;
       }
       applyLocalMirror();
