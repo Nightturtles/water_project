@@ -61,8 +61,7 @@ module.exports = tseslint.config(
   //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
   //   type-checked as ES modules; ui-shared and login-modal moved to
   //   src/components/*.ts via PR (e).)
-  // - The remaining files (script.js, analytics-init.js) are NOT under
-  //   @ts-check today —
+  // - The remaining file (analytics-init.js) is NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
   //   under @ts-check is a separate cleanup tracked outside this PR.
@@ -73,7 +72,6 @@ module.exports = tseslint.config(
     files: [
       "constants.js",
       "metrics.js",
-      "script.js",
       // analytics-init.js: gates GA4 loading by hostname / webdriver /
       // localStorage opt-out so dev + Playwright traffic doesn't inflate
       // Cafelytic's GA active-user count. Same classic-script pattern.

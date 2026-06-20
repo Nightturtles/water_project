@@ -177,6 +177,46 @@ declare global {
     spec: StockConcentrateSpec | null | undefined,
   ): Record<string, number>;
 
+  // --- Calculator math from metrics.js (classic globals) ---
+  // Referenced bare by src/components/script.ts, which runs as a module entry
+  // AFTER metrics.js (so these are on the global object at call time).
+  function calculateIonPPMs(mineralGramsPerL: Record<string, number>): Record<string, number>;
+  function calculateSo4ClRatio(ions: Record<string, number>): number | null;
+  function pickBestCaMgSources(
+    sourceWater: IonMap,
+    targetProfile: Record<string, number>,
+    deltaCa: number,
+    deltaMg: number,
+  ): { caSource: string | null; mgSource: string | null };
+  function solveCalculatorDosing(
+    sourceWater: IonMap,
+    target: Record<string, unknown>,
+    entries: Array<{ id: string; spec: StockConcentrateSpec }>,
+    mineralVars: string[],
+  ): { concentrateGramsPerL: Record<string, number>; residualIons: Record<string, number> };
+  function splitAlkalinityDelta(
+    sources: string[],
+    deltaAlkAsCaCO3: number,
+    sourceWater: IonMap,
+    target: Record<string, unknown>,
+  ): Record<string, number>;
+  function evaluateWaterProfileRanges(
+    ions: Record<string, number>,
+    options: {
+      includeAdvanced?: boolean;
+      alkalinitySources?: string[];
+      calciumSource?: string | null;
+      magnesiumSource?: string | null;
+      brewMethod?: string;
+    },
+  ): { findings: Array<{ severity?: string; message?: string }> };
+  function buildStoredTargetProfile(
+    label: string,
+    ions: Record<string, number>,
+    description: string,
+    options?: { alkalinity?: number; brewMethod?: string },
+  ): TargetProfile;
+
   // From src/lib/html.ts — shared HTML-escaper, bridged onto window so the
   // classic UI scripts (diy-editor.js, stock-editor.js, minerals.html inline)
   // share one implementation instead of each defining their own.
@@ -391,11 +431,26 @@ declare global {
     // Default filter state factory (library-data.js). recipe-browser.ts seeds
     // its `state` from this and resets to it on "Clear filters".
     defaultFilters?: () => LibraryFilters;
+    // Pure filter predicate (library-data.js). script.ts's calculator rail
+    // reuses it to narrow target presets by the Roast/Flavor filters.
+    recipeMatches?: (
+      recipe: TargetProfile | LibraryRecipeRow,
+      filters: LibraryFilterState,
+      options?: { isSaved?: (recipe: LibraryRecipeRow) => boolean },
+    ) => boolean;
     // Re-render subscriptions (library-data.js). recipe-browser.ts registers
     // callbacks fired when the async catalog fetch resolves / fails; each
     // returns an unregister token.
     onLibraryDataLoaded?: (cb: (recipes: LibraryRecipeRow[]) => void) => () => void;
     onLibraryDataError?: (cb: (err: unknown) => void) => () => void;
+    // Lazy warmup hook (library-data.js) — kicks off the public-recipes fetch
+    // on pages that need it (script.ts on index.html; the library.html block).
+    ensurePublicRecipesLoaded?: () => Promise<LibraryRecipeRow[]>;
+    // Calculator re-render entry points, published by src/components/script.ts
+    // so index.html's inline cw:minerals-changed listener can reach them (they
+    // were top-level globals when script.js was a classic script).
+    renderResultItems?: () => void;
+    calculate?: () => void;
     LIBRARY_TRAYS?: ReadonlyArray<{ key: string; title: string; subtitle?: string }>;
     applyFilters?: (
       filters: LibraryFilterState,

@@ -355,7 +355,10 @@
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
   <script defer src="metrics.js"></script>
   <script defer src="library-data.js"></script>
-  <script defer src="script.js"></script>
+  <!-- Calculator orchestrator. A module entry (not bundled via legacy-globals)
+       so it still executes LAST among deferred scripts — after metrics.js and
+       library-data.js, whose globals it reads at load time. -->
+  <script type="module" src="/src/components/script.ts"></script>
   <script>
     // --- Edit minerals button (opens the mineral picker modal) ---
     (function () {
@@ -367,13 +370,13 @@
         }
       });
     })();
-    // The cross-tab storage listener in script.js calls renderResultItems +
+    // The cross-tab storage listener in script.ts calls renderResultItems +
     // calculate when cw_selected_minerals changes; mirror that for in-tab
-    // edits made via the picker modal. (Both functions are exposed by
-    // script.js.)
+    // edits made via the picker modal. (Both functions are published on window
+    // by src/components/script.ts so this classic inline block can reach them.)
     window.addEventListener("cw:minerals-changed", function () {
-      if (typeof renderResultItems === "function") renderResultItems();
-      if (typeof calculate === "function") calculate();
+      if (typeof window.renderResultItems === "function") window.renderResultItems();
+      if (typeof window.calculate === "function") window.calculate();
     });
   </script>
 </body>
