@@ -354,10 +354,10 @@
   <script defer src="constants.js"></script>
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
   <script defer src="metrics.js"></script>
-  <script defer src="library-data.js"></script>
   <!-- Calculator orchestrator. A module entry (not bundled via legacy-globals)
-       so it still executes LAST among deferred scripts — after metrics.js and
-       library-data.js, whose globals it reads at load time. -->
+       so it still executes LAST among deferred scripts — after metrics.js,
+       whose globals it reads. Library data is now bundled through
+       legacy-globals (src/lib/library-data.ts), which runs earlier. -->
   <script type="module" src="/src/components/script.ts"></script>
   <script>
     // --- Edit minerals button (opens the mineral picker modal) ---

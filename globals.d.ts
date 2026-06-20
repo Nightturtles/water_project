@@ -227,16 +227,19 @@ declare global {
   // contexts where sync.js hasn't loaded (tests, pages that skip sync).
   var scheduleSyncToCloud: (() => void) | undefined;
 
-  // From library-data.js — feature-detected via `typeof getPublicRecipesSync === 'function'`
-  // in storage.js (getAllTargetPresets, getExistingTargetProfileLabels). Returns
-  // the cached public-recipes list, or [] before the Supabase fetch resolves.
-  // Loose row typing since library-data.js isn't @ts-checked yet; the fields
-  // storage.js reads (slug, label, ions, brewMethod, description,
-  // creatorDisplayName) are covered by TargetProfile & { slug: string }.
+  // From src/lib/library-data.ts — storage.ts feature-detects it via
+  // `typeof getPublicRecipesSync === 'function'` (getAllTargetPresets,
+  // getExistingTargetProfileLabels), so it reads the bare global that
+  // library-data.ts self-publishes rather than importing it (avoids a
+  // storage ⇆ library-data import cycle). Returns the cached public-recipes
+  // list, or [] before the Supabase fetch resolves. The fields storage.ts
+  // reads (slug, label, ions, brewMethod, description, creatorDisplayName)
+  // are covered by TargetProfile & { slug: string }.
   interface LibraryRecipeRow extends TargetProfile {
     slug: string;
-    // Supabase row id (uuid string in prod; loosely typed since library-data.js
-    // isn't @ts-checked). Read by the Add-From-Library picker to key its cards.
+    // Supabase row id (uuid string in prod; loosely typed because we haven't
+    // generated DB schema types yet). Read by the Add-From-Library picker to
+    // key its cards.
     id?: string | number;
     userId?: string | null;
     // Authoritative creator check (creator_user_id). Null when the original
@@ -245,16 +248,16 @@ declare global {
     tags?: string[];
     // `category` is the client-side name for the DB column `tray`. The
     // recipe-browser spec uses `category`; the DB keeps `tray` for
-    // parallelism with `roast`. library-data.js renames at the boundary.
+    // parallelism with `roast`. library-data.ts renames at the boundary.
     category?: string;
     roast?: string[];
     creatorDisplayName?: string;
     // Migration 011: `is_starter` canonical-row flag, normalized to
-    // `isStarter` in library-data.js. Only set on canonical rows
+    // `isStarter` in library-data.ts. Only set on canonical rows
     // (userId == null); undefined on user-published rows.
     isStarter?: boolean;
     // Multi-mineral recipe-concentrate formula (Coffee ad Astra rows and
-    // later user-defined stocks), or null. library-data.js normalizes
+    // later user-defined stocks), or null. library-data.ts normalizes
     // `stock_formula` → `stockFormula`. Read by recipe-browser.ts's card/hero
     // stock UI and the stock-import handlers.
     stockFormula?: {
@@ -416,11 +419,10 @@ declare global {
     initSourceWaterSection?: (
       options?: import("./src/components/source-water-ui").InitSourceWaterOptions,
     ) => import("./src/components/source-water-ui").SourceWaterSection;
-    // Recipe Library data layer (library-data.js — still a classic script).
-    // The Add-From-Library picker (src/components/library-picker.ts) reaches
-    // these via window.* with the same typeof guards the original used;
-    // recipe-browser.js / my-recipes-ui.js also call them but aren't
-    // @ts-checked yet. Tighten/relocate when library-data.js migrates.
+    // Recipe Library data layer (src/lib/library-data.ts). The migrated UI
+    // modules (library-picker.ts, recipe-browser.ts, my-recipes-ui.ts,
+    // script.ts) and the classic inline page blocks reach these via window.*
+    // with the same typeof guards the original used.
     getPublicRecipesSync?: () => LibraryRecipeRow[];
     fetchPublicRecipes?: (forceRefresh?: boolean) => Promise<LibraryRecipeRow[]>;
     copyRecipeToMyProfiles?: (recipe: LibraryRecipeRow) => string | null;
@@ -428,22 +430,22 @@ declare global {
     // Drops the cached public-recipes snapshot so the next render refetches.
     // Called after an owner edits/unpublishes a row (my-recipes-ui.ts).
     invalidatePublicRecipesCache?: () => void;
-    // Default filter state factory (library-data.js). recipe-browser.ts seeds
+    // Default filter state factory (library-data.ts). recipe-browser.ts seeds
     // its `state` from this and resets to it on "Clear filters".
     defaultFilters?: () => LibraryFilters;
-    // Pure filter predicate (library-data.js). script.ts's calculator rail
+    // Pure filter predicate (library-data.ts). script.ts's calculator rail
     // reuses it to narrow target presets by the Roast/Flavor filters.
     recipeMatches?: (
       recipe: TargetProfile | LibraryRecipeRow,
       filters: LibraryFilterState,
       options?: { isSaved?: (recipe: LibraryRecipeRow) => boolean },
     ) => boolean;
-    // Re-render subscriptions (library-data.js). recipe-browser.ts registers
+    // Re-render subscriptions (library-data.ts). recipe-browser.ts registers
     // callbacks fired when the async catalog fetch resolves / fails; each
     // returns an unregister token.
     onLibraryDataLoaded?: (cb: (recipes: LibraryRecipeRow[]) => void) => () => void;
     onLibraryDataError?: (cb: (err: unknown) => void) => () => void;
-    // Lazy warmup hook (library-data.js) — kicks off the public-recipes fetch
+    // Lazy warmup hook (library-data.ts) — kicks off the public-recipes fetch
     // on pages that need it (script.ts on index.html; the library.html block).
     ensurePublicRecipesLoaded?: () => Promise<LibraryRecipeRow[]>;
     // Calculator re-render entry points, published by src/components/script.ts
@@ -452,6 +454,10 @@ declare global {
     renderResultItems?: () => void;
     calculate?: () => void;
     LIBRARY_TRAYS?: ReadonlyArray<{ key: string; title: string; subtitle?: string }>;
+    // Method-conditional featured-recipe map (library-data.ts), published so
+    // e2e/smoke-library.spec.ts can assert which slug is promoted per method.
+    // recipe-browser.ts / library-picker.ts reach it via pickFeaturedFromFiltered.
+    FEATURED_PICKS?: Record<string, string>;
     applyFilters?: (
       filters: LibraryFilterState,
       recipes: LibraryRecipeRow[],

@@ -7,12 +7,13 @@
 // a browser; testing them here gives a faster, deterministic catch.
 //
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
-// vitest.setup.js so this file can use ES `import` for src/lib/storage.
-// library-data.js stays a classic-script CJS file and is loaded via require().
+// vitest.setup.js so this file can use ES `import` for the src/lib modules.
+// constants.js stays a classic-script CJS file and is loaded via require()
+// (its globals must be on globalThis before any test body runs).
 
 require("./constants.js");
 import { saveCustomTargetProfiles, invalidateTargetPresetsCache } from "./src/lib/storage";
-const library = require("./library-data.js");
+import * as library from "./src/lib/library-data";
 
 const {
   normalizePublicRecipeRow: normalizeRow,

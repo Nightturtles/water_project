@@ -322,7 +322,6 @@
   <script defer src="constants.js"></script>
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
   <script defer src="metrics.js"></script>
-  <script defer src="library-data.js"></script>
   <script>
     // Body wrapped in DOMContentLoaded so the deferred classic scripts above
     // (constants/metrics/etc.) and the legacy-globals.ts module bridge have
@@ -951,7 +950,7 @@
     }
 
     // When the public-recipes fetch resolves, the preset-rail cache is
-    // invalidated by library-data.js. Re-render the taste preset rail so
+    // invalidated by library-data.ts. Re-render the taste preset rail so
     // Supabase library rows appear without requiring a page navigation.
     // Preserve the currently-active preset if it still exists in the merged
     // rail; otherwise renderTastePresets(null) will pick a fallback.
