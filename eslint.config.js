@@ -61,8 +61,8 @@ module.exports = tseslint.config(
   //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
   //   type-checked as ES modules; ui-shared and login-modal moved to
   //   src/components/*.ts via PR (e).)
-  // - The remaining files (script.js, analytics-init.js, recipe-browser.js,
-  //   mineral-selector.js) are NOT under @ts-check today —
+  // - The remaining files (script.js, analytics-init.js, recipe-browser.js)
+  //   are NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
   //   under @ts-check is a separate cleanup tracked outside this PR.
@@ -82,12 +82,6 @@ module.exports = tseslint.config(
       // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
       // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
       "recipe-browser.js",
-      // mineral-selector: inline chip strip + tabbed modal on tool pages.
-      // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
-      // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
-      // load/saveSelectedConcentrates, load/saveLotusDropperType,
-      // loadStockConcentrateSpecs, getActiveStockIds, setStockEnabled).
-      "mineral-selector.js",
     ],
     languageOptions: {
       sourceType: "script",
