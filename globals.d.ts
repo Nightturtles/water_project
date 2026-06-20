@@ -383,6 +383,13 @@ declare global {
     // my-recipes-ui.ts on open/close; recipe-browser.js reads it to suppress
     // Realtime-driven re-renders of the rail/library while the user edits.
     _cwEditModalOpenSlug?: string | null;
+    // Inline mineral & concentrate selector, exposed from
+    // src/components/mineral-selector.ts. mountMineralSelector renders the chip
+    // strip + "Edit Minerals" button into a host element (taste.html inline
+    // block); openMineralSelectorModal opens the tabbed modal directly (the
+    // "Edit Minerals" header button on index.html / recipe.html via script.js).
+    mountMineralSelector?: (targetEl: HTMLElement | null) => void;
+    openMineralSelectorModal?: () => void;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
