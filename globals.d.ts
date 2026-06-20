@@ -154,6 +154,22 @@ declare global {
     alkAsCaCO3: number | string | null | undefined,
     existingBicarbonate: number | string | null | undefined,
   ): number;
+  // From metrics.js — derives a recipe-concentrate formula (bottle + dose +
+  // per-mineral grams) from a target ion profile. Read by
+  // src/components/recipe-browser.ts's onDeriveStock handler.
+  function deriveStockFormulaFromTarget(
+    target:
+      | TargetProfile
+      | Partial<Record<IonName, number | string | null | undefined>>
+      | null
+      | undefined,
+    options?: { bottleMl?: number; doseGramsPerL?: number; calciumChlorideId?: string },
+  ): {
+    bottleMl: number;
+    doseGramsPerL: number;
+    minerals: Array<{ mineralId: string; grams: number }>;
+    notes: string[];
+  };
   // From src/lib/storage.ts (bridged onto window) — distributes a Recipe
   // Concentrate's prescribed dose across its mineral formula (g/L of each
   // mineral). Called by metrics.js's solveCalculatorDosing.
@@ -197,6 +213,29 @@ declare global {
     // `isStarter` in library-data.js. Only set on canonical rows
     // (userId == null); undefined on user-published rows.
     isStarter?: boolean;
+    // Multi-mineral recipe-concentrate formula (Coffee ad Astra rows and
+    // later user-defined stocks), or null. library-data.js normalizes
+    // `stock_formula` → `stockFormula`. Read by recipe-browser.ts's card/hero
+    // stock UI and the stock-import handlers.
+    stockFormula?: {
+      bottleMl?: number;
+      doseGramsPerL?: number;
+      minerals?: Array<{ mineralId?: string; grams?: number }>;
+      source?: string;
+      via?: string;
+    } | null;
+  }
+
+  // Concrete filter state used by recipe-browser.ts (its `state` and the
+  // defaultFilters() factory always populate every field). Distinct from the
+  // all-optional LibraryFilterState the picker/applyFilters accept — a
+  // LibraryFilters is assignable to LibraryFilterState.
+  interface LibraryFilters {
+    method: string;
+    roast: string;
+    tags: string[];
+    mine: boolean;
+    q: string;
   }
   var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
 
@@ -349,6 +388,14 @@ declare global {
     // Drops the cached public-recipes snapshot so the next render refetches.
     // Called after an owner edits/unpublishes a row (my-recipes-ui.ts).
     invalidatePublicRecipesCache?: () => void;
+    // Default filter state factory (library-data.js). recipe-browser.ts seeds
+    // its `state` from this and resets to it on "Clear filters".
+    defaultFilters?: () => LibraryFilters;
+    // Re-render subscriptions (library-data.js). recipe-browser.ts registers
+    // callbacks fired when the async catalog fetch resolves / fails; each
+    // returns an unregister token.
+    onLibraryDataLoaded?: (cb: (recipes: LibraryRecipeRow[]) => void) => () => void;
+    onLibraryDataError?: (cb: (err: unknown) => void) => () => void;
     LIBRARY_TRAYS?: ReadonlyArray<{ key: string; title: string; subtitle?: string }>;
     applyFilters?: (
       filters: LibraryFilterState,
@@ -390,6 +437,18 @@ declare global {
     // "Edit Minerals" header button on index.html / recipe.html via script.js).
     mountMineralSelector?: (targetEl: HTMLElement | null) => void;
     openMineralSelectorModal?: () => void;
+    // Auth helper published by src/lib/supabase-client.ts (via trySet, so it's
+    // a window property, not a module export). Wraps supabaseClient.auth.getUser;
+    // recipe-browser.ts reads the resolved user id to gate owner affordances.
+    getUser?: () => Promise<{ data: { user: { id: string } | null } }>;
+    // Wave D recipe browser, exposed from src/components/recipe-browser.ts.
+    // mountRecipeBrowser builds the filter bar + featured hero + tray carousels
+    // into a host element (library.html / minerals.html inline blocks);
+    // read/writeFiltersToUrl + __visibleChipTags are exposed for e2e.
+    mountRecipeBrowser?: (root: HTMLElement | null) => void;
+    readFiltersFromUrl?: () => LibraryFilters;
+    writeFiltersToUrl?: (f: LibraryFilters) => void;
+    __visibleChipTags?: (tags: unknown) => string[];
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.
