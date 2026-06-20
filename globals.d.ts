@@ -72,6 +72,10 @@ declare global {
   const ION_FIELDS: readonly IonName[];
   const ION_LABELS: Record<IonName, string>;
   const SOURCE_PRESETS: Record<string, { label: string; [key: string]: unknown }>;
+  // Source-water preset picker grouping (constants.js). Read by
+  // src/components/source-water-ui.ts to bucket + order the preset rail.
+  const SOURCE_CATEGORY_ORDER: readonly string[];
+  const SOURCE_CATEGORY_LABELS: Record<string, string>;
   const TARGET_PRESETS: Record<string, TargetProfile>;
   const NON_EDITABLE_TARGET_KEYS: readonly string[];
   const LIBRARY_TAGS: readonly string[];
@@ -143,6 +147,13 @@ declare global {
   function loadSourcePresetName(): string;
   function loadBrewMethod(): string;
   function isReservedTargetKey(key: string): boolean;
+  // From metrics.js — converts an alkalinity (as CaCO3) back to a stable
+  // bicarbonate value, preferring the existing input when it already maps to
+  // the same rounded alkalinity. Read by src/components/source-water-ui.ts.
+  function toStableBicarbonateFromAlkalinity(
+    alkAsCaCO3: number | string | null | undefined,
+    existingBicarbonate: number | string | null | undefined,
+  ): number;
   // From src/lib/storage.ts (bridged onto window) — distributes a Recipe
   // Concentrate's prescribed dose across its mineral formula (g/L of each
   // mineral). Called by metrics.js's solveCalculatorDosing.
@@ -299,6 +310,14 @@ declare global {
     // block) to wire up the open/submit/cancel flow; no-ops if the card markup
     // is absent.
     initEstimateWaterUI?: () => void;
+    // Source-water section init, exposed from src/components/source-water-ui.ts.
+    // Called once per page that hosts the source-water rail (script.js on
+    // index.html; the recipe.html inline DOMContentLoaded block) to wire up the
+    // preset picker, ion inputs, and save/edit flow. Returns accessors for the
+    // current source water + active preset.
+    initSourceWaterSection?: (
+      options?: import("./src/components/source-water-ui").InitSourceWaterOptions,
+    ) => import("./src/components/source-water-ui").SourceWaterSection;
     // Auth-gate helper exposed from ui-shared.js. Locks save affordances
     // when the user is anonymous, intercepts clicks in capture phase, and
     // opens the login modal instead of running the underlying save.

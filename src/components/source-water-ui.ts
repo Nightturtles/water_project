@@ -1,30 +1,76 @@
 // ============================================
 // Source Water UI — shared source water profile management
 // Used by Calculator (index.html) and Recipe Builder (recipe.html)
+//
+// Phase A: converted from source-water-ui.js. Loaded via legacy-globals.ts
+// (the bridge module imports this file as a side-effect). The original was a
+// bare top-level function in a classic script; here it is an ES module that
+// self-publishes window.initSourceWaterSection so the not-yet-migrated classic
+// callers (script.js on index.html; the recipe.html inline DOMContentLoaded
+// block) reach it unchanged.
 // ============================================
+
+import {
+  bindEnterToClick,
+  createStatusHandler,
+  debounce,
+  readNonNegative,
+  renderSourceWaterTags,
+  showConfirm,
+  updateRestoreSourceBar,
+} from "./ui-shared";
+import {
+  addDeletedPreset,
+  deleteCustomProfile,
+  getAllPresets,
+  getExistingSourceProfileLabels,
+  getSourceWaterByPreset,
+  loadCustomProfiles,
+  loadSourcePresetName,
+  loadSourceWater,
+  restoreSourcePresetDefaults,
+  saveCustomProfiles,
+  saveSourcePresetName,
+  saveSourceWater,
+  validateProfileName,
+} from "../lib/storage";
+
+// storage.ts's SourceProfile is module-internal; recover the exact shape from
+// getAllPresets's return type rather than redefining (and risking drift).
+type SourceProfile = ReturnType<typeof getAllPresets>[string];
+
+export interface InitSourceWaterOptions {
+  /** Called when source water changes (preset click, ion edit, save, delete). */
+  onChanged?: () => void;
+  /** Called when a preset is activated; receives the preset name. */
+  onActivated?: (presetName: string) => void;
+}
+
+export interface SourceWaterSection {
+  getSourceWater: () => IonMap;
+  getActivePreset: () => string;
+}
 
 /**
  * Initialize the source water section.
- * @param {Object} options
- * @param {Function} options.onChanged  - called when source water changes (preset click, ion edit, save, delete)
- * @param {Function} options.onActivated - called when a preset is activated; receives (presetName)
- * @returns {{ getSourceWater: Function, getActivePreset: Function }}
  */
-function initSourceWaterSection(options) {
+function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSection {
   options = options || {};
-  const onChanged = options.onChanged || function() {};
-  const onActivated = options.onActivated || function() {};
+  const onChanged = options.onChanged || function () {};
+  const onActivated = options.onActivated || function () {};
 
   // --- DOM elements ---
-  const sourcePresetsContainer = document.getElementById("source-presets");
+  const sourcePresetsContainer = document.getElementById("source-presets") as HTMLElement;
   const sourceEditModeBtn = document.getElementById("source-edit-mode-btn");
   const sourceReadonlyTags = document.getElementById("source-readonly-tags");
   const sourceInputGrid = document.getElementById("source-input-grid");
   const sourceSaveBar = document.getElementById("source-save-bar");
-  const sourceEditBar = document.getElementById("source-edit-bar");
-  const sourceProfileNameInput = document.getElementById("source-profile-name");
-  const sourceSaveBtn = document.getElementById("source-save-btn");
-  const sourceSaveChangesBtn = document.getElementById("source-save-changes-btn");
+  const sourceEditBar = document.getElementById("source-edit-bar") as HTMLElement;
+  const sourceProfileNameInput = document.getElementById("source-profile-name") as HTMLInputElement;
+  const sourceSaveBtn = document.getElementById("source-save-btn") as HTMLButtonElement;
+  const sourceSaveChangesBtn = document.getElementById(
+    "source-save-changes-btn",
+  ) as HTMLButtonElement;
   const sourceSaveStatus = document.getElementById("source-save-status");
 
   // Saving a named custom source profile is a Category B write (a named
@@ -33,11 +79,12 @@ function initSourceWaterSection(options) {
   // them opens the login modal instead of writing to localStorage.
   if (typeof window.applyAuthGate === "function") {
     if (sourceSaveBtn) window.applyAuthGate(sourceSaveBtn, { reason: "save-profile" });
-    if (sourceSaveChangesBtn) window.applyAuthGate(sourceSaveChangesBtn, { reason: "save-profile" });
+    if (sourceSaveChangesBtn)
+      window.applyAuthGate(sourceSaveChangesBtn, { reason: "save-profile" });
     if (sourceEditModeBtn) window.applyAuthGate(sourceEditModeBtn, { reason: "save-profile" });
   }
-  const sourceAlkalinityInput = document.getElementById("src-alkalinity");
-  const sourceBicarbonateInput = document.getElementById("src-bicarbonate");
+  const sourceAlkalinityInput = document.getElementById("src-alkalinity") as HTMLInputElement;
+  const sourceBicarbonateInput = document.getElementById("src-bicarbonate") as HTMLInputElement;
 
   let activeSourcePreset = loadSourcePresetName();
   let isSourceEditMode = false;
@@ -57,10 +104,10 @@ function initSourceWaterSection(options) {
     }
   }
 
-  function getSourceWater() {
-    const water = {};
-    ION_FIELDS.forEach(function(ion) {
-      water[ion] = readNonNegative(document.getElementById("src-" + ion));
+  function getSourceWater(): IonMap {
+    const water: IonMap = {};
+    ION_FIELDS.forEach(function (ion) {
+      water[ion] = readNonNegative(document.getElementById("src-" + ion) as HTMLInputElement);
     });
     return water;
   }
@@ -68,16 +115,21 @@ function initSourceWaterSection(options) {
   function saveCurrentSourceWaterInputs() {
     saveSourceWater(getSourceWater());
   }
-  const debouncedSave = typeof debounce === "function" ? debounce(saveCurrentSourceWaterInputs, 300) : saveCurrentSourceWaterInputs;
+  const debouncedSave =
+    typeof debounce === "function"
+      ? debounce(saveCurrentSourceWaterInputs, 300)
+      : saveCurrentSourceWaterInputs;
 
   function updateSourceAlkalinityFromBicarbonate() {
     const bicarb = parseFloat(sourceBicarbonateInput.value) || 0;
-    sourceAlkalinityInput.value = Math.round(bicarb * HCO3_TO_CACO3);
+    sourceAlkalinityInput.value = String(Math.round(bicarb * HCO3_TO_CACO3));
   }
 
-  sourceAlkalinityInput.addEventListener("input", function() {
+  sourceAlkalinityInput.addEventListener("input", function () {
     const alkAsCaCO3 = parseFloat(sourceAlkalinityInput.value) || 0;
-    sourceBicarbonateInput.value = toStableBicarbonateFromAlkalinity(alkAsCaCO3, sourceBicarbonateInput.value);
+    sourceBicarbonateInput.value = String(
+      toStableBicarbonateFromAlkalinity(alkAsCaCO3, sourceBicarbonateInput.value),
+    );
     sourceBicarbonateInput.dispatchEvent(new Event("input", { bubbles: true }));
   });
 
@@ -100,19 +152,26 @@ function initSourceWaterSection(options) {
     renderSourceReadonlyTags();
   }
 
-  function highlightSourcePreset(presetName) {
-    sourcePresetsContainer.querySelectorAll(".preset-btn").forEach(function(b) { b.classList.remove("active"); });
-    const btn = sourcePresetsContainer.querySelector('[data-preset="' + CSS.escape(presetName) + '"]');
+  function highlightSourcePreset(presetName: string) {
+    sourcePresetsContainer.querySelectorAll(".preset-btn").forEach(function (b) {
+      b.classList.remove("active");
+    });
+    const btn = sourcePresetsContainer.querySelector(
+      '[data-preset="' + CSS.escape(presetName) + '"]',
+    );
     if (btn) btn.classList.add("active");
     if (sourceSaveBar) sourceSaveBar.style.display = presetName === "custom" ? "flex" : "none";
     if (sourceEditBar) sourceEditBar.style.display = "none";
     updateSourceModeUI();
   }
 
-  function activateSourcePreset(presetName) {
+  function activateSourcePreset(presetName: string) {
     const allPresets = getAllPresets();
     if (!allPresets[presetName]) {
-      presetName = Object.keys(allPresets).find(function(k) { return k !== "custom"; }) || "custom";
+      presetName =
+        Object.keys(allPresets).find(function (k) {
+          return k !== "custom";
+        }) || "custom";
     }
     activeSourcePreset = presetName;
     highlightSourcePreset(presetName);
@@ -122,8 +181,8 @@ function initSourceWaterSection(options) {
       return;
     }
     const values = getSourceWaterByPreset(presetName);
-    ION_FIELDS.forEach(function(ion) {
-      document.getElementById("src-" + ion).value = values[ion] || 0;
+    ION_FIELDS.forEach(function (ion) {
+      (document.getElementById("src-" + ion) as HTMLInputElement).value = String(values[ion] || 0);
     });
     saveCurrentSourceWaterInputs();
     updateSourceAlkalinityFromBicarbonate();
@@ -134,15 +193,16 @@ function initSourceWaterSection(options) {
   function hasUnsavedSourceChanges() {
     if (activeSourcePreset === "custom") return false;
     const presetValues = getSourceWaterByPreset(activeSourcePreset);
-    return ION_FIELDS.some(function(ion) {
-      const current = parseFloat(document.getElementById("src-" + ion).value) || 0;
+    return ION_FIELDS.some(function (ion) {
+      const current =
+        parseFloat((document.getElementById("src-" + ion) as HTMLInputElement).value) || 0;
       return current !== (presetValues[ion] || 0);
     });
   }
 
   function renderSourcePresetButtons() {
     // Preserve the estimate-open button across re-renders so its click +
-    // auth-gate listeners (bound once in estimate-water-ui.js) survive. We hold
+    // auth-gate listeners (bound once in estimate-water-ui.ts) survive. We hold
     // the node reference, wipe the container, then re-append after the generic
     // category buttons below.
     const estimateBtn = sourcePresetsContainer.querySelector("#estimate-open-btn");
@@ -153,16 +213,16 @@ function initSourceWaterSection(options) {
     // literal "+ Add Custom" button fall under "saved" (user-created profiles
     // saved via the Save button). The "custom" key is appended last with no
     // heading.
-    const categoryOrder = (typeof SOURCE_CATEGORY_ORDER !== "undefined" && Array.isArray(SOURCE_CATEGORY_ORDER))
-      ? SOURCE_CATEGORY_ORDER
-      : ["pure", "generic", "bottled", "saved"];
-    const categoryLabels = (typeof SOURCE_CATEGORY_LABELS !== "undefined" && SOURCE_CATEGORY_LABELS)
-      ? SOURCE_CATEGORY_LABELS
-      : {};
-    /** @type {Record<string, Array<[string, any]>>} */
-    const buckets = {};
-    /** @type {Array<[string, any]>} */
-    const customEntries = [];
+    const categoryOrder: readonly string[] =
+      typeof SOURCE_CATEGORY_ORDER !== "undefined" && Array.isArray(SOURCE_CATEGORY_ORDER)
+        ? SOURCE_CATEGORY_ORDER
+        : ["pure", "generic", "bottled", "saved"];
+    const categoryLabels: Record<string, string> =
+      typeof SOURCE_CATEGORY_LABELS !== "undefined" && SOURCE_CATEGORY_LABELS
+        ? SOURCE_CATEGORY_LABELS
+        : {};
+    const buckets: Record<string, Array<[string, SourceProfile]>> = {};
+    const customEntries: Array<[string, SourceProfile]> = [];
     for (const [key, preset] of Object.entries(allPresets)) {
       if (key === "custom") {
         customEntries.push([key, preset]);
@@ -170,24 +230,26 @@ function initSourceWaterSection(options) {
       }
       const cat = (preset && preset.category) || "saved";
       if (!buckets[cat]) buckets[cat] = [];
-      buckets[cat].push([key, preset]);
+      buckets[cat]!.push([key, preset]);
     }
-    // Render any unknown category at the end (forward compatibility \u2014 e.g. if
+    // Render any unknown category at the end (forward compatibility — e.g. if
     // a future "municipal" group ships before this code is updated).
     const renderOrder = categoryOrder.concat(
-      Object.keys(buckets).filter(function(k) { return categoryOrder.indexOf(k) === -1; })
+      Object.keys(buckets).filter(function (k) {
+        return categoryOrder.indexOf(k) === -1;
+      }),
     );
 
-    function appendButton(key, preset) {
+    function appendButton(key: string, preset: SourceProfile) {
       const btn = document.createElement("button");
       btn.className = "preset-btn";
       btn.dataset.preset = key;
-      btn.textContent = preset.label;
+      btn.textContent = preset.label ?? "";
       if (isSourceEditMode && key !== "custom") {
         const del = document.createElement("span");
         del.className = "preset-delete";
         del.dataset.delete = key;
-        del.textContent = "\u00d7";
+        del.textContent = "×";
         btn.appendChild(del);
       }
       sourcePresetsContainer.appendChild(btn);
@@ -212,14 +274,14 @@ function initSourceWaterSection(options) {
         estimateAppended = true;
       }
     }
-    // Fallback when the generic bucket is empty \u2014 keep the preserved estimate
+    // Fallback when the generic bucket is empty — keep the preserved estimate
     // node (and its once-bound listeners) in the DOM.
     if (estimateBtn && !estimateAppended) {
       sourcePresetsContainer.appendChild(estimateBtn);
     }
     for (const [key, preset] of customEntries) appendButton(key, preset);
 
-    // "More options" toggle \u2014 the single collapse control. Sits last so it
+    // "More options" toggle — the single collapse control. Sits last so it
     // trails the active preset when collapsed and the full list when expanded.
     const moreToggle = document.createElement("button");
     moreToggle.type = "button";
@@ -235,20 +297,20 @@ function initSourceWaterSection(options) {
   }
 
   function updateSourceProfileNameError() {
-    const errEl = document.getElementById("source-profile-name-error");
+    const errEl = document.getElementById("source-profile-name-error") as HTMLElement;
     const validation = validateProfileName(sourceProfileNameInput.value, {
       allowEmpty: true,
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
-      existingLabels: getExistingSourceProfileLabels()
+      existingLabels: getExistingSourceProfileLabels(),
     });
-    if (validation.empty) {
+    if (validation.ok && validation.empty) {
       errEl.textContent = "";
       sourceSaveBtn.disabled = false;
       return;
     }
     if (!validation.ok) {
-      errEl.textContent = validation.message;
+      errEl.textContent = validation.message ?? "";
       sourceSaveBtn.disabled = true;
       return;
     }
@@ -259,26 +321,30 @@ function initSourceWaterSection(options) {
   // --- Event handlers ---
 
   if (sourceEditModeBtn) {
-    sourceEditModeBtn.addEventListener("click", function() {
+    sourceEditModeBtn.addEventListener("click", function () {
       isSourceEditMode = !isSourceEditMode;
       renderSourcePresetButtons();
       updateSourceModeUI();
     });
   }
 
-  document.getElementById("restore-source-defaults").addEventListener("click", function(e) {
-    e.preventDefault();
-    restoreSourcePresetDefaults();
-    renderSourcePresetButtons();
-    updateRestoreSourceBar();
-  });
+  (document.getElementById("restore-source-defaults") as HTMLElement).addEventListener(
+    "click",
+    function (e) {
+      e.preventDefault();
+      restoreSourcePresetDefaults();
+      renderSourcePresetButtons();
+      updateRestoreSourceBar();
+    },
+  );
 
-  sourcePresetsContainer.addEventListener("click", function(e) {
-    const deleteKey = e.target.dataset.delete;
+  sourcePresetsContainer.addEventListener("click", function (e) {
+    const target = e.target as HTMLElement;
+    const deleteKey = target.dataset.delete;
     if (deleteKey) {
       if (!isSourceEditMode) return;
       e.stopPropagation();
-      showConfirm("Are you sure you want to delete this profile?", function() {
+      showConfirm("Are you sure you want to delete this profile?", function () {
         if (SOURCE_PRESETS[deleteKey]) {
           addDeletedPreset(deleteKey);
         }
@@ -286,7 +352,10 @@ function initSourceWaterSection(options) {
         renderSourcePresetButtons();
         updateRestoreSourceBar();
         if (activeSourcePreset === deleteKey) {
-          const fallback = Object.keys(getAllPresets()).find(function(k) { return k !== "custom"; }) || "custom";
+          const fallback =
+            Object.keys(getAllPresets()).find(function (k) {
+              return k !== "custom";
+            }) || "custom";
           activateSourcePreset(fallback);
         }
         showSourceSaveStatus("Profile deleted.", false);
@@ -294,7 +363,7 @@ function initSourceWaterSection(options) {
       });
       return;
     }
-    const btn = e.target.closest(".preset-btn");
+    const btn = target.closest<HTMLElement>(".preset-btn");
     // Ignore action buttons that share this container but aren't presets: the
     // estimate-from-ZIP button has class "preset-btn" but no data-preset, so
     // activating with an undefined key would fall back to another preset and
@@ -307,15 +376,15 @@ function initSourceWaterSection(options) {
     onChanged();
   });
 
-  ION_FIELDS.forEach(function(ion) {
-    const input = document.getElementById("src-" + ion);
-    input.addEventListener("input", function() {
+  ION_FIELDS.forEach(function (ion) {
+    const input = document.getElementById("src-" + ion) as HTMLInputElement;
+    input.addEventListener("input", function () {
       if (activeSourcePreset !== "custom") {
         const showEdit = isSourceEditMode && hasUnsavedSourceChanges();
         sourceEditBar.style.display = showEdit ? "flex" : "none";
         if (showEdit) {
           const preset = getAllPresets()[activeSourcePreset];
-          document.getElementById("source-edit-bar-label").textContent =
+          (document.getElementById("source-edit-bar-label") as HTMLElement).textContent =
             "Editing: " + (preset && preset.label ? preset.label : activeSourcePreset);
         }
       }
@@ -329,19 +398,19 @@ function initSourceWaterSection(options) {
   sourceProfileNameInput.addEventListener("input", updateSourceProfileNameError);
   bindEnterToClick(sourceProfileNameInput, sourceSaveBtn);
 
-  sourceSaveBtn.addEventListener("click", function() {
+  sourceSaveBtn.addEventListener("click", function () {
     const validation = validateProfileName(sourceProfileNameInput.value, {
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
-      existingLabels: getExistingSourceProfileLabels()
+      existingLabels: getExistingSourceProfileLabels(),
     });
     if (!validation.ok) {
       if (validation.code === "reserved" || validation.code === "duplicate") {
         updateSourceProfileNameError();
         return;
       }
-      document.getElementById("source-profile-name-error").textContent = "";
-      showSourceSaveStatus(validation.message, true);
+      (document.getElementById("source-profile-name-error") as HTMLElement).textContent = "";
+      showSourceSaveStatus(validation.message ?? "", true);
       return;
     }
     const key = validation.key;
@@ -350,11 +419,11 @@ function initSourceWaterSection(options) {
       updateSourceProfileNameError();
       return;
     }
-    document.getElementById("source-profile-name-error").textContent = "";
+    (document.getElementById("source-profile-name-error") as HTMLElement).textContent = "";
     const profiles = loadCustomProfiles();
-    const profile = { label: name };
-    ION_FIELDS.forEach(function(ion) {
-      profile[ion] = readNonNegative(document.getElementById("src-" + ion));
+    const profile: SourceProfile = { label: name };
+    ION_FIELDS.forEach(function (ion) {
+      profile[ion] = readNonNegative(document.getElementById("src-" + ion) as HTMLInputElement);
     });
     profiles[key] = profile;
     if (!saveCustomProfiles(profiles)) {
@@ -369,14 +438,14 @@ function initSourceWaterSection(options) {
     onChanged();
   });
 
-  sourceSaveChangesBtn.addEventListener("click", function() {
-    showConfirm("Are you sure you want to change this profile?", function() {
+  sourceSaveChangesBtn.addEventListener("click", function () {
+    showConfirm("Are you sure you want to change this profile?", function () {
       const allPresets = getAllPresets();
       const existing = allPresets[activeSourcePreset];
       if (!existing) return;
-      const profile = { label: existing.label };
-      ION_FIELDS.forEach(function(ion) {
-        profile[ion] = readNonNegative(document.getElementById("src-" + ion));
+      const profile: SourceProfile = { label: existing.label };
+      ION_FIELDS.forEach(function (ion) {
+        profile[ion] = readNonNegative(document.getElementById("src-" + ion) as HTMLInputElement);
       });
       const profiles = loadCustomProfiles();
       profiles[activeSourcePreset] = profile;
@@ -393,9 +462,9 @@ function initSourceWaterSection(options) {
 
   // --- Initialize ---
   const sourceWater = loadSourceWater();
-  ION_FIELDS.forEach(function(ion) {
-    const input = document.getElementById("src-" + ion);
-    if (input) input.value = sourceWater[ion] || 0;
+  ION_FIELDS.forEach(function (ion) {
+    const input = document.getElementById("src-" + ion) as HTMLInputElement | null;
+    if (input) input.value = String(sourceWater[ion] || 0);
   });
   updateSourceAlkalinityFromBicarbonate();
   renderSourcePresetButtons();
@@ -415,6 +484,10 @@ function initSourceWaterSection(options) {
   // --- Public API ---
   return {
     getSourceWater: getSourceWater,
-    getActivePreset: function() { return activeSourcePreset; }
+    getActivePreset: function () {
+      return activeSourcePreset;
+    },
   };
 }
+
+window.initSourceWaterSection = initSourceWaterSection;
