@@ -62,7 +62,7 @@ module.exports = tseslint.config(
   //   type-checked as ES modules; ui-shared and login-modal moved to
   //   src/components/*.ts via PR (e).)
   // - The remaining files (script.js, analytics-init.js, recipe-browser.js,
-  //   my-recipes-ui.js, mineral-selector.js) are NOT under @ts-check today —
+  //   mineral-selector.js) are NOT under @ts-check today —
   //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
   //   prefer-const, no-empty) are their only static safety net. Bringing them
   //   under @ts-check is a separate cleanup tracked outside this PR.
@@ -82,10 +82,6 @@ module.exports = tseslint.config(
       // relies on globals from constants.js / library-data.js (LIBRARY_TAGS,
       // getPublicRecipesSync, isRecipeInMyProfiles, onLibraryDataLoaded).
       "recipe-browser.js",
-      // my-recipes-ui: owner edit/unpublish modal. Depends on globals from
-      // storage.js (loadCustomTargetProfiles, RESERVED_TARGET_KEYS, slugify),
-      // constants.js (LIBRARY_TAGS), supabase-client.js, library-data.js.
-      "my-recipes-ui.js",
       // mineral-selector: inline chip strip + tabbed modal on tool pages.
       // Depends on globals from constants.js (MINERAL_DB, BRAND_CONCENTRATES,
       // LOTUS_CONCENTRATE_IDS) and storage.js (load/saveSelectedMinerals,
