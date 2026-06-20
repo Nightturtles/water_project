@@ -1,6 +1,7 @@
 // Bridge module: re-exports every public function from storage.ts, sync.ts,
-// and stock-format.ts onto `window` so the not-yet-converted UI files
-// (script.js, library-data.js) keep working without per-file changes.
+// and stock-format.ts onto `window` so the classic inline page scripts (e.g.
+// the taste.html / minerals.html DOMContentLoaded blocks) keep working without
+// per-file changes.
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
 // own module bodies — that side-effect is what keeps unit tests working
@@ -36,6 +37,11 @@ import "./capacitor-bootstrap";
 import * as storage from "./storage";
 import * as sync from "./sync";
 import * as stockFormat from "./stock-format";
+// library-data depends on storage (imports several of its helpers) and reads
+// window.supabaseClient at call time, so it imports AFTER supabase-client and
+// storage but BEFORE the component modules + classic consumers that reach its
+// fns (getPublicRecipesSync, applyFilters, …) via window.*.
+import "./library-data";
 import "../components/ui-shared";
 import "../components/login-modal";
 import "./creator-display";

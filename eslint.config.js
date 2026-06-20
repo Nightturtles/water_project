@@ -34,7 +34,7 @@ module.exports = tseslint.config(
       // ui-shared.js is now linted.
       // source-water-ui.js migrated to src/components/source-water-ui.ts.
       // library-picker.js migrated to src/components/library-picker.ts.
-      "library-data.js",
+      // library-data.js migrated to src/lib/library-data.ts.
       "theme-init.js",
     ],
   },

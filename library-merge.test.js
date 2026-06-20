@@ -8,8 +8,9 @@
 //   * library-data.isRecipeInMyProfiles — canonical-vs-user-published regimes.
 //
 // Load order mirrors the browser: constants.js first (populates globalThis),
-// then storage.js (adds its globals + module exports), then library-data.js
-// (IIFE that assigns to window; requires a stub so `window` exists in Node).
+// then storage.ts (adds its globals + module exports), then library-data.ts
+// (an ES module that self-publishes onto window; in Node window === global
+// per vitest.setup.js, so its publish + getPublicRecipesSync override both work).
 //
 // The tombstone-lift tests pin the *invariant* (canonical slug is preserved
 // on re-add, no suffixed copy created) rather than internal bookkeeping —
@@ -17,8 +18,8 @@
 // model with a bookmark set, so tests written to the invariant survive.
 //
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
-// vitest.setup.js so this file can use ES `import` for src/lib/storage.
-// constants.js + library-data.js stay classic-script CJS files (require()).
+// vitest.setup.js so this file can use ES `import` for the src/lib modules.
+// constants.js stays a classic-script CJS file (require()).
 
 require("./constants.js");
 import {
@@ -36,7 +37,7 @@ import {
   loadCustomTargetProfiles,
   getExistingTargetProfileLabels,
 } from "./src/lib/storage";
-const library = require("./library-data.js");
+import * as library from "./src/lib/library-data";
 
 const { copyRecipeToMyProfiles, isRecipeInMyProfiles } = library;
 
