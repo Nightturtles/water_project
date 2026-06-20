@@ -201,14 +201,15 @@ declare global {
   var getPublicRecipesSync: (() => LibraryRecipeRow[]) | undefined;
 
   // Filter state shared by the library page (recipe-browser.js) and the
-  // Add-From-Library picker (src/components/library-picker.ts). The picker
-  // never sets `mine` — that filter is library-page-only — so it stays
-  // optional here.
+  // Add-From-Library picker (src/components/library-picker.ts). Every field is
+  // optional because applyFilters merges over defaultFilters() — callers can
+  // pass a partial filter object (and the picker omits `mine` entirely, since
+  // that filter is library-page-only).
   interface LibraryFilterState {
-    method: string;
-    roast: string;
-    tags: string[];
-    q: string;
+    method?: string;
+    roast?: string;
+    tags?: string[];
+    q?: string;
     mine?: boolean;
   }
 
