@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { stubLoggedIn } from "./_auth-stub";
 
 // Smoke suite for library.html (the Wave D recipe browser). Covers the
@@ -33,6 +33,135 @@ declare global {
     ) => Recipe[];
     __visibleChipTags: (tags: unknown) => string[];
   }
+}
+
+// The shape my-recipes-ui's two target_profiles UPDATEs resolve to once we
+// give them .select("id").maybeSingle(). data is the affected row (success)
+// or null when zero rows matched (RLS denial / stale id); error is the
+// Postgrest error or null.
+type StubUpdateResult = { data: { id: string } | null; error: { message: string } | null };
+
+// Opens library.html in a fresh context posing as the signed-in owner of a
+// single seeded recipe ("fake-owned"), with the target_profiles UPDATE
+// intercepted to resolve with a configured {data, error}. Everything else on
+// the Supabase client (the background public-recipes SELECT) passes through to
+// the real client untouched, so the page renders exactly as the owner-
+// affordances test above. stubLoggedIn pins isLoggedInSync()=true so the
+// localStorage mirror (a gated Category B write) actually lands in localStorage
+// rather than no-op'ing; the frozen getUser drives recipe-browser's owner
+// affordances.
+async function openLibraryAsOwner(
+  browser: Browser,
+  consoleErrors: string[],
+  opts: { updateResult: StubUpdateResult; customProfiles?: Record<string, unknown> },
+): Promise<{ ctx: BrowserContext; page: Page }> {
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+
+  // Mirror the suite-wide console-error capture onto this custom page so a
+  // runtime error in the stubbed flow fails the test instead of riding green.
+  page.on("console", (msg) => {
+    if (msg.type() === "error") consoleErrors.push(msg.text());
+  });
+  page.on("pageerror", (err) => {
+    consoleErrors.push(err.message);
+  });
+
+  await stubLoggedIn(page, "stub-user-for-e2e");
+
+  // Freeze getUser to the same id so recipe-browser renders owner affordances
+  // for the seeded row (see the owner-affordances test above for the rationale
+  // behind writable:false).
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "getUser", {
+      value: () => Promise.resolve({ data: { user: { id: "stub-user-for-e2e" } } }),
+      writable: false,
+      configurable: false,
+    });
+  });
+
+  await page.addInitScript(
+    ({ updateResult, customProfiles }) => {
+      const fake = [
+        {
+          id: "fake-owned-id",
+          user_id: "stub-user-for-e2e",
+          slug: "fake-owned",
+          // label slugifies back to the slug ("fake-owned") so an unchanged-name
+          // save is treated as an in-place edit, not a rename — the mirror lands
+          // under "fake-owned" and the positive-control assertion reads it there.
+          label: "Fake Owned",
+          brew_method: "filter",
+          calcium: 20,
+          magnesium: 10,
+          alkalinity: 30,
+          potassium: 5,
+          sodium: 8,
+          sulfate: 12,
+          chloride: 14,
+          bicarbonate: 20,
+          description: "Seeded for the owner write-guard e2e.",
+          creator_display_name: "Stub User",
+          tags: ["Bright"],
+          category: "classic",
+          roast: ["light"],
+          created_at: "2026-01-01T00:00:00.000Z",
+        },
+      ];
+      // Cache key tracks library-data.ts's CACHE_KEY constant (v5). Bump
+      // alongside it whenever a schema change forces a re-fetch.
+      sessionStorage.setItem("cw_library_public_recipes_v5", JSON.stringify(fake));
+      // Seed the local mirror (logged-in → gated reads/writes hit localStorage).
+      // The unpublish path only flips an entry that already exists, so its
+      // tests must seed it; the edit tests start empty.
+      if (customProfiles) {
+        localStorage.setItem("cw_custom_target_profiles", JSON.stringify(customProfiles));
+      }
+
+      // Counts how many times the target_profiles UPDATE path ran, so a test
+      // can prove the Supabase write was attempted (not the offline
+      // `typeof supabaseClient === "undefined"` branch).
+      (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount = 0;
+
+      let realClient: unknown;
+      Object.defineProperty(window, "supabaseClient", {
+        configurable: true,
+        get() {
+          return realClient;
+        },
+        set(v: unknown) {
+          realClient = v;
+          const client = v as { from?: (t: string) => Record<string, unknown> } | null;
+          if (!client || typeof client.from !== "function") return;
+          const realFrom = client.from.bind(client);
+          client.from = (table: string) => {
+            const builder = realFrom(table);
+            if (table === "target_profiles" && typeof builder.update === "function") {
+              // Intercept update().eq().select().maybeSingle() and resolve with
+              // the configured result. SELECTs (the public-recipes fetch) stay
+              // on the real builder so the page renders normally.
+              builder.update = () => {
+                (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount++;
+                const chain: Record<string, unknown> = {
+                  eq: () => chain,
+                  select: () => chain,
+                  maybeSingle: () => Promise.resolve(updateResult),
+                  then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
+                    Promise.resolve(updateResult).then(res, rej),
+                };
+                return chain;
+              };
+            }
+            return builder;
+          };
+        },
+      });
+    },
+    { updateResult: opts.updateResult, customProfiles: opts.customProfiles ?? null },
+  );
+
+  await page.goto("/library.html");
+  return { ctx, page };
 }
 
 test.describe("library.html — Wave D recipe browser", () => {
@@ -662,6 +791,160 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(page.locator(".rx-edit-error")).toContainText("Select at least one brew method");
 
     await ctx.close();
+  });
+
+  // Owner write guard (zero-row UPDATE must not mirror locally) -----------
+  // A Supabase v2 UPDATE resolves with error:null even when zero rows matched
+  // (an RLS denial or a stale id). my-recipes-ui appends .select("id")
+  // .maybeSingle() to both target_profiles writes so a no-row result is
+  // detected and the localStorage mirror is left untouched — guarding the
+  // localStorage/Supabase desync class CLAUDE.md's Supabase-safety section
+  // warns about. Each test below drives the real recipe-browser → modal /
+  // confirmUnpublish wiring, only stubbing the UPDATE's resolution.
+
+  test.describe("owner write guard — UPDATE row-count gates the local mirror", () => {
+    test("edit save: a zero-row result surfaces an error and does NOT write the mirror", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: null, error: null },
+      });
+
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ownedCard.locator(".rx-card-owner-btn").nth(0).click(); // Edit
+      await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+
+      // Change calcium so a successful save would be observable in the mirror.
+      await page.locator(".rx-edit-ions input").first().fill("77");
+      await page.locator(".rx-edit-save").click();
+
+      // The Supabase UPDATE path ran...
+      await expect
+        .poll(() =>
+          page.evaluate(() => (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount),
+        )
+        .toBeGreaterThan(0);
+
+      // ...detected the zero-row result, surfaced the error, and re-enabled Save.
+      await expect(page.locator(".rx-edit-error")).toContainText("Failed to save changes");
+      await expect(page.locator(".rx-edit-save")).toBeEnabled();
+      await expect(page.locator(".rx-edit-save")).toHaveText("Save");
+      // Modal stays open — close() was not called on the failed save.
+      await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+
+      // The crux: the local mirror was never written.
+      const mirror = await page.evaluate(() => {
+        const raw = localStorage.getItem("cw_custom_target_profiles");
+        return raw ? JSON.parse(raw) : {};
+      });
+      expect(mirror["fake-owned"]).toBeUndefined();
+
+      await ctx.close();
+    });
+
+    test("edit save: a returned row DOES write the mirror (positive control)", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: { id: "fake-owned-id" }, error: null },
+      });
+
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ownedCard.locator(".rx-card-owner-btn").nth(0).click();
+      await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+
+      await page.locator(".rx-edit-ions input").first().fill("77");
+      await page.locator(".rx-edit-save").click();
+
+      // Modal closes on a successful save.
+      await expect(page.locator(".rx-edit-overlay")).toHaveCount(0);
+
+      // The mirror now carries the edited recipe with the new calcium — proof
+      // the guard isn't vacuously failing every save. applyLocalMirror writes
+      // synchronously before finish()'s refetch/scheduleSyncToCloud, so poll
+      // for the value to read it before any async sync settles over it.
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem("cw_custom_target_profiles");
+            const entry = raw ? JSON.parse(raw)["fake-owned"] : null;
+            return entry ? entry.calcium : null;
+          }),
+        )
+        .toBe(77);
+
+      await ctx.close();
+    });
+
+    test("unpublish: a zero-row result does NOT flip is_public in the mirror", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: null, error: null },
+        customProfiles: {
+          "fake-owned": { slug: "fake-owned", label: "Fake Owned", isPublic: true },
+        },
+      });
+
+      // confirmUnpublish routes through window.confirm — accept it.
+      page.on("dialog", (d) => d.accept());
+
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ownedCard.locator(".rx-card-owner-btn").nth(1).click(); // Unpublish
+
+      await expect
+        .poll(() =>
+          page.evaluate(() => (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount),
+        )
+        .toBeGreaterThan(0);
+
+      // is_public stays true — the no-row write was not adopted into the mirror.
+      const stillPublic = await page.evaluate(() => {
+        const raw = localStorage.getItem("cw_custom_target_profiles");
+        const all = raw ? JSON.parse(raw) : {};
+        return all["fake-owned"] ? all["fake-owned"].isPublic : undefined;
+      });
+      expect(stillPublic).toBe(true);
+
+      // onUnpublished never fired, so the card was not optimistically removed.
+      await expect(ownedCard).toBeVisible();
+
+      await ctx.close();
+    });
+
+    test("unpublish: a returned row flips is_public=false in the mirror (positive control)", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: { id: "fake-owned-id" }, error: null },
+        customProfiles: {
+          "fake-owned": { slug: "fake-owned", label: "Fake Owned", isPublic: true },
+        },
+      });
+
+      page.on("dialog", (d) => d.accept());
+
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ownedCard.locator(".rx-card-owner-btn").nth(1).click();
+
+      // applyLocalMirror runs synchronously before the optimistic re-render,
+      // so the flip is observable in localStorage regardless of the refetch.
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const raw = localStorage.getItem("cw_custom_target_profiles");
+            const all = raw ? JSON.parse(raw) : {};
+            return all["fake-owned"] ? all["fake-owned"].isPublic : undefined;
+          }),
+        )
+        .toBe(false);
+
+      await ctx.close();
+    });
   });
 
   // visibleChipTags coverage --------------------------------------------
