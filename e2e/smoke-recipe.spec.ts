@@ -34,6 +34,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { acquireSharedAccount } from "./_shared-account-lock";
 
 // Same loader pattern as smoke-sync.spec.ts. Strips a single matched pair of
 // surrounding " or ' from values per common .env conventions; falls back to
@@ -207,6 +208,7 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
   let browser: Browser;
   let context: BrowserContext;
   let page: Page;
+  let releaseSharedAccount: (() => void) | undefined;
   const consoleErrors: { msg: string }[] = [];
   // Native dialogs (window.confirm/alert) are auto-dismissed by Playwright,
   // which silently CANCELS the action that raised them. That bit us hard:
@@ -408,6 +410,28 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
         if (res.error) {
           throw new Error("cleanup delete failed: " + (res.error.message || String(res.error)));
         }
+        // Also delete any user override of a BUILT-IN preset slug (e.g. a
+        // drifted cafelytic-filter shadow row planted by a cross-spec race in a
+        // prior run — see _shared-account-lock.ts). The e2e account has no real
+        // WIP to preserve, so a built-in override here is always junk: it would
+        // otherwise load the active profile "Modified" and break
+        // activateSeededProfile.
+        // @ts-expect-error - BUILTIN_TARGET_KEYS is a constants.js classic global
+        const builtinSlugs = typeof BUILTIN_TARGET_KEYS === "undefined" ? [] : BUILTIN_TARGET_KEYS;
+        if (builtinSlugs.length) {
+          // @ts-expect-error - global from supabase-client.js
+          const biRes = await window.supabaseClient
+            .from("target_profiles")
+            .delete()
+            .eq("user_id", userId)
+            .in("slug", builtinSlugs);
+          if (biRes.error) {
+            throw new Error(
+              "cleanup built-in override delete failed: " +
+                (biRes.error.message || String(biRes.error)),
+            );
+          }
+        }
         // Reset the synced WIP-drafts blob. A stale target_draft_ions entry
         // left by manual use of the test account restores "Modified" UI on
         // load, which raises the discard-confirm on profile switch — the
@@ -435,6 +459,12 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
   }
 
   test.beforeAll(async ({ browser: b }) => {
+    // Allow the cross-worker shared-account lock wait (below) to exceed the
+    // per-test timeout without tripping the hook timeout.
+    test.setTimeout(240_000);
+    // Serialize against smoke-sync (shared test account) before any sign-in or
+    // cloud cleanup — see _shared-account-lock.ts.
+    releaseSharedAccount = await acquireSharedAccount();
     browser = b;
     if (EMAIL && PASSWORD) {
       await cleanupSmokeRecipeJunk(browser);
@@ -455,39 +485,43 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
   });
 
   test.afterAll(async () => {
-    // Best-effort cleanup of this run's writes. Wrapped in try/catch so a
-    // post-test cleanup hiccup doesn't mask the real outcome.
-    if (page) {
-      await page
-        .evaluate(
-          async (slugs) => {
-            try {
-              // @ts-expect-error - global from supabase-client.js
-              const sess = await window.supabaseClient.auth.getSession();
-              const userId = sess?.data?.session?.user?.id;
-              if (!userId) return;
-              // @ts-expect-error - global from supabase-client.js
-              await window.supabaseClient
-                .from("target_profiles")
-                .delete()
-                .eq("user_id", userId)
-                .in("slug", slugs);
-            } catch {
-              /* swallow */
-            }
-          },
-          [CREATOR_SLUG, NONCREATOR_SLUG],
-        )
-        .catch(() => {
-          /* swallow */
-        });
-    }
-    await context?.close();
-    if (consoleErrors.length) {
-      console.warn(
-        "[smoke-recipe] console errors during run (informational):",
-        JSON.stringify(consoleErrors.slice(0, 10), null, 2),
-      );
+    try {
+      // Best-effort cleanup of this run's writes. Wrapped in try/catch so a
+      // post-test cleanup hiccup doesn't mask the real outcome.
+      if (page) {
+        await page
+          .evaluate(
+            async (slugs) => {
+              try {
+                // @ts-expect-error - global from supabase-client.js
+                const sess = await window.supabaseClient.auth.getSession();
+                const userId = sess?.data?.session?.user?.id;
+                if (!userId) return;
+                // @ts-expect-error - global from supabase-client.js
+                await window.supabaseClient
+                  .from("target_profiles")
+                  .delete()
+                  .eq("user_id", userId)
+                  .in("slug", slugs);
+              } catch {
+                /* swallow */
+              }
+            },
+            [CREATOR_SLUG, NONCREATOR_SLUG],
+          )
+          .catch(() => {
+            /* swallow */
+          });
+      }
+      await context?.close();
+      if (consoleErrors.length) {
+        console.warn(
+          "[smoke-recipe] console errors during run (informational):",
+          JSON.stringify(consoleErrors.slice(0, 10), null, 2),
+        );
+      }
+    } finally {
+      releaseSharedAccount?.();
     }
   });
 
