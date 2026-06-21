@@ -2,9 +2,9 @@
 // ESLint flat config for Cafelytic.
 //
 // Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. The remaining untyped root .js files (script.js,
-// library-data.js, theme-init.js) are deliberately excluded — linting them
-// is a separate cleanup, not part of this initial rollout.
+// test + config files. The one remaining untyped classic root .js file
+// (theme-init.js) is deliberately excluded: it's a render-blocking <head>
+// primer kept as a classic script, not part of the src/ module bundle.
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -35,6 +35,7 @@ module.exports = tseslint.config(
       // source-water-ui.js migrated to src/components/source-water-ui.ts.
       // library-picker.js migrated to src/components/library-picker.ts.
       // library-data.js migrated to src/lib/library-data.ts.
+      // analytics-init.js migrated to src/lib/analytics-init.ts.
       "theme-init.js",
     ],
   },
@@ -55,28 +56,17 @@ module.exports = tseslint.config(
   // structure — both flag correct code as broken because they can't see the
   // cross-file references, so we turn them off here.
   //
-  // Safety nets:
-  // - Files under @ts-check AND listed in tsconfig.json `include`
-  //   (constants, metrics) get type-checked by `tsc --noEmit` against
-  //   globals.d.ts. (storage and sync moved to src/lib/*.ts and are
-  //   type-checked as ES modules; ui-shared and login-modal moved to
-  //   src/components/*.ts via PR (e).)
-  // - The remaining file (analytics-init.js) is NOT under @ts-check today —
-  //   the per-file lint rules below (eqeqeq, no-implicit-coercion,
-  //   prefer-const, no-empty) are their only static safety net. Bringing them
-  //   under @ts-check is a separate cleanup tracked outside this PR.
+  // Safety net: both files here are under @ts-check AND listed in
+  // tsconfig.json `include`, so `tsc --noEmit` type-checks them against
+  // globals.d.ts; the per-file lint rules below (eqeqeq, no-implicit-coercion,
+  // prefer-const, no-empty) layer on top. (storage + sync moved to src/lib/*.ts
+  // and ui-shared + login-modal to src/components/*.ts via PR (e);
+  // analytics-init.js migrated to src/lib/analytics-init.ts.)
   //
   // This block comes AFTER tseslint.configs.recommended so its rule
   // overrides win.
   {
-    files: [
-      "constants.js",
-      "metrics.js",
-      // analytics-init.js: gates GA4 loading by hostname / webdriver /
-      // localStorage opt-out so dev + Playwright traffic doesn't inflate
-      // Cafelytic's GA active-user count. Same classic-script pattern.
-      "analytics-init.js",
-    ],
+    files: ["constants.js", "metrics.js"],
     languageOptions: {
       sourceType: "script",
       globals: {

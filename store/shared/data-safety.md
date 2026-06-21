@@ -24,7 +24,7 @@ No other categories collected. Specifically NOT collected:
 - Messages, photos, audio, files.
 - Web browsing history.
 - Contacts.
-- App activity beyond saved recipes (no in-app search history, no installed apps list, no page view tracking — analytics-init.js gates GA loading to non-localhost web hostnames only and does not run on the native shell).
+- App activity beyond saved recipes (no in-app search history, no installed apps list, no page view tracking — src/lib/analytics-init.ts gates GA loading to non-localhost web hostnames only and does not run on the native shell).
 - Device or other IDs (no advertising ID, no per-device tracking).
 
 ### Encryption in transit
