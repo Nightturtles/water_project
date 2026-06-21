@@ -2,9 +2,10 @@
 // ESLint flat config for Cafelytic.
 //
 // Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. The one remaining untyped classic root .js file
-// (theme-init.js) is deliberately excluded: it's a render-blocking <head>
-// primer kept as a classic script, not part of the src/ module bundle.
+// test + config files. constants.js, metrics.js, and theme-init.js stay
+// classic root scripts (not src/ modules) but are @ts-checked + linted in the
+// block below; theme-init.js in particular must stay a render-blocking <head>
+// primer (a deferred module would run after first paint and reintroduce FOUC).
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -29,14 +30,6 @@ module.exports = tseslint.config(
       // Claude Code's internal worktrees live at .claude/worktrees/ and
       // contain duplicate copies of project files from past sessions.
       ".claude/",
-      // Root-level .js files NOT under @ts-check — out of scope for this PR.
-      // script.js is now linted.
-      // ui-shared.js is now linted.
-      // source-water-ui.js migrated to src/components/source-water-ui.ts.
-      // library-picker.js migrated to src/components/library-picker.ts.
-      // library-data.js migrated to src/lib/library-data.ts.
-      // analytics-init.js migrated to src/lib/analytics-init.ts.
-      "theme-init.js",
     ],
   },
 
@@ -56,17 +49,18 @@ module.exports = tseslint.config(
   // structure — both flag correct code as broken because they can't see the
   // cross-file references, so we turn them off here.
   //
-  // Safety net: both files here are under @ts-check AND listed in
-  // tsconfig.json `include`, so `tsc --noEmit` type-checks them against
-  // globals.d.ts; the per-file lint rules below (eqeqeq, no-implicit-coercion,
-  // prefer-const, no-empty) layer on top. (storage + sync moved to src/lib/*.ts
-  // and ui-shared + login-modal to src/components/*.ts via PR (e);
-  // analytics-init.js migrated to src/lib/analytics-init.ts.)
+  // Safety net: the files here are under @ts-check AND listed in tsconfig.json
+  // `include`, so `tsc --noEmit` type-checks them against globals.d.ts; the
+  // per-file lint rules below (eqeqeq, no-implicit-coercion, prefer-const,
+  // no-empty) layer on top. (storage + sync moved to src/lib/*.ts and ui-shared
+  // + login-modal to src/components/*.ts via PR (e); analytics-init.js migrated
+  // to src/lib/analytics-init.ts. theme-init.js stays a classic render-blocking
+  // <head> primer — it cannot be a deferred module — but is @ts-checked here.)
   //
   // This block comes AFTER tseslint.configs.recommended so its rule
   // overrides win.
   {
-    files: ["constants.js", "metrics.js"],
+    files: ["constants.js", "metrics.js", "theme-init.js"],
     languageOptions: {
       sourceType: "script",
       globals: {
