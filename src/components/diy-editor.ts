@@ -56,11 +56,14 @@ interface DiyDraft {
 }
 
 function getSolubilityLimitGPerL(mineralId: string): number | null {
-  const v =
-    typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX !== "undefined" &&
-    MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
-      ? MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[mineralId]
-      : null;
+  if (
+    typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX === "undefined" ||
+    !MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
+  ) {
+    return null;
+  }
+  const v = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[mineralId];
+  if (v == null) return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
