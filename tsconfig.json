@@ -17,6 +17,7 @@
   "include": [
     "metrics.js",
     "constants.js",
+    "theme-init.js",
     "src/**/*.ts",
     "globals.d.ts",
     "vite.config.mts",

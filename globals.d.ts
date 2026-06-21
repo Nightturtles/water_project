@@ -545,5 +545,15 @@ declare global {
       isNativePlatform?: () => boolean;
       getPlatform?: () => string;
     };
+    // iOS WKWebView message-handler bridge, present only in the native shell.
+    // theme-init.js posts the in-app theme to cwTheme (so the native chrome
+    // matches overrideUserInterfaceStyle) and drives the cross-page paint-hold
+    // gate via cwNavGate. Undefined on web / Android, so every access is guarded.
+    webkit?: {
+      messageHandlers?: {
+        cwTheme?: { postMessage(message: unknown): void };
+        cwNavGate?: { postMessage(message: unknown): void };
+      };
+    };
   }
 }

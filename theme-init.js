@@ -1,18 +1,28 @@
-(function(){
-  var p;
-  try { p = localStorage.getItem("cw_theme"); } catch(e) { p = null; }
-  p = p || "system";
-  var r = p === "system"
-    ? (window.matchMedia("(prefers-color-scheme:dark)").matches ? "dark" : "light")
-    : p;
-  document.documentElement.setAttribute("data-theme", r);
+// @ts-check
+(function () {
+  /** @type {string | null} */
+  let pref = null;
+  try {
+    pref = localStorage.getItem("cw_theme");
+  } catch (e) {}
+  const theme = pref || "system";
+  const resolved =
+    theme === "system"
+      ? window.matchMedia("(prefers-color-scheme:dark)").matches
+        ? "dark"
+        : "light"
+      : theme;
+  document.documentElement.setAttribute("data-theme", resolved);
+
+  const wk = window.webkit;
+
   // Native iOS only: tell the shell the in-app theme ("system"/"light"/"dark")
   // so it can match overrideUserInterfaceStyle and avoid a mismatched-color
   // flash between pages when the app theme differs from the OS appearance.
   // No-op on web / Android (webkit.messageHandlers is absent).
   try {
-    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cwTheme) {
-      window.webkit.messageHandlers.cwTheme.postMessage(p);
+    if (wk && wk.messageHandlers && wk.messageHandlers.cwTheme) {
+      wk.messageHandlers.cwTheme.postMessage(theme);
     }
   } catch (e) {}
 
@@ -26,12 +36,13 @@
   // running from the same pixels. Old WebKit (no pageswap/pagereveal) and
   // Android/web (no webkit.messageHandlers) skip this entirely.
   try {
-    var gate = window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.cwNavGate;
+    const gate = wk && wk.messageHandlers && wk.messageHandlers.cwNavGate;
     if (gate) {
       window.addEventListener("pageswap", function (e) {
         // Only hold when a view transition was actually captured (same-origin
         // nav, not a reload); otherwise the release may never come.
-        if (e.viewTransition) gate.postMessage("hold");
+        // viewTransition is non-standard on PageSwapEvent — read it loosely.
+        if (/** @type {any} */ (e).viewTransition) gate.postMessage("hold");
       });
       window.addEventListener("pagereveal", function () {
         requestAnimationFrame(function () {
