@@ -48,6 +48,7 @@ const ALLOWLIST = new Set([
   "legacy-globals-HASH.js", // illustrative hashed-bundle example (SENTRY_SETUP.md)
   "SplashScreen.swift", // @capacitor/splash-screen plugin source (SPLASH_HANDOFF.md)
   "SplashScreen.java", // @capacitor/splash-screen plugin source (SPLASH_HANDOFF.md)
+  "ios/ExportOptions.plist", // gitignored per-developer signing config (store/UPLOAD.md)
 ]);
 
 const IGNORE_LINE_MARKER = "<!-- doc-paths:ignore-line -->";
@@ -84,17 +85,18 @@ const EXT = [
 ].join("|");
 const PATH_LIKE = new RegExp("^[\\w./@-]+\\.(" + EXT + ")$");
 
-// Every tracked file's basename, so a doc may cite a file by name alone (e.g. a
-// sibling spec, or a migration referenced without its supabase/migrations/
-// prefix) without tripping the check. A name that exists nowhere in the tree
-// still fails — which is exactly the deleted/renamed-file drift we want caught.
-const trackedBasenames = new Set(
-  execSync("git ls-files", { cwd: repoRoot, encoding: "utf8" })
-    .split("\n")
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .map((f) => path.basename(f)),
-);
+// Existence is judged against git-tracked files (not the working tree), so the
+// check behaves identically locally and in a clean CI checkout; intentionally
+// untracked references (gitignored local files) belong in ALLOWLIST. A doc may
+// also cite a file by basename alone (a sibling spec, or a migration without its
+// supabase/migrations/ prefix); a basename that exists nowhere in the tree still
+// fails, which is exactly the deleted/renamed-file drift we want caught.
+const trackedFiles = execSync("git ls-files", { cwd: repoRoot, encoding: "utf8" })
+  .split("\n")
+  .map((s) => s.trim())
+  .filter(Boolean);
+const trackedPaths = new Set(trackedFiles);
+const trackedBasenames = new Set(trackedFiles.map((f) => path.basename(f)));
 
 function stripLineSuffix(token) {
   return token.replace(/:\d+(:\d+)?$/, "");
@@ -156,7 +158,7 @@ for (const doc of docs) {
       if (!resolved) continue;
       refCount += 1;
       const found =
-        resolved.abs.some((a) => fs.existsSync(a)) ||
+        resolved.abs.some((a) => trackedPaths.has(path.relative(repoRoot, a))) ||
         (!resolved.rel.includes("/") && trackedBasenames.has(resolved.rel));
       if (!found) {
         misses.push({
