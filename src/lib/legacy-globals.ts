@@ -31,6 +31,12 @@
 // side-effect is gated on Capacitor.isNativePlatform()).
 
 import "./sentry-init";
+// analytics-init gates GA4 loading (hostname / webdriver / opt-out). Imported
+// right after sentry-init: no storage/supabase dependency, fired early so the
+// GA queue + ?no-analytics strip happen near page load. Was a render-blocking
+// <head> script pre-migration; GA's own gtag/js tag is async, so the deferred
+// load is immaterial.
+import "./analytics-init";
 import "./html";
 import "./supabase-client";
 import "./capacitor-bootstrap";

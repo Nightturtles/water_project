@@ -1,9 +1,9 @@
-// Unit tests for analytics-init.js gating logic.
+// Unit tests for the analytics-init GA-gating logic.
 //
-// analytics-init.js wraps two pure helpers in an IIFE that also performs the
-// real GA bootstrap. In Node (vitest), location/history/navigator are
-// undefined, so the bootstrap block is skipped and only the UMD shim runs —
-// the require returns the two helpers cleanly without touching globals.
+// src/lib/analytics-init.ts exports two pure helpers and ALSO runs a browser
+// bootstrap at module-eval time. In Node (vitest's "node" environment),
+// location/history/navigator are undefined, so the bootstrap is skipped and
+// importing the module just binds the two helpers: no GA, no globals touched.
 
 function makeFakeStorage() {
   let store = {};
@@ -24,7 +24,7 @@ function makeFakeStorage() {
   };
 }
 
-const { shouldLoadAnalytics, handleOptOutURLParam } = require("./analytics-init.js");
+import { shouldLoadAnalytics, handleOptOutURLParam } from "./src/lib/analytics-init";
 
 // ---------------------------------------------------------------------------
 // shouldLoadAnalytics — pure decision tree

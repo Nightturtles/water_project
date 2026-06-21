@@ -328,6 +328,12 @@ declare global {
     supabaseClient: import("@supabase/supabase-js").SupabaseClient;
     Sentry?: typeof import("@sentry/browser");
     SENTRY_RELEASE?: { id?: string };
+    // Google Analytics (gtag.js) globals, assigned by src/lib/analytics-init.ts
+    // only when shouldLoadAnalytics() passes. dataLayer is GA's command queue;
+    // gtag pushes onto it. Both stay undefined until that bootstrap runs, and
+    // are absent entirely on dev / Playwright / opted-out loads.
+    dataLayer?: unknown[];
+    gtag?: (...args: unknown[]) => void;
     // From src/lib/stock-format.ts — unified stock-formula formatter and label map.
     STOCK_MINERAL_SHORT?: Record<string, string>;
     formatStockSpec?: (
