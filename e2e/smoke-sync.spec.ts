@@ -36,6 +36,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { test, expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { acquireSharedAccount } from "./_shared-account-lock";
 
 // Load `.env.test` manually so we don't add a dotenv runtime dep for one file.
 // Strips a single matched pair of surrounding " or ' from values so users
@@ -128,6 +129,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
   let contextB: BrowserContext;
   let pageA: Page;
   let pageB: Page;
+  let releaseSharedAccount: (() => void) | undefined;
   const consoleErrors: { ctx: string; msg: string }[] = [];
 
   // SourceProfile, etc. are declared in globals.d.ts. The page.evaluate
@@ -293,6 +295,12 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
   }
 
   test.beforeAll(async ({ browser: b }) => {
+    // Allow the cross-worker shared-account lock wait (below) to exceed the
+    // per-test timeout without tripping the hook timeout.
+    test.setTimeout(240_000);
+    // Serialize against smoke-recipe (shared test account) before any sign-in
+    // or cloud cleanup — see _shared-account-lock.ts.
+    releaseSharedAccount = await acquireSharedAccount();
     browser = b;
 
     if (EMAIL && PASSWORD) {
@@ -314,13 +322,17 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
   });
 
   test.afterAll(async () => {
-    await contextA?.close();
-    await contextB?.close();
-    if (consoleErrors.length) {
-      console.warn(
-        "[smoke-sync] console errors during run (informational):",
-        JSON.stringify(consoleErrors.slice(0, 20), null, 2),
-      );
+    try {
+      await contextA?.close();
+      await contextB?.close();
+      if (consoleErrors.length) {
+        console.warn(
+          "[smoke-sync] console errors during run (informational):",
+          JSON.stringify(consoleErrors.slice(0, 20), null, 2),
+        );
+      }
+    } finally {
+      releaseSharedAccount?.();
     }
   });
 
