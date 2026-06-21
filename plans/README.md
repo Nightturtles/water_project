@@ -55,11 +55,11 @@ Run 2:
 
 From Run 1 — three findings vetted as real but NOT planned, because they overlap each other and the in-flight classic-JS → TypeScript migration, and they live in the repo's highest-churn files. Execute as **one sequenced effort**, each planned (`improve plan <description>`) only when it's actually next:
 
-1. **Characterization tests for `script.js` / `recipe-browser.js`** (highest churn, zero coverage, unchecked by tsc) — must land before either file is migrated or restructured.
-2. **recipe.html stops full-page-reloading on mineral changes** (recipe.html:321, 1248). The natural fix is restructuring recipe.html's giant inline script — i.e. part of its migration, after (1).
+1. **Characterization tests for `src/components/script.ts` / `src/components/recipe-browser.ts`** (highest churn, no dedicated unit coverage) — both files have since been migrated to TypeScript (#200, #201) and are now tsc-checked, so this is no longer a migration prerequisite; backfilling unit coverage remains valuable but optional.
+2. **recipe.html stops full-page-reloading on mineral changes** (recipe.html ~316/320, ~1243/1250). The natural fix is restructuring recipe.html's giant inline script as part of migrating it to a TS module.
 3. **Remove `'unsafe-inline'` from the CSP script-src** (partials/head-top.html:3). Blocked on externalizing the per-page inline scripts — which is what (2)'s migration does. Tighten the CSP **last**. (Note: support.html added its own inline submit script in #183, so it's now part of what must be externalized before the CSP can tighten.)
 
-Suggested migration order for the remaining classic files: `theme-init.js`/`analytics-init.js` → `stock-editor.js`/`diy-editor.js` (covered by plan 004 first) → `library-picker.js`/`my-recipes-ui.js`/`source-water-ui.js`/`estimate-water-ui.js` → `library-data.js`/`mineral-selector.js` → `recipe-browser.js` → `script.js` (with characterization tests from (1) in place).
+Suggested migration order for the remaining classic files: `theme-init.js` → `analytics-init.js`. (All other UI/data files have since been migrated to TypeScript under `src/components/` and `src/lib/` via PRs #193-#202: stock-editor #193, diy-editor #194, estimate-water-ui #195, source-water-ui #196, library-picker #197, my-recipes-ui #198, mineral-selector #199, recipe-browser #200, script #201, library-data #202.)
 
 Also deferred:
 - **vite 5 → current major.** Clears the remaining esbuild audit highs (plan 006 leaves those, since they only fix via `npm audit fix --force` → vite 8). Schedule as its own migration with the full e2e suite as the gate (`*.spec.ts` runs against the built dist, exactly what a Vite major can break).

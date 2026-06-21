@@ -1,6 +1,6 @@
 # Smoke: multi-device sync — save-on-navigate, push-then-pull, Realtime
 
-**Scope**: Catches the class of bugs fixed in commits 6d8cd63 (push-then-pull init), 6464fdb (save-on-navigate reliability), 9f89a2e (cross-device delete), and the migration-012 / sync.js Realtime work that makes recipes propagate across signed-in devices within ~2 s without reload. These are the highest-blast-radius bugs the project has shipped — every regression here costs user data.
+**Scope**: Catches the class of bugs fixed in commits 6d8cd63 (push-then-pull init), 6464fdb (save-on-navigate reliability), 9f89a2e (cross-device delete), and the migration-012 / src/lib/sync.ts Realtime work that makes recipes propagate across signed-in devices within ~2 s without reload. These are the highest-blast-radius bugs the project has shipped — every regression here costs user data.
 
 **Requires**: Two distinct browser contexts (simulating two devices) signed in as the **same** Supabase user. Playwright MCP supports multiple contexts within one run; use `browser.newContext()` twice.
 
@@ -38,12 +38,12 @@
 
 ### 6. Concurrent edits
 - Context A and B: within ~5 s of each other, each edit a *different* profile.
-- On **both** contexts, poll until the save-status element for the edited section reads `Saved!` (emitted by `showSourceSaveStatus`/`showRecipeSaveStatus` once the local persist + cloud push both resolve). Use Playwright's `page.locator('#source-save-status, #recipe-save-status, #target-save-status').filter({ hasText: 'Saved!' }).first().waitFor({ timeout: 15000 })`. Failing this wait within 15 s is itself a regression — surface that as the assertion failure, not a timeout.
+- On **both** contexts, poll until the save-status element for the edited section reads `Saved!` (emitted by `showSourceSaveStatus`/`showTargetSaveStatus` once the local persist + cloud push both resolve). Use Playwright's `page.locator('#source-save-status, #recipe-save-status, #target-save-status').filter({ hasText: 'Saved!' }).first().waitFor({ timeout: 15000 })`. Failing this wait within 15 s is itself a regression — surface that as the assertion failure, not a timeout.
 - Reload both. Assert both edits are present on both devices — last-writer-wins should only apply at the same-profile level.
 
 **Codified note**: Step 6 is intentionally NOT in `smoke-sync.spec.ts`. The race is Supabase read-replica lag, and it affects every cross-device read primitive we tried (broadcast-triggered `pullFromCloud`, reload-triggered initSync pull, direct Supabase `SELECT`): PostgREST can route any request to a lagging replica that hasn't seen the recent write, returning stale data. A codified test can't deterministically wait for "the replica B's next pull happens to hit has caught up," so any spec we write either fails sporadically (which `--retries=1` would mask, diluting the signal of the rest of the codified subset) or relies on a fixed timeout long enough to be cargo-cult. PR #86's dirty-tracking makes the race non-destructive — cloud state is correct (A's push did commit), the next sync cycle detects the localStorage/cloud mismatch, and a reload recovers — so the manual UX walk above is the appropriate gate. If you ever see *cloud state* diverge (A's edit missing from `target_profiles` after the dust settles) or *both reloads* show stale data, that's a real regression, not the known race.
 
-## Realtime propagation (migration 012, sync.js Realtime channel)
+## Realtime propagation (migration 012, src/lib/sync.ts Realtime channel)
 
 Steps 7–12 cover the change that makes adds/edits/deletes appear on the other device **within ~2 s without reload**, plus automatic recovery when the Realtime channel drops. Before commit ca89ae9 + migration 012, every assertion below would have required a manual reload on Device B.
 
@@ -52,15 +52,15 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 ### 7. Add-from-library propagates to the other device's rail
 - Context A: navigate to `/library.html`. Confirm the recipe browser mounts (`main#rx-root` populated, `.rx-recipe-card` cards visible).
 - Context B: navigate to `/index.html`. Wait for `#profile-buttons [data-profile]` to render. Snapshot the list of `data-profile` slugs into `bSlugsBefore`.
-- Context A: pick a non-starter library card whose slug is **not** in `bSlugsBefore`. Click its `.rx-recipe-card-bookmark` (the heart). The button's `aria-label` flips from "Save recipe" → "Unsave recipe".
+- Context A: pick a non-starter library card whose slug is **not** in `bSlugsBefore`. Click its `.rx-card-bookmark` (the heart). The button's `aria-label` flips from "Save recipe" → "Unsave recipe".
 - Context B: **without reloading**, wait for `#profile-buttons [data-profile="<slug>"]` to appear. Timeout 4 s.
 - Regression guard: if Context B's rail still doesn't have the slug after 4 s but a manual reload makes it appear, the Realtime subscription isn't firing → check `subscribeToCloudChanges` ran (look for `[sync] realtime channel status: ...` warnings) and that migration 012 added the table to `supabase_realtime`.
 
 ### 8. Edit propagates to the other device's library card
-- Context A: on `/library.html`, find a recipe the test user owns (the card has the `.rx-recipe-card-owner-actions` block visible). Note its current `.rx-recipe-card-title` text as `originalLabel`.
-- Context B: navigate to `/library.html`. Wait for the same recipe card by slug. Confirm its `.rx-recipe-card-title` reads `originalLabel`.
-- Context A: click the `Edit` button (`.rx-recipe-card-owner-btn` with text "Edit"). The modal `.rx-edit-overlay` opens. Replace the name (`.rx-edit-input` first instance — `nameInput`) with `originalLabel + " (edited)"`. Click `.rx-edit-save`. Wait for the modal to close.
-- Context B: **without reloading**, wait for the matching card's `.rx-recipe-card-title` to read `originalLabel + " (edited)"`. Timeout 4 s.
+- Context A: on `/library.html`, find a recipe the test user owns (the card has the `.rx-card-owner-actions` block visible). Note its current `.rx-card-title` text as `originalLabel`.
+- Context B: navigate to `/library.html`. Wait for the same recipe card by slug. Confirm its `.rx-card-title` reads `originalLabel`.
+- Context A: click the `Edit` button (`.rx-card-owner-btn` with text "Edit"). The modal `.rx-edit-overlay` opens. Replace the name (`.rx-edit-input` first instance — `nameInput`) with `originalLabel + " (edited)"`. Click `.rx-edit-save`. Wait for the modal to close.
+- Context B: **without reloading**, wait for the matching card's `.rx-card-title` to read `originalLabel + " (edited)"`. Timeout 4 s.
 - Cleanup: rename it back so re-runs are clean.
 
 ### 9. Delete propagates to the other device's rail
@@ -118,7 +118,7 @@ Before signing out, on the test user:
 - All twelve steps pass.
 - No "sync error" toasts in the save-status elements on either device.
 - No console errors on either context. Warnings about `[sync] realtime channel status: SUBSCRIBED` are fine. A `CHANNEL_ERROR` / `TIMED_OUT` warning is acceptable ONLY when intentionally induced in Step 12 (offline simulation) and the channel then recovers (updates resume without reload); an unexpected one outside Step 12, or one that never recovers, is a failure.
-- Sentry Feed shows no new issues tagged with the sync code paths (`sync.js`, `storage.js`).
+- Sentry Feed shows no new issues tagged with the sync code paths (`src/lib/sync.ts`, `src/lib/storage.ts`).
 - localStorage on both contexts is in sync with Supabase — for each Playwright context, `await page.evaluate(() => Object.keys(localStorage).sort())` and assert the two arrays are deep-equal.
 - After each Realtime step, `await page.evaluate(() => loadCustomTargetProfiles())` returns the same dict on both contexts (the JSON.stringify of which should be deep-equal). This is the strict "always identical" check from the user requirement.
 

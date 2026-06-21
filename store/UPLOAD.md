@@ -1,8 +1,8 @@
 # Upload runbook
 
-End-to-end checklist for shipping a build to TestFlight (iOS) and to the Play Console Internal Testing track (Android). Run through this once accounts exist; ongoing uploads are just steps 5 and 6.
+End-to-end checklist for shipping a build to TestFlight (iOS) and to the Play Console Internal Testing track (Android). Run through this once accounts exist; ongoing uploads are just steps 6 and 7.
 
-The upload scripts under `scripts/` are written but **blocked on accounts** until steps 1-4 below are done. Running either script before that point exits non-zero with a clear hint about what's missing.
+The upload scripts under `scripts/` are written but **blocked on accounts** until steps 1-5 below are done. Running either script before that point exits non-zero with a clear hint about what's missing.
 
 ## 1. Apple Developer Program (one-time, $99/year)
 

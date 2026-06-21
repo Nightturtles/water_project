@@ -59,7 +59,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*git push'; then cd \"$CLAUDE_PROJECT_DIR\" || exit 0; [ -d node_modules ] || { echo '[gate] node_modules missing; skipping local CI gates (CI still runs on the PR)' >&2; exit 0; }; npm run lint && npm run typecheck && npm run format:check && npm test || { echo 'CI gates failed (lint/typecheck/format/test). Fix before pushing.' >&2; exit 2; }; fi",
+            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*git push'; then cd \"$CLAUDE_PROJECT_DIR\" || exit 0; [ -d node_modules ] || { echo '[gate] node_modules missing; skipping local CI gates (CI still runs on the PR)' >&2; exit 0; }; npm run lint && npm run typecheck && npm run format:check && npm run docs:check && npm test || { echo 'CI gates failed (lint/typecheck/format/docs:check/test). Fix before pushing.' >&2; exit 2; }; fi",
             "timeout": 180,
             "statusMessage": "Running CI gates before git push"
           }

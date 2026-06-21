@@ -52,7 +52,7 @@ Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirst
 
 ### 6. Sentry is wired (production only)
 - Assert `window.Sentry && typeof window.Sentry.captureException === 'function'`.
-- Network: confirm **any** request whose URL starts with `https://js.sentry-cdn.com/` returned a success status (200 for a fresh fetch, 304 from cache on a repeat visit — any `status < 400` is fine). Match on host, not on the specific public-key filename — the DSN may rotate.
+- Network: confirm **no** request is made to any `https://js.sentry-cdn.com/` URL — Sentry is bundled via Vite (`@sentry/browser`), not the CDN loader. Instead, confirm event ingestion is reachable: when an error is reported, a request to a host matching `https://*.ingest.us.sentry.io` (the DSN endpoint) succeeds (any `status < 400` is fine). The ingest project id may rotate, so match on host, not the full path.
 
 ## Exit criteria
 

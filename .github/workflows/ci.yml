@@ -19,12 +19,14 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
+      # Fail if a doc references a source file that no longer exists (drift guard).
+      - run: npm run docs:check
       - run: npm test
       - run: npm run build
       - run: npm run build:verify
       # Verify Capacitor's Android scaffold is in sync with dist/ and package.json.
-      # iOS sync requires CocoaPods + macOS, so it runs locally before release
-      # rather than in CI; a follow-up may add a macos-latest job if drift becomes a problem.
+      # iOS sync requires macOS + Xcode, so it is not run in this Linux job; the
+      # native.yml `ios-build` job runs `npx cap sync ios` on a macOS runner instead.
       - run: npx cap sync android --inline
 
   e2e:

@@ -20,7 +20,7 @@ The rest of this runbook assumes Play App Signing is enabled. The keystore docum
 
 ## Prerequisites
 
-- A JDK installed (`keytool` ships with it). The Android tooling already requires JDK 17.
+- A JDK installed (`keytool` ships with it). The Android tooling already requires JDK 21.
 - A password manager you trust (1Password, Bitwarden, Keychain Access).
 
 ## Generate the keystore
