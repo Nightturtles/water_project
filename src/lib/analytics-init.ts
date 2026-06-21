@@ -97,35 +97,45 @@ export function shouldLoadAnalytics(env: AnalyticsEnv): boolean {
 
 // Browser bootstrap. Skipped under Node / Vitest (no location/history/
 // navigator), which lets the test file import the two helpers without firing GA.
-if (
-  typeof location !== "undefined" &&
-  typeof history !== "undefined" &&
-  typeof navigator !== "undefined"
-) {
-  const urlOptOut = handleOptOutURLParam(location.search, location, history, localStorage);
+//
+// Wrapped in try/catch because this module is now a side-effect import of
+// legacy-globals.ts: a synchronous throw here would abort the bridge's module
+// evaluation and take down every later import (supabase-client, storage, sync,
+// the UI components). The realistic culprit is the bare `localStorage` access
+// below, which throws in privacy/sandboxed contexts where storage is blocked.
+// As a standalone <head> script the failure was isolated; in the bundle it must
+// stay contained. Analytics failing is invisible to the user, so it's swallowed.
+try {
   if (
-    shouldLoadAnalytics({
-      urlOptOut,
-      hostname: location.hostname,
-      webdriver: navigator.webdriver,
-      storage: localStorage,
-    })
+    typeof location !== "undefined" &&
+    typeof history !== "undefined" &&
+    typeof navigator !== "undefined"
   ) {
-    const dataLayer: unknown[] = window.dataLayer || [];
-    window.dataLayer = dataLayer;
-    // GA's command queue: each gtag(...) call is pushed as its argument tuple,
-    // which GA later reads by index. Rest params (rather than the canonical
-    // `arguments` push) to satisfy prefer-rest-params; GA processes the queued
-    // array identically.
-    const gtag = function (...args: unknown[]): void {
-      dataLayer.push(args);
-    };
-    window.gtag = gtag;
-    gtag("js", new Date());
-    gtag("config", MEASUREMENT_ID);
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = "https://www.googletagmanager.com/gtag/js?id=" + MEASUREMENT_ID;
-    document.head.appendChild(s);
+    const urlOptOut = handleOptOutURLParam(location.search, location, history, localStorage);
+    if (
+      shouldLoadAnalytics({
+        urlOptOut,
+        hostname: location.hostname,
+        webdriver: navigator.webdriver,
+        storage: localStorage,
+      })
+    ) {
+      const dataLayer: unknown[] = window.dataLayer || [];
+      window.dataLayer = dataLayer;
+      // GA's command queue: each gtag(...) call is pushed as its argument tuple,
+      // which GA later reads by index. Rest params (rather than the canonical
+      // `arguments` push) to satisfy prefer-rest-params; GA processes the queued
+      // array identically.
+      const gtag = function (...args: unknown[]): void {
+        dataLayer.push(args);
+      };
+      window.gtag = gtag;
+      gtag("js", new Date());
+      gtag("config", MEASUREMENT_ID);
+      const s = document.createElement("script");
+      s.async = true;
+      s.src = "https://www.googletagmanager.com/gtag/js?id=" + MEASUREMENT_ID;
+      document.head.appendChild(s);
+    }
   }
-}
+} catch (e) {}
