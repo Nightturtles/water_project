@@ -8,6 +8,9 @@ import { defineConfig, devices } from "@playwright/test";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: /.*\.spec\.ts$/,
+  // Clears any leftover shared-account lock from a crashed prior run before
+  // workers start (see e2e/_shared-account-lock.ts + e2e/_global-setup.ts).
+  globalSetup: "./e2e/_global-setup.ts",
   // Each test file can define its own timeout; 30s is plenty for this app.
   timeout: 30_000,
   // Fail CI if a test.only slips through.

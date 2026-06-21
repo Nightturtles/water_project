@@ -10,29 +10,27 @@
 // running in parallel. (redirect-intercept signs in only with stubbed auth and
 // never touches cloud state, so it does NOT take the lock.)
 //
-// A lock is an exclusive-create file in the OS temp dir, shared across worker
-// processes on the same runner. The timestamp written inside lets a much-later
-// acquirer reclaim a lock orphaned by a hard process crash — afterAll (which
-// releases) still runs on ordinary test failures, so only a kill leaks it, and
-// each CI run gets a fresh runner/tmpdir so a leak never crosses runs.
+// The lock is an exclusive-create file in the OS temp dir, shared across worker
+// processes on the same runner. Normal runs release it in afterAll (which runs
+// even on test failure); only a hard process crash leaks it, and
+// _global-setup.ts clears any leftover before the next run's workers start, so a
+// crash self-heals rather than wedging later runs.
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-const LOCK_FILE = path.join(os.tmpdir(), "cafelytic-e2e-shared-account.lock");
-// Far longer than the whole signed-in suite, so a live holder is never mistaken
-// for a crashed one; a genuinely orphaned lock is reclaimed after this.
-const STALE_MS = 600_000;
+export const LOCK_FILE = path.join(os.tmpdir(), "cafelytic-e2e-shared-account.lock");
 const POLL_MS = 250;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-// Acquire the shared-account lock, returning a release function. Polls until the
-// lock is free or `timeoutMs` elapses (then throws — a loud failure is safer
-// than running two signed-in specs against one account). Under local workers:1
-// there is no contention, so the first attempt always wins.
+// Acquire the shared-account lock, returning a release function. Polls while the
+// lock is held by another worker until it frees or `timeoutMs` elapses (then
+// throws — a loud failure is safer than running two signed-in specs against one
+// account). Under local workers:1 there is no contention, so the first attempt
+// always wins.
 export async function acquireSharedAccount(timeoutMs = 180_000): Promise<() => void> {
   const start = Date.now();
   for (;;) {
@@ -45,20 +43,19 @@ export async function acquireSharedAccount(timeoutMs = 180_000): Promise<() => v
         try {
           fs.unlinkSync(LOCK_FILE);
         } catch {
-          // Already gone (reclaimed as stale, or never written) — nothing to do.
+          // Best-effort: a missing file (already cleared) is fine, and any other
+          // unlink failure is cleared by _global-setup.ts on the next run.
         }
       };
-    } catch {
-      // Lock is held. Reclaim it only if the holder looks crashed.
-      try {
-        const heldSince = Number(fs.readFileSync(LOCK_FILE, "utf8")) || 0;
-        if (Date.now() - heldSince > STALE_MS) fs.unlinkSync(LOCK_FILE);
-      } catch {
-        // Holder released/reclaimed between our write and read — just retry.
-      }
+    } catch (err) {
+      // Only EEXIST ("the lock file already exists") means contention — keep
+      // polling. Any other error (bad permissions, missing tmpdir) is a real
+      // failure and must surface immediately rather than spin for `timeoutMs`.
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") throw err;
       if (Date.now() - start > timeoutMs) {
         throw new Error(
-          `acquireSharedAccount: timed out after ${timeoutMs}ms waiting for ${LOCK_FILE}`,
+          `acquireSharedAccount: timed out after ${timeoutMs}ms waiting for ${LOCK_FILE} ` +
+            `(a prior run may have crashed holding it; it is cleared at the start of each run)`,
         );
       }
       await sleep(POLL_MS);
