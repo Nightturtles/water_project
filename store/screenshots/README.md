@@ -15,7 +15,7 @@ The original plan called for `xcrun simctl io ... screenshot` (iOS) and `adb exe
 
 ```bash
 npm run build                 # screenshots read from dist/ via vite preview
-npm run screenshots:ios       # iPhone 15 Pro Max (6.7") + iPhone 14 Plus (6.5")
+npm run screenshots:ios       # iPhone 15 Pro Max (6.7") + iPhone 14 Plus (6.5") + iPad Pro 12.9"
 npm run screenshots:android   # Pixel 6
 npm run screenshots           # both
 ```
@@ -28,6 +28,7 @@ Each run writes PNGs under `store/screenshots/<platform>/<device>/<NN-scene>.png
 |---|---|---|---|
 | iOS | iPhone 15 Pro Max | 1290 × 2796 | 6.7" — REQUIRED for App Store submission |
 | iOS | iPhone 14 Plus | 1284 × 2778 | 6.5" — optional, accepted as the older-template fallback |
+| iOS | iPad Pro 12.9" | 2048 × 2732 | 12.9" — required tablet set for the Universal build |
 | Android | Pixel 6 | 1080 × 2400 | Phone screenshots — at least one required for Play Console |
 
 The 1024 × 500 Play Store feature graphic is NOT script-generated; it's a Figma export. See `store/android/full-description.md` for the launch-graphic source link once it exists.

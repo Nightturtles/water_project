@@ -9,7 +9,7 @@ Production error telemetry for cafelytic.com.
   name is "cafelytic". The slug is what `@sentry/vite-plugin` and the Sentry
   CLI need; the display name is just a label.
 - Platform: Browser JavaScript (vanilla — no framework)
-- Install method: **Loader Script** (no bundler yet; revisit in Phase 3 after Vite lands)
+- Install method: **bundled via Vite** (`@sentry/browser` npm package, initialized in `src/lib/sentry-init.ts`, imported first by `src/lib/legacy-globals.ts`; replaced the CDN Loader Script in Phase A PR h)
 
 ## DSN
 
@@ -21,39 +21,32 @@ and CLI) is not stored here and is not needed until Phase 3.
 https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4511243165433856
 ```
 
-The loader URL is derived from the public key:
-`https://js.sentry-cdn.com/c99c13e5b1291bc31a11c864a400daca.min.js`
-
 ## Where it's wired
 
-Every HTML entry point loads the Sentry loader in `<head>` right after
-`theme-init.js`. If you add a new entry point, mirror the snippet from
-`index.html`. CodeRabbit's path instructions flag drift between pages.
-
-- `index.html`
-- `recipe.html`
-- `taste.html`
-- `library.html`
-- `login.html`
-- `minerals.html`
+Sentry is initialized once in `src/lib/sentry-init.ts`, which is imported
+first by `src/lib/legacy-globals.ts` — the single `<script type="module">`
+entry every HTML page loads. There is no per-page Sentry snippet to mirror;
+adding a new entry point that includes `legacy-globals.ts` gets Sentry
+automatically.
 
 ## SDK init options
 
-Defined on `window.sentryOnLoad = function () { Sentry.init({ ... }) }` — the
-Sentry Loader invokes this hook before its default init, so custom options
-take effect. **Define it before the `<script src="js.sentry-cdn.com/…">` tag**
-so the hook is in place no matter how the loader is scheduled. Do not confuse
-this with `Sentry.onLoad(callback)` (different API — that callback runs
-*after* default init, too late to override options).
+Options are passed directly to `Sentry.init({ ... })` in `src/lib/sentry-init.ts`
+using the bundled `@sentry/browser` SDK. The module is imported FIRST by
+`src/lib/legacy-globals.ts`, so init runs at module-evaluation time before any
+other module's top-level code can throw. (The old CDN Loader Script and its
+`window.sentryOnLoad` hook were removed in Phase A PR h; #132.)
 
-- `tracesSampleRate: 0.1` — 10% performance sampling (requires BrowserTracing integration enabled in the Sentry dashboard under Project Settings → Loader Script).
+- `tracesSampleRate: 0.1` — 10% performance sampling (BrowserTracing is enabled in code via `Sentry.browserTracingIntegration()` in the `integrations` array).
 - `replaysSessionSampleRate: 0` — do not record sessions for everyone.
-- `replaysOnErrorSampleRate: 1.0` — record a replay whenever an error fires (requires Session Replay enabled in the Loader Script settings).
+- `replaysOnErrorSampleRate: 1.0` — record a replay whenever an error fires (Session Replay is enabled in code via `Sentry.replayIntegration()`).
 - `beforeSend` — drops `event.request.cookies` before send to avoid leaking Supabase auth cookies.
 
-If a feature looks like a no-op in production, verify it's enabled in the
-Sentry dashboard at **Project Settings → Loader Script**. The loader bundles
-only what's toggled there.
+If a feature looks like a no-op in production, check the `integrations` array
+and the option values (e.g. `tracesSampleRate`, `replaysOnErrorSampleRate`) in
+`src/lib/sentry-init.ts`. Everything is configured in code — Sentry is bundled
+via npm (`@sentry/browser`), so there is no Loader Script or dashboard panel
+that controls what gets bundled.
 
 ## Release tagging
 
@@ -133,9 +126,9 @@ issue after testing so the release stays clean.
 until it happens X times / for Y time". Prefer time-bounded ignores to
 permanent ones so we see regressions.
 
-**Resolving**: when a fix ships, click "Resolve in the next release". Once
-Phase 3 release tagging is live this will auto-reopen if the error recurs in
-a later release.
+**Resolving**: when a fix ships, click "Resolve in the next release". Because
+release tagging is live (see the Release tagging section above), this will
+auto-reopen if the error recurs in a later release.
 
 ## PII considerations
 

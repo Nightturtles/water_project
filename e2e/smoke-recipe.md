@@ -2,8 +2,8 @@
 
 **Scope**: Two related flows that have regressed before:
 
-1. **recipe.html source-water auto-persist** — per-ion edits in the Base Water section round-trip through localStorage and survive a page reload, but only on the "custom" preset (saved presets are overwritten by `activateSourcePreset` during init).
-2. **index.html creator-gated share prompt** (commit ae7376e) — after "Save Changes" on a target profile, the share-to-library prompt appears for the recipe's creator and is suppressed for non-creators (e.g. saved-from-library copies). The gate lives in `script.js`'s `offerShareAfterEdit(key, wasCreator)`. A regression that fires the prompt on every non-creator edit is exactly the bug ae7376e fixed.
+1. **recipe.html source-water auto-persist** — per-ion edits in the Starting Water section round-trip through localStorage and survive a page reload, but only on the "custom" preset (saved presets are overwritten by `activateSourcePreset` during init).
+2. **index.html creator-gated share prompt** (commit ae7376e) — after "Save Changes" on a target profile, the share-to-library prompt appears for the recipe's creator and is suppressed for non-creators (e.g. saved-from-library copies). The gate lives in `src/components/script.ts`'s `offerShareAfterEdit(profileKey, profile)`, which delegates to `maybeOfferSharePrompt`/`isUserTheCreator` in `src/components/ui-shared.ts`. A regression that fires the prompt on every non-creator edit is exactly the bug ae7376e fixed.
 
 Spec: [smoke-recipe.spec.ts](smoke-recipe.spec.ts) codifies both. The signed-in creator-gated flow (Scope item 2 / Steps 3–5 below) needs the same `.env.test` credentials as `smoke-sync.spec.ts` (CAFELYTIC_TEST_EMAIL / CAFELYTIC_TEST_PASSWORD); when missing, the signed-in describe is `test.skip`-ed. Steps 1–2 (anonymous recipe.html persistence) run for everyone.
 
@@ -22,12 +22,12 @@ Spec: [smoke-recipe.spec.ts](smoke-recipe.spec.ts) codifies both. The signed-in 
 
 - Navigate to `/recipe.html`.
 - Assert `<h1>` contains `Recipe Builder`.
-- Assert `<h2>` headings present: `Base Water`, `Brew Method`, `Add Minerals`, `Final Water Profile`.
+- Assert `<h2>` headings present: `Starting Water`, `Brew Method`, `Add Minerals`, `Final Water Profile`.
 - Console: zero `error`-level entries.
 
 ### 2. recipe.html source water auto-persist (custom preset only)
 
-The runbook's earlier framing of "click 'Done Editing' to save" was wrong: the source-edit-mode button only toggles the edit-mode UI, it doesn't persist anything. The actual auto-persist path is the per-ion `debouncedSave` call (300 ms) in `source-water-ui.js`. On a saved preset, the post-reload init runs `activateSourcePreset` which overwrites the inputs with the preset's canonical values, so per-ion edits don't survive reload there. On the "custom" preset, `activateSourcePreset` returns early before touching inputs, so the debounced writes stick.
+The runbook's earlier framing of "click 'Done Editing' to save" was wrong: the source-edit-mode button only toggles the edit-mode UI, it doesn't persist anything. The actual auto-persist path is the per-ion `debouncedSave` call (300 ms) in `src/components/source-water-ui.ts`. On a saved preset, the post-reload init runs `activateSourcePreset` which overwrites the inputs with the preset's canonical values, so per-ion edits don't survive reload there. On the "custom" preset, `activateSourcePreset` returns early before touching inputs, so the debounced writes stick.
 
 - Click the **Custom** button in the source-water rail (`#source-presets [data-preset="custom"]`).
 - Change `#src-calcium` to a non-default value (e.g. `15`).
@@ -57,7 +57,7 @@ This is the load-bearing assertion. A regression where the prompt fires on a non
 
 ### 5. recipe.html target-profile save (the always-creator path)
 
-The Recipe Builder's `#recipe-save-target-btn` always saves a *new* target profile (the user is by definition the creator), so it calls `showSharePrompt` unconditionally. This is **not** a regression risk for the creator gate — it's only relevant if you change recipe.html's save flow to allow editing existing profiles.
+The Recipe Builder's `#recipe-save-target-btn` always saves a *new* target profile (the user is by definition the creator), so it calls `maybeOfferSharePrompt` (which forwards to `showSharePrompt` because the saver is always the creator). This is **not** a regression risk for the creator gate — it's only relevant if you change recipe.html's save flow to allow editing existing profiles.
 
 - Navigate to `/recipe.html`.
 - Change source water to a non-distilled preset, fill `#recipe-target-name`, click `#recipe-save-target-btn`.

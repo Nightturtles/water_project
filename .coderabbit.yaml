@@ -40,6 +40,19 @@ reviews:
         time; flag drift between pages (e.g. analytics or Sentry snippets, or
         the /src/lib/legacy-globals.ts module entry, present in some but not
         all).
+    - path: "**/*.{js,mjs,cjs,ts,mts,cts,tsx,html,css,sql,sh,swift,gradle}"
+      instructions: |
+        Docs in this repo restate code facts: file paths, the classic-JS to
+        TypeScript migration status, page selectors and <h2> labels, CLI
+        commands, version pins, and store-copy counts. If this change renames,
+        moves, or deletes a source file, or renames a user-facing label, a CSS
+        selector, or a command, verify the docs that reference it are updated IN
+        THIS PR. Highest-drift docs: CLAUDE.md (the File map + Verification-stack
+        notes), e2e/*.md runbooks (selectors, <h2> labels, file paths),
+        SENTRY_SETUP.md, plans/README.md, and store/**. Flag any doc still
+        pointing at the old path, name, or label. Note: `npm run docs:check`
+        already verifies that file-path references resolve, so focus on what it
+        cannot catch — selectors, labels, status prose, and counts.
 
 chat:
   auto_reply: true

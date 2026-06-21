@@ -19,10 +19,10 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 | Area | Files |
 |---|---|
 | Entry points | `index.html`, `recipe.html`, `taste.html`, `library.html`, `login.html`, `minerals.html`, `start.html`, `reset-password.html`, `support.html` (contact form), `privacy/index.html` (10 Vite inputs) |
-| Data | `src/lib/storage.ts` (localStorage + sync hooks), `src/lib/storage-keys.ts` (canonical storage-key constants shared by storage/sync), `src/lib/sync.ts` (Supabase push/pull), `src/lib/supabase-client.ts` (client + auth helpers), `src/lib/legacy-globals.ts` (bridge module copying exports onto window for classic UI scripts; transitively pulls in `src/components/*`), `library-data.js` (still classic JS) |
+| Data | `src/lib/storage.ts` (localStorage + sync hooks), `src/lib/storage-keys.ts` (canonical storage-key constants shared by storage/sync), `src/lib/sync.ts` (Supabase push/pull), `src/lib/supabase-client.ts` (client + auth helpers), `src/lib/legacy-globals.ts` (bridge module copying exports onto window for classic UI scripts; transitively pulls in `src/components/*`), `src/lib/library-data.ts` (Recipe Library data layer) |
 | Calc | `metrics.js`, `constants.js` |
-| UI (TS modules) | `src/components/ui-shared.ts` (DOM helpers, nav, theme, share/confirm dialogs, applyAuthGate), `src/components/login-modal.ts` (anonymous sign-in modal opened from gated affordances), `src/lib/html.ts` (shared HTML escaper), `src/lib/creator-display.ts` (recipe creator attribution) |
-| UI (classic) | `script.js`, `source-water-ui.js`, `recipe-browser.js`, `my-recipes-ui.js`, `library-picker.js`, `stock-editor.js`, `diy-editor.js`, `estimate-water-ui.js`, `mineral-selector.js`, `theme-init.js` |
+| UI (TS modules) | `src/components/ui-shared.ts` (DOM helpers, nav, theme, share/confirm dialogs, applyAuthGate), `src/components/login-modal.ts` (anonymous sign-in modal opened from gated affordances), `src/components/script.ts` (Calculator page controller), `src/components/recipe-browser.ts` (library.html recipe browser + cards), `src/components/recipe-card.ts` (slim recipe-card renderer for index/taste), `src/components/source-water-ui.ts` (shared source-water profile rail), `src/components/my-recipes-ui.ts` (owner edit/unpublish affordances on library cards), `src/components/library-picker.ts` (modal that adds a Recipe Library entry), `src/components/mineral-selector.ts` (inline mineral & concentrate selector for tool pages), `src/components/stock-editor.ts` (Recipe Concentrate editor modal), `src/components/diy-editor.ts` (single-mineral Mineral Concentrate editor modal), `src/components/estimate-water-ui.ts` ("Estimate from my ZIP" UI), `src/lib/html.ts` (shared HTML escaper), `src/lib/creator-display.ts` (recipe creator attribution) |
+| UI (classic) | `theme-init.js`, `analytics-init.js` |
 | Native (Capacitor) | `capacitor.config.ts` (appId, splash + status-bar plugin config), `src/lib/capacitor-bootstrap.ts` (native-only: splash dismiss, status bar, haptics via `window.cwHaptic`, share via `window.cwNativeShare`, deep-link OAuth), `ios/`, `android/`, `ios/debug.xcconfig` (`#include?`s the gitignored `team.xcconfig` for the Apple Team ID; template `team.xcconfig.example`) |
 | Styles | `style.css` |
 | Tooling | `vite.config.mts` (multi-page build, HTML partials, static copy, Sentry sourcemaps), `partials/` (shared `<head>` fragments injected at build time), `globals.d.ts` (ambient types for the `window` bridge), `tsconfig.json`, `eslint.config.js`, `vitest.config.js`, `playwright.config.ts`, `scripts/` (build verify, screenshot capture, asset PNGs, TestFlight/Play upload), `.coderabbit.yaml`, `src/lib/sentry-init.ts`, `SENTRY_SETUP.md`, `e2e/` |
@@ -33,7 +33,7 @@ A multi-phase rollout is tracked at `~/.claude/plans/i-d-like-to-create-syntheti
 
 - **Phase 1** ✅ — CodeRabbit (PR review) + Sentry (runtime errors).
 - **Phase 2** (this PR) — Playwright MCP + `e2e/` runbooks.
-- **Phase 3** — Vite + TypeScript strict bundling. **Infrastructure landed**: Vitest + Playwright + ESLint/`tsc --noEmit`, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), the Pages deploy cutover (PR c), the storage/sync move to `src/lib/*.ts` plus the `legacy-globals.ts` bridge (PR d), and the first UI slice (ui-shared.js + login-modal.js → `src/components/*.ts`, PR e). `supabase-client.js` and `sentry-init.js` have likewise landed as `src/lib/*.ts`. **Still in progress**: converting the remaining classic UI files (`script.js`, `source-water-ui.js`, `recipe-browser.js`, `my-recipes-ui.js`, `library-picker.js`, `library-data.js`, `mineral-selector.js`, `stock-editor.js`, `diy-editor.js`, `estimate-water-ui.js`, `theme-init.js`, `analytics-init.js`) one-by-one to `src/components/*.ts`, shrinking the bridge as each one converts.
+- **Phase 3** — Vite + TypeScript strict bundling. **Infrastructure landed**: Vitest + Playwright + ESLint/`tsc --noEmit`, the Vite scaffold (PR a), the dev-server + TS test migration (PR b), the Pages deploy cutover (PR c), the storage/sync move to `src/lib/*.ts` plus the `legacy-globals.ts` bridge (PR d), and the first UI slice (ui-shared.js + login-modal.js → `src/components/*.ts`, PR e). `supabase-client` and `sentry-init` have likewise landed as `src/lib/*.ts`. **Still in progress**: only `theme-init.js` and `analytics-init.js` remain as classic root `.js` (loaded via `partials/head-bottom.html`); they are the last to convert to `src/*`, shrinking the bridge as each one does.
 - **Native rollout** ✅ (separate effort, after the verification stack above) — the app now also ships as native iOS + Android via Capacitor; see the **Native (Capacitor)** row in the file map and the **Native** bullet under Stack. `capacitor.config.ts` comments trace the relevant PRs (through "PR h").
 
 ## Verifying changes
@@ -53,6 +53,19 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 ### Analytics on localhost
 
 [analytics-init.js](analytics-init.js) skips loading GA4 when the hostname is `localhost`/`127.0.0.1` (and other loopback addresses: `0.0.0.0`, `::1`, `[::1]`, empty), when `navigator.webdriver` is true, or when `localStorage.cafelytic_no_analytics === "1"`. So all dev, Playwright, and Claude Preview MCP traffic is excluded automatically. To exclude a personal browser on the live site, visit `https://cafelytic.com/?no-analytics=1` once (the script sets the flag and strips the param via `history.replaceState`; subsequent loads run without GA) — `?no-analytics=0` clears it. Devtools fallback: `localStorage.setItem("cafelytic_no_analytics","1")`.
+
+## Keeping docs in sync
+
+Several docs in this repo restate facts the code already encodes: file paths, the classic-JS → TypeScript migration status, page selectors and `<h2>` labels, CLI commands, version pins, and store-copy counts. Anything that duplicates the source tree in prose drifts the moment the tree moves — that is how the file map, the e2e runbooks, and SENTRY_SETUP.md all went stale during the migration. When a change makes one of those facts wrong, fix the referencing doc **in the same commit** — don't defer it.
+
+- Before finishing a rename/move/delete of any file under `src/` or the repo root, grep the docs for the old name and update every hit.
+- Prefer describing a directory or glob over enumerating individual source files in prose, so there is less to drift.
+- Highest-drift docs: **CLAUDE.md** (the File map + Verification-stack notes), **e2e/*.md** runbooks (selectors, `<h2>` labels, paths — the `*.spec.ts` is the source of truth, keep the prose matching), **SENTRY_SETUP.md**, **plans/README.md**, and **store/**.
+
+Two automated backstops catch what slips through:
+
+- **`npm run docs:check`** ([scripts/check-doc-paths.cjs](scripts/check-doc-paths.cjs)) fails if any Markdown doc references a file path that no longer exists. It runs in CI (`typecheck-and-test`) and in the pre-push gate. It checks *paths only*; for intentional non-file references (future/aspirational, gitignored, external plugin source) add the token to its `ALLOWLIST` or append `<!-- doc-paths:ignore-line -->` to the line. Frozen design docs (`plans/`, `SUPABASE_PLAN.md`) are excluded.
+- A **CodeRabbit `path_instructions`** entry (`.coderabbit.yaml`) flags PRs that rename/delete source files or rename a user-facing label/selector/command without updating the docs — covering the selectors, labels, status prose, and counts that `docs:check` cannot.
 
 ## Supabase safety
 
