@@ -858,22 +858,21 @@ test.describe("library.html — Wave D recipe browser", () => {
       await page.locator(".rx-edit-ions input").first().fill("77");
       await page.locator(".rx-edit-save").click();
 
-      // Modal closes on a successful save.
+      // close() runs in finish(), AFTER applyLocalMirror has written the mirror,
+      // so the overlay being gone is a reliable post-write gate — a single read
+      // suffices. (Nothing clobbers the value afterward: under stubLoggedIn the
+      // real getSession() returns no session, so initSync bails before any pull
+      // and scheduleSyncToCloud only ever pushes.)
       await expect(page.locator(".rx-edit-overlay")).toHaveCount(0);
 
       // The mirror now carries the edited recipe with the new calcium — proof
-      // the guard isn't vacuously failing every save. applyLocalMirror writes
-      // synchronously before finish()'s refetch/scheduleSyncToCloud, so poll
-      // for the value to read it before any async sync settles over it.
-      await expect
-        .poll(() =>
-          page.evaluate(() => {
-            const raw = localStorage.getItem("cw_custom_target_profiles");
-            const entry = raw ? JSON.parse(raw)["fake-owned"] : null;
-            return entry ? entry.calcium : null;
-          }),
-        )
-        .toBe(77);
+      // the guard isn't vacuously failing every save.
+      const entry = await page.evaluate(() => {
+        const raw = localStorage.getItem("cw_custom_target_profiles");
+        return raw ? JSON.parse(raw)["fake-owned"] : null;
+      });
+      expect(entry).toBeTruthy();
+      expect(entry.calcium).toBe(77);
 
       await ctx.close();
     });
@@ -931,8 +930,11 @@ test.describe("library.html — Wave D recipe browser", () => {
       await expect(ownedCard).toBeVisible();
       await ownedCard.locator(".rx-card-owner-btn").nth(1).click();
 
-      // applyLocalMirror runs synchronously before the optimistic re-render,
-      // so the flip is observable in localStorage regardless of the refetch.
+      // Unlike the edit path there's no clean synchronous post-write signal
+      // here (the only DOM cue, optimistic card removal, is driven by a real
+      // Supabase refetch), so poll the mirror until the async write lands.
+      // Once it flips to false it stays false — nothing clobbers it (see the
+      // edit positive control's note on why sync is inert under stubLoggedIn).
       await expect
         .poll(() =>
           page.evaluate(() => {
