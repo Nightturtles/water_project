@@ -1,17 +1,27 @@
 // ============================================
 // Storage — localStorage helpers and caches
 // ============================================
-// Cross-file globals (scheduleSyncToCloud, supabaseClient, TARGET_PRESETS, etc.)
-// are declared in globals.d.ts.
+// Cross-file globals (scheduleSyncToCloud, supabaseClient, etc.) are declared
+// in globals.d.ts.
 
 import { KEYS, VOLUME_PREFIX } from "./storage-keys";
 import { reportError } from "./report";
+import {
+  TARGET_PRESETS,
+  BUILTIN_TARGET_KEYS,
+  BUILTIN_TARGET_LABELS,
+  RESERVED_TARGET_KEYS,
+  SOURCE_PRESETS,
+  LOTUS_DROPPER_ML,
+  BRAND_CONCENTRATES,
+  THEME_KEY,
+} from "./constants";
 
 interface SourceProfile {
   label?: string;
   // Picker grouping bucket (e.g. "pure", "generic", "bottled", "saved"). Set
-  // on built-ins in constants.js; user-saved profiles omit it and fall under
-  // "saved" in the picker.
+  // on built-ins in src/lib/constants.ts; user-saved profiles omit it and
+  // fall under "saved" in the picker.
   category?: string;
   calcium?: number;
   magnesium?: number;
@@ -951,7 +961,7 @@ export function getActiveStockSpec(concentrateIds: unknown): StockConcentrateSpe
  * Per-liter grams of each mineral when dispensing the stock at its prescribed
  * dose (one liter of brew water gets `doseGramsPerL` grams of stock; that
  * amount carries `mineral.grams / bottleMl` grams of each mineral per gram of
- * stock — same convention as scripts/compute-coffee-ad-astra-ions.cjs).
+ * stock — same convention the Coffee ad Astra seed rows use).
  * Returns {} for malformed specs (zero/missing bottleMl or doseGramsPerL,
  * non-array minerals, etc.).
  */
@@ -1215,7 +1225,7 @@ export function ensureStarterBackfill(): void {
  * priority, with tombstoned slugs dropped and non-starter canonical rows
  * filtered to the user's explicit added list:
  *
- *   1. TARGET_PRESETS shim  — the 8-entry fallback in constants.js, used
+ *   1. TARGET_PRESETS shim  — the 8-entry fallback in src/lib/constants.ts, used
  *                              before Supabase library data arrives on a
  *                              cold pageload.
  *   2. Supabase library     — all is_public=true rows, fetched by

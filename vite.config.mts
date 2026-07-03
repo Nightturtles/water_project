@@ -81,11 +81,11 @@ export default defineConfig({
           // into dist/. This plugin closes that gap. Negative globs exclude
           // tooling/test files that must not ship.
           // storage.js and sync.js (PR d), ui-shared.js + login-modal.js
-          // (PR e), supabase-client.js + sentry-init.js (PR h), and
-          // analytics-init.js (Phase 3) were moved under src/{lib,components}/
-          // *.ts and are now bundled via the legacy-globals.ts module entry;
-          // the explicit exclusions here document that root-level copies must
-          // never ship.
+          // (PR e), supabase-client.js + sentry-init.js (PR h),
+          // analytics-init.js (Phase 3), and constants.js were moved under
+          // src/{lib,components}/*.ts and are now bundled via the
+          // legacy-globals.ts module entry; the explicit exclusions here
+          // document that root-level copies must never ship.
           src: [
             "*.js",
             "!vite.config.*",
@@ -99,6 +99,7 @@ export default defineConfig({
             "!supabase-client.js",
             "!sentry-init.js",
             "!analytics-init.js",
+            "!constants.js",
           ],
           dest: ".",
         },

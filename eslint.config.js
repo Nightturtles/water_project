@@ -2,10 +2,10 @@
 // ESLint flat config for Cafelytic.
 //
 // Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. constants.js, metrics.js, and theme-init.js stay
-// classic root scripts (not src/ modules) but are @ts-checked + linted in the
-// block below; theme-init.js in particular must stay a render-blocking <head>
-// primer (a deferred module would run after first paint and reintroduce FOUC).
+// test + config files. metrics.js and theme-init.js stay classic root scripts
+// (not src/ modules) but are @ts-checked + linted in the block below;
+// theme-init.js in particular must stay a render-blocking <head> primer (a
+// deferred module would run after first paint and reintroduce FOUC).
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -43,24 +43,25 @@ module.exports = tseslint.config(
   ...tseslint.configs.recommended,
 
   // Classic-script browser JS files.
-  // They load via <script> tag and rely on classic-script scope sharing:
-  // `metrics.js` calls `MINERAL_DB` defined in `constants.js`, etc. ESLint's
-  // `no-undef` and `no-unused-vars` both get the wrong answer against that
-  // structure — both flag correct code as broken because they can't see the
-  // cross-file references, so we turn them off here.
+  // They load via <script> tag and rely on globals populated by the
+  // legacy-globals.ts window bridge: `metrics.js` calls `MINERAL_DB` from
+  // src/lib/constants.ts, etc. ESLint's `no-undef` and `no-unused-vars` both
+  // get the wrong answer against that structure — both flag correct code as
+  // broken because they can't see the cross-file references, so we turn them
+  // off here.
   //
   // Safety net: the files here are under @ts-check AND listed in tsconfig.json
   // `include`, so `tsc --noEmit` type-checks them against globals.d.ts; the
   // per-file lint rules below (eqeqeq, no-implicit-coercion, prefer-const,
-  // no-empty) layer on top. (storage + sync moved to src/lib/*.ts and ui-shared
-  // + login-modal to src/components/*.ts via PR (e); analytics-init.js migrated
-  // to src/lib/analytics-init.ts. theme-init.js stays a classic render-blocking
+  // no-empty) layer on top. (The UI/data classics migrated to
+  // src/{lib,components}/*.ts across the Phase 3 PRs, constants.js to
+  // src/lib/constants.ts. theme-init.js stays a classic render-blocking
   // <head> primer — it cannot be a deferred module — but is @ts-checked here.)
   //
   // This block comes AFTER tseslint.configs.recommended so its rule
   // overrides win.
   {
-    files: ["constants.js", "metrics.js", "theme-init.js"],
+    files: ["metrics.js", "theme-init.js"],
     languageOptions: {
       sourceType: "script",
       globals: {
@@ -124,10 +125,11 @@ module.exports = tseslint.config(
   // files the browser loads as classic scripts. Silence the TS rule
   // that would flag require() in favor of ESM imports.
   //
-  // `.test.ts` files (e.g. metrics.test.ts, metrics-storage.test.ts) still
-  // use require() for the same load-order reason: browser-global stubs
-  // must be in place before constants/storage/metrics are evaluated, and
-  // ES `import` would hoist above the stub assignments.
+  // The metrics test files still use require() for metrics.js (the one
+  // remaining UMD-shimmed classic) for the same load-order reason: globals
+  // (vitest.setup.js stubs + the constants module Object.assign'd onto
+  // globalThis) must be in place before metrics.js is evaluated, and an
+  // ES `import` would hoist above those statements.
   {
     files: ["vitest.config.js", "vitest.setup.js", "**/*.test.{js,ts}"],
     languageOptions: {
@@ -160,10 +162,9 @@ module.exports = tseslint.config(
     },
   },
 
-  // One-shot Node helper scripts (e.g. compute-coffee-ad-astra-ions.cjs).
+  // One-shot Node helper scripts (e.g. check-doc-paths.cjs, verify-build.cjs).
   // CommonJS, Node-only, may use console.log freely as their whole job is
-  // emitting to stdout. require() of source files via the same UMD-shim
-  // pattern unit tests use.
+  // emitting to stdout.
   {
     files: ["scripts/**/*.cjs"],
     languageOptions: {

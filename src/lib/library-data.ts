@@ -12,6 +12,7 @@
 // other migrated modules use. Window types live in globals.d.ts.
 // =============================================================================
 
+import { RESERVED_TARGET_KEYS } from "./constants";
 import {
   addAddedTargetPreset,
   invalidateTargetPresetsCache,

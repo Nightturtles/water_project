@@ -416,7 +416,7 @@ test.describe("index.html — creator-gated share prompt (signed in)", () => {
         // WIP to preserve, so a built-in override here is always junk: it would
         // otherwise load the active profile "Modified" and break
         // activateSeededProfile.
-        // @ts-expect-error - BUILTIN_TARGET_KEYS is a constants.js classic global
+        // @ts-expect-error - BUILTIN_TARGET_KEYS is bridged onto window by legacy-globals.ts
         const builtinSlugs = typeof BUILTIN_TARGET_KEYS === "undefined" ? [] : BUILTIN_TARGET_KEYS;
         if (builtinSlugs.length) {
           // @ts-expect-error - global from supabase-client.js

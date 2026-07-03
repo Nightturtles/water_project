@@ -2,10 +2,6 @@
 // drifted implementations:
 //   - recipe-browser.js formatStockFormula  (labelMode:"short", includeBottleDose:true)
 //   - script.js formatStockResultDetail     (labelMode:"formula", includeBottleDose:false)
-//
-// constants.js is required first so MINERAL_DB is available in the module
-// body (same pattern as sync.test.js which also needs MINERAL_DB at call time).
-require("./constants.js");
 
 import { describe, test, expect } from "vitest";
 import { formatStockSpec, STOCK_MINERAL_SHORT } from "./src/lib/stock-format";

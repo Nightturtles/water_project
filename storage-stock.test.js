@@ -14,7 +14,6 @@
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` directly.
 
-require("./constants.js");
 import {
   loadStockConcentrateSpecs,
   saveStockConcentrateSpecs,
@@ -181,8 +180,9 @@ describe("getStockMineralIds", () => {
 describe("computeStockMineralGramsPerL", () => {
   // Convention: per-L brew water grams of each mineral =
   //   (mineral.grams / bottleMl) * doseGramsPerL
-  // Same dilution math as scripts/compute-coffee-ad-astra-ions.cjs (200 mL
-  // bottle / 4 g/L dose → divide author grams by 50 to get g/L brew).
+  // Same dilution math the Coffee ad Astra seed rows were generated with
+  // (200 mL bottle / 4 g/L dose → divide author grams by 50 to get g/L brew;
+  // see supabase/migrations/20260506231724_add_coffee_ad_astra_recipes.sql).
   test("Rao/Perger formula matches the seed-script convention", () => {
     const spec = {
       bottleMl: 200,

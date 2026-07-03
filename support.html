@@ -48,12 +48,11 @@
     <p><a href="index.html">Back to the calculator</a></p>
   </footer>
 
-  <script defer src="constants.js"></script>
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
   <script>
     // Body wrapped in DOMContentLoaded so the legacy-globals.ts module bridge
-    // (which creates window.supabaseClient) and the deferred classic scripts
-    // have run before we wire the form. The submit itself happens on user click,
+    // (which creates window.supabaseClient) has run before we wire the form.
+    // The submit itself happens on user click,
     // well after load, so the client is always ready by then.
     document.addEventListener("DOMContentLoaded", function () {
       const form = document.getElementById("support-form");

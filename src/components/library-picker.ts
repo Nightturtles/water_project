@@ -21,6 +21,8 @@
 // are reached via window.* with the same typeof guards as the original.
 // =============================================================================
 
+import { LIBRARY_TAGS } from "../lib/constants";
+
 const SEARCH_DEBOUNCE_MS = 150;
 
 interface SegmentedOption {

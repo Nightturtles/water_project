@@ -20,6 +20,7 @@
 // (mineral-selector.js) reaches openDiyEditor unchanged.
 // =============================================================================
 
+import { MINERAL_DB, MINERAL_SOLUBILITY_G_PER_L_25C_APPROX } from "../lib/constants";
 import { escapeHtml } from "../lib/html";
 import {
   loadDiyConcentrateSpecs,

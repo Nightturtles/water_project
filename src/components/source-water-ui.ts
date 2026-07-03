@@ -11,6 +11,13 @@
 // ============================================
 
 import {
+  SOURCE_PRESETS,
+  SOURCE_CATEGORY_ORDER,
+  SOURCE_CATEGORY_LABELS,
+  HCO3_TO_CACO3,
+  ION_FIELDS,
+} from "../lib/constants";
+import {
   bindEnterToClick,
   createStatusHandler,
   debounce,

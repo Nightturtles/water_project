@@ -500,8 +500,8 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
  *   2. Mg → epsom-salt or magnesium-chloride based on target SO4/Cl ratio.
  *   3. Ca → the selected calcium-chloride form (dihydrate by default; anhydrous
  *      when that is the form the user has). Gypsum would match SO4-heavy targets
- *      but its ~2 g/L solubility cap (constants.js
- *      MINERAL_SOLUBILITY_G_PER_L_25C_APPROX) is exceeded by even modest Ca
+ *      but its ~2 g/L solubility cap (MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+ *      src/lib/constants.ts) is exceeded by even modest Ca
  *      targets at concentrate strengths.
  *   4. Residual K → potassium-chloride; residual Na → sodium-chloride.
  *
@@ -1362,9 +1362,10 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
 }
 
 // --- Node/Vitest UMD shim (harmless in browsers) ---
-// See constants.js for the pattern. Assumes constants.js has already loaded
-// and populated globalThis (both in browser script-scope and in tests that
-// require constants.js first).
+// Browsers: `module` is undefined, the if-branch is skipped entirely.
+// Assumes the constants module has already populated the global scope (the
+// legacy-globals.ts window bridge in browsers; Object.assign(globalThis,
+// constants) in the metrics test files).
 if (typeof module !== "undefined" && module.exports) {
   module.exports = {
     calculateIonPPMs,

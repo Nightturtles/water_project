@@ -23,6 +23,11 @@
 // (mineral-selector.js, recipe-browser.js) reach openStockEditor unchanged.
 // =============================================================================
 
+import {
+  MINERAL_DB,
+  RESERVED_LIBRARY_STOCK_SLUGS,
+  MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+} from "../lib/constants";
 import { showConfirm } from "./ui-shared";
 import { escapeHtml } from "../lib/html";
 import {
