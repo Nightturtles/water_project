@@ -4,7 +4,6 @@
 module.exports = {
   test: {
     environment: "node",
-    globals: true, // describe/expect/test auto-injected — lets .test.js files stay CJS and just `require()` the sources under test
     include: ["**/*.test.{js,ts}"],
     exclude: ["node_modules", "coverage", "supabase", "e2e", ".claude"],
     // Installs browser-global stubs (window, localStorage, isLoggedInSync...)

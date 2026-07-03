@@ -23,6 +23,7 @@
 // initSync() kickoff touches window.supabaseClient (undefined => one
 // expected console.warn).
 
+import { describe, test, expect, beforeEach } from "vitest";
 import * as storage from "./src/lib/storage";
 import {
   stableStringify,
@@ -543,8 +544,8 @@ describe("migrateAnonTransientToLocal", () => {
 
 describe("enqueueSerialized", () => {
   test("1. no overlap: task B does not start while task A is unresolved", async () => {
-    let resolveA;
-    const taskAPromise = new Promise((resolve) => {
+    let resolveA!: () => void;
+    const taskAPromise = new Promise<void>((resolve) => {
       resolveA = resolve;
     });
 
@@ -571,7 +572,7 @@ describe("enqueueSerialized", () => {
   });
 
   test("2. order preserved: three tasks execute in enqueue order", async () => {
-    const order = [];
+    const order: number[] = [];
 
     const a = enqueueSerialized(function () {
       order.push(0);

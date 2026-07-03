@@ -6,13 +6,13 @@
 // importing the module just binds the two helpers: no GA, no globals touched.
 
 function makeFakeStorage() {
-  let store = {};
+  let store: Record<string, string> = {};
   return {
-    getItem: (k) => (k in store ? store[k] : null),
-    setItem: (k, v) => {
+    getItem: (k: string) => store[k] ?? null,
+    setItem: (k: string, v: string) => {
       store[k] = String(v);
     },
-    removeItem: (k) => {
+    removeItem: (k: string) => {
       delete store[k];
     },
     clear: () => {
@@ -24,6 +24,7 @@ function makeFakeStorage() {
   };
 }
 
+import { describe, test, expect } from "vitest";
 import { shouldLoadAnalytics, handleOptOutURLParam } from "./src/lib/analytics-init";
 
 // ---------------------------------------------------------------------------
@@ -31,7 +32,8 @@ import { shouldLoadAnalytics, handleOptOutURLParam } from "./src/lib/analytics-i
 // ---------------------------------------------------------------------------
 
 describe("shouldLoadAnalytics", () => {
-  function env(overrides) {
+  type Env = Parameters<typeof shouldLoadAnalytics>[0];
+  function env(overrides: Partial<Env> = {}): Env {
     return Object.assign(
       {
         urlOptOut: false,
@@ -109,15 +111,16 @@ describe("shouldLoadAnalytics", () => {
 
 describe("handleOptOutURLParam", () => {
   function makeFakeHistory() {
+    const calls: { state: unknown; title: string; url: string | null | undefined }[] = [];
     return {
-      calls: [],
-      replaceState: function (state, title, url) {
-        this.calls.push({ state: state, title: title, url: url });
+      calls,
+      replaceState: function (state: unknown, title: string, url?: string | null) {
+        calls.push({ state: state, title: title, url: url });
       },
     };
   }
 
-  function makeFakeLocation(overrides) {
+  function makeFakeLocation(overrides: Partial<{ pathname: string; hash: string }> = {}) {
     return Object.assign({ pathname: "/", hash: "", search: "" }, overrides);
   }
 
@@ -139,7 +142,7 @@ describe("handleOptOutURLParam", () => {
     expect(result).toBe(true);
     expect(storage.getItem("cafelytic_no_analytics")).toBe("1");
     expect(hist.calls).toHaveLength(1);
-    expect(hist.calls[0].url).toBe("/");
+    expect(hist.calls[0]!.url).toBe("/");
   });
 
   test("?no-analytics=0 → returns false, clears existing flag", () => {
@@ -158,7 +161,7 @@ describe("handleOptOutURLParam", () => {
     const loc = makeFakeLocation();
     handleOptOutURLParam("?no-analytics=1&foo=bar", loc, hist, storage);
     expect(hist.calls).toHaveLength(1);
-    expect(hist.calls[0].url).toBe("/?foo=bar");
+    expect(hist.calls[0]!.url).toBe("/?foo=bar");
   });
 
   test("?no-analytics=1 with hash → replaceState preserves hash", () => {
@@ -167,7 +170,7 @@ describe("handleOptOutURLParam", () => {
     const loc = makeFakeLocation({ hash: "#section", pathname: "/recipe.html" });
     handleOptOutURLParam("?no-analytics=1", loc, hist, storage);
     expect(hist.calls).toHaveLength(1);
-    expect(hist.calls[0].url).toBe("/recipe.html#section");
+    expect(hist.calls[0]!.url).toBe("/recipe.html#section");
   });
 
   test("?other=1 (no no-analytics param) → returns false, no replaceState", () => {

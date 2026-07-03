@@ -513,7 +513,7 @@ function hasAnyActiveFilter(f: LibraryFilterState): boolean {
 // filter bar and the modal picker. options.isSaved is a predicate the caller
 // supplies for the `mine` filter (the modal doesn't use it).
 function recipeMatches(
-  recipe: TargetProfile | LibraryRecipeRow,
+  recipe: TargetProfile | Partial<LibraryRecipeRow> | null | undefined,
   filters: LibraryFilterState,
   options?: { isSaved?: (recipe: LibraryRecipeRow) => boolean },
 ): boolean {
@@ -561,8 +561,8 @@ function recipeMatches(
 }
 
 function applyFilters(
-  filters: LibraryFilterState,
-  recipes: LibraryRecipeRow[],
+  filters: LibraryFilterState | null | undefined,
+  recipes: LibraryRecipeRow[] | null | undefined,
   options?: { isSaved?: (recipe: LibraryRecipeRow) => boolean },
 ): LibraryRecipeRow[] {
   if (!Array.isArray(recipes)) return [];
@@ -574,7 +574,9 @@ function applyFilters(
 
 // Group filtered recipes by their category key, in the order LIBRARY_TRAYS
 // declares them. Unknown categories fall through to "classic".
-function partitionByCategory(recipes: LibraryRecipeRow[]): Record<string, LibraryRecipeRow[]> {
+function partitionByCategory(
+  recipes: LibraryRecipeRow[] | null | undefined,
+): Record<string, LibraryRecipeRow[]> {
   const out: Record<string, LibraryRecipeRow[]> = {
     original: [],
     "intro-water": [],
@@ -604,7 +606,7 @@ function partitionByCategory(recipes: LibraryRecipeRow[]): Record<string, Librar
 // tags + roast) so the featured card respects the active search query —
 // otherwise the pinned card may not contain the user's search needle.
 function pickFeaturedFromFiltered(
-  filtered: LibraryRecipeRow[],
+  filtered: LibraryRecipeRow[] | null | undefined,
   method: string,
 ): LibraryRecipeRow | null {
   if (!Array.isArray(filtered) || filtered.length === 0) return null;

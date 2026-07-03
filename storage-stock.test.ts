@@ -14,6 +14,8 @@
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` directly.
 
+import { describe, test, expect, beforeEach } from "vitest";
+import type { StockConcentrateSpec } from "./src/lib/storage";
 import {
   loadStockConcentrateSpecs,
   saveStockConcentrateSpecs,
@@ -165,7 +167,7 @@ describe("getStockMineralIds", () => {
         "string-not-an-object",
         { mineralId: "baking-soda", grams: 1.7 },
       ],
-    };
+    } as unknown as StockConcentrateSpec;
     expect(getStockMineralIds(spec)).toEqual(["epsom-salt", "baking-soda"]);
   });
 
@@ -173,7 +175,9 @@ describe("getStockMineralIds", () => {
     expect(getStockMineralIds(null)).toEqual([]);
     expect(getStockMineralIds(undefined)).toEqual([]);
     expect(getStockMineralIds({})).toEqual([]);
-    expect(getStockMineralIds({ minerals: "not an array" })).toEqual([]);
+    expect(
+      getStockMineralIds({ minerals: "not an array" } as unknown as StockConcentrateSpec),
+    ).toEqual([]);
   });
 });
 
@@ -208,7 +212,11 @@ describe("computeStockMineralGramsPerL", () => {
     expect(computeStockMineralGramsPerL(undefined)).toEqual({});
     expect(computeStockMineralGramsPerL({})).toEqual({});
     expect(
-      computeStockMineralGramsPerL({ bottleMl: 200, doseGramsPerL: 4, minerals: "nope" }),
+      computeStockMineralGramsPerL({
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: "nope",
+      } as unknown as StockConcentrateSpec),
     ).toEqual({});
   });
 
@@ -238,7 +246,7 @@ describe("computeStockMineralGramsPerL", () => {
         { grams: 1.7 }, // missing mineralId
         { mineralId: "baking-soda", grams: 1.7 },
       ],
-    });
+    } as unknown as StockConcentrateSpec);
     expect(Object.keys(out).sort()).toEqual(["baking-soda", "epsom-salt"]);
     expect(out["epsom-salt"]).toBeCloseTo(0.1, 6);
     expect(out["baking-soda"]).toBeCloseTo(0.034, 6);
@@ -353,7 +361,7 @@ describe("importLibraryStockToPantry", () => {
     // Simulate the user editing the bottle volume in Settings to match the
     // bottle they actually have on hand.
     const specs = loadStockConcentrateSpecs();
-    specs["rao-perger"].bottleMl = 250;
+    specs["rao-perger"]!.bottleMl = 250;
     saveStockConcentrateSpecs(specs);
 
     const result = importLibraryStockToPantry(RAO_PERGER);
@@ -361,12 +369,12 @@ describe("importLibraryStockToPantry", () => {
     // The user's edit must survive — re-import must not overwrite. The path
     // to refresh from library values is the "Reset to library values" link
     // in Settings (minerals.html), not re-clicking on a library card.
-    expect(loadStockConcentrateSpecs()["rao-perger"].bottleMl).toBe(250);
+    expect(loadStockConcentrateSpecs()["rao-perger"]!.bottleMl).toBe(250);
   });
 
   test("falls back to slug when label is missing", () => {
     importLibraryStockToPantry({ slug: "no-name", stockFormula: RAO_PERGER.stockFormula });
-    expect(loadStockConcentrateSpecs()["no-name"].label).toBe("no-name");
+    expect(loadStockConcentrateSpecs()["no-name"]!.label).toBe("no-name");
   });
 
   test("omits source when the formula has none", () => {
@@ -374,7 +382,7 @@ describe("importLibraryStockToPantry", () => {
       stockFormula: Object.assign({}, RAO_PERGER.stockFormula, { source: undefined }),
     });
     importLibraryStockToPantry(noSource);
-    const spec = loadStockConcentrateSpecs()["rao-perger"];
+    const spec = loadStockConcentrateSpecs()["rao-perger"]!;
     expect("source" in spec).toBe(false);
   });
 
@@ -395,7 +403,7 @@ describe("importLibraryStockToPantry", () => {
         ],
       },
     });
-    expect(loadStockConcentrateSpecs()["messy"].minerals).toEqual([
+    expect(loadStockConcentrateSpecs()["messy"]!.minerals).toEqual([
       { mineralId: "epsom-salt", grams: 5 },
       { mineralId: "baking-soda", grams: 1.7 },
     ]);
@@ -433,7 +441,7 @@ describe("importLibraryStockToPantry", () => {
         minerals: [{ mineralId: "epsom-salt", grams: 5 }],
       },
     });
-    const spec = loadStockConcentrateSpecs()["garbage"];
+    const spec = loadStockConcentrateSpecs()["garbage"]!;
     expect(spec.bottleMl).toBe(0);
     expect(spec.doseGramsPerL).toBe(0);
   });
@@ -441,7 +449,11 @@ describe("importLibraryStockToPantry", () => {
   test("rejects null / non-object recipe", () => {
     expect(importLibraryStockToPantry(null)).toEqual({ status: "invalid", slug: null });
     expect(importLibraryStockToPantry(undefined)).toEqual({ status: "invalid", slug: null });
-    expect(importLibraryStockToPantry("string")).toEqual({ status: "invalid", slug: null });
+    expect(
+      importLibraryStockToPantry(
+        "string" as unknown as Parameters<typeof importLibraryStockToPantry>[0],
+      ),
+    ).toEqual({ status: "invalid", slug: null });
   });
 
   test("rejects recipe with missing slug or stockFormula", () => {

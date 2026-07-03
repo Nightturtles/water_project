@@ -92,7 +92,6 @@ export default defineConfig({
             "!vite.config.*",
             "!vitest.config.*",
             "!eslint.config.*",
-            "!*.test.js",
             "!storage.js",
             "!sync.js",
             "!ui-shared.js",
