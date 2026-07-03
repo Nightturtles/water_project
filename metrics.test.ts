@@ -1,18 +1,9 @@
-// Unit tests for metrics.js pure functions.
-// Load order mirrors the browser: constants (now a TS module) is assigned
-// onto globalThis first — the same job legacy-globals.ts does with window in
-// the browser — so metrics.js can resolve MINERAL_DB, CA_TO_CACO3, etc. via
-// global scope. The Object.assign statement runs before the (non-hoisted)
-// `require()` of metrics.js.
+// Unit tests for src/lib/metrics.ts pure functions. Everything arrives by ES
+// import now (vitest.setup.js still installs the window/localStorage stubs
+// that storage.ts — imported transitively by metrics — touches at module eval).
 import { describe, test, expect } from "vitest";
 import * as constants from "./src/lib/constants";
-// solveCalculatorDosing (metrics.js) calls computeStockMineralGramsPerL as a
-// global; importing storage publishes it onto window (= global in vitest, via
-// vitest.setup.js). Mirrors storage-stock.test.js.
-import "./src/lib/storage";
-
-Object.assign(globalThis, constants);
-const metrics = require("./metrics.js");
+import * as metrics from "./src/lib/metrics";
 
 describe("calculateIonPPMs", () => {
   test("empty input → all ions at zero", () => {
@@ -363,7 +354,7 @@ describe("splitAlkalinityDelta", () => {
   });
 
   test("both sources, target Na/K both absent or zero → fallback to potassium-bicarbonate", () => {
-    // The 'K-driven or both 0' branch at metrics.js:441-442.
+    // The 'K-driven or both 0' branch of the bicarbonate split.
     const result = metrics.splitAlkalinityDelta(
       ["baking-soda", "potassium-bicarbonate"],
       50,
@@ -485,7 +476,9 @@ describe("getRecipeOverLimitMineralIds", () => {
   test("null / undefined / non-object input → []", () => {
     expect(metrics.getRecipeOverLimitMineralIds(null)).toEqual([]);
     expect(metrics.getRecipeOverLimitMineralIds(undefined)).toEqual([]);
-    expect(metrics.getRecipeOverLimitMineralIds(42)).toEqual([]);
+    expect(metrics.getRecipeOverLimitMineralIds(42 as unknown as Record<string, number>)).toEqual(
+      [],
+    );
   });
 
   test("all minerals below their solubility caps → []", () => {
@@ -763,8 +756,8 @@ describe("solveCalculatorDosing", () => {
       [],
     );
     expect(result.maxResidualIon).not.toBeNull();
-    expect(result.maxResidualIon.ion).toBe("magnesium");
-    expect(result.maxResidualIon.residual).toBeCloseTo(100, 6);
+    expect(result.maxResidualIon!.ion).toBe("magnesium");
+    expect(result.maxResidualIon!.residual).toBeCloseTo(100, 6);
   });
 
   test("Cafelytic Espresso concentrate at its own target snaps to prescribed (reproduction case)", () => {
@@ -791,7 +784,8 @@ describe("solveCalculatorDosing", () => {
       [],
     );
     expect(result.concentrateGramsPerL["stock:cafelytic-espresso"]).toBe(4);
-    expect(Math.abs(result.maxResidualIon.residual)).toBeLessThan(5);
+    expect(result.maxResidualIon).not.toBeNull();
+    expect(Math.abs(result.maxResidualIon!.residual)).toBeLessThan(5);
   });
 
   test("under-target alkalinity leaves a positive bicarbonate residual for gap-fill", () => {

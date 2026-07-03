@@ -1,12 +1,7 @@
 // Bridge module: re-exports every public export from constants.ts, storage.ts,
-// sync.ts, and stock-format.ts onto `window` so the classic inline page scripts
-// (e.g. the taste.html / minerals.html DOMContentLoaded blocks) keep working
-// without per-file changes.
-//
-// The constants namespace also feeds the still-classic metrics.js: its defer
-// tag sits AFTER this module's tag in every page, so `window.MINERAL_DB` etc.
-// exist before any metrics.js function runs (metrics.js only reads them inside
-// function bodies, never at top level).
+// sync.ts, metrics.ts, and stock-format.ts onto `window` so the classic inline
+// page scripts (e.g. the taste.html / minerals.html DOMContentLoaded blocks)
+// and e2e page-context reads keep working without per-file changes.
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
 // own module bodies — that side-effect is what keeps unit tests working
@@ -48,6 +43,7 @@ import "./supabase-client";
 import "./capacitor-bootstrap";
 import * as storage from "./storage";
 import * as sync from "./sync";
+import * as metrics from "./metrics";
 import * as stockFormat from "./stock-format";
 // library-data depends on storage (imports several of its helpers) and reads
 // window.supabaseClient at call time, so it imports AFTER supabase-client and
@@ -67,4 +63,4 @@ import "../components/my-recipes-ui";
 import "../components/mineral-selector";
 import "../components/recipe-browser";
 
-Object.assign(window, constants, storage, sync, stockFormat);
+Object.assign(window, constants, storage, sync, metrics, stockFormat);

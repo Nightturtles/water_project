@@ -1,151 +1,14 @@
-// Ambient declarations for cross-file globals that reach metrics.js / other
-// @ts-checked files via classic-script scope. Mirrors the runtime: all these
-// names are declared in sibling .js files loaded via <script> tags, and the
-// browser makes them visible to later scripts by name.
-//
-// As more files get `// @ts-check`'d in Phase 3 PRs 3-4, some of the
-// permissively-typed entries here will tighten to match real signatures.
+// Ambient declarations for the window bridge (legacy-globals.ts) and the
+// remaining cross-module globals that are read via window/lexical lookup at
+// call time (feature-detected APIs, self-published module surfaces). The
+// classic-script constants/metrics globals migrated to real imports from
+// src/lib/constants.ts and src/lib/metrics.ts.
 
 export {}; // make this a module so `declare global` takes effect
 
 declare global {
-  // --- Shared ion/mineral types ---
-  // Defined and exported by src/lib/constants.ts since the constants
-  // migration; aliased here so the still-classic metrics.js (JSDoc) and the
-  // remaining ambient declarations below can keep referencing them bare.
-  type IonName = import("./src/lib/constants").IonName;
-  type IonMap = import("./src/lib/constants").IonMap;
-  type MineralEntry = import("./src/lib/constants").MineralEntry;
-
-  interface DerivedMetrics {
-    /** General hardness as CaCO3 (mg/L). */
-    gh: number;
-    /** Carbonate hardness / alkalinity as CaCO3 (mg/L). */
-    kh: number;
-    /** Total dissolved solids — sum of contributing ions (mg/L). */
-    tds: number;
-  }
-
-  type MineralGrams = Record<string, number>;
-
+  // Shared domain types, re-exposed globally for the declarations below.
   type TargetProfile = import("./src/lib/constants").TargetProfile;
-
-  // A Recipe Concentrate spec (internal name: "stock"): a multi-mineral bottle
-  // dosed by g/L. Defined in src/lib/storage.ts; mirrored here as a global for
-  // the classic JS files (metrics.js inverse solver) that reference it.
-  interface StockConcentrateSpec {
-    label?: string;
-    bottleMl?: number;
-    doseGramsPerL?: number;
-    minerals?: Array<{ mineralId: string; grams: number }>;
-    [key: string]: unknown;
-  }
-
-  // --- Constants, bridged from src/lib/constants.ts ---
-  // constants.js migrated to src/lib/constants.ts; TS modules import these
-  // directly. The ambient declares below exist SOLELY for the still-classic
-  // metrics.js, which reads them bare at runtime via the window bridge
-  // (legacy-globals.ts Object.assign). Typed as typeof-references into the
-  // module so there is one source of truth — the metrics.js migration PR
-  // deletes this whole block.
-  const MINERAL_DB: typeof import("./src/lib/constants").MINERAL_DB;
-  const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: typeof import("./src/lib/constants").MINERAL_SOLUBILITY_G_PER_L_25C_APPROX;
-  const ION_FIELDS: typeof import("./src/lib/constants").ION_FIELDS;
-  const CA_TO_CACO3: typeof import("./src/lib/constants").CA_TO_CACO3;
-  const MG_TO_CACO3: typeof import("./src/lib/constants").MG_TO_CACO3;
-  const HCO3_TO_CACO3: typeof import("./src/lib/constants").HCO3_TO_CACO3;
-  const CACO3_TO_HCO3: typeof import("./src/lib/constants").CACO3_TO_HCO3;
-  const ALK_TO_BAKING_SODA: typeof import("./src/lib/constants").ALK_TO_BAKING_SODA;
-  const ALK_TO_POTASSIUM_BICARB: typeof import("./src/lib/constants").ALK_TO_POTASSIUM_BICARB;
-  const WATER_PROFILE_RANGE_BANDS: typeof import("./src/lib/constants").WATER_PROFILE_RANGE_BANDS;
-  const RANGE_SEVERITY_ORDER: typeof import("./src/lib/constants").RANGE_SEVERITY_ORDER;
-  type BrandConcentrate = import("./src/lib/constants").BrandConcentrate;
-  type MethodRangeBand = import("./src/lib/constants").MethodRangeBand;
-  type BrewMethodRangeBands = import("./src/lib/constants").BrewMethodRangeBands;
-
-  // --- Functions from other files (source-water-ui.js, storage.js, script.js) ---
-  // Typed permissively for now; will tighten as those files get @ts-check in
-  // later PRs.
-  function calculateMetrics(ions: IonMap): DerivedMetrics;
-  function getEffectiveCalciumSources(): string[];
-  function getEffectiveMagnesiumSources(): string[];
-  function getEffectiveAlkalinitySources(): string[];
-  function getEffectiveCalciumSource(): string | null;
-  function getEffectiveMagnesiumSource(): string | null;
-  function getEffectiveAlkalinitySource(): string | null;
-  function getSourceWaterByPreset(preset: string): IonMap;
-  function loadSourcePresetName(): string;
-  function loadBrewMethod(): string;
-  function isReservedTargetKey(key: string): boolean;
-  // From metrics.js — converts an alkalinity (as CaCO3) back to a stable
-  // bicarbonate value, preferring the existing input when it already maps to
-  // the same rounded alkalinity. Read by src/components/source-water-ui.ts.
-  function toStableBicarbonateFromAlkalinity(
-    alkAsCaCO3: number | string | null | undefined,
-    existingBicarbonate: number | string | null | undefined,
-  ): number;
-  // From metrics.js — derives a recipe-concentrate formula (bottle + dose +
-  // per-mineral grams) from a target ion profile. Read by
-  // src/components/recipe-browser.ts's onDeriveStock handler.
-  function deriveStockFormulaFromTarget(
-    target:
-      | TargetProfile
-      | Partial<Record<IonName, number | string | null | undefined>>
-      | null
-      | undefined,
-    options?: { bottleMl?: number; doseGramsPerL?: number; calciumChlorideId?: string },
-  ): {
-    bottleMl: number;
-    doseGramsPerL: number;
-    minerals: Array<{ mineralId: string; grams: number }>;
-    notes: string[];
-  };
-  // From src/lib/storage.ts (bridged onto window) — distributes a Recipe
-  // Concentrate's prescribed dose across its mineral formula (g/L of each
-  // mineral). Called by metrics.js's solveCalculatorDosing.
-  function computeStockMineralGramsPerL(
-    spec: StockConcentrateSpec | null | undefined,
-  ): Record<string, number>;
-
-  // --- Calculator math from metrics.js (classic globals) ---
-  // Referenced bare by src/components/script.ts, which runs as a module entry
-  // AFTER metrics.js (so these are on the global object at call time).
-  function calculateIonPPMs(mineralGramsPerL: Record<string, number>): Record<string, number>;
-  function calculateSo4ClRatio(ions: Record<string, number>): number | null;
-  function pickBestCaMgSources(
-    sourceWater: IonMap,
-    targetProfile: Record<string, number>,
-    deltaCa: number,
-    deltaMg: number,
-  ): { caSource: string | null; mgSource: string | null };
-  function solveCalculatorDosing(
-    sourceWater: IonMap,
-    target: Record<string, unknown>,
-    entries: Array<{ id: string; spec: StockConcentrateSpec }>,
-    mineralVars: string[],
-  ): { concentrateGramsPerL: Record<string, number>; residualIons: Record<string, number> };
-  function splitAlkalinityDelta(
-    sources: string[],
-    deltaAlkAsCaCO3: number,
-    sourceWater: IonMap,
-    target: Record<string, unknown>,
-  ): Record<string, number>;
-  function evaluateWaterProfileRanges(
-    ions: Record<string, number>,
-    options: {
-      includeAdvanced?: boolean;
-      alkalinitySources?: string[];
-      calciumSource?: string | null;
-      magnesiumSource?: string | null;
-      brewMethod?: string;
-    },
-  ): { findings: Array<{ severity?: string; message?: string }> };
-  function buildStoredTargetProfile(
-    label: string,
-    ions: Record<string, number>,
-    description: string,
-    options?: { alkalinity?: number; brewMethod?: string },
-  ): TargetProfile;
 
   // From src/lib/html.ts — shared HTML-escaper, bridged onto window so the
   // classic UI scripts (diy-editor.js, stock-editor.js, minerals.html inline)
@@ -279,21 +142,6 @@ declare global {
     ) => string;
     // From src/lib/html.ts — shared HTML-escaper (see the global above).
     escapeHtml?: (s: unknown) => string;
-    // From metrics.js - headline water metrics (rounded) for recipe surfaces:
-    // GH/KH as mg/L CaCO3 (GH from Ca+Mg, KH from alkalinity), TDS as mg/L.
-    // Consumed by the slim cards (recipe-card.ts, GH/KH), library cards/hero
-    // (recipe-browser.js, GH/KH), the Add-From-Library picker
-    // (library-picker.js, GH/KH), and the library detail modal (GH/KH/TDS).
-    recipeMetricsSummary?: (recipe: {
-      calcium?: number | null;
-      magnesium?: number | null;
-      alkalinity?: number | null;
-      potassium?: number | null;
-      sodium?: number | null;
-      sulfate?: number | null;
-      chloride?: number | null;
-      bicarbonate?: number | null;
-    }) => { gh: number; kh: number; tds: number };
     // Public API exposed from sync.js via `window.name = ...` at the bottom
     // of the IIFE.
     scheduleSyncToCloud?: () => void;

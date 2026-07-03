@@ -1,6 +1,6 @@
 // Vitest configuration for Cafelytic unit tests.
 // CommonJS — matches the default package.json (no "type": "module").
-// Tests run in Node (no DOM needed for pure-logic files like metrics.js).
+// Tests run in Node (no DOM needed for pure-logic modules like src/lib/metrics.ts).
 module.exports = {
   test: {
     environment: "node",

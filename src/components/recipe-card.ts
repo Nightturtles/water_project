@@ -19,6 +19,8 @@
 // scripts (script.js and the taste.html inline script) can call it without an
 // import. Pulled in via the bare side-effect import in src/lib/legacy-globals.ts.
 
+import { recipeMetricsSummary } from "../lib/metrics";
+
 export interface SlimRecipe {
   label?: string;
   calcium?: number | null;
@@ -72,13 +74,12 @@ function formatMethodRoast(recipe: SlimRecipe): string {
 }
 
 // GH / KH summary row (replaces the raw Ca/Mg/Alk triplet). Values come from
-// metrics.js's recipeMetricsSummary, bridged on window: GH from Ca + Mg, KH
-// from alkalinity, both as mg/L CaCO3. Reuses the .rx-mineral-* classes, so a
-// pair renders with the same styling the triplet used.
+// metrics' recipeMetricsSummary: GH from Ca + Mg, KH from alkalinity, both as
+// mg/L CaCO3. Reuses the .rx-mineral-* classes, so a pair renders with the
+// same styling the triplet used.
 function hardnessRow(recipe: SlimRecipe): HTMLElement {
   const wrap = el("div", "rx-mineral-triplet");
-  const summary =
-    typeof window.recipeMetricsSummary === "function" ? window.recipeMetricsSummary(recipe) : null;
+  const summary = recipeMetricsSummary(recipe);
   const pairs: Array<{ label: string; value: number | null }> = [
     { label: "GH", value: summary ? summary.gh : null },
     { label: "KH", value: summary ? summary.kh : null },

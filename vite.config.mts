@@ -82,10 +82,11 @@ export default defineConfig({
           // tooling/test files that must not ship.
           // storage.js and sync.js (PR d), ui-shared.js + login-modal.js
           // (PR e), supabase-client.js + sentry-init.js (PR h),
-          // analytics-init.js (Phase 3), and constants.js were moved under
-          // src/{lib,components}/*.ts and are now bundled via the
+          // analytics-init.js (Phase 3), and constants.js + metrics.js were
+          // moved under src/{lib,components}/*.ts and are now bundled via the
           // legacy-globals.ts module entry; the explicit exclusions here
-          // document that root-level copies must never ship.
+          // document that root-level copies must never ship. Only
+          // theme-init.js (the permanent classic) still copies through.
           src: [
             "*.js",
             "!vite.config.*",
@@ -100,6 +101,7 @@ export default defineConfig({
             "!sentry-init.js",
             "!analytics-init.js",
             "!constants.js",
+            "!metrics.js",
           ],
           dest: ".",
         },

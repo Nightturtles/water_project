@@ -1,18 +1,59 @@
-// @ts-check
 // ============================================
 // Metrics — water chemistry calculations
 // ============================================
-// Shared types and cross-file globals live in globals.d.ts
-// (IonName, IonMap, MineralEntry, DerivedMetrics, MineralGrams, etc.).
+// Constants and storage helpers come in by ES import; DerivedMetrics and
+// MineralGrams are defined and exported here. Published onto window via
+// legacy-globals.ts (Object.assign) for the inline page scripts
+// (recipe/taste/minerals DOMContentLoaded blocks) and e2e page-context reads.
+
+import {
+  MINERAL_DB,
+  MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+  ION_FIELDS,
+  CA_TO_CACO3,
+  MG_TO_CACO3,
+  HCO3_TO_CACO3,
+  CACO3_TO_HCO3,
+  ALK_TO_BAKING_SODA,
+  ALK_TO_POTASSIUM_BICARB,
+  WATER_PROFILE_RANGE_BANDS,
+  RANGE_SEVERITY_ORDER,
+} from "./constants";
+import type { IonName, IonMap, TargetProfile } from "./constants";
+import {
+  getEffectiveCalciumSources,
+  getEffectiveMagnesiumSources,
+  getEffectiveAlkalinitySources,
+  getEffectiveCalciumSource,
+  getEffectiveMagnesiumSource,
+  getEffectiveAlkalinitySource,
+  getSourceWaterByPreset,
+  loadSourcePresetName,
+  loadBrewMethod,
+  computeStockMineralGramsPerL,
+} from "./storage";
+import type { StockConcentrateSpec } from "./storage";
+
+/** Headline water metrics: GH / KH as mg/L CaCO3, TDS as mg/L. */
+export interface DerivedMetrics {
+  /** General hardness as CaCO3 (mg/L). */
+  gh: number;
+  /** Carbonate hardness / alkalinity as CaCO3 (mg/L). */
+  kh: number;
+  /** Total dissolved solids — sum of contributing ions (mg/L). */
+  tds: number;
+}
+
+/** Grams of each mineral salt, keyed by MINERAL_DB id. */
+export type MineralGrams = Record<string, number>;
+
+type Severity = "danger" | "warn" | "info";
 
 /**
  * Convert grams-per-liter of mineral salts into ion concentrations (mg/L).
- * @param {MineralGrams} mineralGrams
- * @returns {Record<IonName, number>}
  */
-function calculateIonPPMs(mineralGrams) {
-  /** @type {Record<IonName, number>} */
-  const ions = {
+export function calculateIonPPMs(mineralGrams: MineralGrams): Record<IonName, number> {
+  const ions: Record<IonName, number> = {
     calcium: 0,
     magnesium: 0,
     potassium: 0,
@@ -26,7 +67,7 @@ function calculateIonPPMs(mineralGrams) {
     const mineral = MINERAL_DB[mineralId];
     if (!mineral) continue;
     for (const [ion, fraction] of Object.entries(mineral.ions)) {
-      const key = /** @type {IonName} */ (ion);
+      const key = ion as IonName;
       const frac = fraction ?? 0;
       ions[key] += grams * frac * 1000; // g/L * fraction * 1000 = mg/L
     }
@@ -37,10 +78,8 @@ function calculateIonPPMs(mineralGrams) {
 
 /**
  * Compute GH / KH / TDS from an ion map (CaCO3-equivalent for GH and KH).
- * @param {IonMap} ions
- * @returns {DerivedMetrics}
  */
-function calculateMetrics(ions) {
+export function calculateMetrics(ions: IonMap): DerivedMetrics {
   const gh = (ions.calcium || 0) * CA_TO_CACO3 + (ions.magnesium || 0) * MG_TO_CACO3;
   const kh = (ions.bicarbonate || 0) * HCO3_TO_CACO3;
   const tds =
@@ -63,21 +102,28 @@ function calculateMetrics(ions) {
  * bicarbonate-only rows report a correct KH. TDS is the sum of all
  * ion concentrations, matching calculateMetrics. Used by the slim cards (GH/KH)
  * and the library detail modal (GH/KH/TDS).
- * @param {{ calcium?: number | null, magnesium?: number | null, alkalinity?: number | null, potassium?: number | null, sodium?: number | null, sulfate?: number | null, chloride?: number | null, bicarbonate?: number | null }} [recipe]
- * @returns {{ gh: number, kh: number, tds: number }}
  */
-function recipeMetricsSummary(recipe) {
+export function recipeMetricsSummary(recipe?: {
+  calcium?: number | null;
+  magnesium?: number | null;
+  alkalinity?: number | null;
+  potassium?: number | null;
+  sodium?: number | null;
+  sulfate?: number | null;
+  chloride?: number | null;
+  bicarbonate?: number | null;
+}): { gh: number; kh: number; tds: number } {
   recipe = recipe || {};
-  var gh =
+  const gh =
     (Number(recipe.calcium) || 0) * CA_TO_CACO3 + (Number(recipe.magnesium) || 0) * MG_TO_CACO3;
   // Prefer alkalinity (already CaCO3 = KH); fall back to deriving KH from
   // bicarbonate when alkalinity is absent, mirroring calculateMetrics.
-  var alk = Number(recipe.alkalinity);
-  var kh =
+  const alk = Number(recipe.alkalinity);
+  const kh =
     recipe.alkalinity != null && Number.isFinite(alk)
       ? alk
       : (Number(recipe.bicarbonate) || 0) * HCO3_TO_CACO3;
-  var tds =
+  const tds =
     (Number(recipe.calcium) || 0) +
     (Number(recipe.magnesium) || 0) +
     (Number(recipe.potassium) || 0) +
@@ -88,32 +134,23 @@ function recipeMetricsSummary(recipe) {
   return { gh: Math.round(gh), kh: Math.round(kh), tds: Math.round(tds) };
 }
 
-if (typeof window !== "undefined") {
-  // Bridge to window so the bundled ES module src/components/recipe-card.ts
-  // (slim cards) can reach it; the classic UI scripts (recipe-browser.js,
-  // library-picker.js) read window.recipeMetricsSummary the same way.
-  window.recipeMetricsSummary = recipeMetricsSummary;
-}
-
 /**
- * @param {unknown} ions — defensive; accepts partial/malformed inputs from storage.
- * @returns {number | null}
+ * SO4:Cl ratio, or null when chloride is absent/zero.
+ * Defensive; accepts partial/malformed inputs from storage.
  */
-function calculateSo4ClRatio(ions) {
+export function calculateSo4ClRatio(ions: unknown): number | null {
   if (!ions || typeof ions !== "object") return null;
-  const ionRecord = /** @type {Record<string, unknown>} */ (ions);
+  const ionRecord = ions as Record<string, unknown>;
   const sulfate = Number(ionRecord.sulfate);
   const chloride = Number(ionRecord.chloride);
   if (!Number.isFinite(sulfate) || !Number.isFinite(chloride) || chloride <= 0) return null;
   return sulfate / chloride;
 }
 
-/**
- * @param {number | string | null | undefined} alkAsCaCO3
- * @param {number | string | null | undefined} existingBicarbonate
- * @returns {number}
- */
-function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
+export function toStableBicarbonateFromAlkalinity(
+  alkAsCaCO3: number | string | null | undefined,
+  existingBicarbonate: number | string | null | undefined,
+): number {
   const alkRounded = Math.round(parseFloat(String(alkAsCaCO3 ?? "")) || 0);
   const candidate = Math.round(alkRounded * CACO3_TO_HCO3 * 10) / 10;
   const existing = Math.round((parseFloat(String(existingBicarbonate ?? "")) || 0) * 10) / 10;
@@ -127,13 +164,13 @@ function toStableBicarbonateFromAlkalinity(alkAsCaCO3, existingBicarbonate) {
 /**
  * Pick the Ca/Mg salt combination whose side-effect ion additions best match
  * the target's chloride/sulfate.
- * @param {IonMap} sourceWater
- * @param {TargetProfile | null | undefined} targetProfile
- * @param {number} deltaCa
- * @param {number} deltaMg
- * @returns {{ caSource: string | null, mgSource: string | null }}
  */
-function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
+export function pickBestCaMgSources(
+  sourceWater: IonMap,
+  targetProfile: Partial<TargetProfile> | Partial<Record<IonName, number>> | null | undefined,
+  deltaCa: number,
+  deltaMg: number,
+): { caSource: string | null; mgSource: string | null } {
   const caSources = getEffectiveCalciumSources();
   const mgSources = getEffectiveMagnesiumSources();
   // caSources/mgSources are already empty arrays when no sources are enabled,
@@ -170,18 +207,15 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
   const srcCl = (sourceWater && Number(sourceWater.chloride)) || 0;
   const srcSO4 = (sourceWater && Number(sourceWater.sulfate)) || 0;
 
-  /** @type {{ caSource: string | null, mgSource: string | null, error: number, tieBreak: number }} */
-  let best = { caSource: null, mgSource: null, error: Infinity, tieBreak: Infinity };
+  let best: { caSource: string | null; mgSource: string | null; error: number; tieBreak: number } =
+    { caSource: null, mgSource: null, error: Infinity, tieBreak: Infinity };
 
-  /** @type {(string | null)[]} */
-  const caOpts = caCandidates.length ? caCandidates : [null];
-  /** @type {(string | null)[]} */
-  const mgOpts = mgCandidates.length ? mgCandidates : [null];
+  const caOpts: (string | null)[] = caCandidates.length ? caCandidates : [null];
+  const mgOpts: (string | null)[] = mgCandidates.length ? mgCandidates : [null];
 
   for (const caSrc of caOpts) {
     for (const mgSrc of mgOpts) {
-      /** @type {MineralGrams} */
-      const mineralGrams = {};
+      const mineralGrams: MineralGrams = {};
       if (caSrc && deltaCa > 0) {
         const caFrac =
           MINERAL_DB[caSrc] && MINERAL_DB[caSrc].ions ? (MINERAL_DB[caSrc].ions.calcium ?? 0) : 0;
@@ -193,8 +227,7 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
         if (mgFrac > 0) mineralGrams[mgSrc] = deltaMg / 1000 / mgFrac;
       }
       const added = calculateIonPPMs(mineralGrams);
-      /** @type {Record<IonName, number>} */
-      const result = {
+      const result: Record<IonName, number> = {
         calcium: 0,
         magnesium: 0,
         potassium: 0,
@@ -229,19 +262,21 @@ function pickBestCaMgSources(sourceWater, targetProfile, deltaCa, deltaMg) {
   };
 }
 
-/**
- * @param {IonMap | null | undefined} ions
- * @param {{
- *   includeAdvanced?: boolean,
- *   alkalinitySources?: string[],
- *   calciumSource?: string | null,
- *   magnesiumSource?: string | null,
- *   brewMethod?: string | null,
- * }} [options]
- */
-function evaluateWaterProfileRanges(ions, options = {}) {
-  /** @type {Record<IonName, number>} */
-  const normalized = {
+export function evaluateWaterProfileRanges(
+  ions: IonMap | null | undefined,
+  options: {
+    includeAdvanced?: boolean;
+    alkalinitySources?: string[];
+    calciumSource?: string | null;
+    magnesiumSource?: string | null;
+    brewMethod?: string | null;
+  } = {},
+): {
+  findings: { severity: Severity; message: string }[];
+  metrics: DerivedMetrics;
+  ratio: number | null;
+} {
+  const normalized: Record<IonName, number> = {
     calcium: 0,
     magnesium: 0,
     potassium: 0,
@@ -270,48 +305,29 @@ function evaluateWaterProfileRanges(ions, options = {}) {
     options.magnesiumSource !== undefined ? options.magnesiumSource : getEffectiveMagnesiumSource();
   const brewMethod = options.brewMethod === "espresso" ? "espresso" : "filter";
   const methodBands = WATER_PROFILE_RANGE_BANDS[brewMethod] || WATER_PROFILE_RANGE_BANDS.filter;
-  /** @typedef {"danger" | "warn" | "info"} Severity */
-  /** @type {{ severity: Severity, message: string }[]} */
-  const findings = [];
+  const findings: { severity: Severity; message: string }[] = [];
 
-  /** @param {Severity} severity @param {string} message */
-  function addFinding(severity, message) {
+  function addFinding(severity: Severity, message: string) {
     findings.push({ severity, message });
   }
 
-  /**
-   * @param {number | null} min
-   * @param {number | null} max
-   * @param {string} [unit]
-   */
-  function formatBand(min, max, unit) {
+  function formatBand(min: number | null, max: number | null, unit?: string) {
     if (min != null && max != null) return `${min}-${max}${unit ? " " + unit : ""}`;
     if (min != null) return `>=${min}${unit ? " " + unit : ""}`;
     if (max != null) return `<=${max}${unit ? " " + unit : ""}`;
     return "n/a";
   }
 
-  /**
-   * @param {string} label
-   * @param {number} value
-   * @param {string} unit
-   * @param {number | null} preferredMin
-   * @param {number | null} preferredMax
-   * @param {number | null} warnMin
-   * @param {number | null} warnMax
-   * @param {number | null} dangerMin
-   * @param {number | null} dangerMax
-   */
   function addBandFinding(
-    label,
-    value,
-    unit,
-    preferredMin,
-    preferredMax,
-    warnMin,
-    warnMax,
-    dangerMin,
-    dangerMax,
+    label: string,
+    value: number,
+    unit: string,
+    preferredMin: number | null,
+    preferredMax: number | null,
+    warnMin: number | null,
+    warnMax: number | null,
+    dangerMin: number | null,
+    dangerMax: number | null,
   ) {
     if (!Number.isFinite(value)) return;
     const rounded = Math.round(value * 10) / 10;
@@ -338,20 +354,19 @@ function evaluateWaterProfileRanges(ions, options = {}) {
     }
   }
 
-  /**
-   * @param {string} label
-   * @param {number} value
-   * @param {string} unit
-   * @param {{
-   *   preferredMin?: number | null,
-   *   preferredMax?: number | null,
-   *   warnMin?: number | null,
-   *   warnMax?: number | null,
-   *   dangerMin?: number | null,
-   *   dangerMax?: number | null,
-   * }} band
-   */
-  function addBandFindingFromConfig(label, value, unit, band) {
+  function addBandFindingFromConfig(
+    label: string,
+    value: number,
+    unit: string,
+    band: {
+      preferredMin?: number | null;
+      preferredMax?: number | null;
+      warnMin?: number | null;
+      warnMax?: number | null;
+      dangerMin?: number | null;
+      dangerMax?: number | null;
+    },
+  ) {
     if (!band) return;
     addBandFinding(
       label,
@@ -440,16 +455,13 @@ function evaluateWaterProfileRanges(ions, options = {}) {
   return { findings, metrics, ratio };
 }
 
-/**
- * @param {string[]} alkalinitySources
- * @param {number} deltaAlkAsCaCO3
- * @param {IonMap | null | undefined} sourceWater
- * @param {TargetProfile | null | undefined} targetProfile
- * @returns {Record<string, number>}
- */
-function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, targetProfile) {
-  /** @type {Record<string, number>} */
-  var result = {};
+export function splitAlkalinityDelta(
+  alkalinitySources: string[],
+  deltaAlkAsCaCO3: number,
+  sourceWater: IonMap | null | undefined,
+  targetProfile: Partial<TargetProfile> | Partial<Record<IonName, number>> | null | undefined,
+): Record<string, number> {
+  const result: Record<string, number> = {};
   if (alkalinitySources.length === 0) return result;
   if (alkalinitySources.length === 1) {
     const firstSource = alkalinitySources[0];
@@ -457,25 +469,25 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
     return result;
   }
   // Both baking-soda and potassium-bicarbonate enabled: split by target sodium vs potassium if present
-  var targetNa =
+  const targetNa =
     targetProfile && Number.isFinite(Number(targetProfile.sodium))
       ? Number(targetProfile.sodium)
       : null;
-  var targetK =
+  const targetK =
     targetProfile && Number.isFinite(Number(targetProfile.potassium))
       ? Number(targetProfile.potassium)
       : null;
-  var sourceNa =
+  const sourceNa =
     sourceWater && Number.isFinite(Number(sourceWater.sodium)) ? Number(sourceWater.sodium) : 0;
-  var sourceK =
+  const sourceK =
     sourceWater && Number.isFinite(Number(sourceWater.potassium))
       ? Number(sourceWater.potassium)
       : 0;
-  var deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
-  var deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
+  const deltaNa = targetNa != null ? Math.max(0, targetNa - sourceNa) : 0;
+  const deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
 
   if (deltaNa > 0 && deltaK > 0) {
-    var total = deltaNa + deltaK;
+    const total = deltaNa + deltaK;
     result["baking-soda"] = (deltaAlkAsCaCO3 * deltaNa) / total;
     result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * deltaK) / total;
   } else if (deltaNa > 0) {
@@ -504,37 +516,42 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
  *      src/lib/constants.ts) is exceeded by even modest Ca
  *      targets at concentrate strengths.
  *   4. Residual K → potassium-chloride; residual Na → sodium-chloride.
- *
- * @param {Partial<Record<IonName, number | string | null | undefined>> | null | undefined} target
- * @param {{ bottleMl?: number, doseGramsPerL?: number, calciumChlorideId?: "calcium-chloride" | "calcium-chloride-anhydrous" }} [options]
- * @returns {{ bottleMl: number, doseGramsPerL: number, minerals: Array<{ mineralId: string, grams: number }>, notes: string[] }}
  */
-function deriveStockFormulaFromTarget(target, options) {
+export function deriveStockFormulaFromTarget(
+  target:
+    | TargetProfile
+    | Partial<Record<IonName, number | string | null | undefined>>
+    | null
+    | undefined,
+  options?: { bottleMl?: number; doseGramsPerL?: number; calciumChlorideId?: string },
+): {
+  bottleMl: number;
+  doseGramsPerL: number;
+  minerals: Array<{ mineralId: string; grams: number }>;
+  notes: string[];
+} {
   options = options || {};
-  var bottleMl = Number(options.bottleMl);
-  var doseGramsPerL = Number(options.doseGramsPerL);
+  let bottleMl = Number(options.bottleMl);
+  let doseGramsPerL = Number(options.doseGramsPerL);
   if (!Number.isFinite(bottleMl) || bottleMl <= 0) bottleMl = 200;
   if (!Number.isFinite(doseGramsPerL) || doseGramsPerL <= 0) doseGramsPerL = 4;
 
-  /** @type {string[]} */
-  var notes = [];
-  /** @type {Array<{ mineralId: string, grams: number }>} */
-  var minerals = [];
+  const notes: string[] = [];
+  let minerals: Array<{ mineralId: string; grams: number }> = [];
 
-  /** @param {string} field */
-  function num(field) {
+  function num(field: string) {
     if (!target) return 0;
-    var v = Number(/** @type {Record<string, unknown>} */ (target)[field]);
+    const v = Number((target as Record<string, unknown>)[field]);
     return Number.isFinite(v) && v > 0 ? v : 0;
   }
 
-  var tCa = num("calcium");
-  var tMg = num("magnesium");
-  var tK = num("potassium");
-  var tNa = num("sodium");
-  var tSO4 = num("sulfate");
-  var tCl = num("chloride");
-  var tHCO3 = num("bicarbonate");
+  const tCa = num("calcium");
+  const tMg = num("magnesium");
+  const tK = num("potassium");
+  const tNa = num("sodium");
+  const tSO4 = num("sulfate");
+  const tCl = num("chloride");
+  const tHCO3 = num("bicarbonate");
 
   if (tCa + tMg + tK + tNa + tSO4 + tCl + tHCO3 === 0) {
     notes.push("Distilled / RO target: no minerals to derive.");
@@ -544,15 +561,10 @@ function deriveStockFormulaFromTarget(target, options) {
   // grams of salt to put in the bottle so that dosing at doseGramsPerL produces
   // mgPerL of the target ion in brew water:
   //   grams = (mgPerL × bottleMl) / (1000 × ion_fraction × doseGramsPerL)
-  /**
-   * @param {string} mineralId
-   * @param {string} ionName
-   * @param {number} mgPerL
-   */
-  function gramsForIon(mineralId, ionName, mgPerL) {
-    var entry = MINERAL_DB[mineralId];
+  function gramsForIon(mineralId: string, ionName: string, mgPerL: number) {
+    const entry = MINERAL_DB[mineralId];
     if (!entry || !entry.ions) return 0;
-    var frac = /** @type {Record<string, number | undefined>} */ (entry.ions)[ionName] || 0;
+    const frac = (entry.ions as Record<string, number | undefined>)[ionName] || 0;
     if (frac <= 0 || mgPerL <= 0) return 0;
     return (mgPerL * bottleMl) / (1000 * frac * doseGramsPerL);
   }
@@ -560,30 +572,31 @@ function deriveStockFormulaFromTarget(target, options) {
   /**
    * mg/L of side-ion produced when the mineral is sized to deliver primaryMgPerL
    * of the primary ion. = primaryMgPerL × (sideFrac / primaryFrac).
-   * @param {string} mineralId
-   * @param {string} primaryIon
-   * @param {number} primaryMgPerL
-   * @param {string} sideIon
    */
-  function sideIonProduced(mineralId, primaryIon, primaryMgPerL, sideIon) {
-    var entry = MINERAL_DB[mineralId];
+  function sideIonProduced(
+    mineralId: string,
+    primaryIon: string,
+    primaryMgPerL: number,
+    sideIon: string,
+  ) {
+    const entry = MINERAL_DB[mineralId];
     if (!entry || !entry.ions) return 0;
-    var ionsRec = /** @type {Record<string, number | undefined>} */ (entry.ions);
-    var primaryFrac = ionsRec[primaryIon] || 0;
-    var sideFrac = ionsRec[sideIon] || 0;
+    const ionsRec = entry.ions as Record<string, number | undefined>;
+    const primaryFrac = ionsRec[primaryIon] || 0;
+    const sideFrac = ionsRec[sideIon] || 0;
     if (primaryFrac <= 0 || sideFrac <= 0 || primaryMgPerL <= 0) return 0;
     return primaryMgPerL * (sideFrac / primaryFrac);
   }
 
-  var producedNa = 0;
-  var producedK = 0;
-  var producedSO4 = 0;
-  var producedCl = 0;
+  let producedNa = 0;
+  let producedK = 0;
+  let producedSO4 = 0;
+  let _producedCl = 0;
 
   // --- 1. Bicarbonate split ---
   if (tHCO3 > 0) {
-    var hcoNa = 0;
-    var hcoK = 0;
+    let hcoNa = 0;
+    let hcoK = 0;
     if (tNa > 0 && tK > 0) {
       // Try sizing each buffer for its respective monovalent target ion. When
       // the recipe's Na/K/HCO3 numbers are internally consistent (the common
@@ -592,21 +605,21 @@ function deriveStockFormulaFromTarget(target, options) {
       // hit both Na and K exactly. Eliminates the K-overshoot the proportional
       // split produced on recipes like Lotus Simple Sweet. Falls back to the
       // proportional split when targets aren't aligned.
-      var bakingDb = MINERAL_DB["baking-soda"];
-      var khcoDb = MINERAL_DB["potassium-bicarbonate"];
-      var bakingNaFrac = (bakingDb && bakingDb.ions && bakingDb.ions.sodium) || 0;
-      var bakingHCO3Frac = (bakingDb && bakingDb.ions && bakingDb.ions.bicarbonate) || 0;
-      var khcoKFrac = (khcoDb && khcoDb.ions && khcoDb.ions.potassium) || 0;
-      var khcoHCO3Frac = (khcoDb && khcoDb.ions && khcoDb.ions.bicarbonate) || 0;
-      var directNaHCO3 = bakingNaFrac > 0 ? tNa * (bakingHCO3Frac / bakingNaFrac) : 0;
-      var directKHCO3 = khcoKFrac > 0 ? tK * (khcoHCO3Frac / khcoKFrac) : 0;
-      var directTotalHCO3 = directNaHCO3 + directKHCO3;
-      var tolerance = Math.max(1, tHCO3 * 0.1);
+      const bakingDb = MINERAL_DB["baking-soda"];
+      const khcoDb = MINERAL_DB["potassium-bicarbonate"];
+      const bakingNaFrac = (bakingDb && bakingDb.ions && bakingDb.ions.sodium) || 0;
+      const bakingHCO3Frac = (bakingDb && bakingDb.ions && bakingDb.ions.bicarbonate) || 0;
+      const khcoKFrac = (khcoDb && khcoDb.ions && khcoDb.ions.potassium) || 0;
+      const khcoHCO3Frac = (khcoDb && khcoDb.ions && khcoDb.ions.bicarbonate) || 0;
+      const directNaHCO3 = bakingNaFrac > 0 ? tNa * (bakingHCO3Frac / bakingNaFrac) : 0;
+      const directKHCO3 = khcoKFrac > 0 ? tK * (khcoHCO3Frac / khcoKFrac) : 0;
+      const directTotalHCO3 = directNaHCO3 + directKHCO3;
+      const tolerance = Math.max(1, tHCO3 * 0.1);
       if (Math.abs(directTotalHCO3 - tHCO3) <= tolerance) {
         hcoNa = directNaHCO3;
         hcoK = directKHCO3;
       } else {
-        var sumNaK = tNa + tK;
+        const sumNaK = tNa + tK;
         hcoNa = (tHCO3 * tNa) / sumNaK;
         hcoK = (tHCO3 * tK) / sumNaK;
       }
@@ -617,14 +630,14 @@ function deriveStockFormulaFromTarget(target, options) {
       hcoK = tHCO3;
     }
     if (hcoNa > 0) {
-      var gBaking = gramsForIon("baking-soda", "bicarbonate", hcoNa);
+      const gBaking = gramsForIon("baking-soda", "bicarbonate", hcoNa);
       if (gBaking > 0) {
         minerals.push({ mineralId: "baking-soda", grams: gBaking });
         producedNa += sideIonProduced("baking-soda", "bicarbonate", hcoNa, "sodium");
       }
     }
     if (hcoK > 0) {
-      var gKHCO3 = gramsForIon("potassium-bicarbonate", "bicarbonate", hcoK);
+      const gKHCO3 = gramsForIon("potassium-bicarbonate", "bicarbonate", hcoK);
       if (gKHCO3 > 0) {
         minerals.push({ mineralId: "potassium-bicarbonate", grams: gKHCO3 });
         producedK += sideIonProduced("potassium-bicarbonate", "bicarbonate", hcoK, "potassium");
@@ -642,7 +655,7 @@ function deriveStockFormulaFromTarget(target, options) {
   // - tSO4 === 0 with tCl > 0: MgCl2 (Mg side matches the recipe's Cl target).
   // - Both > 0: pick by SO4/Cl ratio.
   if (tMg > 0) {
-    var mgPick;
+    let mgPick;
     if (tCl === 0) {
       mgPick = "epsom-salt";
     } else if (tSO4 === 0) {
@@ -652,13 +665,13 @@ function deriveStockFormulaFromTarget(target, options) {
     } else {
       mgPick = "magnesium-chloride";
     }
-    var gMg = gramsForIon(mgPick, "magnesium", tMg);
+    const gMg = gramsForIon(mgPick, "magnesium", tMg);
     if (gMg > 0) {
       minerals.push({ mineralId: mgPick, grams: gMg });
       if (mgPick === "epsom-salt") {
         producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
       } else {
-        producedCl += sideIonProduced("magnesium-chloride", "magnesium", tMg, "chloride");
+        _producedCl += sideIonProduced("magnesium-chloride", "magnesium", tMg, "chloride");
       }
     }
   }
@@ -667,13 +680,12 @@ function deriveStockFormulaFromTarget(target, options) {
   if (tCa > 0) {
     // Both calcium-chloride forms add the same Ca:Cl ratio, so only the gram
     // weight differs. Use whichever form the user has (dihydrate by default).
-    var caForm =
-      typeof getEffectiveCalciumSource === "function" ? getEffectiveCalciumSource() : null;
+    const caForm = getEffectiveCalciumSource();
     // Trust calciumChlorideId only if it names a known CaCl2 form; otherwise
     // fall back to the user's effective source so a bad id can't silently
     // skip calcium addition for a non-zero target.
-    var requestedCaId = options.calciumChlorideId;
-    var caId =
+    const requestedCaId = options.calciumChlorideId;
+    const caId =
       requestedCaId === "calcium-chloride" || requestedCaId === "calcium-chloride-anhydrous"
         ? requestedCaId
         : caForm === "calcium-chloride-anhydrous"
@@ -684,35 +696,35 @@ function deriveStockFormulaFromTarget(target, options) {
         "Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
       );
     }
-    var gCa = gramsForIon(caId, "calcium", tCa);
+    const gCa = gramsForIon(caId, "calcium", tCa);
     if (gCa > 0) {
       minerals.push({ mineralId: caId, grams: gCa });
-      producedCl += sideIonProduced(caId, "calcium", tCa, "chloride");
+      _producedCl += sideIonProduced(caId, "calcium", tCa, "chloride");
     }
   }
 
   // --- 4. Residual K → KCl, residual Na → NaCl ---
-  var residK = Math.max(0, tK - producedK);
-  var residNa = Math.max(0, tNa - producedNa);
+  const residK = Math.max(0, tK - producedK);
+  const residNa = Math.max(0, tNa - producedNa);
   if (residK > 0) {
-    var gKCl = gramsForIon("potassium-chloride", "potassium", residK);
+    const gKCl = gramsForIon("potassium-chloride", "potassium", residK);
     if (gKCl > 0) {
       minerals.push({ mineralId: "potassium-chloride", grams: gKCl });
-      producedCl += sideIonProduced("potassium-chloride", "potassium", residK, "chloride");
+      _producedCl += sideIonProduced("potassium-chloride", "potassium", residK, "chloride");
     }
   }
   if (residNa > 0) {
-    var gNaCl = gramsForIon("sodium-chloride", "sodium", residNa);
+    const gNaCl = gramsForIon("sodium-chloride", "sodium", residNa);
     if (gNaCl > 0) {
       minerals.push({ mineralId: "sodium-chloride", grams: gNaCl });
-      producedCl += sideIonProduced("sodium-chloride", "sodium", residNa, "chloride");
+      _producedCl += sideIonProduced("sodium-chloride", "sodium", residNa, "chloride");
     }
   }
 
   // Leftover SO4 the chosen sources can't supply (no salt in MINERAL_DB
   // produces SO4 except gypsum + epsom; if Mg is on Cl side, we'd need gypsum
   // to fill in, which isn't viable here).
-  var residSO4 = tSO4 - producedSO4;
+  const residSO4 = tSO4 - producedSO4;
   if (residSO4 > 1) {
     notes.push(
       "Target sulfate of " +
@@ -733,28 +745,23 @@ function deriveStockFormulaFromTarget(target, options) {
     });
 
   // Solubility check on bottle concentration (g/L) of each rounded entry.
-  if (typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX !== "undefined") {
-    var solubility = /** @type {Record<string, number | undefined>} */ (
-      MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
-    );
-    minerals.forEach(function (m) {
-      var cap = solubility[m.mineralId];
-      if (!cap) return;
-      var concentrationGperL = m.grams / (bottleMl / 1000);
-      if (concentrationGperL > cap) {
-        var entry = MINERAL_DB[m.mineralId];
-        var name = (entry && entry.name) || m.mineralId;
-        notes.push(
-          name +
-            " in bottle (" +
-            concentrationGperL.toFixed(1) +
-            " g/L) exceeds approximate solubility (" +
-            cap +
-            " g/L); try a larger bottle or lower dose.",
-        );
-      }
-    });
-  }
+  minerals.forEach(function (m) {
+    const cap = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[m.mineralId];
+    if (!cap) return;
+    const concentrationGperL = m.grams / (bottleMl / 1000);
+    if (concentrationGperL > cap) {
+      const entry = MINERAL_DB[m.mineralId];
+      const name = (entry && entry.name) || m.mineralId;
+      notes.push(
+        name +
+          " in bottle (" +
+          concentrationGperL.toFixed(1) +
+          " g/L) exceeds approximate solubility (" +
+          cap +
+          " g/L); try a larger bottle or lower dose.",
+      );
+    }
+  });
 
   return { bottleMl: bottleMl, doseGramsPerL: doseGramsPerL, minerals: minerals, notes: notes };
 }
@@ -762,19 +769,17 @@ function deriveStockFormulaFromTarget(target, options) {
 /**
  * Compute the full 7-ion profile from a Ca/Mg/Alk target. Uses the same
  * pickBestCaMgSources and splitAlkalinityDelta logic as the Calculator so ion
- * math stays consistent across pages.
- * @param {TargetProfile} target
- * @returns {Record<IonName, number>}
+ * math stays consistent across pages. Accepts any TargetProfile subset — only
+ * the ion fields and alkalinity are read.
  */
-function computeFullProfile(target) {
-  var hasExplicitIons =
+export function computeFullProfile(target: Partial<TargetProfile>): Record<IonName, number> {
+  const hasExplicitIons =
     target &&
     ION_FIELDS.every(function (ion) {
       return Number.isFinite(Number(target[ion]));
     });
   if (hasExplicitIons) {
-    /** @type {Record<IonName, number>} */
-    var explicit = {
+    const explicit: Record<IonName, number> = {
       calcium: 0,
       magnesium: 0,
       potassium: 0,
@@ -789,30 +794,30 @@ function computeFullProfile(target) {
     return explicit;
   }
 
-  var sourceWater = getSourceWaterByPreset(loadSourcePresetName());
-  var alkalinitySources = getEffectiveAlkalinitySources();
+  const sourceWater = getSourceWaterByPreset(loadSourcePresetName());
+  const alkalinitySources = getEffectiveAlkalinitySources();
 
-  var sourceAlk = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
-  var deltaCa = Math.max(0, (target.calcium || 0) - (sourceWater.calcium || 0));
-  var deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
-  var deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
+  const sourceAlk = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
+  const deltaCa = Math.max(0, (target.calcium || 0) - (sourceWater.calcium || 0));
+  const deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
+  const deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
 
   // Use same Ca/Mg source optimization as Calculator
-  var picked = pickBestCaMgSources(sourceWater, target, deltaCa, deltaMg);
-  var caSource = picked.caSource;
-  var mgSource = picked.mgSource;
+  const picked = pickBestCaMgSources(sourceWater, target, deltaCa, deltaMg);
+  const caSource = picked.caSource;
+  const mgSource = picked.mgSource;
 
   const caEntry = caSource ? MINERAL_DB[caSource] : null;
   const mgEntry = mgSource ? MINERAL_DB[mgSource] : null;
-  var caFraction = caEntry ? caEntry.ions.calcium || 0 : 0;
-  var mgFraction = mgEntry ? mgEntry.ions.magnesium || 0 : 0;
-  var mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
-  var mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
+  const caFraction = caEntry ? caEntry.ions.calcium || 0 : 0;
+  const mgFraction = mgEntry ? mgEntry.ions.magnesium || 0 : 0;
+  const mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
+  const mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
 
   // Use same alkalinity split logic as Calculator
-  var alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlk, sourceWater, target);
+  const alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlk, sourceWater, target);
 
-  var result = {
+  const result: Record<IonName, number> = {
     calcium: sourceWater.calcium || 0,
     magnesium: sourceWater.magnesium || 0,
     potassium: sourceWater.potassium || 0,
@@ -825,7 +830,7 @@ function computeFullProfile(target) {
   const caMineral = caSource ? MINERAL_DB[caSource] : null;
   if (caMineral && mgL_caSalt > 0) {
     for (const [ionCa, frac] of Object.entries(caMineral.ions)) {
-      const key = /** @type {IonName} */ (ionCa);
+      const key = ionCa as IonName;
       result[key] += mgL_caSalt * (frac ?? 0);
     }
   }
@@ -833,24 +838,24 @@ function computeFullProfile(target) {
   const mgMineral = mgSource ? MINERAL_DB[mgSource] : null;
   if (mgMineral && mgL_mgSalt > 0) {
     for (const [ionMg, frac] of Object.entries(mgMineral.ions)) {
-      const key = /** @type {IonName} */ (ionMg);
+      const key = ionMg as IonName;
       result[key] += mgL_mgSalt * (frac ?? 0);
     }
   }
 
   // Apply each alkalinity source from the split allocation
-  /** @type {const} */ (["baking-soda", "potassium-bicarbonate"]).forEach(function (alkId) {
-    var alkDelta = alkAllocation[alkId];
+  (["baking-soda", "potassium-bicarbonate"] as const).forEach(function (alkId) {
+    const alkDelta = alkAllocation[alkId];
     const alkMineral = MINERAL_DB[alkId];
     if (!alkDelta || alkDelta <= 0 || !alkMineral) return;
-    var mgL_buffer;
+    let mgL_buffer;
     if (alkId === "potassium-bicarbonate") {
       mgL_buffer = alkDelta * ALK_TO_POTASSIUM_BICARB;
     } else {
       mgL_buffer = alkDelta * ALK_TO_BAKING_SODA;
     }
     for (const [ionAlk, frac] of Object.entries(alkMineral.ions)) {
-      const key = /** @type {IonName} */ (ionAlk);
+      const key = ionAlk as IonName;
       result[key] += mgL_buffer * (frac ?? 0);
     }
   });
@@ -864,12 +869,13 @@ function computeFullProfile(target) {
 /**
  * Build a stored target profile from ions. Kept consistent across pages so
  * round-trip reads/writes don't drift.
- * @param {string} label
- * @param {Record<string, number | string | undefined | null>} ions
- * @param {string | null | undefined} description
- * @param {{ brewMethod?: string, alkalinity?: number | null }} [options]
  */
-function buildStoredTargetProfile(label, ions, description, options) {
+export function buildStoredTargetProfile(
+  label: string,
+  ions: Record<string, number | string | undefined | null>,
+  description?: string | null,
+  options?: { brewMethod?: string; alkalinity?: number | null },
+): TargetProfile {
   options = options || {};
   const brewMethod =
     options.brewMethod === "espresso"
@@ -877,8 +883,7 @@ function buildStoredTargetProfile(label, ions, description, options) {
       : options.brewMethod === "filter"
         ? "filter"
         : loadBrewMethod();
-  /** @type {Record<IonName, number>} */
-  const normalized = {
+  const normalized: Record<IonName, number> = {
     calcium: 0,
     magnesium: 0,
     potassium: 0,
@@ -917,19 +922,14 @@ function buildStoredTargetProfile(label, ions, description, options) {
  * across all Recipe Concentrates, Mineral Concentrates, and manual inputs)
  * would precipitate out. Per-Recipe-Concentrate solubility checks in Settings
  * are unchanged; this is the combined-in-brew-water check.
- * @param {Record<string, number> | null | undefined} mineralGramsPerLiter
- * @returns {string[]}
  */
-function getRecipeOverLimitMineralIds(mineralGramsPerLiter) {
-  /** @type {string[]} */
-  const out = [];
+export function getRecipeOverLimitMineralIds(
+  mineralGramsPerLiter: Record<string, number> | null | undefined,
+): string[] {
+  const out: string[] = [];
   if (!mineralGramsPerLiter || typeof mineralGramsPerLiter !== "object") return out;
-  if (typeof MINERAL_SOLUBILITY_G_PER_L_25C_APPROX === "undefined") return out;
-  const solubility = /** @type {Record<string, number | undefined>} */ (
-    MINERAL_SOLUBILITY_G_PER_L_25C_APPROX
-  );
   for (const [mineralId, gPerLraw] of Object.entries(mineralGramsPerLiter)) {
-    const cap = solubility[mineralId];
+    const cap = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[mineralId];
     if (!Number.isFinite(cap) || cap == null || cap <= 0) continue;
     const gPerL = Number(gPerLraw);
     if (!Number.isFinite(gPerL) || gPerL <= 0) continue;
@@ -961,19 +961,15 @@ function getRecipeOverLimitMineralIds(mineralGramsPerLiter) {
 
 /**
  * Transpose an m×n matrix to n×m.
- * @param {number[][]} A
- * @returns {number[][]}
  */
-function _matTranspose(A) {
+function _matTranspose(A: number[][]): number[][] {
   if (!A || A.length === 0) return [];
   const m = A.length;
   const firstRow = A[0];
   const n = firstRow ? firstRow.length : 0;
-  /** @type {number[][]} */
-  const out = [];
+  const out: number[][] = [];
   for (let j = 0; j < n; j++) {
-    /** @type {number[]} */
-    const row = [];
+    const row: number[] = [];
     for (let i = 0; i < m; i++) {
       const ai = A[i];
       row.push((ai && ai[j]) || 0);
@@ -985,20 +981,15 @@ function _matTranspose(A) {
 
 /**
  * Multiply matrix A (m×n) by matrix B (n×p), returning an m×p matrix.
- * @param {number[][]} A
- * @param {number[][]} B
- * @returns {number[][]}
  */
-function _matMul(A, B) {
+function _matMul(A: number[][], B: number[][]): number[][] {
   const m = A.length;
   const n = A[0]?.length || 0;
   const p = B[0]?.length || 0;
-  /** @type {number[][]} */
-  const out = [];
+  const out: number[][] = [];
   for (let i = 0; i < m; i++) {
     const rowA = A[i];
-    /** @type {number[]} */
-    const row = new Array(p).fill(0);
+    const row: number[] = new Array(p).fill(0);
     if (!rowA) {
       out.push(row);
       continue;
@@ -1017,15 +1008,11 @@ function _matMul(A, B) {
 
 /**
  * Multiply matrix A (m×n) by vector x (n), returning a vector of length m.
- * @param {number[][]} A
- * @param {number[]} x
- * @returns {number[]}
  */
-function _matVec(A, x) {
+function _matVec(A: number[][], x: number[]): number[] {
   const m = A.length;
   const n = A[0]?.length || 0;
-  /** @type {number[]} */
-  const out = new Array(m).fill(0);
+  const out: number[] = new Array(m).fill(0);
   for (let i = 0; i < m; i++) {
     const row = A[i];
     if (!row) continue;
@@ -1040,18 +1027,14 @@ function _matVec(A, x) {
  * Solve an n×n linear system Mx = c via Gaussian elimination with partial
  * pivoting. Returns null if the system is singular (no unique solution).
  * Mutates copies of M and c; the inputs are not modified.
- * @param {number[][]} M
- * @param {number[]} c
- * @returns {number[] | null}
  */
-function _solveLinear(M, c) {
+function _solveLinear(M: number[][], c: number[]): number[] | null {
   const n = M.length;
   if (n === 0) return [];
   // Build augmented matrix [M | c] working copies. Defensive about undefined
   // entries even though callers pass dense matrices — TS strict-index-access
   // can't prove that from inside.
-  /** @type {number[][]} */
-  const aug = M.map((row, i) => (row || []).concat([c[i] || 0]));
+  const aug: number[][] = M.map((row, i) => (row || []).concat([c[i] || 0]));
   for (let col = 0; col < n; col++) {
     // Pivot on the row with the largest absolute value in this column.
     let pivot = col;
@@ -1087,8 +1070,7 @@ function _solveLinear(M, c) {
     }
   }
   // Back-substitute.
-  /** @type {number[]} */
-  const x = new Array(n).fill(0);
+  const x: number[] = new Array(n).fill(0);
   for (let row = n - 1; row >= 0; row--) {
     const augRow = aug[row];
     if (!augRow) continue;
@@ -1108,21 +1090,19 @@ function _solveLinear(M, c) {
  * value is negative (clamp to 0), and re-solve. Converges in O(n) iterations
  * for the small problems the calculator generates.
  *
- * @param {number[][]} A — m×n matrix
- * @param {number[]} b — m-vector
- * @returns {number[]} x — n-vector, all entries ≥ 0
+ * @param A — m×n matrix
+ * @param b — m-vector
+ * @returns x — n-vector, all entries ≥ 0
  */
-function solveNNLS(A, b) {
+export function solveNNLS(A: number[][], b: number[]): number[] {
   if (!A || A.length === 0) return [];
   const n = A[0]?.length || 0;
   if (n === 0) return [];
 
-  /** @type {Set<number>} */
-  const active = new Set();
+  const active = new Set<number>();
   for (let j = 0; j < n; j++) active.add(j);
 
-  /** @type {number[]} */
-  const x = new Array(n).fill(0);
+  const x: number[] = new Array(n).fill(0);
 
   // Cap iterations defensively — convergence is fast for well-posed
   // problems but a malformed input shouldn't hang the UI.
@@ -1131,8 +1111,7 @@ function solveNNLS(A, b) {
     if (activeIdx.length === 0) break;
 
     // Build A_active: m × |active| by picking columns.
-    /** @type {number[][]} */
-    const A_active = A.map((row) => activeIdx.map((j) => (row && row[j]) || 0));
+    const A_active: number[][] = A.map((row) => activeIdx.map((j) => (row && row[j]) || 0));
     const At = _matTranspose(A_active);
     const AtA = _matMul(At, A_active);
     const Atb = _matVec(At, b);
@@ -1181,25 +1160,27 @@ function solveNNLS(A, b) {
  * mineral salt, the column is its per-gram ion contribution. b is
  * target − sourceWater per ion. Solver units are grams per liter of brew
  * water; multiply by volumeL outside to get displayed amounts.
- *
- * @param {IonMap | null | undefined} sourceWater
- * @param {Partial<Record<IonName, number | null | undefined>> | null | undefined} target
- * @param {Array<{ id: string, spec: StockConcentrateSpec }>} concentrateEntries
- * @param {string[]} mineralIds
- * @returns {{
- *   concentrateGramsPerL: Record<string, number>,
- *   mineralGramsPerL: Record<string, number>,
- *   residualIons: Record<IonName, number>,
- *   maxResidualIon: { ion: IonName, residual: number } | null,
- * }}
  */
-function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralIds) {
+export function solveCalculatorDosing(
+  sourceWater: IonMap | null | undefined,
+  target:
+    | Partial<Record<IonName, number | null | undefined>>
+    | Record<string, unknown>
+    | null
+    | undefined,
+  concentrateEntries: Array<{ id: string; spec: StockConcentrateSpec }>,
+  mineralIds: string[],
+): {
+  concentrateGramsPerL: Record<string, number>;
+  mineralGramsPerL: Record<string, number>;
+  residualIons: Record<IonName, number>;
+  maxResidualIon: { ion: IonName; residual: number } | null;
+} {
   const entries = Array.isArray(concentrateEntries) ? concentrateEntries : [];
   const mins = Array.isArray(mineralIds) ? mineralIds : [];
 
   // b = target - source per ion, in row order matching ION_FIELDS.
-  /** @type {number[]} */
-  const b = [];
+  const b: number[] = [];
   ION_FIELDS.forEach((ion) => {
     const tgt = target && target[ion] != null ? Number(target[ion]) : 0;
     const src = sourceWater && sourceWater[ion] != null ? Number(sourceWater[ion]) : 0;
@@ -1208,11 +1189,9 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
 
   // Columns of A: each concentrate's ion contribution per gram-per-liter,
   // then each mineral's ion contribution per gram-per-liter.
-  /** @type {number[][]} */
-  const A = ION_FIELDS.map(() => []);
+  const A: number[][] = ION_FIELDS.map(() => []);
 
-  /** @type {string[]} */
-  const concentrateOrder = [];
+  const concentrateOrder: string[] = [];
   for (const entry of entries) {
     if (!entry || !entry.spec) continue;
     // computeStockMineralGramsPerL returns per-liter grams of each mineral
@@ -1221,8 +1200,7 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     const dosePerL = Number(entry.spec.doseGramsPerL) || 0;
     if (dosePerL <= 0) continue;
     const perLAtPrescribed = computeStockMineralGramsPerL(entry.spec);
-    /** @type {Record<string, number>} */
-    const perGramOfConcentrate = {};
+    const perGramOfConcentrate: Record<string, number> = {};
     for (const [mid, g] of Object.entries(perLAtPrescribed)) {
       perGramOfConcentrate[mid] = g / dosePerL;
     }
@@ -1234,8 +1212,7 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     concentrateOrder.push(entry.id);
   }
 
-  /** @type {string[]} */
-  const mineralOrder = [];
+  const mineralOrder: string[] = [];
   for (const mid of mins) {
     if (!MINERAL_DB[mid]) continue;
     // calculateIonPPMs takes g/L; pass 1 to get the per-(gram-per-liter)
@@ -1249,8 +1226,7 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
   }
 
   // Skip the solve when there are no variables; downstream just sees zeros.
-  /** @type {number[]} */
-  let x = [];
+  let x: number[] = [];
   if (concentrateOrder.length + mineralOrder.length > 0) {
     x = solveNNLS(A, b);
   }
@@ -1325,10 +1301,8 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     }
   });
 
-  /** @type {Record<string, number>} */
-  const concentrateGramsPerL = {};
-  /** @type {Record<string, number>} */
-  const mineralGramsPerL = {};
+  const concentrateGramsPerL: Record<string, number> = {};
+  const mineralGramsPerL: Record<string, number> = {};
   concentrateOrder.forEach((id, k) => {
     concentrateGramsPerL[id] = Math.max(0, x[k] || 0);
   });
@@ -1339,10 +1313,16 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
   // Residual diagnostic: what ions are still under-/over-target after the
   // solver picks the best non-negative combination.
   const Ax = _matVec(A, x);
-  /** @type {Record<string, number>} */
-  const residualIons = {};
-  /** @type {{ ion: IonName, residual: number } | null} */
-  let maxResidualIon = null;
+  const residualIons: Record<IonName, number> = {
+    calcium: 0,
+    magnesium: 0,
+    potassium: 0,
+    sodium: 0,
+    sulfate: 0,
+    chloride: 0,
+    bicarbonate: 0,
+  };
+  let maxResidualIon: { ion: IonName; residual: number } | null = null;
   ION_FIELDS.forEach((ion, i) => {
     const bi = b[i] || 0;
     const axi = Ax[i] || 0;
@@ -1358,29 +1338,5 @@ function solveCalculatorDosing(sourceWater, target, concentrateEntries, mineralI
     mineralGramsPerL,
     residualIons,
     maxResidualIon,
-  };
-}
-
-// --- Node/Vitest UMD shim (harmless in browsers) ---
-// Browsers: `module` is undefined, the if-branch is skipped entirely.
-// Assumes the constants module has already populated the global scope (the
-// legacy-globals.ts window bridge in browsers; Object.assign(globalThis,
-// constants) in the metrics test files).
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    calculateIonPPMs,
-    calculateMetrics,
-    recipeMetricsSummary,
-    calculateSo4ClRatio,
-    toStableBicarbonateFromAlkalinity,
-    pickBestCaMgSources,
-    evaluateWaterProfileRanges,
-    splitAlkalinityDelta,
-    deriveStockFormulaFromTarget,
-    computeFullProfile,
-    buildStoredTargetProfile,
-    getRecipeOverLimitMineralIds,
-    solveNNLS,
-    solveCalculatorDosing,
   };
 }

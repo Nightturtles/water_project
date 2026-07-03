@@ -14,13 +14,6 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": [
-    "metrics.js",
-    "theme-init.js",
-    "src/**/*.ts",
-    "globals.d.ts",
-    "vite.config.mts",
-    "**/*.test.ts"
-  ],
+  "include": ["theme-init.js", "src/**/*.ts", "globals.d.ts", "vite.config.mts", "**/*.test.ts"],
   "exclude": ["node_modules", "coverage", "supabase"]
 }

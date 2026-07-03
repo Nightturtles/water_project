@@ -4,16 +4,12 @@
 //
 // Phase A: converted from script.js (the index.html calculator orchestrator).
 // Unlike the other migrated UI files, this one is NOT imported by
-// legacy-globals.ts — it must run AFTER the classic metrics.js script (which
-// loads after the legacy-globals module). So it stays its own module entry:
-// index.html loads it via `<script type="module"
-// src="/src/components/script.ts">` at the last position, and deferred scripts
-// (classic `defer` + module) execute in document order, so it still runs last.
-// It publishes nothing on window (it's a pure top-level orchestrator); storage,
-// constants, and ui-shared helpers are imported directly, metrics.js stays
-// ambient globals, and the cross-module bridge (showLibraryPicker, recipeMatches,
-// cwHaptic, formatStockSpec, init{Source,Estimate}…) is reached via window.* /
-// the migrated modules with the same guards as the original.
+// legacy-globals.ts — only index.html hosts the calculator, so it stays its
+// own module entry (`<script type="module" src="/src/components/script.ts">`).
+// Storage, constants, metrics, and ui-shared helpers are imported directly;
+// the cross-module bridge (showLibraryPicker, recipeMatches, cwHaptic,
+// formatStockSpec, init{Source,Estimate}…) is reached via window.* / the
+// migrated modules with the same guards as the original.
 // ============================================
 
 import {
@@ -23,7 +19,22 @@ import {
   NON_EDITABLE_TARGET_KEYS,
   LIBRARY_TAGS,
   ION_FIELDS,
+  HCO3_TO_CACO3,
+  ALK_TO_BAKING_SODA,
+  ALK_TO_POTASSIUM_BICARB,
 } from "../lib/constants";
+import type { IonMap } from "../lib/constants";
+import {
+  calculateIonPPMs,
+  calculateMetrics,
+  calculateSo4ClRatio,
+  toStableBicarbonateFromAlkalinity,
+  pickBestCaMgSources,
+  evaluateWaterProfileRanges,
+  splitAlkalinityDelta,
+  solveCalculatorDosing,
+  buildStoredTargetProfile,
+} from "../lib/metrics";
 import { buildSlimRecipeCard } from "./recipe-card";
 import {
   bindEnterToClick,
@@ -42,6 +53,12 @@ import {
   computeStockMineralGramsPerL,
   deleteCustomTargetProfile,
   getActiveStockSpecs,
+  getEffectiveAlkalinitySources,
+  getEffectiveCalciumSource,
+  getEffectiveCalciumSources,
+  getEffectiveMagnesiumSource,
+  getEffectiveMagnesiumSources,
+  loadBrewMethod,
   getAllPresets,
   getConcentrateGramsPerMl,
   getConcentrateMineralId,
@@ -66,20 +83,15 @@ import {
   saveVolumePreference,
   validateTargetProfileName,
 } from "../lib/storage";
+import type { StockConcentrateSpec } from "../lib/storage";
 
-// Storage's StockConcentrateSpec (the one getActiveStockSpecs returns) is
-// module-internal and structurally distinct from the ambient global of the same
-// name (which carries an index signature). Recover it from the return type so
-// the calculator's stock-spec values line up with what storage hands back.
-type StockSpec = ReturnType<typeof getActiveStockSpecs>[number]["spec"];
+// The Recipe Concentrate spec shape storage hands back from getActiveStockSpecs.
+type StockSpec = StockConcentrateSpec;
 
 // All DOM access + orchestration runs inside main(), invoked on DOMContentLoaded
-// (see the bottom of the file). Vite bundles this module into index.html's head
-// entry, which executes BEFORE the body's classic deferred script (metrics.js)
-// — whose globals this file reads. DOMContentLoaded fires after every deferred
-// script has run, so by then it's loaded. (The classic script.js was a body
-// `defer` script that ran after them naturally; recipe.html / taste.html wrap
-// their inline orchestration the same way for the same reason.)
+// (see the bottom of the file). DOMContentLoaded also guarantees the DOM ids
+// this file queries exist. (The classic script.js was a body `defer` script;
+// recipe.html / taste.html wrap their inline orchestration the same way.)
 function main(): void {
   // --- State ---
   // Load brew method first so loadTargetPresetName() can pick the
@@ -1016,14 +1028,7 @@ function main(): void {
 
     // Stage 1: best-fit concentrate doses (snapped). No mineral variables — the
     // concentrate is the primary, minerals only top up the residual in Stage 2.
-    // Cast bridges storage's spec type to metrics.js's ambient StockConcentrateSpec
-    // (same shape; they differ only by the ambient one's index signature).
-    const solve = solveCalculatorDosing(
-      sourceWater,
-      solverTarget,
-      entries as unknown as Array<{ id: string; spec: StockConcentrateSpec }>,
-      [],
-    );
+    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, []);
 
     // Stage 2: residual after the concentrate contribution, gap-filled with
     // individually-enabled minerals.

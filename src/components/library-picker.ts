@@ -22,6 +22,7 @@
 // =============================================================================
 
 import { LIBRARY_TAGS } from "../lib/constants";
+import { recipeMetricsSummary } from "../lib/metrics";
 
 const SEARCH_DEBOUNCE_MS = 150;
 
@@ -78,10 +79,7 @@ function creatorLine(recipe: LibraryRecipeRow): string {
 }
 
 function ionsSummary(recipe: LibraryRecipeRow): string {
-  const s =
-    typeof window.recipeMetricsSummary === "function"
-      ? window.recipeMetricsSummary(recipe)
-      : { gh: null, kh: null };
+  const s = recipeMetricsSummary(recipe);
   return "GH " + (s.gh != null ? s.gh : "-") + " · KH " + (s.kh != null ? s.kh : "-");
 }
 
