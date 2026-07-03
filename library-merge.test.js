@@ -7,10 +7,10 @@
 //     copy branches.
 //   * library-data.isRecipeInMyProfiles — canonical-vs-user-published regimes.
 //
-// Load order mirrors the browser: constants.js first (populates globalThis),
-// then storage.ts (adds its globals + module exports), then library-data.ts
-// (an ES module that self-publishes onto window; in Node window === global
-// per vitest.setup.js, so its publish + getPublicRecipesSync override both work).
+// Load order mirrors the browser: storage.ts first (imports constants, adds
+// its globals + module exports), then library-data.ts (an ES module that
+// self-publishes onto window; in Node window === global per vitest.setup.js,
+// so its publish + getPublicRecipesSync override both work).
 //
 // The tombstone-lift tests pin the *invariant* (canonical slug is preserved
 // on re-add, no suffixed copy created) rather than internal bookkeeping —
@@ -19,9 +19,7 @@
 //
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` for the src/lib modules.
-// constants.js stays a classic-script CJS file (require()).
 
-require("./constants.js");
 import {
   getAllTargetPresets,
   getTargetProfileByKey,
@@ -70,7 +68,7 @@ beforeEach(resetState);
 describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
   test("empty library + no custom → rail is shim + '+ Custom' + '+ From Library'", () => {
     const result = getAllTargetPresets();
-    // Shim contains 5 entries (constants.js TARGET_PRESETS).
+    // Shim contains the starter entries (src/lib/constants.ts TARGET_PRESETS).
     expect(Object.keys(result)).toContain("sca");
     expect(Object.keys(result)).toContain("cafelytic-filter");
     // Ion values come from the shim row verbatim.

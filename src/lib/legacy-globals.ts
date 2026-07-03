@@ -1,7 +1,12 @@
-// Bridge module: re-exports every public function from storage.ts, sync.ts,
-// and stock-format.ts onto `window` so the classic inline page scripts (e.g.
-// the taste.html / minerals.html DOMContentLoaded blocks) keep working without
-// per-file changes.
+// Bridge module: re-exports every public export from constants.ts, storage.ts,
+// sync.ts, and stock-format.ts onto `window` so the classic inline page scripts
+// (e.g. the taste.html / minerals.html DOMContentLoaded blocks) keep working
+// without per-file changes.
+//
+// The constants namespace also feeds the still-classic metrics.js: its defer
+// tag sits AFTER this module's tag in every page, so `window.MINERAL_DB` etc.
+// exist before any metrics.js function runs (metrics.js only reads them inside
+// function bodies, never at top level).
 //
 // Both storage.ts and sync.ts ALSO populate window.* at the bottom of their
 // own module bodies — that side-effect is what keeps unit tests working
@@ -30,6 +35,7 @@
 // without a null guard. On web the module is effectively a no-op (every
 // side-effect is gated on Capacitor.isNativePlatform()).
 
+import * as constants from "./constants";
 import "./sentry-init";
 // analytics-init gates GA4 loading (hostname / webdriver / opt-out). Imported
 // right after sentry-init: no storage/supabase dependency, fired early so the
@@ -61,4 +67,4 @@ import "../components/my-recipes-ui";
 import "../components/mineral-selector";
 import "../components/recipe-browser";
 
-Object.assign(window, storage, sync, stockFormat);
+Object.assign(window, constants, storage, sync, stockFormat);

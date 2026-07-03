@@ -1,15 +1,17 @@
 // Unit tests for metrics.js pure functions.
-// Load order mirrors the browser: constants.js populates globalThis first,
-// then metrics.js can resolve MINERAL_DB, CA_TO_CACO3, etc. via global scope.
-// `require()` (not `import`) is deliberate so the constants.js side-effect of
-// populating globalThis happens before metrics.js is evaluated.
+// Load order mirrors the browser: constants (now a TS module) is assigned
+// onto globalThis first — the same job legacy-globals.ts does with window in
+// the browser — so metrics.js can resolve MINERAL_DB, CA_TO_CACO3, etc. via
+// global scope. The Object.assign statement runs before the (non-hoisted)
+// `require()` of metrics.js.
 import { describe, test, expect } from "vitest";
+import * as constants from "./src/lib/constants";
 // solveCalculatorDosing (metrics.js) calls computeStockMineralGramsPerL as a
 // global; importing storage publishes it onto window (= global in vitest, via
 // vitest.setup.js). Mirrors storage-stock.test.js.
 import "./src/lib/storage";
 
-require("./constants.js");
+Object.assign(globalThis, constants);
 const metrics = require("./metrics.js");
 
 describe("calculateIonPPMs", () => {
@@ -289,13 +291,11 @@ describe("evaluateWaterProfileRanges — brew method dependent bands", () => {
   });
 });
 
-describe("MINERAL_DB integrity (constants.js sanity)", () => {
+describe("MINERAL_DB integrity (constants sanity)", () => {
   test("every mineral has positive MW and at least one ion fraction in (0, 1]", () => {
     // Regression guard: if someone adds a mineral with mw=0, ion fractions become
     // NaN/Infinity and the calculator silently produces bad water.
-    // MINERAL_DB is declared ambiently in globals.d.ts; refer to it directly
-    // rather than via globalThis (which doesn't include `declare const` names).
-    for (const [id, mineral] of Object.entries(MINERAL_DB)) {
+    for (const [id, mineral] of Object.entries(constants.MINERAL_DB)) {
       expect(mineral.mw, `${id}.mw`).toBeGreaterThan(0);
       const fractions = Object.values(mineral.ions);
       expect(fractions.length, `${id} should declare at least one ion`).toBeGreaterThan(0);

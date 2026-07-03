@@ -10,24 +10,12 @@ export {}; // make this a module so `declare global` takes effect
 
 declare global {
   // --- Shared ion/mineral types ---
-  type IonName =
-    | "calcium"
-    | "magnesium"
-    | "potassium"
-    | "sodium"
-    | "sulfate"
-    | "chloride"
-    | "bicarbonate";
-
-  type IonMap = Partial<Record<IonName, number>>;
-
-  interface MineralEntry {
-    name: string;
-    formula: string;
-    mw: number;
-    description: string;
-    ions: IonMap;
-  }
+  // Defined and exported by src/lib/constants.ts since the constants
+  // migration; aliased here so the still-classic metrics.js (JSDoc) and the
+  // remaining ambient declarations below can keep referencing them bare.
+  type IonName = import("./src/lib/constants").IonName;
+  type IonMap = import("./src/lib/constants").IonMap;
+  type MineralEntry = import("./src/lib/constants").MineralEntry;
 
   interface DerivedMetrics {
     /** General hardness as CaCO3 (mg/L). */
@@ -40,20 +28,7 @@ declare global {
 
   type MineralGrams = Record<string, number>;
 
-  interface TargetProfile {
-    label: string;
-    calcium?: number;
-    magnesium?: number;
-    alkalinity?: number;
-    potassium?: number;
-    sodium?: number;
-    sulfate?: number;
-    chloride?: number;
-    bicarbonate?: number;
-    description?: string;
-    brewMethod?: string;
-    [key: string]: unknown;
-  }
+  type TargetProfile = import("./src/lib/constants").TargetProfile;
 
   // A Recipe Concentrate spec (internal name: "stock"): a multi-mineral bottle
   // dosed by g/L. Defined in src/lib/storage.ts; mirrored here as a global for
@@ -66,72 +41,27 @@ declare global {
     [key: string]: unknown;
   }
 
-  // --- Constants from constants.js (classic-script globals) ---
-  const MINERAL_DB: Record<string, MineralEntry>;
-  const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: Record<string, number>;
-  const ION_FIELDS: readonly IonName[];
-  const ION_LABELS: Record<IonName, string>;
-  const SOURCE_PRESETS: Record<string, { label: string; [key: string]: unknown }>;
-  // Source-water preset picker grouping (constants.js). Read by
-  // src/components/source-water-ui.ts to bucket + order the preset rail.
-  const SOURCE_CATEGORY_ORDER: readonly string[];
-  const SOURCE_CATEGORY_LABELS: Record<string, string>;
-  const TARGET_PRESETS: Record<string, TargetProfile>;
-  const NON_EDITABLE_TARGET_KEYS: readonly string[];
-  const LIBRARY_TAGS: readonly string[];
-  const BUILTIN_TARGET_KEYS: readonly string[];
-  const RESERVED_TARGET_KEYS: Set<string>;
-  // Library-recipe slugs reserved so user-defined stocks can't shadow them
-  // (constants.js). Read by src/components/stock-editor.ts's uniqueStockSlug.
-  const RESERVED_LIBRARY_STOCK_SLUGS: readonly string[];
-  const BUILTIN_TARGET_LABELS: Record<string, string>;
-  const GALLONS_TO_LITERS: number;
-  const CA_TO_CACO3: number;
-  const MG_TO_CACO3: number;
-  const HCO3_TO_CACO3: number;
-  const CACO3_TO_HCO3: number;
-  const MW_CACO3: number;
-  const ALK_TO_BAKING_SODA: number;
-  const ALK_TO_POTASSIUM_BICARB: number;
-  const LOTUS_DROPPER_ML: Record<string, number>;
-  interface BrandConcentrate {
-    name: string;
-    mineralId: string;
-    formula: string;
-    gramsPerMl: number;
-    description?: string;
-  }
-  const BRAND_CONCENTRATES: Record<string, BrandConcentrate>;
-  const BRAND_CONCENTRATE_IDS: readonly string[];
-  const LOTUS_CONCENTRATE_IDS: readonly string[];
-  interface MethodRangeBand {
-    preferredMin?: number | null;
-    preferredMax?: number | null;
-    warnMin?: number | null;
-    warnMax?: number | null;
-    dangerMin?: number | null;
-    dangerMax?: number | null;
-  }
-  interface BrewMethodRangeBands {
-    tds: MethodRangeBand;
-    kh: MethodRangeBand;
-    gh: MethodRangeBand;
-    calcium: MethodRangeBand;
-    magnesium: MethodRangeBand;
-    sodium: {
-      default: { preferredMax: number; warnMax: number; dangerMax: number };
-      bakingSoda: { preferredMax: number; warnMax: number; dangerMax: number };
-    };
-    chloride: {
-      default: { preferredMax: number; warnMax: number; dangerMax: number };
-      chlorideHeavy: { preferredMax: number; warnMax: number; dangerMax: number };
-    };
-    sulfate: { warnMax: number };
-    potassium: { dangerMax: number };
-  }
-  const WATER_PROFILE_RANGE_BANDS: Record<"filter" | "espresso", BrewMethodRangeBands>;
-  const RANGE_SEVERITY_ORDER: { danger: number; warn: number; info: number };
-  const THEME_KEY: string;
+  // --- Constants, bridged from src/lib/constants.ts ---
+  // constants.js migrated to src/lib/constants.ts; TS modules import these
+  // directly. The ambient declares below exist SOLELY for the still-classic
+  // metrics.js, which reads them bare at runtime via the window bridge
+  // (legacy-globals.ts Object.assign). Typed as typeof-references into the
+  // module so there is one source of truth — the metrics.js migration PR
+  // deletes this whole block.
+  const MINERAL_DB: typeof import("./src/lib/constants").MINERAL_DB;
+  const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: typeof import("./src/lib/constants").MINERAL_SOLUBILITY_G_PER_L_25C_APPROX;
+  const ION_FIELDS: typeof import("./src/lib/constants").ION_FIELDS;
+  const CA_TO_CACO3: typeof import("./src/lib/constants").CA_TO_CACO3;
+  const MG_TO_CACO3: typeof import("./src/lib/constants").MG_TO_CACO3;
+  const HCO3_TO_CACO3: typeof import("./src/lib/constants").HCO3_TO_CACO3;
+  const CACO3_TO_HCO3: typeof import("./src/lib/constants").CACO3_TO_HCO3;
+  const ALK_TO_BAKING_SODA: typeof import("./src/lib/constants").ALK_TO_BAKING_SODA;
+  const ALK_TO_POTASSIUM_BICARB: typeof import("./src/lib/constants").ALK_TO_POTASSIUM_BICARB;
+  const WATER_PROFILE_RANGE_BANDS: typeof import("./src/lib/constants").WATER_PROFILE_RANGE_BANDS;
+  const RANGE_SEVERITY_ORDER: typeof import("./src/lib/constants").RANGE_SEVERITY_ORDER;
+  type BrandConcentrate = import("./src/lib/constants").BrandConcentrate;
+  type MethodRangeBand = import("./src/lib/constants").MethodRangeBand;
+  type BrewMethodRangeBands = import("./src/lib/constants").BrewMethodRangeBands;
 
   // --- Functions from other files (source-water-ui.js, storage.js, script.js) ---
   // Typed permissively for now; will tighten as those files get @ts-check in

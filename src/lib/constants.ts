@@ -1,15 +1,89 @@
-// @ts-check
 // ============================================
 // Constants — pure data, no side effects
 // ============================================
-// Shared type definitions live in globals.d.ts (IonName, IonMap, MineralEntry).
+// The shared ion/mineral types (IonName, IonMap, MineralEntry, TargetProfile,
+// …) are defined and exported here; globals.d.ts re-exposes them as global
+// aliases for the remaining classic script (metrics.js) until it migrates.
+
+// --- Shared ion/mineral types ---
+export type IonName =
+  | "calcium"
+  | "magnesium"
+  | "potassium"
+  | "sodium"
+  | "sulfate"
+  | "chloride"
+  | "bicarbonate";
+
+export type IonMap = Partial<Record<IonName, number>>;
+
+export interface MineralEntry {
+  name: string;
+  formula: string;
+  mw: number;
+  description: string;
+  ions: IonMap;
+}
+
+export interface TargetProfile {
+  label: string;
+  calcium?: number;
+  magnesium?: number;
+  alkalinity?: number;
+  potassium?: number;
+  sodium?: number;
+  sulfate?: number;
+  chloride?: number;
+  bicarbonate?: number;
+  description?: string;
+  brewMethod?: string;
+  [key: string]: unknown;
+}
+
+export interface BrandConcentrate {
+  name: string;
+  mineralId: string;
+  formula: string;
+  gramsPerMl: number;
+  description?: string;
+}
+
+export interface MethodRangeBand {
+  preferredMin?: number | null;
+  preferredMax?: number | null;
+  warnMin?: number | null;
+  warnMax?: number | null;
+  dangerMin?: number | null;
+  dangerMax?: number | null;
+}
+
+export interface BrewMethodRangeBands {
+  tds: MethodRangeBand;
+  kh: MethodRangeBand;
+  gh: MethodRangeBand;
+  calcium: MethodRangeBand;
+  magnesium: MethodRangeBand;
+  sodium: {
+    default: { preferredMax: number; warnMax: number; dangerMax: number };
+    bakingSoda: { preferredMax: number; warnMax: number; dangerMax: number };
+  };
+  chloride: {
+    default: { preferredMax: number; warnMax: number; dangerMax: number };
+    chlorideHeavy: { preferredMax: number; warnMax: number; dangerMax: number };
+  };
+  sulfate: { warnMax: number };
+  potassium: { dangerMax: number };
+}
 
 // --- Mineral database ---
-// Each mineral salt and the ions it contributes per gram dissolved in 1 liter
-const MINERAL_DB = {
+// Each mineral salt and the ions it contributes per gram dissolved in 1 liter.
+// The literal lives in an internal const so same-file derivations below
+// (ALK_TO_*) can index known keys without noUncheckedIndexedAccess guards;
+// the export is typed to the public Record shape consumers already use.
+const MINERAL_DB_LITERAL = {
   "calcium-chloride": {
     name: "Calcium Chloride (Dihydrate)",
-    formula: "CaCl\u2082\u00b72H\u2082O",
+    formula: "CaCl₂·2H₂O",
     mw: 147.01,
     description: "Adds calcium and chloride. Increases sweetness and body.",
     ions: {
@@ -30,7 +104,7 @@ const MINERAL_DB = {
   },
   "epsom-salt": {
     name: "Epsom Salt",
-    formula: "MgSO\u2084\u00b77H\u2082O",
+    formula: "MgSO₄·7H₂O",
     mw: 246.47,
     description: "Adds magnesium and sulfate. Enhances fruity notes and clarity.",
     ions: {
@@ -40,7 +114,7 @@ const MINERAL_DB = {
   },
   "baking-soda": {
     name: "Baking Soda",
-    formula: "NaHCO\u2083",
+    formula: "NaHCO₃",
     mw: 84.007,
     description: "Adds sodium and bicarbonate (alkalinity/KH). Buffers acidity.",
     ions: {
@@ -50,7 +124,7 @@ const MINERAL_DB = {
   },
   "potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
-    formula: "KHCO\u2083",
+    formula: "KHCO₃",
     mw: 100.115,
     description: "Sodium-free alkalinity source. Adds potassium and bicarbonate.",
     ions: {
@@ -60,7 +134,7 @@ const MINERAL_DB = {
   },
   "magnesium-chloride": {
     name: "Magnesium Chloride",
-    formula: "MgCl\u2082\u00b76H\u2082O",
+    formula: "MgCl₂·6H₂O",
     mw: 203.3,
     description: "Adds magnesium and chloride. Fruity notes with added body.",
     ions: {
@@ -70,7 +144,7 @@ const MINERAL_DB = {
   },
   gypsum: {
     name: "Gypsum",
-    formula: "CaSO\u2084\u00b72H\u2082O",
+    formula: "CaSO₄·2H₂O",
     mw: 172.17,
     description: "Adds calcium and sulfate. Sweetness with crisp clarity.",
     ions: {
@@ -98,11 +172,13 @@ const MINERAL_DB = {
       chloride: 35.453 / 58.44,
     },
   },
-};
+} satisfies Record<string, MineralEntry>;
+
+export const MINERAL_DB: Record<string, MineralEntry> = MINERAL_DB_LITERAL;
 
 // --- Approximate solubility limits (g/L at ~25C) ---
 // Used only to warn when DIY concentrate strengths are likely to precipitate.
-const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
+export const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX: Record<string, number> = {
   "calcium-chloride": 700,
   "calcium-chloride-anhydrous": 745,
   "epsom-salt": 700,
@@ -115,7 +191,7 @@ const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
 };
 
 // Library-recipe slugs reserved so user-defined stocks can't shadow them.
-const RESERVED_LIBRARY_STOCK_SLUGS = [
+export const RESERVED_LIBRARY_STOCK_SLUGS: readonly string[] = [
   "rao-perger",
   "dan-eils",
   "matt-perger",
@@ -131,7 +207,7 @@ const RESERVED_LIBRARY_STOCK_SLUGS = [
 ];
 
 // --- Shared ion field list and labels ---
-const ION_FIELDS = [
+export const ION_FIELDS: readonly IonName[] = [
   "calcium",
   "magnesium",
   "potassium",
@@ -140,24 +216,24 @@ const ION_FIELDS = [
   "chloride",
   "bicarbonate",
 ];
-const ION_LABELS = {
+export const ION_LABELS: Record<IonName, string> = {
   calcium: "Ca",
   magnesium: "Mg",
   potassium: "K",
   sodium: "Na",
-  sulfate: "SO\u2084",
+  sulfate: "SO₄",
   chloride: "Cl",
-  bicarbonate: "HCO\u2083",
+  bicarbonate: "HCO₃",
 };
 
 // --- Source water presets ---
 // --- Source water preset categories ---
-// Drives the grouping in source-water-ui.js renderSourcePresetButtons. The
+// Drives the grouping in source-water-ui.ts renderSourcePresetButtons. The
 // "saved" bucket is for user-created custom profiles that don't carry a
 // category field. The literal "+ Add Custom" entry is always last and has no
 // category so it's not grouped under any heading.
-const SOURCE_CATEGORY_ORDER = ["pure", "generic", "bottled", "saved"];
-const SOURCE_CATEGORY_LABELS = {
+export const SOURCE_CATEGORY_ORDER: readonly string[] = ["pure", "generic", "bottled", "saved"];
+export const SOURCE_CATEGORY_LABELS: Record<string, string> = {
   pure: "Distilled / RO",
   generic: "Tap Water",
   bottled: "Bottled Water",
@@ -169,7 +245,7 @@ const SOURCE_CATEGORY_LABELS = {
 // mineralogies; values are mg/L. If a user's local bottling differs (some
 // brands source from multiple springs by region) they can override via
 // "Edit Starting Water" → Save Changes.
-const SOURCE_PRESETS = {
+export const SOURCE_PRESETS: Record<string, { label: string; [key: string]: unknown }> = {
   distilled: {
     label: "Distilled / RO",
     category: "pure",
@@ -279,7 +355,7 @@ const SOURCE_PRESETS = {
 // 20260606060755 recategorizes eaf-rpavlis to espresso and renames the "and"
 // recipes to "&") so the shim and the loaded library don't disagree. If you
 // change a value or the key order here, update the migration too.
-const TARGET_PRESETS = {
+export const TARGET_PRESETS: Record<string, TargetProfile> = {
   "cafelytic-filter": {
     label: "Cafelytic Filter",
     brewMethod: "filter",
@@ -293,7 +369,7 @@ const TARGET_PRESETS = {
     bicarbonate: 13.18,
     description:
       "Cafelytic in-house light-roast filter recipe. Direct dosing per 1.85L: " +
-      "0.024g CaCl\u2082\u00b72H\u2082O + 0.148g MgCl\u2082\u00b76H\u2082O + 0.040g KHCO\u2083. " +
+      "0.024g CaCl₂·2H₂O + 0.148g MgCl₂·6H₂O + 0.040g KHCO₃. " +
       "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
   },
   sca: {
@@ -342,8 +418,8 @@ const TARGET_PRESETS = {
     bicarbonate: 21.09,
     description:
       "Cafelytic in-house espresso companion to Cafelytic Filter. Direct dosing per 1.85L: " +
-      "0.015g CaCl\u2082\u00b72H\u2082O + 0.134g MgCl\u2082\u00b76H\u2082O + 0.064g KHCO\u2083. " +
-      "Preserves the Cafelytic house character (Cl-heavy, no SO\u2084, sodium-free, " +
+      "0.015g CaCl₂·2H₂O + 0.134g MgCl₂·6H₂O + 0.064g KHCO₃. " +
+      "Preserves the Cafelytic house character (Cl-heavy, no SO₄, sodium-free, " +
       "K-buffered) at espresso concentrations.",
   },
   "eaf-rpavlis": {
@@ -393,7 +469,7 @@ const TARGET_PRESETS = {
 //
 // Currently scoped to sca/rao — broadening this to every library (user_id=NULL)
 // slug is a pending UX call tracked against Piece D.
-const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
+export const NON_EDITABLE_TARGET_KEYS: readonly string[] = ["sca", "rao"];
 
 // --- Predefined library tags ---
 // Canonical flavor-tag vocabulary for the recipe library (v2 taxonomy, 2026-04).
@@ -401,7 +477,14 @@ const NON_EDITABLE_TARGET_KEYS = ["sca", "rao"];
 // CHECK constraint on target_profiles.tags enforcing the same. Removed in the
 // 2026-04 taxonomy overhaul: "Delicate" (→ Clarity), "Round" (→ Full Body),
 // "Low TDS" / "High TDS" (not flavor descriptors).
-const LIBRARY_TAGS = ["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clarity"];
+export const LIBRARY_TAGS: readonly string[] = [
+  "Full Body",
+  "Balanced",
+  "Bright",
+  "Sweet",
+  "Juicy",
+  "Clarity",
+];
 
 // --- Custom target profile helpers ---
 
@@ -412,84 +495,85 @@ const LIBRARY_TAGS = ["Full Body", "Balanced", "Bright", "Sweet", "Juicy", "Clar
 // set but Rao's recipe remains in the library.
 const LEGACY_RESERVED_TARGET_KEYS = ["rao"];
 
-const BUILTIN_TARGET_KEYS = Object.keys(TARGET_PRESETS);
-const RESERVED_TARGET_KEYS = new Set([
+export const BUILTIN_TARGET_KEYS: readonly string[] = Object.keys(TARGET_PRESETS);
+export const RESERVED_TARGET_KEYS: Set<string> = new Set([
   ...BUILTIN_TARGET_KEYS,
   ...LEGACY_RESERVED_TARGET_KEYS,
   "custom",
   "library",
 ]);
-/** @type {Record<string, string>} */
-const BUILTIN_TARGET_LABELS = {};
+export const BUILTIN_TARGET_LABELS: Record<string, string> = {};
 for (const [key, preset] of Object.entries(TARGET_PRESETS)) {
   BUILTIN_TARGET_LABELS[key] = preset.label;
 }
 
-/** @param {string} key */
-function isReservedTargetKey(key) {
+export function isReservedTargetKey(key: string): boolean {
   return RESERVED_TARGET_KEYS.has(key);
 }
 
 // --- Unit conversion ---
-const GALLONS_TO_LITERS = 3.78541;
+export const GALLONS_TO_LITERS = 3.78541;
 
 // --- Conversion constants (single source of truth for GH/KH/TDS) ---
-const CA_TO_CACO3 = 100.09 / 40.078; // Ca ppm -> GH contribution (mg/L as CaCO3)
-const MG_TO_CACO3 = 100.09 / 24.305; // Mg ppm -> GH contribution (mg/L as CaCO3)
-const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
-const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
-const MW_CACO3 = 100.09; // Molecular weight of CaCO3
-const ALK_TO_BAKING_SODA = (2 * MINERAL_DB["baking-soda"].mw) / MW_CACO3;
-const ALK_TO_POTASSIUM_BICARB = (2 * MINERAL_DB["potassium-bicarbonate"].mw) / MW_CACO3;
+export const CA_TO_CACO3 = 100.09 / 40.078; // Ca ppm -> GH contribution (mg/L as CaCO3)
+export const MG_TO_CACO3 = 100.09 / 24.305; // Mg ppm -> GH contribution (mg/L as CaCO3)
+export const HCO3_TO_CACO3 = 50.045 / 61.017; // HCO3 ppm -> KH (mg/L as CaCO3)
+export const CACO3_TO_HCO3 = 61.017 / 50.045; // KH (mg/L as CaCO3) -> bicarbonate ppm
+export const MW_CACO3 = 100.09; // Molecular weight of CaCO3
+export const ALK_TO_BAKING_SODA = (2 * MINERAL_DB_LITERAL["baking-soda"].mw) / MW_CACO3;
+export const ALK_TO_POTASSIUM_BICARB =
+  (2 * MINERAL_DB_LITERAL["potassium-bicarbonate"].mw) / MW_CACO3;
 
 // --- Brand name concentrates (fixed strength, equivalent grams of mineral per mL) ---
 // Lotus Coffee Water Drops: concentrations derived from official round-tip dropper recipes
 // (round drop ≈ 0.0716 mL, straight drop ≈ 0.0386 mL). gramsPerMl = equivalent grams of
 // the mapped MINERAL_DB salt per mL of concentrate (for dosing math).
-const LOTUS_DROPPER_ML = {
+export const LOTUS_DROPPER_ML: Record<string, number> = {
   round: 0.0716,
   straight: 0.0386,
 };
-const BRAND_CONCENTRATES = {
+export const BRAND_CONCENTRATES: Record<string, BrandConcentrate> = {
   "brand:lotus:calcium": {
     name: "Calcium",
     mineralId: "calcium-chloride",
-    formula: "CaCl\u2082\u00b72H\u2082O",
+    formula: "CaCl₂·2H₂O",
     gramsPerMl: 0.1671,
     description:
-      "~113.7 mg/mL hardness as CaCO\u2083 (\u2248 45.5 mg/mL Ca\u00B2\u207A). Calibrated so 69 round drops in 15L yields ~15 mg/L Ca and ~26.5 mg/L Cl.",
+      "~113.7 mg/mL hardness as CaCO₃ (≈ 45.5 mg/mL Ca²⁺). Calibrated so 69 round drops in 15L yields ~15 mg/L Ca and ~26.5 mg/L Cl.",
   },
   "brand:lotus:magnesium": {
     name: "Magnesium",
     mineralId: "magnesium-chloride",
-    formula: "MgCl\u2082\u00b76H\u2082O",
+    formula: "MgCl₂·6H₂O",
     gramsPerMl: 0.2302,
     description:
-      "~113.4 mg/mL hardness as CaCO\u2083 (\u2248 27.5 mg/mL Mg\u00B2\u207A). Calibrated so 274 round drops in 15L yields ~36 mg/L Mg and ~105.0 mg/L Cl.",
+      "~113.4 mg/mL hardness as CaCO₃ (≈ 27.5 mg/mL Mg²⁺). Calibrated so 274 round drops in 15L yields ~36 mg/L Mg and ~105.0 mg/L Cl.",
   },
   "brand:lotus:sodium-bicarbonate": {
     name: "Sodium Bicarbonate",
     mineralId: "baking-soda",
-    formula: "NaHCO\u2083",
+    formula: "NaHCO₃",
     gramsPerMl: 0.095,
     description:
-      "~150.2 mg/mL alkalinity as CaCO\u2083 (\u2248 26.0 mg/mL Na\u207A; \u2248 69.0 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~69 mg/L Na and ~183.1 mg/L HCO\u2083.",
+      "~150.2 mg/mL alkalinity as CaCO₃ (≈ 26.0 mg/mL Na⁺; ≈ 69.0 mg/mL HCO₃⁻). Calibrated so 556 round drops in 15L yields ~69 mg/L Na and ~183.1 mg/L HCO₃.",
   },
   "brand:lotus:potassium-bicarbonate": {
     name: "Potassium Bicarbonate",
     mineralId: "potassium-bicarbonate",
-    formula: "KHCO\u2083",
+    formula: "KHCO₃",
     gramsPerMl: 0.1129,
     description:
-      "~149.8 mg/mL alkalinity as CaCO\u2083 (\u2248 44.1 mg/mL K\u207A; \u2248 68.8 mg/mL HCO\u2083\u207B). Calibrated so 556 round drops in 15L yields ~117 mg/L K and ~182.6 mg/L HCO\u2083.",
+      "~149.8 mg/mL alkalinity as CaCO₃ (≈ 44.1 mg/mL K⁺; ≈ 68.8 mg/mL HCO₃⁻). Calibrated so 556 round drops in 15L yields ~117 mg/L K and ~182.6 mg/L HCO₃.",
   },
 };
 
 /** All brand concentrate IDs (for iteration). */
-const BRAND_CONCENTRATE_IDS = Object.keys(BRAND_CONCENTRATES);
+export const BRAND_CONCENTRATE_IDS: readonly string[] = Object.keys(BRAND_CONCENTRATES);
 
 /** Lotus Coffee Water Drops subset (for settings subsection). */
-const LOTUS_CONCENTRATE_IDS = BRAND_CONCENTRATE_IDS.filter((id) => id.startsWith("brand:lotus:"));
+export const LOTUS_CONCENTRATE_IDS: readonly string[] = BRAND_CONCENTRATE_IDS.filter((id) =>
+  id.startsWith("brand:lotus:"),
+);
 
 // --- Water-profile range bands by brew method ---
 // These bands drive evaluateWaterProfileRanges() in metrics.js.
@@ -498,7 +582,7 @@ const LOTUS_CONCENTRATE_IDS = BRAND_CONCENTRATE_IDS.filter((id) => id.startsWith
 //  - Upper KH and GH bounds are tighter than filter to flag the
 //    scale risk that espresso boilers face above ~70-100 ppm CaCO3
 //    alkalinity (Barista Hustle / ThirdWaveWater / EspressoAF guidance).
-const WATER_PROFILE_RANGE_BANDS = {
+export const WATER_PROFILE_RANGE_BANDS: Record<"filter" | "espresso", BrewMethodRangeBands> = {
   filter: {
     tds: {
       preferredMin: 50,
@@ -606,47 +690,11 @@ const WATER_PROFILE_RANGE_BANDS = {
 };
 
 // --- Range severity ordering ---
-const RANGE_SEVERITY_ORDER = { danger: 0, warn: 1, info: 2 };
+export const RANGE_SEVERITY_ORDER: { danger: number; warn: number; info: number } = {
+  danger: 0,
+  warn: 1,
+  info: 2,
+};
 
 // --- Theme key ---
-const THEME_KEY = "cw_theme";
-
-// --- Node/Vitest UMD shim (harmless in browsers) ---
-// Browsers: `module` is undefined, the if-branch is skipped entirely.
-// Node/Vitest: exports all top-level names AND mirrors them to globalThis so
-// sibling files that reference these names via browser script-scope (e.g.
-// metrics.js's `MINERAL_DB`) can resolve them through the global scope chain.
-if (typeof module !== "undefined" && module.exports) {
-  module.exports = {
-    MINERAL_DB,
-    MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
-    RESERVED_LIBRARY_STOCK_SLUGS,
-    ION_FIELDS,
-    ION_LABELS,
-    SOURCE_PRESETS,
-    SOURCE_CATEGORY_ORDER,
-    SOURCE_CATEGORY_LABELS,
-    TARGET_PRESETS,
-    NON_EDITABLE_TARGET_KEYS,
-    LIBRARY_TAGS,
-    BUILTIN_TARGET_KEYS,
-    RESERVED_TARGET_KEYS,
-    BUILTIN_TARGET_LABELS,
-    GALLONS_TO_LITERS,
-    CA_TO_CACO3,
-    MG_TO_CACO3,
-    HCO3_TO_CACO3,
-    CACO3_TO_HCO3,
-    MW_CACO3,
-    ALK_TO_BAKING_SODA,
-    ALK_TO_POTASSIUM_BICARB,
-    LOTUS_DROPPER_ML,
-    BRAND_CONCENTRATES,
-    BRAND_CONCENTRATE_IDS,
-    LOTUS_CONCENTRATE_IDS,
-    WATER_PROFILE_RANGE_BANDS,
-    RANGE_SEVERITY_ORDER,
-    THEME_KEY,
-  };
-  Object.assign(globalThis, module.exports);
-}
+export const THEME_KEY = "cw_theme";

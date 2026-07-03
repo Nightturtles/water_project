@@ -4,18 +4,26 @@
 //
 // Phase A: converted from script.js (the index.html calculator orchestrator).
 // Unlike the other migrated UI files, this one is NOT imported by
-// legacy-globals.ts — it must run AFTER the classic metrics.js / library-data.js
-// scripts (which load after the legacy-globals module). So it stays its own
-// module entry: index.html loads it via `<script type="module"
+// legacy-globals.ts — it must run AFTER the classic metrics.js script (which
+// loads after the legacy-globals module). So it stays its own module entry:
+// index.html loads it via `<script type="module"
 // src="/src/components/script.ts">` at the last position, and deferred scripts
 // (classic `defer` + module) execute in document order, so it still runs last.
-// It publishes nothing on window (it's a pure top-level orchestrator); storage
-// and ui-shared helpers are imported directly, metrics.js / constants.js stay
+// It publishes nothing on window (it's a pure top-level orchestrator); storage,
+// constants, and ui-shared helpers are imported directly, metrics.js stays
 // ambient globals, and the cross-module bridge (showLibraryPicker, recipeMatches,
 // cwHaptic, formatStockSpec, init{Source,Estimate}…) is reached via window.* /
 // the migrated modules with the same guards as the original.
 // ============================================
 
+import {
+  MINERAL_DB,
+  BRAND_CONCENTRATES,
+  GALLONS_TO_LITERS,
+  NON_EDITABLE_TARGET_KEYS,
+  LIBRARY_TAGS,
+  ION_FIELDS,
+} from "../lib/constants";
 import { buildSlimRecipeCard } from "./recipe-card";
 import {
   bindEnterToClick,
@@ -67,12 +75,11 @@ type StockSpec = ReturnType<typeof getActiveStockSpecs>[number]["spec"];
 
 // All DOM access + orchestration runs inside main(), invoked on DOMContentLoaded
 // (see the bottom of the file). Vite bundles this module into index.html's head
-// entry, which executes BEFORE the body's classic deferred scripts
-// (constants.js / metrics.js / library-data.js) — whose globals this file reads.
-// DOMContentLoaded fires after every deferred script has run, so by then they're
-// all loaded. (The classic script.js was a body `defer` script that ran after
-// them naturally; recipe.html / taste.html wrap their inline orchestration the
-// same way for the same reason.)
+// entry, which executes BEFORE the body's classic deferred script (metrics.js)
+// — whose globals this file reads. DOMContentLoaded fires after every deferred
+// script has run, so by then it's loaded. (The classic script.js was a body
+// `defer` script that ran after them naturally; recipe.html / taste.html wrap
+// their inline orchestration the same way for the same reason.)
 function main(): void {
   // --- State ---
   // Load brew method first so loadTargetPresetName() can pick the

@@ -15,13 +15,16 @@
 //
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` for src/lib/storage.
-// metrics.js stays a classic-script CJS file and is loaded via require().
+// metrics.js stays a classic-script CJS file and is loaded via require();
+// constants (a TS module since its migration) is assigned onto globalThis
+// first so metrics.js resolves MINERAL_DB etc. via global scope.
 import { describe, test, expect, beforeEach } from "vitest";
+import * as constants from "./src/lib/constants";
 import { saveSelectedMinerals } from "./src/lib/storage";
 
 const g: any = global;
 
-require("./constants.js");
+Object.assign(globalThis, constants);
 const metrics = require("./metrics.js");
 
 function resetState() {
@@ -139,7 +142,8 @@ describe("pickBestCaMgSources", () => {
 
 // ---------------------------------------------------------------------------
 // deriveStockFormulaFromTarget — pure, but uses MINERAL_DB from constants.
-// Calibration anchors from scripts/compute-coffee-ad-astra-ions.cjs.
+// Calibration anchors are the Coffee ad Astra ground-truth recipes (seeded in
+// supabase/migrations/20260506231724_add_coffee_ad_astra_recipes.sql).
 // ---------------------------------------------------------------------------
 
 describe("deriveStockFormulaFromTarget", () => {

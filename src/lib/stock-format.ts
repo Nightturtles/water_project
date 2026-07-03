@@ -5,11 +5,8 @@
 // Published onto window via legacy-globals.ts so all classic UI scripts can
 // call window.formatStockSpec / window.STOCK_MINERAL_SHORT without per-file
 // changes. Window type augmentation is in globals.d.ts.
-//
-// MINERAL_DB is a constants.js global (ambient-declared in globals.d.ts). It
-// is safe to reference inside function bodies — classic-script load order
-// guarantees constants.js executes before any call site runs — but it must
-// NOT be read at module-evaluation time.
+
+import { MINERAL_DB } from "./constants";
 
 // Compact label for a MINERAL_DB id used in stock-formula chips. Falls back
 // to the formula notation when shorter than the full name (KHCO3 vs.
@@ -77,11 +74,7 @@ export function formatStockSpec(
       // formula mode: drop entries with no mineralId, or grams <= 0 / non-finite.
       if (!m.mineralId) continue;
       if (!Number.isFinite(grams) || grams <= 0) continue;
-      // MINERAL_DB is a constants.js global — guard against the module being
-      // loaded in a test environment before constants.js has run.
-      const mineralDb: Record<string, { formula?: string }> =
-        typeof MINERAL_DB !== "undefined" ? MINERAL_DB : {};
-      const label = mineralDb[m.mineralId]?.formula || m.mineralId;
+      const label = MINERAL_DB[m.mineralId]?.formula || m.mineralId;
       parts.push(grams + "g " + label);
     }
   }

@@ -11,14 +11,15 @@
 //
 // Phase A: converted from my-recipes-ui.js. Loaded via legacy-globals.ts (the
 // bridge module imports this file as a side-effect). The original IIFE wrapper
-// is dropped — ES module scope already isolates internals. Storage helpers are
-// imported from src/lib/storage; the still-classic globals it touches
-// (RESERVED_TARGET_KEYS, LIBRARY_TAGS, library-data's invalidatePublicRecipesCache)
-// stay ambient / window.* with the same typeof guards as the original. The
-// public API is re-published on window so the not-yet-migrated caller
-// (recipe-browser.js) reaches openEditRecipeModal / confirmUnpublish unchanged.
+// is dropped — ES module scope already isolates internals. Storage helpers and
+// constants are imported from their src/lib modules; library-data's
+// invalidatePublicRecipesCache stays window.* with the same typeof guard as
+// the original. The public API is re-published on window so the not-yet-migrated
+// caller (recipe-browser.js) reaches openEditRecipeModal / confirmUnpublish
+// unchanged.
 // =============================================================================
 
+import { LIBRARY_TAGS, RESERVED_TARGET_KEYS } from "../lib/constants";
 import { loadCustomTargetProfiles, saveCustomTargetProfiles, slugify } from "../lib/storage";
 
 function el<K extends keyof HTMLElementTagNameMap>(

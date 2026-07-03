@@ -59,7 +59,7 @@ From Run 1 — three findings vetted as real but NOT planned, because they overl
 2. **recipe.html stops full-page-reloading on mineral changes** (recipe.html ~316/320, ~1243/1250). The natural fix is restructuring recipe.html's giant inline script as part of migrating it to a TS module.
 3. **Remove `'unsafe-inline'` from the CSP script-src** (partials/head-top.html:3). Blocked on externalizing the per-page inline scripts — which is what (2)'s migration does. Tighten the CSP **last**. (Note: support.html added its own inline submit script in #183, so it's now part of what must be externalized before the CSP can tighten.)
 
-Suggested migration order for the remaining classic file: `theme-init.js` (the last one; `analytics-init.js` has since migrated to `src/lib/analytics-init.ts`). (All other UI/data files have since been migrated to TypeScript under `src/components/` and `src/lib/` via PRs #193-#202: stock-editor #193, diy-editor #194, estimate-water-ui #195, source-water-ui #196, library-picker #197, my-recipes-ui #198, mineral-selector #199, recipe-browser #200, script #201, library-data #202.)
+Suggested migration order for the remaining classic files: `metrics.js` (constants.js has since migrated to `src/lib/constants.ts`; `theme-init.js` is a permanent classic — render-blocking `<head>` primer, guarded by smoke-index.spec.ts). (All other UI/data files have since been migrated to TypeScript under `src/components/` and `src/lib/` via PRs #193-#202: stock-editor #193, diy-editor #194, estimate-water-ui #195, source-water-ui #196, library-picker #197, my-recipes-ui #198, mineral-selector #199, recipe-browser #200, script #201, library-data #202; `analytics-init.js` via #207.)
 
 Also deferred:
 - **vite 5 → current major.** Clears the remaining esbuild audit highs (plan 006 leaves those, since they only fix via `npm audit fix --force` → vite 8). Schedule as its own migration with the full e2e suite as the gate (`*.spec.ts` runs against the built dist, exactly what a Vite major can break).
@@ -86,7 +86,7 @@ From Run 1:
 - **Hoist repeated `getEffective*Sources()` calls in script.js `calculate()`** — module-cached; negligible win, delicate function.
 
 From Run 2:
-- **`THEME_KEY` "undefined" in sync.ts:634** — false. It's a declared ambient global (globals.d.ts:127, constants.js:612), used the same way in storage.ts; `tsc` passes. Not a bug.
+- **`THEME_KEY` "undefined" in sync.ts:634** — false. It was a declared ambient global at the time (now a real import from src/lib/constants.ts), used the same way in storage.ts; `tsc` passes. Not a bug.
 - **`delete_account` UPDATE→DELETE "race" / dangling `creator_user_id`** — false. A PL/pgSQL function body is atomic (one transaction), and the `creator_user_id` FK is `NO ACTION`, so a stray reference would *reject* the delete, not dangle. By-design.
 - **`delete_account` public-row metadata leak** — speculative; recipes intentionally survive as "Anonymous User" (documented in the migration); requires account-recreation social engineering. Not actionable.
 - **Email header injection via `name` → subject/text in submit-support** — not injectable. Resend is called via its JSON API (it encodes headers server-side), and `reply_to` is regex-validated to reject CRLF. Not raw SMTP.

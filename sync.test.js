@@ -23,7 +23,6 @@
 // initSync() kickoff touches window.supabaseClient (undefined => one
 // expected console.warn).
 
-require("./constants.js");
 import * as storage from "./src/lib/storage";
 import {
   stableStringify,

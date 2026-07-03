@@ -26,6 +26,7 @@
 // openMineralSelectorModal unchanged.
 // =============================================================================
 
+import { MINERAL_DB, BRAND_CONCENTRATES, LOTUS_CONCENTRATE_IDS } from "../lib/constants";
 import { showConfirm } from "./ui-shared";
 import {
   _getTransient,

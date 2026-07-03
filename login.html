@@ -67,12 +67,11 @@
     <p><a href="/privacy" id="privacy-link">Privacy policy</a></p>
   </footer>
 
-  <script defer src="constants.js"></script>
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
   <script>
     // Body wrapped in DOMContentLoaded so the legacy-globals.ts module
-    // bridge (which imports supabase-client + sentry-init) and the remaining
-    // deferred classic scripts have populated their globals on window before
+    // bridge (which imports supabase-client + sentry-init) has populated
+    // its globals on window before
     // any top-level calls below run.
     document.addEventListener("DOMContentLoaded", function () {
     const signinTab = document.getElementById('signin-tab');

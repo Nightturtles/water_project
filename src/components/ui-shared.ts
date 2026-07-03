@@ -3,14 +3,15 @@
 // ============================================
 //
 // Phase A PR (e): converted from ui-shared.js. Loaded via legacy-globals.ts
-// (the bridge module imports this file as a side-effect). Storage helpers
-// come in by ES import; cross-script symbols hosted by classic scripts
-// (constants.js's MINERAL_DB / ION_LABELS, metrics.js's calculateMetrics,
+// (the bridge module imports this file as a side-effect). Storage and
+// constants come in by ES import; cross-script symbols hosted elsewhere
+// (metrics.js's calculateMetrics,
 // supabase-client.js's isLoggedIn / signOut / supabaseClient / isLoggedInSync,
 // sync.js's flushPendingSync / clearLocalUserContent / invalidatePublicRecipesCache,
 // library-data.js's invalidatePublicRecipesCache, and login-modal.ts's
 // openLoginModal) are still consumed via window/global lexical lookup.
 
+import { MINERAL_DB, ION_LABELS } from "../lib/constants";
 import {
   loadCustomTargetProfiles,
   saveCustomTargetProfiles,

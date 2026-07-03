@@ -20,6 +20,8 @@
 // initEstimateWaterUI unchanged.
 // ============================================
 
+import { ION_FIELDS } from "../lib/constants";
+
 const CACHE_KEY_PREFIX = "cw_estimate_cache_v1:";
 const CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const REQUEST_TIMEOUT_MS = 30000;

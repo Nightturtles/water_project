@@ -29,6 +29,7 @@
 // library.html inline block, which calls window.mountRecipeBrowser) is unchanged.
 // =============================================================================
 
+import { LIBRARY_TAGS } from "../lib/constants";
 import { formatStockSpec } from "../lib/stock-format";
 import {
   addDeletedTargetPreset,
