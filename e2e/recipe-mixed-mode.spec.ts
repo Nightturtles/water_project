@@ -135,6 +135,20 @@ test.describe("recipe.html — Mixed mode (Recipe Concentrate + supplements)", (
       ),
     ).toBe(true);
 
+    // The click sets `.open` synchronously, but the save runs in a `toggle`
+    // listener that the UA fires on a QUEUED task — under parallel-worker CPU
+    // load the reload can commit before that task runs, and the preference is
+    // never persisted (the pre-fix flake: ~2-3 of 8 repeats). Wait for the
+    // persisted key — the actual precondition of the reload assertion.
+    // (stubLoggedIn pins the logged-in transient route, i.e. localStorage.)
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(() => localStorage.getItem("cw_recipe_supplement_panel_open")),
+        { timeout: 3000 },
+      )
+      .toBe("true");
+
     await page.reload();
 
     // applyDispenseModeUI restores the saved open state on the fresh load.
