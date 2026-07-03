@@ -1,4 +1,4 @@
-// Sanity-check `dist/` after `vite build`. Asserts the eight HTML entry
+// Sanity-check `dist/` after `vite build`. Asserts the ten HTML entry
 // points, the root-level classic-script .js sources, the brand SVGs, the
 // CNAME, and exactly one hashed style*.css are present. Logs PASS / FAIL
 // plus sorted lists of missing and unexpected paths.
@@ -18,6 +18,7 @@ const htmlEntries = [
   "minerals.html",
   "start.html",
   "reset-password.html",
+  "support.html",
   // Nested entry — served at cafelytic.com/privacy via the directory-form
   // path. Vite emits dist/privacy/index.html alongside the root entries.
   "privacy/index.html",
@@ -29,6 +30,7 @@ const excludeFromJsShip = (name) =>
   name === "vite.config.ts" ||
   /^vite\.config\./.test(name) ||
   /^vitest\.config\./.test(name) ||
+  /^vitest\.setup\./.test(name) ||
   /^eslint\.config\./.test(name) ||
   /\.test\.js$/.test(name);
 
