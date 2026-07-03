@@ -113,10 +113,9 @@ module.exports = tseslint.config(
     },
   },
 
-  // Vitest config (CommonJS) + unit tests. The remaining `.test.js` files are
-  // CommonJS (require() allowed — historical; a rename to .test.ts is the
-  // outstanding cosmetic follow-up), and all test files lean on `any` for
-  // loosely-shaped fixtures.
+  // Vitest config + setup (CommonJS) and the unit tests (TypeScript modules
+  // that import describe/test/expect from "vitest" explicitly). Test files
+  // lean on `any` for loosely-shaped fixtures.
   {
     files: ["vitest.config.js", "vitest.setup.js", "**/*.test.{js,ts}"],
     languageOptions: {
@@ -127,10 +126,9 @@ module.exports = tseslint.config(
       },
     },
     rules: {
+      // vitest.config.js / vitest.setup.js are CJS (package.json has no
+      // "type": "module"), so require()/module.exports is correct there.
       "@typescript-eslint/no-require-imports": "off",
-      // Test-file callbacks consume types from `require()`'d sources that
-      // resolve to `any`. Typing each callback param would mean writing the
-      // full source-module surface here. Same trade-off as the e2e block.
       "@typescript-eslint/no-explicit-any": "off",
       "no-unused-vars": ["error", { args: "none", caughtErrorsIgnorePattern: "^_" }],
     },

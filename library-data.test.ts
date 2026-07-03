@@ -9,6 +9,7 @@
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` for the src/lib modules.
 
+import { describe, test, expect, beforeEach } from "vitest";
 import { saveCustomTargetProfiles, invalidateTargetPresetsCache } from "./src/lib/storage";
 import * as library from "./src/lib/library-data";
 
@@ -32,10 +33,10 @@ const LIBRARY_CACHE_KEY = "cw_library_public_recipes_v5";
 // library-merge.test.js. This override is read by storage.js (which looks
 // up the function via globalThis), but not by library-data.js's internal
 // callers. Use seedLibraryRows() below for those.
-let fakeLibraryRows = [];
+let fakeLibraryRows: LibraryRecipeRow[] = [];
 globalThis.getPublicRecipesSync = () => fakeLibraryRows;
 
-function seedLibraryRows(rows) {
+function seedLibraryRows(rows: LibraryRecipeRow[]) {
   fakeLibraryRows = rows;
   global.sessionStorage.setItem(LIBRARY_CACHE_KEY, JSON.stringify(rows));
   library.invalidatePublicRecipesCache();
@@ -177,13 +178,13 @@ describe("normalizePublicRecipeRow", () => {
       slug: "x",
       label: "X",
       stock_formula: { a: 1 },
-    });
+    } as Parameters<typeof normalizeRow>[0]);
     expect(snake.stockFormula).toEqual({ a: 1 });
     const camel = normalizeRow({
       slug: "x",
       label: "X",
       stockFormula: { b: 2 },
-    });
+    } as Parameters<typeof normalizeRow>[0]);
     expect(camel.stockFormula).toEqual({ b: 2 });
   });
 
@@ -329,7 +330,7 @@ describe("applyFilters", () => {
   test("non-array recipes argument returns []", () => {
     expect(applyFilters({}, null)).toEqual([]);
     expect(applyFilters({}, undefined)).toEqual([]);
-    expect(applyFilters({}, "not array")).toEqual([]);
+    expect(applyFilters({}, "not array" as unknown as LibraryRecipeRow[])).toEqual([]);
   });
 
   test("null filters → defaults applied, returns all recipes", () => {
@@ -392,7 +393,7 @@ describe("partitionByCategory", () => {
   test("unknown category falls through to 'classic'", () => {
     const result = partitionByCategory([{ slug: "x", category: "mystery", label: "X" }]);
     expect(result.classic).toHaveLength(1);
-    expect(result.classic[0].slug).toBe("x");
+    expect(result.classic![0]!.slug).toBe("x");
   });
 
   test("intro-water bucket is sorted by slug ascending", () => {
@@ -401,7 +402,7 @@ describe("partitionByCategory", () => {
       { slug: "rasami-w1d1", category: "intro-water", label: "D1" },
       { slug: "rasami-w1d2", category: "intro-water", label: "D2" },
     ]);
-    expect(result["intro-water"].map((r) => r.slug)).toEqual([
+    expect(result["intro-water"]!.map((r) => r.slug)).toEqual([
       "rasami-w1d1",
       "rasami-w1d2",
       "rasami-w1d3",
@@ -413,7 +414,7 @@ describe("partitionByCategory", () => {
       { slug: "z", category: "classic", label: "Z" },
       { slug: "a", category: "classic", label: "A" },
     ]);
-    expect(result.classic.map((r) => r.slug)).toEqual(["z", "a"]);
+    expect(result.classic!.map((r) => r.slug)).toEqual(["z", "a"]);
   });
 });
 
@@ -430,22 +431,22 @@ describe("pickFeaturedFromFiltered", () => {
 
   test("method='espresso' returns cafelytic-espresso", () => {
     const result = pickFeaturedFromFiltered(filtered, "espresso");
-    expect(result.slug).toBe("cafelytic-espresso");
+    expect(result!.slug).toBe("cafelytic-espresso");
   });
 
   test("method='filter' returns cafelytic-filter", () => {
     const result = pickFeaturedFromFiltered(filtered, "filter");
-    expect(result.slug).toBe("cafelytic-filter");
+    expect(result!.slug).toBe("cafelytic-filter");
   });
 
   test("method='all' returns cafelytic-filter", () => {
     const result = pickFeaturedFromFiltered(filtered, "all");
-    expect(result.slug).toBe("cafelytic-filter");
+    expect(result!.slug).toBe("cafelytic-filter");
   });
 
   test("unknown method falls through to FEATURED_PICKS.all", () => {
     const result = pickFeaturedFromFiltered(filtered, "bogus");
-    expect(result.slug).toBe("cafelytic-filter");
+    expect(result!.slug).toBe("cafelytic-filter");
   });
 
   test("featured slug not in filtered set → null (respects active search)", () => {

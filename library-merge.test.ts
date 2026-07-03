@@ -20,6 +20,7 @@
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` for the src/lib modules.
 
+import { describe, test, expect, beforeEach } from "vitest";
 import {
   getAllTargetPresets,
   getTargetProfileByKey,
@@ -44,7 +45,7 @@ const { copyRecipeToMyProfiles, isRecipeInMyProfiles } = library;
 // library-data.js exports its real getPublicRecipesSync, but in tests we want
 // to inject specific library rows. Override on globalThis so storage.js's
 // `typeof getPublicRecipesSync === "function"` resolves to our stub.
-let fakeLibraryRows = [];
+let fakeLibraryRows: LibraryRecipeRow[] = [];
 globalThis.getPublicRecipesSync = () => fakeLibraryRows;
 
 function resetState() {
@@ -72,13 +73,13 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     expect(Object.keys(result)).toContain("sca");
     expect(Object.keys(result)).toContain("cafelytic-filter");
     // Ion values come from the shim row verbatim.
-    expect(result["sca"].calcium).toBe(51);
+    expect(result["sca"]!.calcium).toBe(51);
     // Action pseudo-tiles always present: "+ Custom" (scratch mode) and
     // "+ From Library" (opens the library picker).
     expect(result["custom"]).toBeDefined();
-    expect(result["custom"].label).toBe("+ Custom");
+    expect(result["custom"]!.label).toBe("+ Custom");
     expect(result["library"]).toBeDefined();
-    expect(result["library"].label).toBe("+ From Library");
+    expect(result["library"]!.label).toBe("+ From Library");
   });
 
   test("library row overrides shim at the same slug", () => {
@@ -97,8 +98,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     ];
     invalidateTargetPresetsCache();
     const result = getAllTargetPresets();
-    expect(result["sca"].label).toBe("SCA from library");
-    expect(result["sca"].calcium).toBe(999);
+    expect(result["sca"]!.label).toBe("SCA from library");
+    expect(result["sca"]!.calcium).toBe(999);
   });
 
   test("custom row overrides library at the same slug", () => {
@@ -125,8 +126,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     });
     invalidateTargetPresetsCache();
     const result = getAllTargetPresets();
-    expect(result["sca"].label).toBe("My SCA");
-    expect(result["sca"].calcium).toBe(42);
+    expect(result["sca"]!.label).toBe("My SCA");
+    expect(result["sca"]!.calcium).toBe(42);
   });
 
   test("starter library-only slug appears in rail (not in shim, not in custom)", () => {
@@ -145,7 +146,7 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     invalidateTargetPresetsCache();
     const result = getAllTargetPresets();
     expect(result["sey"]).toBeDefined();
-    expect(result["sey"].label).toBe("Sey");
+    expect(result["sey"]!.label).toBe("Sey");
   });
 
   test("non-starter library slug is hidden by default but appears when explicitly added (migration 011)", () => {
@@ -235,8 +236,8 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     invalidateTargetPresetsCache();
     const profile = getTargetProfileByKey("sey");
     expect(profile).not.toBeNull();
-    expect(profile.label).toBe("Sey");
-    expect(profile.calcium).toBe(20);
+    expect(profile!.label).toBe("Sey");
+    expect(profile!.calcium).toBe(20);
   });
 
   test("getTargetProfileByKey returns null for 'custom' sentinel", () => {
@@ -361,9 +362,9 @@ describe("copyRecipeToMyProfiles: canonical-identity preservation + starter-vs-a
     const returned = copyRecipeToMyProfiles(recipe);
     expect(returned).toBeTruthy();
     const custom = loadCustomTargetProfiles();
-    expect(custom[returned]).toBeDefined();
-    expect(custom[returned].label).toBe("A Published Recipe");
-    expect(custom[returned].calcium).toBe(30);
+    expect(custom[returned!]).toBeDefined();
+    expect(custom[returned!]!.label).toBe("A Published Recipe");
+    expect(custom[returned!]!.calcium).toBe(30);
   });
 });
 
@@ -588,8 +589,8 @@ describe("brewMethod='all' cross-method support", () => {
     invalidateTargetPresetsCache();
     const all = getAllTargetPresets();
     expect(all["roasty"]).toBeDefined();
-    expect(all["roasty"].roast).toEqual(["dark"]);
-    expect(all["roasty"].tags).toEqual(["Sweet", "Full Body"]);
+    expect(all["roasty"]!.roast).toEqual(["dark"]);
+    expect(all["roasty"]!.tags).toEqual(["Sweet", "Full Body"]);
   });
 
   test("getAllTargetPresets: library row without roast/tags degrades to ['all'] / []", () => {
@@ -607,7 +608,7 @@ describe("brewMethod='all' cross-method support", () => {
     ];
     invalidateTargetPresetsCache();
     const all = getAllTargetPresets();
-    expect(all["bare"].roast).toEqual(["all"]);
-    expect(all["bare"].tags).toEqual([]);
+    expect(all["bare"]!.roast).toEqual(["all"]);
+    expect(all["bare"]!.tags).toEqual([]);
   });
 });
