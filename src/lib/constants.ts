@@ -2,8 +2,7 @@
 // Constants — pure data, no side effects
 // ============================================
 // The shared ion/mineral types (IonName, IonMap, MineralEntry, TargetProfile,
-// …) are defined and exported here; globals.d.ts re-exposes them as global
-// aliases for the remaining classic script (metrics.js) until it migrates.
+// …) are defined and exported here.
 
 // --- Shared ion/mineral types ---
 export type IonName =
@@ -576,7 +575,7 @@ export const LOTUS_CONCENTRATE_IDS: readonly string[] = BRAND_CONCENTRATE_IDS.fi
 );
 
 // --- Water-profile range bands by brew method ---
-// These bands drive evaluateWaterProfileRanges() in metrics.js.
+// These bands drive evaluateWaterProfileRanges() in src/lib/metrics.ts.
 // Espresso bands diverge from filter in two directions:
 //  - Lower bounds are more permissive (zero-Ca/low-GH espresso recipes).
 //  - Upper KH and GH bounds are tighter than filter to flag the

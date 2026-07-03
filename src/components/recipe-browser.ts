@@ -23,13 +23,14 @@
 // since this module now loads (via legacy-globals) BEFORE the classic
 // library-data.js script, a load-time capture would grab undefined. Reading
 // window.* lazily is behavior-equivalent (library-data sets them once and never
-// reassigns). deriveStockFormulaFromTarget (metrics.js) stays an ambient global;
-// getUser is read from window (supabase-client publishes it via trySet). The
-// public API is re-published on window so the not-yet-migrated caller (the
-// library.html inline block, which calls window.mountRecipeBrowser) is unchanged.
+// reassigns). getUser is read from window (supabase-client publishes it via
+// trySet). The public API is re-published on window so the not-yet-migrated
+// caller (the library.html inline block, which calls window.mountRecipeBrowser)
+// is unchanged.
 // =============================================================================
 
 import { LIBRARY_TAGS } from "../lib/constants";
+import { deriveStockFormulaFromTarget, recipeMetricsSummary } from "../lib/metrics";
 import { formatStockSpec } from "../lib/stock-format";
 import {
   addDeletedTargetPreset,
@@ -310,14 +311,11 @@ function formatStockFormula(formula: LibraryRecipeRow["stockFormula"]): string {
   return formatStockSpec(formula, { labelMode: "short", includeBottleDose: true });
 }
 
-// GH / KH summary row. Values from metrics.js's recipeMetricsSummary (on
-// window): GH from Ca + Mg, KH from alkalinity, mg/L as CaCO3.
+// GH / KH summary row. Values from metrics' recipeMetricsSummary: GH from
+// Ca + Mg, KH from alkalinity, mg/L as CaCO3.
 function createMineralTriplet(recipe: LibraryRecipeRow, extraClass?: string): HTMLDivElement {
   const wrap = el("div", "rx-mineral-triplet" + (extraClass ? " " + extraClass : ""));
-  const summary =
-    typeof window.recipeMetricsSummary === "function"
-      ? window.recipeMetricsSummary(recipe)
-      : { gh: null, kh: null };
+  const summary = recipeMetricsSummary(recipe);
   (
     [
       { label: "GH", value: summary.gh },
@@ -686,10 +684,8 @@ function buildDetailBody(recipe: LibraryRecipeRow, handlers: RecipeHandlers): vo
   scroll.appendChild(header);
 
   // Headline metrics (GH / KH / TDS) - derived summary numbers shown above the
-  // raw per-ion breakdown. recipeMetricsSummary is bridged on window by
-  // metrics.js. Rendered as a 3-up grid (.rx-detail-metrics).
-  const summary =
-    typeof window.recipeMetricsSummary === "function" ? window.recipeMetricsSummary(recipe) : null;
+  // raw per-ion breakdown. Rendered as a 3-up grid (.rx-detail-metrics).
+  const summary = recipeMetricsSummary(recipe);
   if (summary) {
     const metricsSection = el("div", "rx-detail-section");
     const metricsGrid = el("div", "rx-detail-metrics");
@@ -1390,10 +1386,7 @@ function mountRecipeBrowser(root: HTMLElement | null): void {
     // hand-authored stockFormula. Derivation runs here at click time.
     onDeriveStock: function (recipe) {
       if (!recipe || !recipe.slug) return;
-      if (
-        typeof window.openStockEditor !== "function" ||
-        typeof deriveStockFormulaFromTarget !== "function"
-      ) {
+      if (typeof window.openStockEditor !== "function") {
         window.location.href = "minerals.html#stock-derive=" + encodeURIComponent(recipe.slug);
         return;
       }

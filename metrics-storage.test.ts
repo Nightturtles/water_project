@@ -1,4 +1,4 @@
-// Unit tests for metrics.js functions that read from storage.js (and
+// Unit tests for src/lib/metrics.ts functions that read from storage (and
 // therefore need browser-globals stubs in Node).
 //
 // Covers:
@@ -14,18 +14,14 @@
 //     to loadBrewMethod() when options.brewMethod is absent.
 //
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
-// vitest.setup.js so this file can use ES `import` for src/lib/storage.
-// metrics.js stays a classic-script CJS file and is loaded via require();
-// constants (a TS module since its migration) is assigned onto globalThis
-// first so metrics.js resolves MINERAL_DB etc. via global scope.
+// vitest.setup.js; they're installed before these imports execute, which
+// matters because storage.ts (imported directly and via metrics) touches
+// localStorage at module-eval time.
 import { describe, test, expect, beforeEach } from "vitest";
-import * as constants from "./src/lib/constants";
 import { saveSelectedMinerals } from "./src/lib/storage";
+import * as metrics from "./src/lib/metrics";
 
 const g: any = global;
-
-Object.assign(globalThis, constants);
-const metrics = require("./metrics.js");
 
 function resetState() {
   g.localStorage.clear();
@@ -70,7 +66,7 @@ describe("pickBestCaMgSources", () => {
 
   test("both deltas zero, two Ca + two Mg enabled → falls back to CaCl2 + epsom", () => {
     // The caSources.length === 2 → "calcium-chloride", mgSources.length === 2 →
-    // "epsom-salt" fallback at metrics.js:107-117.
+    // "epsom-salt" fallback in pickBestCaMgSources' no-candidates branch.
     saveSelectedMinerals([
       "calcium-chloride",
       "gypsum",
@@ -194,7 +190,10 @@ describe("deriveStockFormulaFromTarget", () => {
     const negative = metrics.deriveStockFormulaFromTarget({}, { bottleMl: -10, doseGramsPerL: 0 });
     expect(negative.bottleMl).toBe(200);
     expect(negative.doseGramsPerL).toBe(4);
-    const nan = metrics.deriveStockFormulaFromTarget({}, { bottleMl: "bad", doseGramsPerL: NaN });
+    const nan = metrics.deriveStockFormulaFromTarget(
+      {},
+      { bottleMl: "bad" as unknown as number, doseGramsPerL: NaN },
+    );
     expect(nan.bottleMl).toBe(200);
     expect(nan.doseGramsPerL).toBe(4);
   });
@@ -214,8 +213,8 @@ describe("deriveStockFormulaFromTarget", () => {
     // Anhydrous is more concentrated: less mass for the same Ca, scaling by the
     // CaCl2 MW ratio (110.98 / 147.01 ≈ 0.755). Output grams are rounded, so
     // compare the ratio loosely rather than to full precision.
-    expect(aCa.grams).toBeLessThan(dCa.grams);
-    expect(aCa.grams / dCa.grams).toBeCloseTo(110.98 / 147.01, 1);
+    expect(aCa!.grams).toBeLessThan(dCa!.grams);
+    expect(aCa!.grams / dCa!.grams).toBeCloseTo(110.98 / 147.01, 1);
   });
 
   test("only anhydrous CaCl2 selected (no override) → derive uses anhydrous via effective source", () => {
@@ -284,7 +283,7 @@ describe("deriveStockFormulaFromTarget", () => {
 
 describe("computeFullProfile", () => {
   test("all 7 ions explicit → ignores source water, returns rounded ions verbatim", () => {
-    // hasExplicitIons branch at metrics.js:711.
+    // computeFullProfile's hasExplicitIons branch.
     const result = metrics.computeFullProfile({
       calcium: 51.6,
       magnesium: 17.4,
@@ -347,8 +346,8 @@ describe("buildStoredTargetProfile (brewMethod fallback)", () => {
   });
 
   test("options.brewMethod 'invalid-mode' + cw_brew_method='espresso' → falls through to loadBrewMethod", () => {
-    // metrics.js:815-820 only recognizes 'espresso' or 'filter' on options;
-    // everything else falls through to loadBrewMethod().
+    // buildStoredTargetProfile only recognizes 'espresso' or 'filter' on
+    // options; everything else falls through to loadBrewMethod().
     g.localStorage.setItem("cw_brew_method", "espresso");
     const profile = metrics.buildStoredTargetProfile(
       "X",

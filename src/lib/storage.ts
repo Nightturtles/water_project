@@ -42,7 +42,7 @@ interface StockMineralEntry {
   grams: number;
 }
 
-interface StockConcentrateSpec {
+export interface StockConcentrateSpec {
   label?: string;
   bottleMl?: number;
   doseGramsPerL?: number;

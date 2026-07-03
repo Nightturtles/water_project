@@ -1,11 +1,10 @@
 // @ts-check
 // ESLint flat config for Cafelytic.
 //
-// Scope: only the files that have already opted into @ts-check, plus the
-// test + config files. metrics.js and theme-init.js stay classic root scripts
-// (not src/ modules) but are @ts-checked + linted in the block below;
-// theme-init.js in particular must stay a render-blocking <head> primer (a
-// deferred module would run after first paint and reintroduce FOUC).
+// Scope: the src/ TypeScript modules plus the test + config files.
+// theme-init.js is the one permanent classic root script — it must stay a
+// render-blocking <head> primer (a deferred module would run after first
+// paint and reintroduce FOUC) — and is @ts-checked + linted in the block below.
 
 const js = require("@eslint/js");
 const tseslint = require("typescript-eslint");
@@ -42,26 +41,21 @@ module.exports = tseslint.config(
   // "unused" without being visible to ESLint.
   ...tseslint.configs.recommended,
 
-  // Classic-script browser JS files.
-  // They load via <script> tag and rely on globals populated by the
-  // legacy-globals.ts window bridge: `metrics.js` calls `MINERAL_DB` from
-  // src/lib/constants.ts, etc. ESLint's `no-undef` and `no-unused-vars` both
-  // get the wrong answer against that structure — both flag correct code as
-  // broken because they can't see the cross-file references, so we turn them
-  // off here.
+  // The one classic-script browser JS file: theme-init.js, the render-blocking
+  // <head> primer (it cannot be a deferred module — FOUC). It loads via
+  // <script> tag, so ESLint's `no-undef` / `no-unused-vars` misjudge its
+  // cross-file references; both are off here.
   //
-  // Safety net: the files here are under @ts-check AND listed in tsconfig.json
-  // `include`, so `tsc --noEmit` type-checks them against globals.d.ts; the
-  // per-file lint rules below (eqeqeq, no-implicit-coercion, prefer-const,
-  // no-empty) layer on top. (The UI/data classics migrated to
-  // src/{lib,components}/*.ts across the Phase 3 PRs, constants.js to
-  // src/lib/constants.ts. theme-init.js stays a classic render-blocking
-  // <head> primer — it cannot be a deferred module — but is @ts-checked here.)
+  // Safety net: it is under @ts-check AND listed in tsconfig.json `include`,
+  // so `tsc --noEmit` type-checks it against globals.d.ts; the per-file lint
+  // rules below (eqeqeq, no-implicit-coercion, prefer-const, no-empty) layer
+  // on top. (Every other classic migrated to src/{lib,components}/*.ts across
+  // the Phase 3 PRs.)
   //
   // This block comes AFTER tseslint.configs.recommended so its rule
   // overrides win.
   {
-    files: ["metrics.js", "theme-init.js"],
+    files: ["theme-init.js"],
     languageOptions: {
       sourceType: "script",
       globals: {
@@ -119,17 +113,10 @@ module.exports = tseslint.config(
     },
   },
 
-  // Vitest config (CommonJS) + unit tests (CommonJS + globals: true).
-  // These legitimately use require() to import UMD-shimmed sources —
-  // the whole point of the shim is letting Node/Vitest consume the same
-  // files the browser loads as classic scripts. Silence the TS rule
-  // that would flag require() in favor of ESM imports.
-  //
-  // The metrics test files still use require() for metrics.js (the one
-  // remaining UMD-shimmed classic) for the same load-order reason: globals
-  // (vitest.setup.js stubs + the constants module Object.assign'd onto
-  // globalThis) must be in place before metrics.js is evaluated, and an
-  // ES `import` would hoist above those statements.
+  // Vitest config (CommonJS) + unit tests. The remaining `.test.js` files are
+  // CommonJS (require() allowed — historical; a rename to .test.ts is the
+  // outstanding cosmetic follow-up), and all test files lean on `any` for
+  // loosely-shaped fixtures.
   {
     files: ["vitest.config.js", "vitest.setup.js", "**/*.test.{js,ts}"],
     languageOptions: {

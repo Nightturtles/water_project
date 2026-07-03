@@ -320,11 +320,9 @@
   </footer>
 
   <script type="module" src="/src/lib/legacy-globals.ts"></script>
-  <script defer src="metrics.js"></script>
   <script>
-    // Body wrapped in DOMContentLoaded so the deferred classic script above
-    // (metrics.js) and the legacy-globals.ts module bridge have populated
-    // their globals on window before any top-level calls below run.
+    // Body wrapped in DOMContentLoaded so the legacy-globals.ts module bridge
+    // has populated its globals on window before any top-level calls below run.
     document.addEventListener("DOMContentLoaded", function () {
     // --- Inline mineral selector (mount + in-tab re-render) ---
     if (typeof window.mountMineralSelector === "function") {
