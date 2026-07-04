@@ -25,7 +25,7 @@ function makeFakeStorage() {
 }
 
 import { describe, test, expect } from "vitest";
-import { shouldLoadAnalytics, handleOptOutURLParam } from "./src/lib/analytics-init";
+import { shouldLoadAnalytics, handleOptOutURLParam, createGtag } from "./src/lib/analytics-init";
 
 // ---------------------------------------------------------------------------
 // shouldLoadAnalytics — pure decision tree
@@ -102,6 +102,40 @@ describe("shouldLoadAnalytics", () => {
       removeItem: () => {},
     };
     expect(shouldLoadAnalytics(env({ storage: blockingStorage }))).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createGtag — the command-queue shim
+// ---------------------------------------------------------------------------
+
+describe("createGtag", () => {
+  test("pushes an Arguments object, NOT a plain array (gtag.js ignores arrays)", () => {
+    // Regression guard for #207: gtag.js only recognizes dataLayer entries
+    // that are `arguments` objects. A rest-params rewrite pushed plain arrays,
+    // which the tag silently dropped — zero GA hits while gtag/js still loaded
+    // fine. If this assertion fires, GA is dark in production again.
+    const dl: unknown[] = [];
+    const gtag = createGtag(dl);
+    gtag("config", "G-TEST123");
+    expect(dl).toHaveLength(1);
+    expect(Object.prototype.toString.call(dl[0])).toBe("[object Arguments]");
+  });
+
+  test("queued entry exposes the command tuple by index and length", () => {
+    const dl: unknown[] = [];
+    const gtag = createGtag(dl);
+    const when = new Date(0);
+    gtag("js", when);
+    gtag("config", "G-TEST123");
+    const first = dl[0] as { [i: number]: unknown; length: number };
+    const second = dl[1] as { [i: number]: unknown; length: number };
+    expect(first.length).toBe(2);
+    expect(first[0]).toBe("js");
+    expect(first[1]).toBe(when);
+    expect(second.length).toBe(2);
+    expect(second[0]).toBe("config");
+    expect(second[1]).toBe("G-TEST123");
   });
 });
 

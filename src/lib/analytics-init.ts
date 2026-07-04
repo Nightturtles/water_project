@@ -8,10 +8,10 @@
 // legacy-globals.ts (imported as a side-effect, right after sentry-init) rather
 // than the render-blocking <head> <script> it used to be. GA's own gtag/js tag
 // is async regardless, so the deferred load is immaterial; the ?no-analytics
-// opt-out just applies a tick later. The two pure helpers are exported for the
-// Vitest suite (analytics-init.test.js); nothing reaches them at runtime, so
-// there is no window self-publish. Window types (dataLayer, gtag) live in
-// globals.d.ts.
+// opt-out just applies a tick later. The pure helpers (and createGtag) are
+// exported for the Vitest suite (analytics-init.test.ts); nothing reaches them
+// at runtime, so there is no window self-publish. Window types (dataLayer,
+// gtag) live in globals.d.ts.
 // =============================================================================
 
 const MEASUREMENT_ID = "G-BGJWVRGJJC";
@@ -95,6 +95,20 @@ export function shouldLoadAnalytics(env: AnalyticsEnv): boolean {
   return true;
 }
 
+// GA's command queue: gtag.js only processes dataLayer entries that are
+// `arguments` objects — it silently ignores plain arrays, so a rest-params
+// rewrite (`dataLayer.push(args)`) kills every hit while the tag still loads
+// cleanly. That exact regression shipped in the TS migration (#207) and took
+// GA dark for ~12 days. The eslint-disable is load-bearing; do not "modernize"
+// this back to rest params. Exported so the test suite can assert the pushed
+// entry really is an Arguments object.
+export function createGtag(dataLayer: unknown[]): (...args: unknown[]) => void {
+  return function () {
+    // eslint-disable-next-line prefer-rest-params
+    dataLayer.push(arguments);
+  };
+}
+
 // Browser bootstrap. Skipped under Node / Vitest (no location/history/
 // navigator), which lets the test file import the two helpers without firing GA.
 //
@@ -122,13 +136,7 @@ try {
     ) {
       const dataLayer: unknown[] = window.dataLayer || [];
       window.dataLayer = dataLayer;
-      // GA's command queue: each gtag(...) call is pushed as its argument tuple,
-      // which GA later reads by index. Rest params (rather than the canonical
-      // `arguments` push) to satisfy prefer-rest-params; GA processes the queued
-      // array identically.
-      const gtag = function (...args: unknown[]): void {
-        dataLayer.push(args);
-      };
+      const gtag = createGtag(dataLayer);
       window.gtag = gtag;
       gtag("js", new Date());
       gtag("config", MEASUREMENT_ID);
