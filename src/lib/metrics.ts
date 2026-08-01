@@ -262,6 +262,191 @@ export function pickBestCaMgSources(
   };
 }
 
+/** Result of allocateCaMgDoses: per-salt doses plus a dominant source per slot. */
+export interface CaMgAllocation {
+  /** g/L of each dosed salt; only salts with a nonzero dose appear. */
+  gramsPerL: Record<string, number>;
+  /** Salt carrying the majority of the calcium delta (warnings / range bands). */
+  caSource: string | null;
+  /** Salt carrying the majority of the magnesium delta. */
+  mgSource: string | null;
+  /** True when either slot splits its delta across two salts. */
+  blended: boolean;
+}
+
+/**
+ * Dose the Ca/Mg deltas across the enabled salts so the added sulfate and
+ * chloride land as close as possible (least squares) to the target profile's
+ * SO4/Cl, while still delivering the Ca and Mg deltas exactly.
+ *
+ * Unlike pickBestCaMgSources (kept for its existing callers), a slot with
+ * both of its salts enabled may SPLIT its delta — e.g. Mg 10 as epsom 2 +
+ * MgCl2 8 — which is the only way to reach SO4:Cl ratios between the
+ * all-sulfate and all-chloride corners. The solve reduces to one scalar:
+ * every divalent cation pairs with one SO4²⁻ or two Cl⁻, so added sulfate
+ * trades against added chloride at the fixed mass ratio κ = 96.06/70.906
+ * regardless of which salt carries it. Least-squares over (SO4, Cl) is then
+ * a 1-D quadratic in "total sulfate carried by the blendable slots", solved
+ * in closed form and clamped to capacity.
+ *
+ * Tie-breaks (any split with the same sulfate total yields identical water):
+ * sulfate rides Mg (epsom) before Ca (gypsum is solubility-limited and
+ * disfavored, matching pickBestCaMgSources). A slot within 2% of a pure
+ * corner snaps to it, so profiles without a meaningful SO4/Cl target keep
+ * producing the classic single-salt dose. When the profile omits BOTH ions
+ * (non-finite, e.g. a Ca/Mg/Alk-only partial profile) blending is skipped
+ * entirely and the legacy least-added-anion corner is chosen.
+ */
+export function allocateCaMgDoses(
+  sourceWater: IonMap | null | undefined,
+  targetProfile: Partial<TargetProfile> | Partial<Record<IonName, number>> | null | undefined,
+  deltaCa: number,
+  deltaMg: number,
+): CaMgAllocation {
+  const caSources = getEffectiveCalciumSources();
+  const mgSources = getEffectiveMagnesiumSources();
+  const caCl2Form = caSources.find((s) => s !== "gypsum") ?? null;
+  const hasGypsum = caSources.includes("gypsum");
+  const hasEpsom = mgSources.includes("epsom-salt");
+  const hasMgCl2 = mgSources.includes("magnesium-chloride");
+
+  // mg of anion delivered per mg of cation for a given salt.
+  const yieldOf = (mineralId: string, anion: IonName, cation: IonName): number => {
+    const ions = MINERAL_DB[mineralId] ? MINERAL_DB[mineralId].ions : null;
+    const anionFrac = (ions && ions[anion]) || 0;
+    const cationFrac = (ions && ions[cation]) || 0;
+    return cationFrac > 0 ? anionFrac / cationFrac : 0;
+  };
+  const so4PerMg = yieldOf("epsom-salt", "sulfate", "magnesium");
+  const clPerMg = yieldOf("magnesium-chloride", "chloride", "magnesium");
+  const so4PerCa = yieldOf("gypsum", "sulfate", "calcium");
+  const clPerCa = yieldOf(caCl2Form ?? "calcium-chloride", "chloride", "calcium");
+
+  const dCa = Math.max(0, Number(deltaCa) || 0);
+  const dMg = Math.max(0, Number(deltaMg) || 0);
+
+  const srcSO4 = (sourceWater && Number(sourceWater.sulfate)) || 0;
+  const srcCl = (sourceWater && Number(sourceWater.chloride)) || 0;
+  const tSO4 = targetProfile ? Number(targetProfile.sulfate) : NaN;
+  const tCl = targetProfile ? Number(targetProfile.chloride) : NaN;
+  const hasAnionTarget = Number.isFinite(tSO4) || Number.isFinite(tCl);
+  // Added-anion goals. A finite 0 is an expressed preference ("as little as
+  // possible", blend allowed); when BOTH fields are absent the profile has no
+  // SO4/Cl opinion at all and the corner search below keeps the legacy
+  // single-salt-per-slot outcome (computeFullProfile's partial-profile
+  // fallback reaches that path).
+  const wantS = Number.isFinite(tSO4) ? Math.max(0, tSO4 - srcSO4) : 0;
+  const wantC = Number.isFinite(tCl) ? Math.max(0, tCl - srcCl) : 0;
+
+  // A slot is free (blendable) when both of its salts are enabled and there
+  // is a delta to place; otherwise its anion side effect is fixed by the
+  // single enabled salt.
+  const mgFree = dMg > 0 && hasEpsom && hasMgCl2;
+  const caFree = dCa > 0 && caCl2Form != null && hasGypsum;
+  let fixedS = 0;
+  let fixedC = 0;
+  if (dMg > 0 && !mgFree) {
+    if (hasEpsom) fixedS += dMg * so4PerMg;
+    else if (hasMgCl2) fixedC += dMg * clPerMg;
+  }
+  if (dCa > 0 && !caFree) {
+    if (caCl2Form) fixedC += dCa * clPerCa;
+    else if (hasGypsum) fixedS += dCa * so4PerCa;
+  }
+
+  // Free-slot capacities. κ is salt-independent (see docstring), so a single
+  // scalar S — total sulfate carried by the free slots — describes every
+  // reachable water: addedSO4 = fixedS + S, addedCl = fixedC + Ufree - S/κ.
+  const capSMg = mgFree ? dMg * so4PerMg : 0;
+  const capSCa = caFree ? dCa * so4PerCa : 0;
+  const sMax = capSMg + capSCa;
+  const uFree = (mgFree ? dMg * clPerMg : 0) + (caFree ? dCa * clPerCa : 0);
+  const kappa = uFree > 0 ? sMax / uFree : 0;
+
+  let sOnMg = 0;
+  let sOnCa = 0;
+  if (sMax > 0 && kappa > 0) {
+    if (!hasAnionTarget) {
+      // No SO4/Cl opinion: evaluate only the pure corners so a free slot
+      // never splits, and break ties like pickBestCaMgSources (CaCl2 over
+      // gypsum, then epsom over MgCl2).
+      let best: { sMg: number; sCa: number; err: number; tie: number } | null = null;
+      for (const smg of mgFree ? [capSMg, 0] : [0]) {
+        for (const sca of caFree ? [0, capSCa] : [0]) {
+          const so4 = fixedS + smg + sca;
+          const cl = fixedC + uFree - (smg + sca) / kappa;
+          const err = so4 * so4 + cl * cl;
+          const tie = (sca > 0 ? 1 : 0) + (mgFree && smg === 0 ? 2 : 0);
+          if (!best || err < best.err || (err === best.err && tie < best.tie)) {
+            best = { sMg: smg, sCa: sca, err, tie };
+          }
+        }
+      }
+      sOnMg = best ? best.sMg : 0;
+      sOnCa = best ? best.sCa : 0;
+    } else {
+      const a = wantS - fixedS; // sulfate still wanted from the free slots
+      const b = fixedC + uFree - wantC; // chloride overshoot if the free slots add none of it as sulfate
+      let s = (kappa * (kappa * a + b)) / (kappa * kappa + 1);
+      s = Math.min(sMax, Math.max(0, s));
+      // Sulfate rides Mg (epsom) first, then Ca (gypsum).
+      sOnMg = Math.min(s, capSMg);
+      sOnCa = Math.min(s - sOnMg, capSCa);
+    }
+  }
+
+  // Cation mass carried by the sulfate salt in each free slot, snapped so
+  // near-pure allocations collapse to the classic single salt.
+  const SNAP_SHARE = 0.02;
+  const snapShare = (cationOnSulfate: number, delta: number): number => {
+    if (delta <= 0) return 0;
+    if (cationOnSulfate < SNAP_SHARE * delta) return 0;
+    if (cationOnSulfate > (1 - SNAP_SHARE) * delta) return delta;
+    return cationOnSulfate;
+  };
+  let mgOnEpsom = 0;
+  if (mgFree) mgOnEpsom = snapShare(so4PerMg > 0 ? sOnMg / so4PerMg : 0, dMg);
+  else if (dMg > 0 && hasEpsom) mgOnEpsom = dMg;
+  const mgOnMgCl2 = hasMgCl2 ? Math.max(0, dMg - mgOnEpsom) : 0;
+  let caOnGypsum = 0;
+  if (caFree) caOnGypsum = snapShare(so4PerCa > 0 ? sOnCa / so4PerCa : 0, dCa);
+  else if (dCa > 0 && hasGypsum && !caCl2Form) caOnGypsum = dCa;
+  const caOnCaCl2 = caCl2Form ? Math.max(0, dCa - caOnGypsum) : 0;
+
+  const gramsPerL: Record<string, number> = {};
+  const addSalt = (mineralId: string | null, cationMgL: number, cation: IonName): void => {
+    if (!mineralId || cationMgL <= 0) return;
+    const frac = (MINERAL_DB[mineralId] && MINERAL_DB[mineralId].ions[cation]) || 0;
+    if (frac > 0) gramsPerL[mineralId] = (gramsPerL[mineralId] || 0) + cationMgL / frac / 1000;
+  };
+  addSalt("epsom-salt", mgOnEpsom, "magnesium");
+  addSalt("magnesium-chloride", mgOnMgCl2, "magnesium");
+  addSalt("gypsum", caOnGypsum, "calcium");
+  addSalt(caCl2Form, caOnCaCl2, "calcium");
+
+  // Dominant source per slot; the zero-delta fallbacks mirror
+  // pickBestCaMgSources so range guidance keeps rendering.
+  let mgSource: string | null = null;
+  if (mgOnEpsom > 0 || mgOnMgCl2 > 0) {
+    mgSource = mgOnEpsom >= mgOnMgCl2 ? "epsom-salt" : "magnesium-chloride";
+  } else if (mgSources.length > 0) {
+    mgSource = mgSources.length === 1 ? (mgSources[0] ?? null) : "epsom-salt";
+  }
+  let caSource: string | null = null;
+  if (caOnGypsum > 0 || caOnCaCl2 > 0) {
+    caSource = caOnCaCl2 >= caOnGypsum ? (caCl2Form ?? "gypsum") : "gypsum";
+  } else if (caSources.length > 0) {
+    caSource = caCl2Form ?? caSources[0] ?? null;
+  }
+
+  return {
+    gramsPerL,
+    caSource,
+    mgSource,
+    blended: (mgOnEpsom > 0 && mgOnMgCl2 > 0) || (caOnGypsum > 0 && caOnCaCl2 > 0),
+  };
+}
+
 export function evaluateWaterProfileRanges(
   ions: IonMap | null | undefined,
   options: {
@@ -802,17 +987,9 @@ export function computeFullProfile(target: Partial<TargetProfile>): Record<IonNa
   const deltaMg = Math.max(0, (target.magnesium || 0) - (sourceWater.magnesium || 0));
   const deltaAlk = Math.max(0, (target.alkalinity || 0) - sourceAlk);
 
-  // Use same Ca/Mg source optimization as Calculator
-  const picked = pickBestCaMgSources(sourceWater, target, deltaCa, deltaMg);
-  const caSource = picked.caSource;
-  const mgSource = picked.mgSource;
-
-  const caEntry = caSource ? MINERAL_DB[caSource] : null;
-  const mgEntry = mgSource ? MINERAL_DB[mgSource] : null;
-  const caFraction = caEntry ? caEntry.ions.calcium || 0 : 0;
-  const mgFraction = mgEntry ? mgEntry.ions.magnesium || 0 : 0;
-  const mgL_caSalt = caFraction > 0 ? deltaCa / caFraction : 0;
-  const mgL_mgSalt = mgFraction > 0 ? deltaMg / mgFraction : 0;
+  // Use same Ca/Mg dose allocation as Calculator (may blend two salts per
+  // slot to match the target's SO4/Cl).
+  const allocation = allocateCaMgDoses(sourceWater, target, deltaCa, deltaMg);
 
   // Use same alkalinity split logic as Calculator
   const alkAllocation = splitAlkalinityDelta(alkalinitySources, deltaAlk, sourceWater, target);
@@ -827,21 +1004,10 @@ export function computeFullProfile(target: Partial<TargetProfile>): Record<IonNa
     bicarbonate: sourceWater.bicarbonate || 0,
   };
 
-  const caMineral = caSource ? MINERAL_DB[caSource] : null;
-  if (caMineral && mgL_caSalt > 0) {
-    for (const [ionCa, frac] of Object.entries(caMineral.ions)) {
-      const key = ionCa as IonName;
-      result[key] += mgL_caSalt * (frac ?? 0);
-    }
-  }
-
-  const mgMineral = mgSource ? MINERAL_DB[mgSource] : null;
-  if (mgMineral && mgL_mgSalt > 0) {
-    for (const [ionMg, frac] of Object.entries(mgMineral.ions)) {
-      const key = ionMg as IonName;
-      result[key] += mgL_mgSalt * (frac ?? 0);
-    }
-  }
+  const caMgIons = calculateIonPPMs(allocation.gramsPerL);
+  ION_FIELDS.forEach(function (ion) {
+    result[ion] += caMgIons[ion] || 0;
+  });
 
   // Apply each alkalinity source from the split allocation
   (["baking-soda", "potassium-bicarbonate"] as const).forEach(function (alkId) {
