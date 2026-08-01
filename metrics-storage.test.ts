@@ -19,6 +19,7 @@
 // localStorage at module-eval time.
 import { describe, test, expect, beforeEach } from "vitest";
 import { saveSelectedMinerals } from "./src/lib/storage";
+import { MINERAL_DB } from "./src/lib/constants";
 import * as metrics from "./src/lib/metrics";
 
 const g: any = global;
@@ -368,5 +369,146 @@ describe("buildStoredTargetProfile (brewMethod fallback)", () => {
     // whatever normalizeBrewMethod returns for null, which is "filter" per
     // storage.js convention.
     expect(profile.brewMethod).toBe("filter");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// allocateCaMgDoses — SO4/Cl blend allocation (reads mineral selection from
+// storage like pickBestCaMgSources)
+// ---------------------------------------------------------------------------
+
+describe("allocateCaMgDoses", () => {
+  const DISTILLED = { calcium: 0, magnesium: 0, sulfate: 0, chloride: 0 };
+
+  function addedIons(allocation: { gramsPerL: Record<string, number> }) {
+    return metrics.calculateIonPPMs(allocation.gramsPerL);
+  }
+
+  test("κ invariant: SO4-vs-Cl mass trade is identical for the Mg and Ca salt pairs", () => {
+    // The closed-form 1-D solve relies on every divalent cation pairing with
+    // one SO4²⁻ or two Cl⁻, making sulfate-per-chloride-displaced a single
+    // constant. Guards MINERAL_DB edits that would break that reduction.
+    const kMg =
+      MINERAL_DB["epsom-salt"]!.ions.sulfate! /
+      MINERAL_DB["epsom-salt"]!.ions.magnesium! /
+      (MINERAL_DB["magnesium-chloride"]!.ions.chloride! /
+        MINERAL_DB["magnesium-chloride"]!.ions.magnesium!);
+    const kCa =
+      MINERAL_DB["gypsum"]!.ions.sulfate! /
+      MINERAL_DB["gypsum"]!.ions.calcium! /
+      (MINERAL_DB["calcium-chloride"]!.ions.chloride! /
+        MINERAL_DB["calcium-chloride"]!.ions.calcium!);
+    expect(kMg).toBeCloseTo(kCa, 6);
+  });
+
+  test("balanced profile (SO4 8 / Cl 29), no gypsum → splits Mg across epsom + MgCl2", () => {
+    // The motivating regression: a saved recipe of epsom + MgCl2 whose ratio
+    // (0.28) is unreachable by any single Mg salt. Expect Mg ≈ 2.19 mg/L via
+    // epsom and ≈ 7.81 via MgCl2, landing added SO4/Cl at ≈ (8.64, 29.87).
+    saveSelectedMinerals(["calcium-chloride", "epsom-salt", "magnesium-chloride", "baking-soda"]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 8, chloride: 29 }, 4, 10);
+    expect(result.blended).toBe(true);
+    expect(result.gramsPerL["epsom-salt"]).toBeCloseTo(0.02218, 4);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeCloseTo(0.06535, 4);
+    expect(result.gramsPerL["calcium-chloride"]).toBeCloseTo(0.01467, 4);
+    const ions = addedIons(result);
+    expect(ions.calcium).toBeCloseTo(4, 2);
+    expect(ions.magnesium).toBeCloseTo(10, 2);
+    expect(ions.sulfate).toBeCloseTo(8.64, 1);
+    expect(ions.chloride).toBeCloseTo(29.87, 1);
+    // MgCl2 carries the larger share → dominant source for range bands.
+    expect(result.mgSource).toBe("magnesium-chloride");
+    expect(result.caSource).toBe("calcium-chloride");
+  });
+
+  test("SCA-scale zeros target with all four salts → snaps to the classic epsom + CaCl2", () => {
+    // Legacy-compat: the unconstrained optimum leaves 0.6% of Mg on MgCl2;
+    // the 2% snap collapses it so Ca 51 / Mg 17 profiles keep the classic
+    // single-salt dose from pickBestCaMgSources.
+    saveSelectedMinerals([
+      "calcium-chloride",
+      "gypsum",
+      "epsom-salt",
+      "magnesium-chloride",
+      "baking-soda",
+    ]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 0, chloride: 0 }, 51, 17);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeUndefined();
+    expect(result.gramsPerL["gypsum"]).toBeUndefined();
+    const ions = addedIons(result);
+    expect(ions.calcium).toBeCloseTo(51, 2);
+    expect(ions.magnesium).toBeCloseTo(17, 2);
+    expect(result.caSource).toBe("calcium-chloride");
+    expect(result.mgSource).toBe("epsom-salt");
+  });
+
+  test("sulfate-heavy target (SO4 40 / Cl 7) → all Mg on epsom", () => {
+    saveSelectedMinerals(["calcium-chloride", "epsom-salt", "magnesium-chloride", "baking-soda"]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 40, chloride: 7 }, 4, 10);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeUndefined();
+    const ions = addedIons(result);
+    expect(ions.sulfate).toBeCloseTo(39.52, 1);
+    expect(ions.chloride).toBeCloseTo(7.08, 1);
+    expect(result.mgSource).toBe("epsom-salt");
+  });
+
+  test("chloride-heavy target (SO4 0 / Cl 140) at SCA deltas → all MgCl2 + CaCl2", () => {
+    saveSelectedMinerals([
+      "calcium-chloride",
+      "gypsum",
+      "epsom-salt",
+      "magnesium-chloride",
+      "baking-soda",
+    ]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 0, chloride: 140 }, 51, 17);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["epsom-salt"]).toBeUndefined();
+    expect(result.gramsPerL["gypsum"]).toBeUndefined();
+    const ions = addedIons(result);
+    expect(ions.chloride).toBeCloseTo(139.82, 1);
+    expect(ions.sulfate).toBeCloseTo(0, 2);
+    expect(result.mgSource).toBe("magnesium-chloride");
+  });
+
+  test("single enabled salt per slot ignores SO4/Cl targets entirely", () => {
+    // resetState default: calcium-chloride + epsom-salt only. Even a target
+    // demanding all-chloride water cannot move the dose off the enabled salts.
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 0, chloride: 200 }, 4, 10);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["epsom-salt"]).toBeGreaterThan(0);
+    expect(result.gramsPerL["calcium-chloride"]).toBeGreaterThan(0);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeUndefined();
+    const ions = addedIons(result);
+    expect(ions.magnesium).toBeCloseTo(10, 2);
+    expect(ions.calcium).toBeCloseTo(4, 2);
+  });
+
+  test("unreachably high sulfate target clamps to full epsom + gypsum", () => {
+    saveSelectedMinerals([
+      "calcium-chloride",
+      "gypsum",
+      "epsom-salt",
+      "magnesium-chloride",
+      "baking-soda",
+    ]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 300, chloride: 0 }, 4, 10);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeUndefined();
+    expect(result.gramsPerL["calcium-chloride"]).toBeUndefined();
+    expect(result.gramsPerL["gypsum"]).toBeCloseTo(0.01718, 4);
+    const ions = addedIons(result);
+    expect(ions.sulfate).toBeCloseTo(49.11, 1);
+    expect(ions.chloride).toBeCloseTo(0, 2);
+    expect(result.caSource).toBe("gypsum");
+  });
+
+  test("zero deltas → no doses, but dominant sources fall back like pickBestCaMgSources", () => {
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 8, chloride: 29 }, 0, 0);
+    expect(Object.keys(result.gramsPerL)).toEqual([]);
+    expect(result.caSource).toBe("calcium-chloride");
+    expect(result.mgSource).toBe("epsom-salt");
+    expect(result.blended).toBe(false);
   });
 });

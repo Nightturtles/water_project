@@ -29,7 +29,7 @@ import {
   calculateMetrics,
   calculateSo4ClRatio,
   toStableBicarbonateFromAlkalinity,
-  pickBestCaMgSources,
+  allocateCaMgDoses,
   evaluateWaterProfileRanges,
   splitAlkalinityDelta,
   solveCalculatorDosing,
@@ -1342,12 +1342,12 @@ function main(): void {
     const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
 
     const targetProfile = getCurrentTargetProfileForCalculations();
-    const { caSource, mgSource } = pickBestCaMgSources(
-      sourceWater,
-      targetProfile,
-      deltaCa,
-      deltaMg,
-    );
+    // May split a slot's delta across both of its enabled salts (e.g. epsom +
+    // MgCl2) to match the target's SO4/Cl; caSource/mgSource carry the
+    // dominant salt for warnings and range bands.
+    const allocation = allocateCaMgDoses(sourceWater, targetProfile, deltaCa, deltaMg);
+    const caSource = allocation.caSource;
+    const mgSource = allocation.mgSource;
 
     // Warn when source exceeds target or when we need a source but none is enabled
     const hasMgSource = getEffectiveMagnesiumSources().length > 0;
@@ -1383,11 +1383,8 @@ function main(): void {
     if (!hasCaSource && deltaCa > 0)
       warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
 
-    // Compute salt dosing (per L) using auto-selected sources
-    const mgFraction = mgSource ? MINERAL_DB[mgSource]?.ions?.magnesium || 0 : 0;
-    const caFraction = caSource ? MINERAL_DB[caSource]?.ions?.calcium || 0 : 0;
-    const mgSaltPerL = mgFraction > 0 ? deltaMg / mgFraction / 1000 : 0;
-    const caSaltPerL = caFraction > 0 ? deltaCa / caFraction / 1000 : 0;
+    // Salt doses (g/L) from the allocator; a blended slot yields two entries.
+    const caMgGramsPerL = allocation.gramsPerL;
 
     // Alkalinity: one source or split between baking soda and potassium bicarbonate
     const alkAllocation = splitAlkalinityDelta(
@@ -1423,16 +1420,15 @@ function main(): void {
       }
     }
 
-    // Total grams for the full volume; show 0 for unchosen Ca/Mg sources so UI indicates which were chosen
-    const mgSaltTotal = mgSaltPerL * volumeL;
-    const caSaltTotal = caSaltPerL * volumeL;
+    // Total grams for the full volume; show 0 for undosed Ca/Mg sources so UI indicates which were used
     const bufferTotals: Record<string, number> = {};
     for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
       bufferTotals[id] = gPerL * volumeL;
     }
     const resultValues: Record<string, number> = { ...bufferTotals };
-    if (mgSource) resultValues[mgSource] = mgSaltTotal;
-    if (caSource) resultValues[caSource] = caSaltTotal;
+    for (const [id, gPerL] of Object.entries(caMgGramsPerL)) {
+      resultValues[id] = gPerL * volumeL;
+    }
     const mgSourceIds = getEffectiveMagnesiumSources();
     const caSourceIds = getEffectiveCalciumSources();
     mgSourceIds.forEach((id) => {
@@ -1466,9 +1462,7 @@ function main(): void {
     if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
     // Compute resulting ions (mg/L)
-    const mineralGramsPerL: Record<string, number> = {};
-    if (mgSource && mgSaltPerL > 0) mineralGramsPerL[mgSource] = mgSaltPerL;
-    if (caSource && caSaltPerL > 0) mineralGramsPerL[caSource] = caSaltPerL;
+    const mineralGramsPerL: Record<string, number> = { ...caMgGramsPerL };
     for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
       if (gPerL > 0) mineralGramsPerL[id] = gPerL;
     }
