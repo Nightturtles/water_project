@@ -293,7 +293,9 @@ export interface CaMgAllocation {
  * sulfate rides Mg (epsom) before Ca (gypsum is solubility-limited and
  * disfavored, matching pickBestCaMgSources). A slot within 2% of a pure
  * corner snaps to it, so profiles without a meaningful SO4/Cl target keep
- * producing the classic single-salt dose.
+ * producing the classic single-salt dose. When the profile omits BOTH ions
+ * (non-finite, e.g. a Ca/Mg/Alk-only partial profile) blending is skipped
+ * entirely and the legacy least-added-anion corner is chosen.
  */
 export function allocateCaMgDoses(
   sourceWater: IonMap | null | undefined,
@@ -327,8 +329,12 @@ export function allocateCaMgDoses(
   const srcCl = (sourceWater && Number(sourceWater.chloride)) || 0;
   const tSO4 = targetProfile ? Number(targetProfile.sulfate) : NaN;
   const tCl = targetProfile ? Number(targetProfile.chloride) : NaN;
-  // Added-anion goals; an absent target means "add as little as possible",
-  // which is also what pickBestCaMgSources' source-matching fallback does.
+  const hasAnionTarget = Number.isFinite(tSO4) || Number.isFinite(tCl);
+  // Added-anion goals. A finite 0 is an expressed preference ("as little as
+  // possible", blend allowed); when BOTH fields are absent the profile has no
+  // SO4/Cl opinion at all and the corner search below keeps the legacy
+  // single-salt-per-slot outcome (computeFullProfile's partial-profile
+  // fallback reaches that path).
   const wantS = Number.isFinite(tSO4) ? Math.max(0, tSO4 - srcSO4) : 0;
   const wantC = Number.isFinite(tCl) ? Math.max(0, tCl - srcCl) : 0;
 
@@ -360,13 +366,33 @@ export function allocateCaMgDoses(
   let sOnMg = 0;
   let sOnCa = 0;
   if (sMax > 0 && kappa > 0) {
-    const a = wantS - fixedS; // sulfate still wanted from the free slots
-    const b = fixedC + uFree - wantC; // chloride overshoot if the free slots add none of it as sulfate
-    let s = (kappa * (kappa * a + b)) / (kappa * kappa + 1);
-    s = Math.min(sMax, Math.max(0, s));
-    // Sulfate rides Mg (epsom) first, then Ca (gypsum).
-    sOnMg = Math.min(s, capSMg);
-    sOnCa = Math.min(s - sOnMg, capSCa);
+    if (!hasAnionTarget) {
+      // No SO4/Cl opinion: evaluate only the pure corners so a free slot
+      // never splits, and break ties like pickBestCaMgSources (CaCl2 over
+      // gypsum, then epsom over MgCl2).
+      let best: { sMg: number; sCa: number; err: number; tie: number } | null = null;
+      for (const smg of mgFree ? [capSMg, 0] : [0]) {
+        for (const sca of caFree ? [0, capSCa] : [0]) {
+          const so4 = fixedS + smg + sca;
+          const cl = fixedC + uFree - (smg + sca) / kappa;
+          const err = so4 * so4 + cl * cl;
+          const tie = (sca > 0 ? 1 : 0) + (mgFree && smg === 0 ? 2 : 0);
+          if (!best || err < best.err || (err === best.err && tie < best.tie)) {
+            best = { sMg: smg, sCa: sca, err, tie };
+          }
+        }
+      }
+      sOnMg = best ? best.sMg : 0;
+      sOnCa = best ? best.sCa : 0;
+    } else {
+      const a = wantS - fixedS; // sulfate still wanted from the free slots
+      const b = fixedC + uFree - wantC; // chloride overshoot if the free slots add none of it as sulfate
+      let s = (kappa * (kappa * a + b)) / (kappa * kappa + 1);
+      s = Math.min(sMax, Math.max(0, s));
+      // Sulfate rides Mg (epsom) first, then Ca (gypsum).
+      sOnMg = Math.min(s, capSMg);
+      sOnCa = Math.min(s - sOnMg, capSCa);
+    }
   }
 
   // Cation mass carried by the sulfate salt in each free slot, snapped so

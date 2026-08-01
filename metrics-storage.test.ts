@@ -511,4 +511,41 @@ describe("allocateCaMgDoses", () => {
     expect(result.mgSource).toBe("epsom-salt");
     expect(result.blended).toBe(false);
   });
+
+  test("SO4/Cl absent from the profile → legacy single-salt corner, never a split", () => {
+    // CodeRabbit's PR-217 case: Ca 51 / Mg 1 with all four salts and NO
+    // sulfate/chloride fields would have split Ca ≈ 16.9 gypsum + 34.1 CaCl2
+    // under the closed form. Absent-both must corner-pick like
+    // pickBestCaMgSources (here: epsom + CaCl2 minimizes added anions).
+    saveSelectedMinerals([
+      "calcium-chloride",
+      "gypsum",
+      "epsom-salt",
+      "magnesium-chloride",
+      "baking-soda",
+    ]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { calcium: 51, magnesium: 1 }, 51, 1);
+    expect(result.blended).toBe(false);
+    expect(result.gramsPerL["gypsum"]).toBeUndefined();
+    expect(result.gramsPerL["magnesium-chloride"]).toBeUndefined();
+    const ions = addedIons(result);
+    expect(ions.calcium).toBeCloseTo(51, 2);
+    expect(ions.magnesium).toBeCloseTo(1, 2);
+    expect(result.caSource).toBe("calcium-chloride");
+    expect(result.mgSource).toBe("epsom-salt");
+  });
+
+  test("explicit SO4/Cl zeros are an expressed preference → blend still allowed", () => {
+    // Contrast with the absent-both case above: a profile that STORES 0/0
+    // (small deltas, no gypsum) gets the least-squares blend, which beats
+    // either pure corner for total added anions.
+    saveSelectedMinerals(["calcium-chloride", "epsom-salt", "magnesium-chloride", "baking-soda"]);
+    const result = metrics.allocateCaMgDoses(DISTILLED, { sulfate: 0, chloride: 0 }, 4, 10);
+    expect(result.blended).toBe(true);
+    expect(result.gramsPerL["epsom-salt"]).toBeGreaterThan(0);
+    expect(result.gramsPerL["magnesium-chloride"]).toBeGreaterThan(0);
+    const ions = addedIons(result);
+    expect(ions.sulfate).toBeCloseTo(17.32, 1);
+    expect(ions.chloride).toBeCloseTo(23.46, 1);
+  });
 });
