@@ -20,7 +20,7 @@ These facts override the generic guidance below. Re-check them if the workflows 
 
 - **What "green" means.** The `main: require CI` ruleset requires exactly six checks: `typecheck-and-test`, `e2e`, `edge-functions` (CI workflow), `ios-build`, `android-build` (Native build workflow), and `CodeRabbit` (`gh pr checks <n> --required` lists them). `deploy` shows `skipping` on every PR; that is expected. CodeRabbit's check can pass without a review having run (see below), so a green required set is necessary but not sufficient.
 - **Ruleset bypass.** Repo admins (the owner) can bypass that ruleset, which keeps direct release pushes to `main` working. Never use it to merge: no `gh pr merge --admin`, and never merge while a required check is red or pending.
-- **CI timing.** typecheck-and-test ~1 min, e2e ~1.5-2.5 min, ios-build ~2-3 min. The `e2e` job is serialized repo-wide (`concurrency: e2e-shared-test-account`), so it can sit `pending` while another PR's e2e runs. An e2e job that shows **cancelled** was bumped from that queue by a newer run, not a failure: `gh run rerun <run-id> --failed`.
+- **CI timing.** typecheck-and-test ~1 min, e2e ~1.5-2.5 min, ios-build ~2-3 min. The `e2e` job is serialized repo-wide (`concurrency: e2e-shared-test-account`), so it can sit `pending` while another PR's e2e runs (`queue: max` keeps every pending job in order). An e2e job that shows **cancelled** without a code reason was dropped from that queue (only past 100 pending): `gh run rerun <run-id> --failed`.
 - **Merge style:** squash (every merged PR on `main` is `title (#N)`).
 - **Merge gates by changed files** (`gh pr diff <n> --name-only`). Check these before the merge step, not after:
   - `src/lib/sync.ts`, `src/lib/storage.ts`, `src/lib/supabase-client.ts`, or the `window.*` auth surface → the **full** `npm run test:e2e` (not just smoke-sync) must have passed locally on the final head with `.env.test` credentials, per CLAUDE.md "Supabase safety". Before running it locally, confirm no CI e2e job is in progress (`gh run list --workflow CI --status in_progress`): the local run signs in as the same shared prod test account and the CI concurrency group cannot see it.
@@ -85,24 +85,25 @@ Wait for CI to register and finish after PR creation or each push. `gh pr checks
 
 ### Comments and review threads
 
-CodeRabbit spreads its feedback over three places; read all three after every push. Fetch them (plus `gh pr view <n> --json headRefOid,mergeStateStatus,mergeable` and `gh pr checks <n>`) in one Bash batch, and keep only the JSON paths you need:
+CodeRabbit spreads its feedback over three places; read all three after every push. Fetch them (plus `gh pr view <n> --json headRefOid,mergeStateStatus,mergeable` and `gh pr checks <n>`) in one Bash batch. The commands paginate (`--paginate`) and return **complete** bodies with only HTML comments stripped: never truncate a body before deciding nothing actionable remains, because outside-diff comments and nitpicks sit deep inside long review bodies. To save context, filter by author and by commit/resolution state, not by length:
 
 ```bash
 # 1. Walkthrough / status comment: rate-limit notices and "Review skipped" text live here.
-gh api "repos/{owner}/{repo}/issues/<n>/comments?per_page=100" \
-  --jq '.[] | select(.user.login|test("coderabbit")) | {updated_at, body: (.body|gsub("<!--[^>]*-->";"")|.[0:600])}'
+gh api --paginate "repos/{owner}/{repo}/issues/<n>/comments?per_page=100" \
+  --jq '.[] | select(.user.login|test("coderabbit")) | {updated_at, body: (.body|gsub("<!--[^>]*-->";""))}'
 # 2. Review bodies: "Actionable comments posted: N", plus nitpicks and
 #    "Outside diff range" comments that never become inline threads.
-gh api "repos/{owner}/{repo}/pulls/<n>/reviews?per_page=100" \
-  --jq '.[] | select(.user.login|test("coderabbit")) | {commit_id, submitted_at, body: .body[0:2000]}'
+gh api --paginate "repos/{owner}/{repo}/pulls/<n>/reviews?per_page=100" \
+  --jq '.[] | select(.user.login|test("coderabbit")) | {commit_id, submitted_at, body: (.body|gsub("<!--[^>]*-->";""))}'
 # 3. Unresolved inline threads. REST cannot tell resolved from unresolved; GraphQL can.
-gh api graphql -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
-  query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
-    reviewThreads(first:100){nodes{isResolved isOutdated path line
-      comments(first:1){nodes{author{login} body url}}}}}}}' \
+gh api graphql --paginate -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
+  query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
+    reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
+      nodes{isResolved isOutdated path line
+        comments(first:1){nodes{author{login} body url}}}}}}}' \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[]
         | select((.isResolved|not) and (.comments.nodes[0].author.login|test("coderabbit")))
-        | {path, line, isOutdated, url: .comments.nodes[0].url, body: .comments.nodes[0].body[0:800]}'
+        | {path, line, isOutdated, url: .comments.nodes[0].url, body: (.comments.nodes[0].body|gsub("<!--[^>]*-->";""))}'
 ```
 
 - **CodeRabbit:** treat feedback as CodeRabbit when the author login contains `coderabbit` (REST shows `coderabbitai[bot]`, GraphQL shows `coderabbitai`).
@@ -139,8 +140,10 @@ gh api graphql -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
 When the loop conditions are met:
 
 ```bash
-gh pr merge <n> --squash
+gh pr merge <n> --squash --match-head-commit <validated-head-sha>
 ```
+
+`<validated-head-sha>` is the `headRefOid` the checks, file gates, and CodeRabbit review above were all evaluated against. If the merge is rejected because the head moved (for example, a push landed while you waited for a remote go-ahead), re-run the Main loop on the new head before trying again; never drop the flag to force the merge through.
 
 In a remote / non-interactive run, get the explicit go-ahead from the **Remote / non-interactive runs** gate above *before* running this.
 
@@ -148,7 +151,7 @@ This repo squash-merges (see **This repo**); on another repo, use `--merge` if i
 
 **Head branch:** if the repo's "Automatically delete head branches" setting is on, GitHub already removed it. Otherwise delete the remote branch after a confirmed merge unless the user asked to keep it: `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<branch>"`. Prefer this over `gh pr merge --delete-branch`, which also tries to switch and delete the local branch and errors when the branch is checked out in a worktree.
 
-**Watch the deploy.** Merging pushes to `main`, which runs CI again and then the `deploy` job (GitHub Pages). Find the run (`gh run list --branch main --event push --limit 3`) and wait for it in the background (`gh run watch <run-id> --exit-status`). If `deploy` fails at `actions/deploy-pages` with "Deployment failed, try again later", that is GitHub-side and transient: `gh run rerun <run-id> --failed`. A red `e2e` on `main` blocks the deploy; triage it like any CI failure (the flake tracker issue logs main-branch flakes). Report the deploy outcome in the recap.
+**Watch the deploy.** Merging pushes to `main`, which runs CI again and then the `deploy` job (GitHub Pages). Both the CI and Native build workflows run on that push, and other pushes can land at the same time, so find this merge's CI run by workflow and merge commit: `gh run list --workflow CI --branch main --event push --commit <mergeCommit-sha> --json databaseId,status,conclusion` (the SHA from `gh pr view <n> --json mergeCommit`). If it hasn't registered yet, wait briefly and re-query. Then wait for that run in the background (`gh run watch <run-id> --exit-status`). If `deploy` fails at `actions/deploy-pages` with "Deployment failed, try again later", that is GitHub-side and transient: `gh run rerun <run-id> --failed`. A red `e2e` on `main` blocks the deploy; triage it like any CI failure (the flake tracker issue logs main-branch flakes). Report the deploy outcome in the recap.
 
 With more than one PR, after a successful merge run the **Between PRs** steps above, then start the Main loop on the next PR in the order. Continue until the queue is empty (every PR merged or set aside). You can start the next PR's loop while the previous merge's deploy is still running, but check its outcome before the final recap.
 

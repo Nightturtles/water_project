@@ -101,11 +101,31 @@ test.describe("index.html — Coffee Water Calculator smoke", () => {
     // theme-init.js is a plain synchronous <script> tag in <head>. Classic
     // sync scripts block HTML parsing until they finish, so by construction
     // the theme marker is applied before <body> is parsed and therefore
-    // before paint. A post-load assertion is sufficient; the regression
-    // risk is someone adding `async` or `defer` to the theme-init tag or
-    // moving it below other scripts — both of which this assertion catches
-    // because theme-init would fail to run in time on a fresh visit.
-    //
+    // before paint. A post-load data-theme check alone can't prove that
+    // timing (an `async`, `defer`, or `type="module"` tag would still set
+    // data-theme by the time this runs, just after first paint), so the
+    // first assertion pins the tag's shape: in <head>, no async/defer, not a
+    // module. Together they guard the conditions for a flash-free first
+    // paint; they do not exercise the native inter-page transition.
+    const tag = await page.evaluate(() => {
+      const s = Array.from(document.querySelectorAll("script[src]")).find((el) =>
+        /(^|\/)theme-init\.js(\?|$)/.test(el.getAttribute("src") || ""),
+      );
+      if (!s) return null;
+      return {
+        inHead: s.parentElement === document.head,
+        async: s.hasAttribute("async"),
+        defer: s.hasAttribute("defer"),
+        type: s.getAttribute("type") || "",
+      };
+    });
+    expect(tag, "theme-init.js must stay a synchronous classic <script> in <head>").toEqual({
+      inHead: true,
+      async: false,
+      defer: false,
+      type: "",
+    });
+
     // Explicit attribute check (not a regex sweep over the whole dataset) so
     // unrelated data-* attributes can't accidentally satisfy it. Expects the
     // resolved value — "system" is resolved to "light" or "dark" at load.

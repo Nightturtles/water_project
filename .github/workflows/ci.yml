@@ -52,12 +52,14 @@ jobs:
     # land on separate runners, where that file lock can't reach. Concurrent
     # signed-in runs on one account are the race that planted the smoke-recipe
     # shadow row, so serialize the e2e job repo-wide. cancel-in-progress: false
-    # lets the running job finish. GitHub keeps only ONE pending job per group:
-    # a third overlapping run cancels the older pending one, which then needs a
-    # manual re-run (gh run rerun <id> --failed).
+    # lets the running job finish. queue: max keeps up to 100 pending jobs in
+    # order; the default (single) would let a newer PR run replace a pending
+    # push-to-main e2e job, cancelling it and skipping that push's deploy.
+    # (queue: max cannot be combined with cancel-in-progress: true.)
     concurrency:
       group: e2e-shared-test-account
       cancel-in-progress: false
+      queue: max
     permissions:
       issues: write
       contents: read
