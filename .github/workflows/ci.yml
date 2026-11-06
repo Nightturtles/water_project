@@ -148,9 +148,14 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # queue: max keeps every pending deploy in order. With the default
+    # (single), a re-run of an older failed deploy would REPLACE a newer
+    # deploy that is waiting behind a running one, cancelling it before its
+    # freshness check could run.
     concurrency:
       group: pages
       cancel-in-progress: false
+      queue: max
     steps:
       # Full history so the freshness check can order commits locally.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
