@@ -36,16 +36,16 @@
     "@capacitor/ios": "^8.6.0",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.65.0",
-    "@sentry/vite-plugin": "^5.3.0",
+    "@sentry/vite-plugin": "^5.4.1",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
     "globals": "^15.15.0",
-    "prettier": "^3.8.3",
-    "sharp": "^0.32.6",
+    "prettier": "^3.9.10",
+    "sharp": "^0.35.5",
     "typescript": "^5.4.0",
-    "typescript-eslint": "^8.58.2",
-    "vite": "^5.4.10",
-    "vite-plugin-static-copy": "^2.1.0",
-    "vitest": "^3.2.6"
+    "typescript-eslint": "^8.72.1",
+    "vite": "^8.3.6",
+    "vite-plugin-static-copy": "^4.1.1",
+    "vitest": "^5.1.0"
   }
 }

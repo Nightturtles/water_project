@@ -43,7 +43,7 @@ export default defineConfig({
   webServer: {
     // PR (g): e2e runs against `vite preview` (the built `dist/`) instead of
     // `vite dev`. The dev server's module graph diverges from the production
-    // Rollup bundle in ways real bugs hide in — tree-shaking, deferred script
+    // Rolldown bundle in ways real bugs hide in — tree-shaking, deferred script
     // execution order through `legacy-globals.ts`, the Sentry plugin's
     // `window.SENTRY_RELEASE` injection (only emitted by `vite build`), CSS
     // bundling, asset hashing, and `base: "./"` resolution are all build-only
