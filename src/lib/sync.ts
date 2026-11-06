@@ -983,7 +983,7 @@ export function unionConcentrateIds(local: unknown, cloud: unknown): string[] {
 // selected-concentrate list and union them into local storage. Throws on a
 // fetch error so the merge aborts (and retries on the next load) instead of
 // pushing a row that would drop the cloud's concentrates.
-async function foldCloudConcentratesIntoLocal(userId: string): Promise<void> {
+export async function foldCloudConcentratesIntoLocal(userId: string): Promise<void> {
   const res = await window.supabaseClient
     .from("user_settings")
     .select("diy_concentrate_specs, stock_concentrate_specs, selected_concentrates")
@@ -995,20 +995,32 @@ async function foldCloudConcentratesIntoLocal(userId: string): Promise<void> {
   }
   const cloud = res && res.data;
   if (!cloud) return;
-  safeSetItem(
-    KEYS.DIY_CONCENTRATE_SPECS,
-    JSON.stringify(unionConcentrateSpecs(loadDiyConcentrateSpecs(), cloud.diy_concentrate_specs)),
-  );
-  safeSetItem(
-    KEYS.STOCK_CONCENTRATE_SPECS,
-    JSON.stringify(
-      unionConcentrateSpecs(loadStockConcentrateSpecs(), cloud.stock_concentrate_specs),
-    ),
-  );
-  safeSetItem(
-    KEYS.SELECTED_CONCENTRATES,
-    JSON.stringify(unionConcentrateIds(loadSelectedConcentrates(), cloud.selected_concentrates)),
-  );
+  const writes: Array<[string, string]> = [
+    [
+      KEYS.DIY_CONCENTRATE_SPECS,
+      JSON.stringify(unionConcentrateSpecs(loadDiyConcentrateSpecs(), cloud.diy_concentrate_specs)),
+    ],
+    [
+      KEYS.STOCK_CONCENTRATE_SPECS,
+      JSON.stringify(
+        unionConcentrateSpecs(loadStockConcentrateSpecs(), cloud.stock_concentrate_specs),
+      ),
+    ],
+    [
+      KEYS.SELECTED_CONCENTRATES,
+      JSON.stringify(unionConcentrateIds(loadSelectedConcentrates(), cloud.selected_concentrates)),
+    ],
+  ];
+  // A failed write (e.g. storage quota) would leave local without the cloud's
+  // concentrates, and the keep-local push that follows would then erase them
+  // from the cloud. Abort the merge instead: SYNCED_USER_ID stays unset, so
+  // the push gate holds and the merge retries on the next load.
+  for (const [key, value] of writes) {
+    if (!safeSetItem(key, value)) {
+      invalidateAllCaches();
+      throw new Error("[sync] failed to fold cloud concentrates into local storage: " + key);
+    }
+  }
   invalidateAllCaches();
 }
 

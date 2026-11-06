@@ -38,6 +38,7 @@ import {
   pushAllToCloud,
   unionConcentrateSpecs,
   unionConcentrateIds,
+  foldCloudConcentratesIntoLocal,
 } from "./src/lib/sync";
 
 const { invalidateAllCaches } = storage;
@@ -714,5 +715,57 @@ describe("unionConcentrateIds", () => {
 
   test("ignores non-arrays and non-string ids", () => {
     expect(unionConcentrateIds(null, ["diy:a", 3, null])).toEqual(["diy:a"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// foldCloudConcentratesIntoLocal (keep-local merge pre-step)
+// ---------------------------------------------------------------------------
+
+describe("foldCloudConcentratesIntoLocal", () => {
+  let savedClient: any;
+  const cloudRow = {
+    diy_concentrate_specs: { "epsom-salt": { bottleMl: 100, gramsPerBottle: 10 } },
+    stock_concentrate_specs: { mine: { label: "Mine", bottleMl: 200, doseGramsPerL: 4 } },
+    selected_concentrates: ["diy:epsom-salt", "stock:mine"],
+  };
+
+  beforeEach(() => {
+    savedClient = (global as any).window.supabaseClient;
+    (global as any).window.supabaseClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: cloudRow, error: null }) }),
+        }),
+      }),
+    };
+  });
+
+  afterEach(() => {
+    (global as any).window.supabaseClient = savedClient;
+  });
+
+  test("unions cloud concentrates into local storage", async () => {
+    storage.saveDiyConcentrateSpecs({ "baking-soda": { bottleMl: 100, gramsPerBottle: 5 } as any });
+    await foldCloudConcentratesIntoLocal("u1");
+    expect(Object.keys(storage.loadDiyConcentrateSpecs()).sort()).toEqual([
+      "baking-soda",
+      "epsom-salt",
+    ]);
+    expect(Object.keys(storage.loadStockConcentrateSpecs())).toEqual(["mine"]);
+  });
+
+  test("throws (aborting the keep-local push) when a local write fails", async () => {
+    const realSetItem = global.localStorage.setItem;
+    global.localStorage.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      await expect(foldCloudConcentratesIntoLocal("u1")).rejects.toThrow(
+        /failed to fold cloud concentrates/,
+      );
+    } finally {
+      global.localStorage.setItem = realSetItem;
+    }
   });
 });
