@@ -464,15 +464,38 @@
     // Drops-capable rows (Lotus, or a Mineral Concentrate with a dropper size)
     // persist { ml, drops }; mL-only rows persist a bare number. Accept either
     // shape so toggling a dropper size on/off never loses the saved amount.
+    // The saved mL is the real dose: drops are re-derived from it with the
+    // current dropper size, so changing the dropper (or the Lotus dropper
+    // style) keeps the same amount of concentrate instead of reusing a stale
+    // drop count at the new size.
     function normalizeRecipeDropsInputValue(savedVal, dropMl) {
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
         const ml = Math.max(0, parseFloat(savedVal.ml) || 0);
-        const drops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        const savedDrops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        if (ml <= 0 && savedDrops > 0 && dropMl > 0) {
+          // Legacy shape (early 2026 builds kept separate mL and drops fields):
+          // a drops-only dose. Current writers always store the matching mL,
+          // so 0 mL with a nonzero count can only mean the count is the dose.
+          const drops = Math.round(savedDrops);
+          return { ml: drops * dropMl, drops };
+        }
+        const drops = dropMl > 0 ? Math.round(ml / dropMl) : savedDrops;
         return { ml, drops };
       }
       const ml = Math.max(0, parseFloat(savedVal) || 0);
       const drops = (dropMl > 0) ? Math.round(ml / dropMl) : 0;
       return { ml, drops };
+    }
+
+    // mL for a drops entry. When the drop count is still the one derived from
+    // the saved mL (e.g. 0.05 mL shown as 1 drop of a 0.1 mL dropper), the
+    // saved mL is the real dose; only a count the user typed is drops x size.
+    function recipeDropsToMl(concentrateId, drops) {
+      const saved = recipeConcentrateInputs[concentrateId];
+      if (saved != null && typeof saved === "object" && saved.drops === drops) {
+        return Math.max(0, parseFloat(saved.ml) || 0);
+      }
+      return drops * getConcentrateDropMl(concentrateId);
     }
 
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
@@ -681,9 +704,10 @@
           ml = currentValue;
           drops = dropMl > 0 ? Math.round(currentValue / dropMl) : 0;
         } else {
-          // Same whole-drop rounding as the input handler, so ml and drops agree.
+          // Same whole-drop rounding as the input handler; an untouched count
+          // keeps the saved mL rather than collapsing it to drops x size.
           drops = Math.round(currentValue);
-          ml = drops * dropMl;
+          ml = recipeDropsToMl(key, drops);
         }
         recipeConcentrateInputs[key] = { ml, drops };
         input.step = nextUnit === "ml" ? "0.001" : "1";
@@ -1057,7 +1081,7 @@
             const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
             const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
             const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
-            ml = unit === "ml" ? value : (value * getConcentrateDropMl(concentrateId));
+            ml = unit === "ml" ? value : recipeDropsToMl(concentrateId, Math.round(value));
           } else {
             const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
             ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
