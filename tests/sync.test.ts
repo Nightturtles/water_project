@@ -680,6 +680,22 @@ describe("pushAllToCloud merge gate", () => {
     expect(settings!.payload.diy_concentrate_specs).toEqual({ "epsom-salt": { gramsPerMl: 0.1 } });
   });
 
+  test("ordinary push is a silent no-op when the user lookup fails", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
+    await expect(pushAllToCloud()).resolves.toBeUndefined();
+    expect(upserts).toEqual([]);
+  });
+
+  test("merge push rejects when the user lookup fails, so the merge isn't marked done", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => {
+      throw new Error("Failed to fetch");
+    };
+    await expect(pushAllToCloud({ allowBeforeMerge: true })).rejects.toThrow(
+      /could not resolve the signed-in user/,
+    );
+    expect(upserts).toEqual([]);
+  });
+
   test("allowBeforeMerge (merge's own new-user / keep-local push) bypasses the gate", async () => {
     await pushAllToCloud({ allowBeforeMerge: true });
     expect(upserts.some((u) => u.table === "user_settings")).toBe(true);

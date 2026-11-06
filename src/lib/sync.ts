@@ -327,7 +327,17 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // allowBeforeMerge, for its "new user" and "keep local" branches.
 export async function pushAllToCloud(options?: { allowBeforeMerge?: boolean }): Promise<void> {
   const userId = await getLoggedInUserId();
-  if (!userId) return;
+  if (!userId) {
+    // The merge's own push (allowBeforeMerge) must not "succeed" without
+    // pushing: handleFirstLoginMerge would then mark the device merged, and a
+    // realtime pull could overwrite the local data the user chose to keep
+    // before any push sent it up. Reject so the merge aborts and retries.
+    // Ordinary pushes keep the logged-out no-op.
+    if (options && options.allowBeforeMerge) {
+      throw new Error("[sync] merge push aborted: could not resolve the signed-in user");
+    }
+    return;
+  }
   if (!(options && options.allowBeforeMerge) && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
     return;
   }
