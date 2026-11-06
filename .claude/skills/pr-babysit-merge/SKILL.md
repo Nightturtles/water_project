@@ -95,16 +95,20 @@ gh api --paginate "repos/{owner}/{repo}/issues/<n>/comments?per_page=100" \
 #    "Outside diff range" comments that never become inline threads.
 gh api --paginate "repos/{owner}/{repo}/pulls/<n>/reviews?per_page=100" \
   --jq '.[] | select(.user.login|test("coderabbit")) | {commit_id, submitted_at, body: (.body|gsub("<!--[^>]*-->";""))}'
-# 3. Unresolved inline threads. REST cannot tell resolved from unresolved; GraphQL can.
+# 3. Unresolved inline threads, with EVERY comment in each (CodeRabbit often follows up
+#    in a reply, e.g. "this still misses X"). REST cannot tell resolved from unresolved; GraphQL can.
 gh api graphql --paginate -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
   query($o:String!,$r:String!,$n:Int!,$endCursor:String){repository(owner:$o,name:$r){pullRequest(number:$n){
     reviewThreads(first:100,after:$endCursor){pageInfo{hasNextPage endCursor}
-      nodes{isResolved isOutdated path line
-        comments(first:1){nodes{author{login} body url}}}}}}}' \
+      nodes{id isResolved isOutdated path line
+        comments(first:100){totalCount nodes{author{login} createdAt url body}}}}}}}' \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[]
-        | select((.isResolved|not) and (.comments.nodes[0].author.login|test("coderabbit")))
-        | {path, line, isOutdated, url: .comments.nodes[0].url, body: (.comments.nodes[0].body|gsub("<!--[^>]*-->";""))}'
+        | select((.isResolved|not) and any(.comments.nodes[]; .author.login|test("coderabbit")))
+        | {id, path, line, isOutdated, totalComments: .comments.totalCount,
+           comments: [.comments.nodes[] | {author: .author.login, createdAt, url, body: (.body|gsub("<!--[^>]*-->";""))}]}'
 ```
+
+Read the **whole** comment list of each thread, newest last: the latest CodeRabbit reply is what decides whether the thread is still open. `--paginate` walks the thread pages; comments inside a thread come 100 at a time, so if a thread's `totalComments` is over 100, fetch the rest for that thread (`node(id:"<id>"){... on PullRequestReviewThread{comments(first:100,after:"<cursor>"){...}}}`) before judging it.
 
 - **CodeRabbit:** treat feedback as CodeRabbit when the author login contains `coderabbit` (REST shows `coderabbitai[bot]`, GraphQL shows `coderabbitai`).
 - **Has it reviewed the latest push?** Yes when a CodeRabbit review's `commit_id` equals the PR's `headRefOid`, or when its walkthrough comment's `updated_at` is after the push and says the review finished. Keep polling until one of those is true.
@@ -151,7 +155,11 @@ This repo squash-merges (see **This repo**); on another repo, use `--merge` if i
 
 **Head branch:** if the repo's "Automatically delete head branches" setting is on, GitHub already removed it. Otherwise delete the remote branch after a confirmed merge unless the user asked to keep it: `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<branch>"`. Prefer this over `gh pr merge --delete-branch`, which also tries to switch and delete the local branch and errors when the branch is checked out in a worktree.
 
-**Watch the deploy.** Merging pushes to `main`, which runs CI again and then the `deploy` job (GitHub Pages). Both the CI and Native build workflows run on that push, and other pushes can land at the same time, so find this merge's CI run by workflow and merge commit: `gh run list --workflow CI --branch main --event push --commit <mergeCommit-sha> --json databaseId,status,conclusion` (the SHA from `gh pr view <n> --json mergeCommit`). If it hasn't registered yet, wait briefly and re-query. Then wait for that run in the background (`gh run watch <run-id> --exit-status`). If `deploy` fails at `actions/deploy-pages` with "Deployment failed, try again later", that is GitHub-side and transient: `gh run rerun <run-id> --failed`. A red `e2e` on `main` blocks the deploy; triage it like any CI failure (the flake tracker issue logs main-branch flakes). Report the deploy outcome in the recap.
+**Watch the deploy.** Merging pushes to `main`, which runs CI again and then the `deploy` job (GitHub Pages). Both the CI and Native build workflows run on that push, and other pushes can land at the same time, so find this merge's CI run by workflow and merge commit: `gh run list --workflow CI --branch main --event push --commit <mergeCommit-sha> --json databaseId,status,conclusion` (the SHA from `gh pr view <n> --json mergeCommit`). If it hasn't registered yet, wait briefly and re-query. Then wait for that run in the background (`gh run watch <run-id> --exit-status`). If `deploy` fails at `actions/deploy-pages` with "Deployment failed, try again later", that is GitHub-side and transient, but a re-run redeploys the run's ORIGINAL commit, so only retry while that commit is still the newest one on `main`:
+  1. Compare the failed run's `headSha` with the current tip: `gh api repos/{owner}/{repo}/commits/main --jq .sha`.
+  2. **Same SHA** → safe: `gh run rerun <run-id> --failed`.
+  3. **`main` has moved on** → do **not** re-run the old deploy; it could finish last and overwrite the newer site with an older build. The newer push's own CI run deploys a build that already contains this merge, so find that run (`gh run list --workflow CI --branch main --event push --commit <tip-sha>`) and report its deploy instead. If that newer deploy also failed transiently, re-run only the newest one, after repeating step 1 for it.
+  The `pages` concurrency group (`cancel-in-progress: false`) serializes deploys but does not order them by commit, so this check is what keeps the newest build live. A red `e2e` on `main` blocks the deploy; triage it like any CI failure (the flake tracker issue logs main-branch flakes). Report the deploy outcome in the recap.
 
 With more than one PR, after a successful merge run the **Between PRs** steps above, then start the Main loop on the next PR in the order. Continue until the queue is empty (every PR merged or set aside). You can start the next PR's loop while the previous merge's deploy is still running, but check its outcome before the final recap.
 
