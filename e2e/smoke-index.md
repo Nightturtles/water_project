@@ -6,7 +6,7 @@
 
 ## Pre-flight
 
-1. Ensure a local server is running via Claude Preview MCP (`preview_start` on the `dev` config in `.claude/launch.json`). Skip for prod smoke.
+1. Ensure a local server is running via the desktop app's browser pane (`preview_start` on the `dev` config in `.claude/launch.json`). Skip for prod smoke.
 2. Use Playwright MCP to open a fresh browser context (no cached localStorage).
 
 ## Steps

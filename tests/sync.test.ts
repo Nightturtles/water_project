@@ -23,8 +23,8 @@
 // initSync() kickoff touches window.supabaseClient (undefined => one
 // expected console.warn).
 
-import { describe, test, expect, beforeEach } from "vitest";
-import * as storage from "./src/lib/storage";
+import { describe, test, expect, beforeEach, afterEach } from "vitest";
+import * as storage from "../src/lib/storage";
 import {
   stableStringify,
   snapshotForCompare,
@@ -35,7 +35,11 @@ import {
   isDefaultData,
   migrateAnonTransientToLocal,
   enqueueSerialized,
-} from "./src/lib/sync";
+  pushAllToCloud,
+  unionConcentrateSpecs,
+  unionConcentrateIds,
+  foldCloudConcentratesIntoLocal,
+} from "../src/lib/sync";
 
 const { invalidateAllCaches } = storage;
 
@@ -616,5 +620,152 @@ describe("enqueueSerialized", () => {
       return Promise.resolve(42);
     });
     expect(result).toBe(42);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pushAllToCloud merge gate
+// ---------------------------------------------------------------------------
+// Regression: signing in on a second device (e.g. mobile web after setting up
+// concentrates in the native app) wiped the account's concentrate specs.
+// login.html redirects the moment sign-in resolves, cutting off the merge, and
+// the next page's initSync pushed the device's empty user_settings row over the
+// cloud row before any merge pulled. pushAllToCloud must refuse to push until
+// this device has completed the merge for the signed-in user.
+
+describe("pushAllToCloud merge gate", () => {
+  const USER = "user-123";
+  let upserts: Array<{ table: string; payload: any }>;
+  let savedClient: any;
+
+  beforeEach(() => {
+    upserts = [];
+    savedClient = (global as any).window.supabaseClient;
+    (global as any).window.supabaseClient = {
+      auth: {
+        getUser: async () => ({ data: { user: { id: USER } } }),
+      },
+      from: (table: string) => ({
+        upsert: async (payload: any) => {
+          upserts.push({ table, payload });
+          return { error: null };
+        },
+        delete: () => ({ eq: () => ({ in: async () => ({ error: null }) }) }),
+      }),
+    };
+  });
+
+  afterEach(() => {
+    (global as any).window.supabaseClient = savedClient;
+  });
+
+  test("does not push before this device has merged for the user", async () => {
+    // Fresh device: no cw_synced_user_id. Local holds no concentrate specs.
+    await pushAllToCloud();
+    expect(upserts).toEqual([]);
+  });
+
+  test("does not push when the device merged for a different user", async () => {
+    global.localStorage.setItem("cw_synced_user_id", "someone-else");
+    await pushAllToCloud();
+    expect(upserts).toEqual([]);
+  });
+
+  test("pushes once the device has merged for this user", async () => {
+    global.localStorage.setItem("cw_synced_user_id", USER);
+    storage.saveDiyConcentrateSpecs({ "epsom-salt": { gramsPerMl: 0.1 } as any });
+    await pushAllToCloud();
+    const settings = upserts.find((u) => u.table === "user_settings");
+    expect(settings).toBeDefined();
+    expect(settings!.payload.diy_concentrate_specs).toEqual({ "epsom-salt": { gramsPerMl: 0.1 } });
+  });
+
+  test("allowBeforeMerge (merge's own new-user / keep-local push) bypasses the gate", async () => {
+    await pushAllToCloud({ allowBeforeMerge: true });
+    expect(upserts.some((u) => u.table === "user_settings")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Keep-local merge: concentrate union helpers
+// ---------------------------------------------------------------------------
+
+describe("unionConcentrateSpecs", () => {
+  test("keeps every cloud spec; local wins on the same key", () => {
+    const cloud = { a: { v: 1 }, b: { v: 2 } };
+    const local = { b: { v: 20 }, c: { v: 3 } };
+    expect(unionConcentrateSpecs(local, cloud)).toEqual({ a: { v: 1 }, b: { v: 20 }, c: { v: 3 } });
+  });
+
+  test("tolerates missing / malformed sides", () => {
+    expect(unionConcentrateSpecs(null, { a: 1 })).toEqual({ a: 1 });
+    expect(unionConcentrateSpecs({ a: 1 }, undefined)).toEqual({ a: 1 });
+    expect(unionConcentrateSpecs({ a: 1 }, [] as any)).toEqual({ a: 1 });
+  });
+});
+
+describe("unionConcentrateIds", () => {
+  test("local order first, cloud extras appended, deduped", () => {
+    expect(unionConcentrateIds(["diy:b", "stock:x"], ["diy:a", "diy:b"])).toEqual([
+      "diy:b",
+      "stock:x",
+      "diy:a",
+    ]);
+  });
+
+  test("ignores non-arrays and non-string ids", () => {
+    expect(unionConcentrateIds(null, ["diy:a", 3, null])).toEqual(["diy:a"]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// foldCloudConcentratesIntoLocal (keep-local merge pre-step)
+// ---------------------------------------------------------------------------
+
+describe("foldCloudConcentratesIntoLocal", () => {
+  let savedClient: any;
+  const cloudRow = {
+    diy_concentrate_specs: { "epsom-salt": { bottleMl: 100, gramsPerBottle: 10 } },
+    stock_concentrate_specs: { mine: { label: "Mine", bottleMl: 200, doseGramsPerL: 4 } },
+    selected_concentrates: ["diy:epsom-salt", "stock:mine"],
+  };
+
+  beforeEach(() => {
+    savedClient = (global as any).window.supabaseClient;
+    (global as any).window.supabaseClient = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: cloudRow, error: null }) }),
+        }),
+      }),
+    };
+  });
+
+  afterEach(() => {
+    (global as any).window.supabaseClient = savedClient;
+  });
+
+  test("unions cloud concentrates into local storage", async () => {
+    storage.saveDiyConcentrateSpecs({ "baking-soda": { bottleMl: 100, gramsPerBottle: 5 } as any });
+    await foldCloudConcentratesIntoLocal("u1");
+    expect(Object.keys(storage.loadDiyConcentrateSpecs()).sort()).toEqual([
+      "baking-soda",
+      "epsom-salt",
+    ]);
+    expect(Object.keys(storage.loadStockConcentrateSpecs())).toEqual(["mine"]);
+  });
+
+  test("throws (aborting the keep-local push) when a local write fails", async () => {
+    const realSetItem = global.localStorage.setItem;
+    global.localStorage.setItem = () => {
+      throw new Error("QuotaExceededError");
+    };
+    try {
+      await expect(foldCloudConcentratesIntoLocal("u1")).rejects.toThrow(
+        /failed to fold cloud concentrates/,
+      );
+    } finally {
+      global.localStorage.setItem = realSetItem;
+    }
   });
 });

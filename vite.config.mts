@@ -91,7 +91,6 @@ export default defineConfig({
             "*.js",
             "!vite.config.*",
             "!vitest.config.*",
-            "!vitest.setup.js",
             "!eslint.config.*",
             "!storage.js",
             "!sync.js",

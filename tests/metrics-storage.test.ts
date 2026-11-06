@@ -18,9 +18,9 @@
 // matters because storage.ts (imported directly and via metrics) touches
 // localStorage at module-eval time.
 import { describe, test, expect, beforeEach } from "vitest";
-import { saveSelectedMinerals } from "./src/lib/storage";
-import { MINERAL_DB } from "./src/lib/constants";
-import * as metrics from "./src/lib/metrics";
+import { saveSelectedMinerals } from "../src/lib/storage";
+import { MINERAL_DB } from "../src/lib/constants";
+import * as metrics from "../src/lib/metrics";
 
 const g: any = global;
 

@@ -1,0 +1,56 @@
+# Dependabot version updates. Opens PRs that bump npm packages and the
+# SHA-pinned GitHub Actions in .github/workflows/. Security updates (PRs for
+# advisories like the Capacitor GHSA-rvm3-566m-v7fv one) are a separate repo
+# setting: Settings > Code security > Dependabot security updates.
+#
+# Notes for whoever lands these PRs (see .claude/skills/pr-babysit-merge):
+# - Dependabot-triggered workflows don't receive Actions secrets, so the
+#   signed-in e2e describes (smoke-sync, smoke-recipe) skip on these PRs. The
+#   push-to-main run has the secrets and gates the deploy, so a broken bump
+#   blocks the publish instead of shipping. Bumps to @supabase/supabase-js
+#   deserve a local `npm run test:e2e` with .env.test before merging.
+# - @capacitor/* bumps also need `npm run build && npx cap sync` committed:
+#   ios/App/CapApp-SPM/Package.swift pins capacitor-swift-pm to an exact
+#   version, and Dependabot only edits package.json / package-lock.json.
+
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    # Wait a week after a release before proposing it: most compromised or
+    # broken npm releases are yanked within days. Security updates ignore this.
+    cooldown:
+      default-days: 7
+    # Each PR triggers CI (including the macOS iOS build) and a CodeRabbit
+    # review, so keep the queue short.
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      # Core, CLI, platforms, and plugins move in lockstep; never split them.
+      capacitor:
+        patterns: ["@capacitor/*"]
+      # Runtime deps that ship to users get their own PR so they are easy to
+      # spot and revert.
+      runtime-minor-patch:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
+      dev-minor-patch:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+    # Semver-major bumps (vite, vitest, eslint, typescript, @sentry/*) arrive
+    # as individual PRs; those usually need code or config changes.
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    commit-message:
+      prefix: "chore(ci)"
+    groups:
+      actions:
+        patterns: ["*"]

@@ -6,12 +6,24 @@ on:
   push:
     branches: [main]
 
+# Least-privilege GITHUB_TOKEN by default; the e2e and deploy jobs widen it
+# per-job for exactly what they need (issue comments, Pages deploy).
+permissions:
+  contents: read
+
+# Actions are pinned to commit SHAs (same policy as native.yml): mutable tags
+# can be force-pushed by a compromised maintainer account, SHAs cannot. The
+# trailing comment is the human-readable tag; Dependabot
+# (.github/dependabot.yml) bumps the SHA and the comment together.
+
 jobs:
   typecheck-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -34,12 +46,28 @@ jobs:
     # Fail fast if webServer hangs or browser wedges — protects the runner from
     # burning minutes on a stuck job.
     timeout-minutes: 15
+    # smoke-sync + smoke-recipe sign in as ONE shared test account on prod
+    # Supabase. e2e/_shared-account-lock.ts serializes them across workers on a
+    # single runner, but two workflow runs (e.g. two open PRs pushed together)
+    # land on separate runners, where that file lock can't reach. Concurrent
+    # signed-in runs on one account are the race that planted the smoke-recipe
+    # shadow row, so serialize the e2e job repo-wide. cancel-in-progress: false
+    # lets the running job finish. queue: max keeps up to 100 pending jobs in
+    # order; the default (single) would let a newer PR run replace a pending
+    # push-to-main e2e job, cancelling it and skipping that push's deploy.
+    # (queue: max cannot be combined with cancel-in-progress: true.)
+    concurrency:
+      group: e2e-shared-test-account
+      cancel-in-progress: false
+      queue: max
     permissions:
       issues: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -47,7 +75,7 @@ jobs:
       # Use cached browser downloads when possible; fall back to a fresh install.
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -75,7 +103,7 @@ jobs:
           body=$(node scripts/append-flake-log.cjs)
           gh issue comment "${{ vars.FLAKE_TRACKING_ISSUE }}" --body "$body" --repo "$GITHUB_REPOSITORY"
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: playwright-report/
@@ -84,8 +112,10 @@ jobs:
   edge-functions:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
       - run: deno lint
@@ -102,6 +132,9 @@ jobs:
   # Builds dist/ with Vite and publishes to GitHub Pages.
   # Gated to push-to-main; PRs never deploy. Depends on the full PR-gating
   # suite so a red typecheck/test/build or red e2e blocks the publish.
+  # deploy-pages occasionally fails with "Deployment failed, try again later"
+  # (GitHub-side, seen when several pushes land within a minute); that is
+  # transient, so re-run the job rather than debugging it.
   deploy:
     needs: [typecheck-and-test, e2e, edge-functions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -109,31 +142,97 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      # Read-only, for the freshness check below (deployments + compare API).
+      contents: read
+      deployments: read
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    # queue: max keeps every pending deploy in order. With the default
+    # (single), a re-run of an older failed deploy would REPLACE a newer
+    # deploy that is waiting behind a running one, cancelling it before its
+    # freshness check could run.
     concurrency:
       group: pages
       cancel-in-progress: false
+      queue: max
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Full history so the freshness check can order commits locally.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      # Never let an older commit deploy over a newer live site. A re-run
+      # deploys the run's ORIGINAL commit, so re-running a stale failed deploy
+      # after a newer merge went live would roll the site back. This job is
+      # serialized by the `pages` group, so no other deploy can land between
+      # this check and deploy-pages. It skips (with a notice; the job still
+      # shows green) when any commit that ever deployed is newer than this
+      # one, and FAILS the job when the deployment history can't be read, so
+      # freshness is never assumed. Re-running a failed check is safe.
+      - name: Skip if a newer commit has already deployed
+        id: fresh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Every commit that ever deployed successfully. INACTIVE counts too: GitHub's
+          # auto_inactive flips a successful deployment to INACTIVE once a later one
+          # succeeds (a skipped run's record included), so SUCCESS alone is not a
+          # reliable record of what is live. All pages are read; there is no window.
+          # Fail-closed: if the history can't be read, stop (re-running is safe).
+          if ! deployed=$(gh api graphql --paginate \
+            -F o="${GITHUB_REPOSITORY%/*}" -F r="${GITHUB_REPOSITORY#*/}" -f query='
+              query($o:String!,$r:String!,$endCursor:String){repository(owner:$o,name:$r){
+                deployments(environments:["github-pages"],first:100,after:$endCursor){
+                  pageInfo{hasNextPage endCursor} nodes{commitOid latestStatus{state}}}}}' \
+            --jq '.data.repository.deployments.nodes[]
+                  | select(.latestStatus.state == "SUCCESS" or .latestStatus.state == "INACTIVE")
+                  | .commitOid'); then
+            echo "::error::Could not read the Pages deployment history, so this deploy can't be checked for freshness. Re-run the job."
+            exit 1
+          fi
+          commits=$(printf '%s\n' "$deployed" | awk 'NF && !seen[$0]++')
+          total=$(printf '%s\n' "$commits" | awk 'NF' | wc -l | tr -d ' ')
+          for sha in $commits; do
+            [ "$sha" = "$GITHUB_SHA" ] && continue
+            if ! git cat-file -e "${sha}^{commit}" 2>/dev/null; then
+              echo "::warning::Deployed commit ${sha:0:7} is not in this repo's history; ignoring it."
+              continue
+            fi
+            if git merge-base --is-ancestor "$GITHUB_SHA" "$sha"; then
+              echo "::notice::A newer commit (${sha:0:7}) has already deployed than this run's (${GITHUB_SHA:0:7}); skipping deploy so an older build can't overwrite it."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Checked $total deployed commits; none is newer than ${GITHUB_SHA:0:7}. Deploying."
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm ci
+      - if: steps.fresh.outputs.stale != 'true'
+        run: npm ci
       # SENTRY_AUTH_TOKEN gates @sentry/vite-plugin's sourcemap upload + release
       # injection. Scoped to the deploy job only: the typecheck-and-test job's
       # build runs without it so PR builds don't pollute Sentry with one
       # release per commit. errorHandler in vite.config.mts converts upload
       # failures (e.g. rotated token) to warnings, so a broken token still
       # produces a deployable dist/.
-      - run: npm run build
+      - if: steps.fresh.outputs.stale != 'true'
+        run: npm run build
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      # v4+ excludes dotfiles from the artifact. dist/ has none today; if one is
+      # ever added (e.g. .well-known/ for universal links), set
+      # include-hidden-files: true here or it silently won't deploy.
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
-      - uses: actions/deploy-pages@v4
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment

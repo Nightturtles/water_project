@@ -35,8 +35,8 @@ import {
   saveCustomTargetProfiles,
   loadCustomTargetProfiles,
   getExistingTargetProfileLabels,
-} from "./src/lib/storage";
-import * as library from "./src/lib/library-data";
+} from "../src/lib/storage";
+import * as library from "../src/lib/library-data";
 
 const { copyRecipeToMyProfiles, isRecipeInMyProfiles } = library;
 

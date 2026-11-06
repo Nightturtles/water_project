@@ -9,7 +9,7 @@
 // than the render-blocking <head> <script> it used to be. GA's own gtag/js tag
 // is async regardless, so the deferred load is immaterial; the ?no-analytics
 // opt-out just applies a tick later. The pure helpers (and createGtag) are
-// exported for the Vitest suite (analytics-init.test.ts); nothing reaches them
+// exported for the Vitest suite (tests/analytics-init.test.ts); nothing reaches them
 // at runtime, so there is no window self-publish. Window types (dataLayer,
 // gtag) live in globals.d.ts.
 // =============================================================================

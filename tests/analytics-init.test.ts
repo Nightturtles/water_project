@@ -25,7 +25,7 @@ function makeFakeStorage() {
 }
 
 import { describe, test, expect } from "vitest";
-import { shouldLoadAnalytics, handleOptOutURLParam, createGtag } from "./src/lib/analytics-init";
+import { shouldLoadAnalytics, handleOptOutURLParam, createGtag } from "../src/lib/analytics-init";
 
 // ---------------------------------------------------------------------------
 // shouldLoadAnalytics — pure decision tree
