@@ -1001,7 +1001,7 @@ export function computeStockMineralGramsPerL(
  * NOTE: No production caller as of #stock-import editor flow — recipe-browser.js
  * onAddStock now navigates to "minerals.html#stock-import=<slug>" so the user
  * can review/tweak before saving. Retained as the canonical "recreate library
- * spec from a recipe" helper for storage-stock.test.js coverage and a planned
+ * spec from a recipe" helper for tests/storage-stock.test.ts coverage and a planned
  * "Reset to library values" affordance.
  */
 export function importLibraryStockToPantry(
@@ -1581,7 +1581,7 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
 // `global.window = global`, so this Object.assign lands on global, where
 // sync.ts's lexical references (safeGetItem, loadThemePreference, etc.)
 // resolve via the global scope chain.  Keeping the assignment here means
-// sync.test.js works without loading the bridge.
+// tests/sync.test.ts works without loading the bridge.
 if (typeof window !== "undefined") {
   Object.assign(window, {
     safeGetItem,

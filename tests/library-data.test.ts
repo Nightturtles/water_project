@@ -10,8 +10,8 @@
 // vitest.setup.js so this file can use ES `import` for the src/lib modules.
 
 import { describe, test, expect, beforeEach } from "vitest";
-import { saveCustomTargetProfiles, invalidateTargetPresetsCache } from "./src/lib/storage";
-import * as library from "./src/lib/library-data";
+import { saveCustomTargetProfiles, invalidateTargetPresetsCache } from "../src/lib/storage";
+import * as library from "../src/lib/library-data";
 
 const {
   normalizePublicRecipeRow: normalizeRow,

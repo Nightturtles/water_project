@@ -24,7 +24,7 @@
 // expected console.warn).
 
 import { describe, test, expect, beforeEach, afterEach } from "vitest";
-import * as storage from "./src/lib/storage";
+import * as storage from "../src/lib/storage";
 import {
   stableStringify,
   snapshotForCompare,
@@ -39,7 +39,7 @@ import {
   unionConcentrateSpecs,
   unionConcentrateIds,
   foldCloudConcentratesIntoLocal,
-} from "./src/lib/sync";
+} from "../src/lib/sync";
 
 const { invalidateAllCaches } = storage;
 

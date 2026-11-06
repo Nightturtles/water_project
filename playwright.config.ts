@@ -1,9 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
 // Config for cafelytic's e2e smoke suite.
-// Runs `npx http-server . -c-1 -p 8080 --silent` as the web server and drives
-// Chromium against it. One browser — multi-browser is out of scope until a
-// real cross-browser bug justifies the CI runtime cost.
+// Builds dist/ and serves it with `vite preview` on port 8080 (see webServer
+// below), then drives Chromium against it. One browser — multi-browser is out
+// of scope until a real cross-browser bug justifies the CI runtime cost.
 
 export default defineConfig({
   testDir: "./e2e",

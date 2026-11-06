@@ -7,13 +7,19 @@
     "noUncheckedIndexedAccess": true,
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM"],
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["theme-init.js", "src/**/*.ts", "globals.d.ts", "vite.config.mts", "**/*.test.ts"],
+  "include": [
+    "theme-init.js",
+    "src/**/*.ts",
+    "globals.d.ts",
+    "vite.config.mts",
+    "tests/**/*.test.ts"
+  ],
   "exclude": ["node_modules", "coverage", "supabase"]
 }

@@ -1485,7 +1485,7 @@ if (window.supabaseClient && window.supabaseClient.auth) {
 // --- Window publishing (browser + tests) ---
 // In the browser the legacy-globals.ts bridge module also copies these onto
 // window via Object.assign, but the explicit assignments below mean tests
-// (sync.test.js) — which `require()` this file without loading the bridge —
+// (tests/sync.test.ts) — which `require()` this file without loading the bridge —
 // still see the public API on `global` after `global.window = global`.
 window.scheduleSyncToCloud = scheduleSyncToCloud;
 window.syncNow = syncNow;

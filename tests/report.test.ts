@@ -2,8 +2,8 @@
 // storage/sync pipeline. Browser globals are pre-stubbed by vitest.setup.js
 // (window = global, localStorage = makeFakeStorage, etc.).
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-import { reportError, _resetReportCounts } from "./src/lib/report";
-import { safeSetItem } from "./src/lib/storage";
+import { reportError, _resetReportCounts } from "../src/lib/report";
+import { safeSetItem } from "../src/lib/storage";
 
 describe("reportError", () => {
   beforeEach(() => {

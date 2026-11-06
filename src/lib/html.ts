@@ -5,10 +5,10 @@
 // Prefer textContent / createTextNode where you can; reach for this only when
 // building an HTML string is genuinely unavoidable.
 //
-// Self-publishes window.escapeHtml so the not-yet-migrated classic scripts
-// (diy-editor.js, stock-editor.js) and inline page scripts (minerals.html) share
-// one implementation instead of each redefining their own copy. legacy-globals.ts
-// imports this early, so the global exists before any editor or render runs.
+// Self-publishes window.escapeHtml so the inline page scripts (minerals.html)
+// share this one implementation instead of redefining their own copy; the TS
+// modules import it directly. legacy-globals.ts imports this early, so the
+// global exists before any editor or render runs.
 export function escapeHtml(s: unknown): string {
   return String(s)
     .replace(/&/g, "&amp;")

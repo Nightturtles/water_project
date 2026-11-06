@@ -25,7 +25,7 @@ The `webServer` config in `playwright.config.ts` runs `npm run build && npx vite
 
 See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full decision matrix. Short version:
 
-- **Single-page, single-flow change during development** → Claude Preview MCP (`preview_start` + `preview_eval`/`preview_snapshot`/`preview_console_logs`). Fast, sandboxed to the local server, zero setup cost per run.
+- **Single-page, single-flow change during development** → the Claude desktop app's browser pane (`preview_start` with the `dev` config from `.claude/launch.json`, then `read_page` / `javascript_tool` / `read_console_messages`). Fast, sandboxed to the local server, zero setup cost per run.
 - **Flow that has a `*.spec.ts` here** → `npm run test:e2e`. Deterministic, gated in CI.
 - **Flow that only has a `.md` runbook here** (typically anything needing a logged-in Supabase session, multiple browser contexts, or production-origin checks) → Playwright MCP driving the `.md` runbook step-by-step.
 
@@ -40,3 +40,9 @@ See the "Verifying changes" section of [../CLAUDE.md](../CLAUDE.md) for the full
 | Settings page minerals/concentrates/stock editor flows | [smoke-minerals.spec.ts](smoke-minerals.spec.ts) | — | Settings behaviors and stock workflows (spec-only today) |
 | Estimate-from-ZIP flow | [smoke-estimate-water.spec.ts](smoke-estimate-water.spec.ts) | — | Estimate Water UI and related guards (spec-only today) |
 | Recipe-to-concentrate handoff | [smoke-stock-from-recipe.spec.ts](smoke-stock-from-recipe.spec.ts) | — | `+ Create Concentrate` import (hand-authored formula) and derive (ion-derived) paths; save persistence across reload; empty-label validation guard |
+| Calculator dosing intelligence | [calculator-dosing.spec.ts](calculator-dosing.spec.ts) | — | Recipe Concentrate best-fit dose scaling (snaps to the prescribed dose on an exact match), residual mineral suggestions with one-click Enable, alkalinity buffer suggestion. Stubbed login (`stubLoggedIn`) |
+| Recipe builder mixed mode | [recipe-mixed-mode.spec.ts](recipe-mixed-mode.spec.ts) | — | "Supplement minerals (optional)" panel under the active Recipe Concentrate: additive doses, combined solubility warning, open state persisting across reload. Stubbed login |
+| Multiple Recipe Concentrates | [recipe-multi-concentrate.spec.ts](recipe-multi-concentrate.spec.ts) | — | One row per enabled concentrate in the recipe builder and calculator, summed contributions, disable/recompute, orphan-id filtering. Stubbed login |
+| Web-side native redirect guard | [redirect-intercept.spec.ts](redirect-intercept.spec.ts) | — | `window.Capacitor` exists on the web build but `isNativePlatform()` is false, so OAuth and password-reset `redirectTo` stay on cafelytic.com URLs. Stubbed auth; no cloud state |
+| Delete account | [smoke-delete-account.spec.ts](smoke-delete-account.spec.ts) | [smoke-delete-account.md](smoke-delete-account.md) | Settings "Delete account" reveal, exact-email confirm modal, `delete_account` RPC success (sign-out, local clear, redirect, flash) and failure paths. RPC is stubbed; the runbook covers the real deletion |
+| Support contact form | [support-form.spec.ts](support-form.spec.ts) | — | Client-side validation (name, email, message), success and server-failure paths. `functions.invoke` is stubbed; never reaches the Edge Function or Resend |

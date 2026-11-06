@@ -637,8 +637,8 @@ window.applyFilters = applyFilters;
 window.partitionByCategory = partitionByCategory;
 window.pickFeaturedFromFiltered = pickFeaturedFromFiltered;
 
-// Named exports for the Vitest unit suites (library-data.test.js,
-// library-merge.test.js), which import this module directly instead of going
+// Named exports for the Vitest unit suites (tests/library-data.test.ts,
+// tests/library-merge.test.ts), which import this module directly instead of going
 // through the window bridge. normalizePublicRecipeRow + generateUniqueSlug are
 // internal helpers exposed only for those tests.
 export {

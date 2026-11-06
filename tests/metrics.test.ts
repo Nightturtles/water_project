@@ -2,8 +2,8 @@
 // import now (vitest.setup.js still installs the window/localStorage stubs
 // that storage.ts — imported transitively by metrics — touches at module eval).
 import { describe, test, expect } from "vitest";
-import * as constants from "./src/lib/constants";
-import * as metrics from "./src/lib/metrics";
+import * as constants from "../src/lib/constants";
+import * as metrics from "../src/lib/metrics";
 
 describe("calculateIonPPMs", () => {
   test("empty input → all ions at zero", () => {

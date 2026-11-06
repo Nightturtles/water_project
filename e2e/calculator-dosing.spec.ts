@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { stubLoggedIn } from "./_auth-stub";
 
-// Verifies the calculator's dosing intelligence (index.html / script.js):
+// Verifies the calculator's dosing intelligence (index.html / src/components/script.ts):
 //   Stage 1 — scale each enabled Recipe Concentrate's dose to best-fit the
 //             target, snapping to the prescribed dose when it matches.
 //   Stage 2 — suggest individual-mineral supplements for the residual, with a
