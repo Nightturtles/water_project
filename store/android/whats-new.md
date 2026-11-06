@@ -2,4 +2,4 @@
 <!-- Shown on the listing page and in the user's My apps and games view -->
 <!-- after they install an update. -->
 
-v1.1: new in-app Support page with a contact form, more reliable recipe sync, smoother scrolling behind dialogs, and a reorganized Tools menu in the navigation. Bug reports and feedback: info@cafelytic.com.
+v1.2: the calculator can now blend calcium and magnesium salts to match a target profile's sulfate-to-chloride ratio. Set a custom dropper size on Mineral and Recipe Concentrates, and dose Recipe Concentrates in mL or drops. More reliable sync: concentrates no longer go missing when you sign in. Bug reports and feedback: info@cafelytic.com.
