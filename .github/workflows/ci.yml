@@ -142,6 +142,9 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      # Read-only, for the freshness check below (deployments + compare API).
+      contents: read
+      deployments: read
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -149,29 +152,76 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Never let an older commit deploy over a newer live site. A re-run
+      # deploys the run's ORIGINAL commit, so re-running a stale failed deploy
+      # after a newer merge went live would roll the site back. This job is
+      # serialized by the `pages` group, so no other deploy can land between
+      # this check and deploy-pages. Fail-open: an API error deploys as
+      # before; only a positive "behind" result skips (with a notice).
+      - name: Skip if the live site is newer than this commit
+        id: fresh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Skip if this commit is older than ANY recent successful github-pages
+          # deployment record. (A skipped run still records a "success" deployment for
+          # its older commit, so the newest record isn't necessarily what's live; but
+          # every record is either live or older than what's live, so "behind any
+          # record" implies "behind the live site".)
+          # Fail-open: any API error deploys as before; only a positive "behind" skips.
+          rows=$(gh api "repos/$GITHUB_REPOSITORY/deployments?environment=github-pages&per_page=20" \
+            --jq '.[] | "\(.id) \(.sha)"') || {
+            echo "::warning::Could not list Pages deployments; deploying without the freshness check."
+            exit 0
+          }
+          checked=" "
+          while read -r id sha; do
+            [ -z "$id" ] && continue
+            case "$checked" in *" $sha "*) continue ;; esac
+            state=$(gh api "repos/$GITHUB_REPOSITORY/deployments/$id/statuses?per_page=1" --jq '.[0].state // ""') || state=""
+            [ "$state" = "success" ] || continue
+            checked="$checked$sha "
+            status=$(gh api "repos/$GITHUB_REPOSITORY/compare/$sha...$GITHUB_SHA" --jq .status) || {
+              echo "::warning::Could not compare ${sha:0:7}...${GITHUB_SHA:0:7}; skipping that record."
+              continue
+            }
+            if [ "$status" = "behind" ]; then
+              echo "::notice::A newer commit (${sha:0:7}) has already deployed than this run's (${GITHUB_SHA:0:7}); skipping deploy so an older build can't overwrite it."
+              echo "stale=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done <<< "$rows"
+          echo "No deployed commit is newer than ${GITHUB_SHA:0:7}; deploying."
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
-      - run: npm ci
+      - if: steps.fresh.outputs.stale != 'true'
+        run: npm ci
       # SENTRY_AUTH_TOKEN gates @sentry/vite-plugin's sourcemap upload + release
       # injection. Scoped to the deploy job only: the typecheck-and-test job's
       # build runs without it so PR builds don't pollute Sentry with one
       # release per commit. errorHandler in vite.config.mts converts upload
       # failures (e.g. rotated token) to warnings, so a broken token still
       # produces a deployable dist/.
-      - run: npm run build
+      - if: steps.fresh.outputs.stale != 'true'
+        run: npm run build
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
       # v4+ excludes dotfiles from the artifact. dist/ has none today; if one is
       # ever added (e.g. .well-known/ for universal links), set
       # include-hidden-files: true here or it silently won't deploy.
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
-      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
+      - if: steps.fresh.outputs.stale != 'true'
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment
