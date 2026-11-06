@@ -727,7 +727,12 @@
       return v;
     }
 
-    // Total grams of a given Recipe Concentrate that recalculate should treat
+    // Recipe Concentrate amounts are mL of concentrate. (The stored key and
+    // field names still say "grams": the library recipes quoted doses by
+    // weight, and the dose math has always treated 1 g of this dilute
+    // concentrate as 1 mL, so the stored numbers are unchanged.)
+    //
+    // Total mL of a given Recipe Concentrate that recalculate should treat
     // as dispensed: the user's persisted override if set, otherwise the live
     // default of `doseGramsPerL × volumeL`. Keeping the default *unpersisted*
     // is what lets the displayed grams scale with volume changes — once we
@@ -756,8 +761,37 @@
           'input[data-stock-id="' + CSS.escape(id) + '"]',
         );
         if (!input) continue;
-        input.value = String(getEffectiveStockTotalGrams(id, spec, volumeL));
+        input.value = stockMlToDisplay(id, getEffectiveStockTotalGrams(id, spec, volumeL));
       }
+    }
+
+    // Unit a Recipe Concentrate row is shown in: drops when the concentrate
+    // has a dropper size and the user hasn't switched that row to mL.
+    function getStockRowUnit(stockId) {
+      if (!(getConcentrateDropMl(stockId) > 0)) return "ml";
+      return loadLotusConcentrateUnitFor(stockId);
+    }
+
+    function roundMl(ml) {
+      return Math.round(ml * 1000) / 1000;
+    }
+
+    function stockMlToDisplay(stockId, ml) {
+      const dropMl = getConcentrateDropMl(stockId);
+      if (getStockRowUnit(stockId) === "drops" && dropMl > 0) {
+        return String(Math.round(ml / dropMl));
+      }
+      return String(roundMl(ml));
+    }
+
+    // The override is always stored in mL; drops are converted on the way in.
+    function stockDisplayToMl(stockId, value) {
+      const n = Math.max(0, parseFloat(value) || 0);
+      const dropMl = getConcentrateDropMl(stockId);
+      if (getStockRowUnit(stockId) === "drops" && dropMl > 0) {
+        return Math.round(n * dropMl * 1e6) / 1e6;
+      }
+      return n;
     }
 
     function buildStockDispenseUI() {
@@ -793,15 +827,40 @@
         const input = document.createElement("input");
         input.type = "number";
         input.id = "add-stock-" + stockId;
-        input.value = String(initialGrams);
+        input.value = stockMlToDisplay(stockId, initialGrams);
         input.min = "0";
-        input.step = "0.01";
+        input.step = getStockRowUnit(stockId) === "drops" ? "1" : "0.01";
         input.dataset.stockId = stockId;
-        const unit = document.createElement("span");
-        unit.className = "mineral-input-unit";
-        unit.textContent = "g";
         field.appendChild(input);
-        field.appendChild(unit);
+        if (getConcentrateDropMl(stockId) > 0) {
+          // Same drops/mL toggle the Mineral Concentrate rows use.
+          div.dataset.dropsCapable = "true";
+          const unitSelect = document.createElement("select");
+          unitSelect.className = "lotus-unit-select";
+          unitSelect.dataset.stockUnitSelect = "true";
+          const dropsOption = document.createElement("option");
+          dropsOption.value = "drops";
+          dropsOption.textContent = "drops";
+          const mlOption = document.createElement("option");
+          mlOption.value = "ml";
+          mlOption.textContent = "mL";
+          unitSelect.appendChild(dropsOption);
+          unitSelect.appendChild(mlOption);
+          unitSelect.value = getStockRowUnit(stockId);
+          field.appendChild(unitSelect);
+          unitSelect.addEventListener("change", () => {
+            // Convert the shown amount; the stored mL override is unchanged.
+            const ml = getEffectiveStockTotalGrams(stockId, activeStockSpec, getCurrentRecipeVolumeL());
+            saveLotusConcentrateUnitFor(stockId, unitSelect.value);
+            input.step = getStockRowUnit(stockId) === "drops" ? "1" : "0.01";
+            input.value = stockMlToDisplay(stockId, ml);
+          });
+        } else {
+          const unit = document.createElement("span");
+          unit.className = "mineral-input-unit";
+          unit.textContent = "mL";
+          field.appendChild(unit);
+        }
 
         div.appendChild(info);
         div.appendChild(field);
@@ -815,7 +874,7 @@
           if (input.value === "") {
             delete recipeStockGrams[stockId];
           } else {
-            recipeStockGrams[stockId] = input.value;
+            recipeStockGrams[stockId] = String(stockDisplayToMl(stockId, input.value));
           }
           saveRecipeStockGrams(recipeStockGrams);
           clearLastSavedTargetState();

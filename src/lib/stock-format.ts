@@ -87,7 +87,7 @@ export function formatStockSpec(
     const bottle = Number(spec.bottleMl);
     const dose = Number(spec.doseGramsPerL);
     if (Number.isFinite(bottle) && bottle > 0) result += " in " + bottle + " mL";
-    if (Number.isFinite(dose) && dose > 0) result += " - " + dose + " g/L";
+    if (Number.isFinite(dose) && dose > 0) result += " - " + dose + " mL/L";
   }
 
   return result;

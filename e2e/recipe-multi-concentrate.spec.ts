@@ -80,9 +80,7 @@ test.describe("recipe.html — multi-Recipe-Concentrate", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("renders one row per enabled concentrate, each with its own grams input", async ({
-    page,
-  }) => {
+  test("renders one row per enabled concentrate, each with its own mL input", async ({ page }) => {
     const rows = page.locator("#stock-dispense-inputs .mineral-input-row");
     await expect(rows).toHaveCount(2);
     await expect(
@@ -91,7 +89,7 @@ test.describe("recipe.html — multi-Recipe-Concentrate", () => {
     await expect(
       page.locator('#stock-dispense-inputs .mineral-input-row[data-stock-id="stock:stock-b"]'),
     ).toBeVisible();
-    // Each row defaults to the prescribed dose (4 g/L × 1 L default volume).
+    // Each row defaults to the prescribed dose (4 mL/L × 1 L default volume).
     await expect(page.locator("#add-stock-stock\\:stock-a")).toHaveValue("4");
     await expect(page.locator("#add-stock-stock\\:stock-b")).toHaveValue("4");
   });

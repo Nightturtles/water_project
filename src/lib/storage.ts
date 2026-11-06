@@ -50,7 +50,12 @@ interface StockMineralEntry {
 export interface StockConcentrateSpec {
   label?: string;
   bottleMl?: number;
+  // Dose of concentrate per liter of brew water, in mL. (Named "grams" for
+  // historical reasons: the library recipes quoted it by weight, and the math
+  // has always treated 1 g of this dilute concentrate as 1 mL.)
   doseGramsPerL?: number;
+  // Optional: average mL per drop from the user's dropper (see DiyConcentrateSpec).
+  dropMl?: number;
   minerals?: StockMineralEntry[];
   createdFrom?: string;
   source?: string;
@@ -1088,8 +1093,9 @@ export function normalizeDropMl(value: unknown): number | null {
 
 /**
  * mL per drop for a concentrate, or 0 when it isn't dosed in drops.
- * Lotus brand concentrates use the selected Lotus dropper style; DIY Mineral
- * Concentrates use the dropper size saved on their spec (if any).
+ * Lotus brand concentrates use the selected Lotus dropper style; Mineral
+ * (diy:) and Recipe (stock:) Concentrates use the dropper size saved on their
+ * spec, if any.
  */
 export function getConcentrateDropMl(concentrateId: unknown): number {
   if (typeof concentrateId !== "string") return 0;
@@ -1098,6 +1104,10 @@ export function getConcentrateDropMl(concentrateId: unknown): number {
     const mineralId = parseDiyConcentrateId(concentrateId);
     if (!mineralId) return 0;
     const spec = loadDiyConcentrateSpecs()[mineralId];
+    return (spec && normalizeDropMl(spec.dropMl)) || 0;
+  }
+  if (concentrateId.startsWith("stock:")) {
+    const spec = getStockSpec(concentrateId);
     return (spec && normalizeDropMl(spec.dropMl)) || 0;
   }
   return 0;

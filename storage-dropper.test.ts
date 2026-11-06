@@ -58,8 +58,17 @@ describe("getConcentrateDropMl", () => {
     expect(getConcentrateDropMl("diy:baking-soda")).toBe(0);
   });
 
-  test("Recipe Concentrates and junk ids are not drops-capable", () => {
-    expect(getConcentrateDropMl("stock:my-stock")).toBe(0);
+  test("a Recipe Concentrate uses its saved dropper size", () => {
+    storage.saveStockConcentrateSpecs({
+      "my-stock": { label: "Mine", bottleMl: 200, doseGramsPerL: 4, dropMl: 0.04, minerals: [] },
+      plain: { label: "Plain", bottleMl: 200, doseGramsPerL: 4, minerals: [] },
+    });
+    expect(getConcentrateDropMl("stock:my-stock")).toBe(0.04);
+    expect(getConcentrateDropMl("stock:plain")).toBe(0);
+  });
+
+  test("unknown stocks and junk ids are not drops-capable", () => {
+    expect(getConcentrateDropMl("stock:missing")).toBe(0);
     expect(getConcentrateDropMl(42)).toBe(0);
     expect(getConcentrateDropMl("diy:")).toBe(0);
   });

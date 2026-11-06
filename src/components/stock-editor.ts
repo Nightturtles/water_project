@@ -37,6 +37,7 @@ import {
   setStockEnabled,
   loadSelectedConcentrates,
   saveSelectedConcentrates,
+  normalizeDropMl,
 } from "../lib/storage";
 
 interface StockEditorMineral {
@@ -52,6 +53,7 @@ interface StockSpec {
   label?: string;
   bottleMl?: number;
   doseGramsPerL?: number;
+  dropMl?: number;
   minerals?: StockEditorMineral[];
   createdFrom?: string;
   source?: string;
@@ -87,6 +89,7 @@ interface StockEditorSession {
   label: string;
   bottleMl: number;
   doseGramsPerL: number;
+  dropMl: number | null;
   minerals: StockEditorMineral[];
   hint: string;
   notes: string[];
@@ -101,6 +104,8 @@ interface StockDraft {
   label: string;
   bottleMl: number;
   doseGramsPerL: number;
+  // Raw text of the optional dropper field: "" = unset.
+  dropMlRaw: string;
   minerals: StockEditorMineral[];
 }
 
@@ -251,6 +256,7 @@ function renderForm(): void {
     Number.isFinite(Number(s.doseGramsPerL)) && Number(s.doseGramsPerL) > 0
       ? Number(s.doseGramsPerL)
       : 4;
+  const dropAttr = s.dropMl ? 'value="' + s.dropMl + '"' : 'placeholder="e.g. 0.050"';
   const hintHtml = s.hint ? '<p class="hint stock-derive-hint">' + escapeHtml(s.hint) + "</p>" : "";
   const notesHtml =
     Array.isArray(s.notes) && s.notes.length
@@ -278,10 +284,17 @@ function renderForm(): void {
     '">' +
     "</div>" +
     '<div class="input-group">' +
-    '<label for="stock-editor-dose">Dose g/L</label>' +
+    '<label for="stock-editor-dose">Dose mL/L</label>' +
     '<input type="number" id="stock-editor-dose" min="0" step="0.01" value="' +
     doseGramsPerL +
     '">' +
+    "</div>" +
+    '<div class="input-group concentrate-drop-group">' +
+    '<label for="stock-editor-drop-ml">Dropper size (mL per drop, optional)</label>' +
+    '<input type="number" id="stock-editor-drop-ml" min="0" step="0.001" inputmode="decimal" ' +
+    dropAttr +
+    ">" +
+    '<p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>' +
     "</div>" +
     "</div>" +
     '<div class="stock-mineral-list stock-editor-mineral-list">' +
@@ -333,10 +346,12 @@ function readDraftFromForm(): StockDraft {
   const labelInput = formEl.querySelector<HTMLInputElement>("#stock-editor-label");
   const bottleInput = formEl.querySelector<HTMLInputElement>("#stock-editor-bottle-ml");
   const doseInput = formEl.querySelector<HTMLInputElement>("#stock-editor-dose");
+  const dropInput = formEl.querySelector<HTMLInputElement>("#stock-editor-drop-ml");
   return {
     label: labelInput ? labelInput.value.trim() : "",
     bottleMl: bottleInput ? Math.max(0, parseFloat(bottleInput.value) || 0) : 0,
     doseGramsPerL: doseInput ? Math.max(0, parseFloat(doseInput.value) || 0) : 0,
+    dropMlRaw: dropInput ? dropInput.value.trim() : "",
     minerals: session!.minerals.slice(),
   };
 }
@@ -442,6 +457,11 @@ function handleSave(): void {
     showError("Dose must be greater than 0.");
     return;
   }
+  const dropMl = normalizeDropMl(draft.dropMlRaw);
+  if (draft.dropMlRaw !== "" && dropMl === null) {
+    showError("Dropper size must be at least 0.001 mL, or leave it blank.");
+    return;
+  }
   if (!draft.minerals || draft.minerals.length === 0) {
     showError("Add at least one mineral.");
     return;
@@ -485,6 +505,7 @@ function handleSave(): void {
     doseGramsPerL: draft.doseGramsPerL,
     minerals: cleaned,
   };
+  if (dropMl !== null) spec.dropMl = dropMl;
   if (s.mode === "edit") {
     // Preserve the round-tripped origin and source so minerals.html's
     // "Reset to library values" / "Re-derive from recipe" affordances keep
@@ -594,6 +615,7 @@ function openEditor(opts?: OpenStockEditorOptions): void {
     label: "",
     bottleMl: 0,
     doseGramsPerL: 0,
+    dropMl: null,
     minerals: [],
     hint: "",
     notes: [],
@@ -619,6 +641,7 @@ function openEditor(opts?: OpenStockEditorOptions): void {
     resolvedSession.label = spec.label || opts.slug;
     resolvedSession.bottleMl = Number(spec.bottleMl) || 0;
     resolvedSession.doseGramsPerL = Number(spec.doseGramsPerL) || 0;
+    resolvedSession.dropMl = normalizeDropMl(spec.dropMl);
     resolvedSession.minerals = Array.isArray(spec.minerals)
       ? spec.minerals.map(function (m) {
           return {
