@@ -270,6 +270,27 @@ test.describe("Recipe Concentrates in mL, with drops when a dropper size is set"
       )
       .toBe("2");
 
+    // A fractional drops entry rounds to a whole drop before converting:
+    // 50.6 drops -> 51 drops -> 2.04 mL, matching what reload displays.
+    await input.fill("50.6");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("cw_recipe_stock_grams") || "{}")["stock:drop-stock"],
+        ),
+      )
+      .toBe("2.04");
+    await input.fill("50");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("cw_recipe_stock_grams") || "{}")["stock:drop-stock"],
+        ),
+      )
+      .toBe("2");
+
     await select.selectOption("ml");
     await expect(input).toHaveValue("2");
 

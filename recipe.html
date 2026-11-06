@@ -681,8 +681,9 @@
           ml = currentValue;
           drops = dropMl > 0 ? Math.round(currentValue / dropMl) : 0;
         } else {
+          // Same whole-drop rounding as the input handler, so ml and drops agree.
           drops = Math.round(currentValue);
-          ml = currentValue * dropMl;
+          ml = drops * dropMl;
         }
         recipeConcentrateInputs[key] = { ml, drops };
         input.step = nextUnit === "ml" ? "0.001" : "1";
@@ -788,11 +789,14 @@
     }
 
     // The override is always stored in mL; drops are converted on the way in.
+    // A fractional drops entry rounds to a whole drop first, so the stored mL
+    // matches the whole-drop count stockMlToDisplay shows after reload.
     function stockDisplayToMl(stockId, value) {
       const n = Math.max(0, parseFloat(value) || 0);
       const dropMl = getConcentrateDropMl(stockId);
       if (getStockRowUnit(stockId) === "drops" && dropMl > 0) {
-        return Math.round(n * dropMl * 1e6) / 1e6;
+        const drops = Math.round(n);
+        return Math.round(drops * dropMl * 1e6) / 1e6;
       }
       return n;
     }
