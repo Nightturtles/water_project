@@ -313,9 +313,24 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 }
 
 // --- Push all localStorage data to Supabase ---
-export async function pushAllToCloud(): Promise<void> {
+//
+// Merge gate: refuses to push until this device has completed
+// handleFirstLoginMerge for the signed-in user (SYNCED_USER_ID === userId).
+// user_settings is one whole-row upsert, so a push from a device that has
+// not yet reconciled with the cloud overwrites the cloud row with whatever
+// this device happens to hold, which on a fresh sign-in is empty concentrate
+// specs. That was the "my concentrates vanish when I sign in on the web"
+// bug: login.html redirects to index.html the instant sign-in resolves,
+// which kills the in-flight merge, and index.html's initSync (plus any
+// debounced save) then pushed the empty local row before a merge ever
+// pulled. Only handleFirstLoginMerge itself bypasses the gate, via
+// allowBeforeMerge, for its "new user" and "keep local" branches.
+export async function pushAllToCloud(options?: { allowBeforeMerge?: boolean }): Promise<void> {
   const userId = await getLoggedInUserId();
   if (!userId) return;
+  if (!(options && options.allowBeforeMerge) && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
+    return;
+  }
 
   const now = new Date().toISOString();
 
@@ -939,6 +954,64 @@ function showMergeDialog(): Promise<"local" | "cloud"> {
   });
 }
 
+// Union two concentrate-spec dicts: every cloud entry survives, and local
+// wins where both define the same key (local is the side the user chose to
+// keep). Exported for unit tests.
+export function unionConcentrateSpecs<T>(
+  local: Record<string, T> | null | undefined,
+  cloud: Record<string, T> | null | undefined,
+): Record<string, T> {
+  const safeCloud = cloud && typeof cloud === "object" && !Array.isArray(cloud) ? cloud : {};
+  const safeLocal = local && typeof local === "object" && !Array.isArray(local) ? local : {};
+  return Object.assign({}, safeCloud, safeLocal);
+}
+
+// Union two selected-concentrate id lists, local order first, deduped.
+// Exported for unit tests.
+export function unionConcentrateIds(local: unknown, cloud: unknown): string[] {
+  const out: string[] = [];
+  [local, cloud].forEach(function (list) {
+    if (!Array.isArray(list)) return;
+    list.forEach(function (id) {
+      if (typeof id === "string" && out.indexOf(id) === -1) out.push(id);
+    });
+  });
+  return out;
+}
+
+// Before a "Keep local data" push, pull the cloud's concentrate specs and
+// selected-concentrate list and union them into local storage. Throws on a
+// fetch error so the merge aborts (and retries on the next load) instead of
+// pushing a row that would drop the cloud's concentrates.
+async function foldCloudConcentratesIntoLocal(userId: string): Promise<void> {
+  const res = await window.supabaseClient
+    .from("user_settings")
+    .select("diy_concentrate_specs, stock_concentrate_specs, selected_concentrates")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (res && res.error) {
+    reportError("sync.merge-fold-concentrates", res.error);
+    throw res.error;
+  }
+  const cloud = res && res.data;
+  if (!cloud) return;
+  safeSetItem(
+    KEYS.DIY_CONCENTRATE_SPECS,
+    JSON.stringify(unionConcentrateSpecs(loadDiyConcentrateSpecs(), cloud.diy_concentrate_specs)),
+  );
+  safeSetItem(
+    KEYS.STOCK_CONCENTRATE_SPECS,
+    JSON.stringify(
+      unionConcentrateSpecs(loadStockConcentrateSpecs(), cloud.stock_concentrate_specs),
+    ),
+  );
+  safeSetItem(
+    KEYS.SELECTED_CONCENTRATES,
+    JSON.stringify(unionConcentrateIds(loadSelectedConcentrates(), cloud.selected_concentrates)),
+  );
+  invalidateAllCaches();
+}
+
 // --- First-login merge: call this right after a successful sign-in ---
 // Determines what to do based on whether cloud data exists and whether
 // local data has been customized. Skips the prompt on repeat logins
@@ -960,7 +1033,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
 
     if (!cloudExists) {
       // Brand new user: push local data to initialize cloud
-      await pushAllToCloud();
+      await pushAllToCloud({ allowBeforeMerge: true });
     } else {
       if (isDefaultData()) {
         // Returning user on a fresh device: pull cloud data down
@@ -969,7 +1042,12 @@ export async function handleFirstLoginMerge(): Promise<void> {
         // Both local and cloud have non-default data: ask the user
         const choice = await showMergeDialog();
         if (choice === "local") {
-          await pushAllToCloud();
+          // "Keep local" overwrites the cloud user_settings row, but the
+          // concentrate specs in it are named artifacts (Category B), not
+          // preferences: fold the cloud's into local first so choosing
+          // "local" can't erase concentrates saved on another device.
+          await foldCloudConcentratesIntoLocal(userId);
+          await pushAllToCloud({ allowBeforeMerge: true });
         } else {
           await pullFromCloud();
         }
@@ -1170,8 +1248,18 @@ async function initSync(): Promise<void> {
     const result = await window.supabaseClient.auth.getSession();
     if (!result.data || !result.data.session) return;
     userId = result.data.session.user.id;
-    await pushAllToCloud();
-    await pullFromCloud();
+    if (safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
+      // This device hasn't completed the first-login merge for this user:
+      // a fresh device, or a sign-in on login.html whose merge was cut off by
+      // the redirect to index.html. A blind push here would overwrite the
+      // cloud user_settings row (concentrate specs included) with this
+      // device's empty local state, so run the guarded merge instead. The
+      // SIGNED_IN handler may start it too; mergeInFlight dedupes the two.
+      await handleFirstLoginMerge();
+    } else {
+      await pushAllToCloud();
+      await pullFromCloud();
+    }
     if (typeof window.dispatchEvent === "function") {
       window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
     }
@@ -1362,10 +1450,11 @@ if (window.supabaseClient && window.supabaseClient.auth) {
       // bailed) needs the merge to surface the user's cloud data. And a device
       // whose merge has NOT completed — a fresh device, or one whose first
       // attempt failed before setting SYNCED_USER_ID (e.g. a transient network
-      // error) — must keep retrying the guarded merge rather than fall back to
-      // initSync's blind push-pull, which would push local defaults over the
-      // user's cloud settings. Gating on "session exists" instead would suppress
-      // that retry.
+      // error) — must keep retrying the guarded merge. (initSync routes an
+      // unmerged device into the same merge, and pushAllToCloud refuses to
+      // push before it completes, so local defaults can't be pushed over the
+      // user's cloud settings in the meantime.) Gating on "session exists"
+      // instead would suppress that retry.
       const mergeAlreadyDone = safeGetItem(KEYS.SYNCED_USER_ID) === session.user.id;
       if (wasLoggedInAtLoad && mergeAlreadyDone) return;
       handleFirstLoginMerge()
