@@ -201,6 +201,11 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
     await expect(input).toHaveValue("1");
     await expect(mg).toHaveText("2");
     expect(await readSaved()).toEqual({ ml: 0.05, drops: 1 });
+
+    // Typing a drop count (even the same one) makes it the dose: drops x size.
+    await input.fill("1");
+    await expect.poll(readSaved).toEqual({ ml: 0.1, drops: 1 });
+    await expect(mg).toHaveText("5");
   });
 
   test("minerals page edits keep the dropper size and round it to 3 decimals", async ({ page }) => {
