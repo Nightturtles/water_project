@@ -27,7 +27,7 @@ Apple's questionnaire lives under **App Information → Age Rating**. All answer
 | Unrestricted Web Access | Are there URLs that open in a browser? | No (the in-app privacy link opens in an embedded system browser via @capacitor/browser, which Apple does not count as unrestricted web access for this question) |
 | User Generated Content | Does the app contain user-generated content? | Yes (users can publish recipe names; moderation note below) |
 | Messaging and Chat | Does the app include messaging or chat? | No |
-| Social Media | Does the app include social media features? | No (no profiles, follows, feeds, likes, or comments; publishing a recipe to the public library is covered by User Generated Content above). First asked at the 1.2 submission |
+| Social Media | Does the app include social media features? | No. Apple defines this as redistributing or amplifying user content "through a social feed or similar discovery method" (views, likes, comments, shares). The library has none of that: recipes sit in fixed category trays, newest first, the featured picks are hard-coded slugs, and nothing shows engagement. Broad visibility of published recipes is what User Generated Content above declares. A Yes would also raise the rating above 4+. First asked at the 1.2 submission |
 | Advertising | Does the app contain advertising? | No |
 | Parental Controls | Does the app offer parental controls? | No |
 | Age Assurance | Does the app verify a person's age? | No |
@@ -65,3 +65,12 @@ Resulting Play rating: **Everyone**, with an "Interactive Elements" disclosure o
 Interactivity note for the Play Console reviewer (paste into the relevant "Tell us about interaction features" prompt):
 
 > Signed-in users can publish recipes they save to a public library that all users can browse. There is no chat, direct messaging, comments, or any other channel for direct user-to-user communication. The shared field is the recipe name (under 200 chars) plus the mineral target values. Reactive moderation: inappropriate names can be removed via a database-side query; a public reporting UI is planned for a future release.
+
+## Open moderation gap
+
+Both stores' user-generated-content rules ask for more than the app has today:
+
+- **Apple** (App Review Guideline 1.2): a way to report offensive content with timely responses, and the ability to block abusive users, alongside filtering and published contact info.
+- **Google Play** (User Generated Content policy): apps with publicly accessible UGC "must implement in-app functionality to report users and content, and to block users", plus clear terms of use.
+
+Today the only channel is the Support page contact form and email; names are removed by hand. Apple has approved 1.0 and 1.1 with the reviewer notes above, but an in-app report action (and user blocking) should ship before the first Play production release.
