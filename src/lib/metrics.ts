@@ -704,10 +704,7 @@ export function splitAlkalinityDelta(
  */
 export function deriveStockFormulaFromTarget(
   target:
-    | TargetProfile
-    | Partial<Record<IonName, number | string | null | undefined>>
-    | null
-    | undefined,
+    TargetProfile | Partial<Record<IonName, number | string | null | undefined>> | null | undefined,
   options?: { bottleMl?: number; doseGramsPerL?: number; calciumChlorideId?: string },
 ): {
   bottleMl: number;

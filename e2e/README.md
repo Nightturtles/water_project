@@ -15,7 +15,7 @@ npx playwright test --ui      # interactive UI mode for debugging
 npx playwright test --debug   # step-through debugger
 ```
 
-The `webServer` config in `playwright.config.ts` runs `npm run build && npx vite preview --port 8080 --strictPort` automatically — no need to start anything separately. The build step ensures the suite exercises the production Rollup bundle (the actual `dist/` artifact that ships to cafelytic.com), not the dev-server's on-the-fly transforms. Adds ~1.5s per cold run; preview itself boots instantly.
+The `webServer` config in `playwright.config.ts` runs `npm run build && npx vite preview --port 8080 --strictPort` automatically — no need to start anything separately. The build step ensures the suite exercises the production bundle (the actual `dist/` artifact that ships to cafelytic.com), not the dev-server's on-the-fly transforms. Adds ~1.5s per cold run; preview itself boots instantly.
 
 **Local iteration:** `reuseExistingServer: true` outside CI honors an already-running preview server on 8080 — so `npm run build && npx vite preview --port 8080 --strictPort` in another terminal once, then iterate with `npx playwright test --debug`. **The reused server serves whatever `dist/` was last built**, so rebuild between source edits or you'll see stale results. (Alternative: kill the long-running preview and let Playwright spawn a fresh one each invocation; you pay ~1.5s per run but never see stale state.)
 
