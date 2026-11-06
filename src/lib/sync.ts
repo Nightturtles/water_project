@@ -1077,6 +1077,11 @@ export async function handleFirstLoginMerge(): Promise<void> {
     }
 
     safeSetItem(KEYS.SYNCED_USER_ID, userId);
+    // Catch up on realtime changes that arrived while the merge was pending.
+    if (realtimePullDeferred) {
+      realtimePullDeferred = false;
+      scheduleRealtimePull();
+    }
   })();
   return mergeInFlight.finally(function () {
     mergeInFlight = null;
@@ -1223,11 +1228,30 @@ function scheduleRealtimeReconnect(): void {
 // as initSync's push-then-pull ordering). Pulls are serialized via
 // enqueueSerialized so a second realtime event arriving while a pull is
 // in flight can't start a concurrent pull.
+//
+// Until this device has completed the first-login merge for the subscribed
+// user, a realtime pull is deferred instead: its push-first step is a no-op
+// behind the merge gate, so the pull would overwrite unmerged local data
+// with cloud state (initSync subscribes even when the merge failed). The
+// merge re-arms one catch-up pull once it succeeds.
+let realtimePullDeferred = false;
+
+export function realtimePullBlockedByMerge(
+  subscribedUserId: string | null,
+  syncedUserId: string | null,
+): boolean {
+  return !subscribedUserId || syncedUserId !== subscribedUserId;
+}
+
 function scheduleRealtimePull(): void {
   clearTimeout(pullDebounceTimer);
   pullDebounceTimer = setTimeout(function () {
     pullDebounceTimer = undefined;
     enqueueSerialized(function () {
+      if (realtimePullBlockedByMerge(realtimeUserId, safeGetItem(KEYS.SYNCED_USER_ID))) {
+        realtimePullDeferred = true;
+        return Promise.resolve();
+      }
       const pendingPush = syncTimer ? syncNow() : Promise.resolve();
       return Promise.resolve(pendingPush)
         .then(function () {

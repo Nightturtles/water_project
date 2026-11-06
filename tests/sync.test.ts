@@ -39,6 +39,7 @@ import {
   unionConcentrateSpecs,
   unionConcentrateIds,
   foldCloudConcentratesIntoLocal,
+  realtimePullBlockedByMerge,
 } from "../src/lib/sync";
 
 const { invalidateAllCaches } = storage;
@@ -699,6 +700,15 @@ describe("pushAllToCloud merge gate", () => {
   test("allowBeforeMerge (merge's own new-user / keep-local push) bypasses the gate", async () => {
     await pushAllToCloud({ allowBeforeMerge: true });
     expect(upserts.some((u) => u.table === "user_settings")).toBe(true);
+  });
+});
+
+describe("realtimePullBlockedByMerge", () => {
+  test("defers realtime pulls until this device has merged the subscribed user", () => {
+    expect(realtimePullBlockedByMerge("user-a", null)).toBe(true);
+    expect(realtimePullBlockedByMerge("user-a", "user-b")).toBe(true);
+    expect(realtimePullBlockedByMerge(null, "user-a")).toBe(true);
+    expect(realtimePullBlockedByMerge("user-a", "user-a")).toBe(false);
   });
 });
 
