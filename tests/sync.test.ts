@@ -698,6 +698,13 @@ describe("pushAllToCloud merge gate", () => {
     expect(upserts).toEqual([]);
   });
 
+  test("merge push rejects when the signed-in user is not the merge user", async () => {
+    await expect(
+      pushAllToCloud({ allowBeforeMerge: true, mergeUserId: "someone-else" }),
+    ).rejects.toThrow(/signed-in user changed/);
+    expect(upserts).toEqual([]);
+  });
+
   test("allowBeforeMerge (merge's own new-user / keep-local push) bypasses the gate", async () => {
     await pushAllToCloud({ allowBeforeMerge: true });
     expect(upserts.some((u) => u.table === "user_settings")).toBe(true);
@@ -754,21 +761,37 @@ describe("pullFromCloud user binding", () => {
     (global as any).window.supabaseClient.auth.getUser = async () => {
       throw new Error("Failed to fetch");
     };
-    await expect(pullFromCloud({ requireUser: true })).rejects.toThrow(
+    await expect(pullFromCloud({ mergeUserId: USER })).rejects.toThrow(
       /could not resolve the signed-in user/,
     );
     expect(reads).toEqual([]);
   });
 
+  test("a merge pull rejects, without applying, when the user changes mid-pull", async () => {
+    let calls = 0;
+    (global as any).window.supabaseClient.auth.getUser = async () => ({
+      data: { user: { id: calls++ === 0 ? USER : "someone-else" } },
+    });
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ mergeUserId: USER })).rejects.toThrow(/signed-in user changed/);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("filter");
+  });
+
+  test("a merge pull for the signed-in merge user applies rows", async () => {
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ mergeUserId: USER })).resolves.toBe(true);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("espresso");
+  });
+
   test("a realtime pull bound to another user reads nothing", async () => {
     global.localStorage.setItem("cw_synced_user_id", "user-a");
-    await expect(pullFromCloud({ expectedUserId: "user-a" })).resolves.toBe(true);
+    await expect(pullFromCloud({ expectedUserId: "user-a" })).resolves.toBe("discarded");
     expect(reads).toEqual([]);
   });
 
   test("a realtime pull discards rows when the merge marker no longer matches", async () => {
     global.localStorage.setItem("cw_brew_method", "filter");
-    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe(true);
+    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe("discarded");
     expect(reads.length).toBeGreaterThan(0);
     expect(global.localStorage.getItem("cw_brew_method")).toBe("filter");
   });

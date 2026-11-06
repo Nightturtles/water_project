@@ -325,7 +325,14 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // debounced save) then pushed the empty local row before a merge ever
 // pulled. Only handleFirstLoginMerge itself bypasses the gate, via
 // allowBeforeMerge, for its "new user" and "keep local" branches.
-export async function pushAllToCloud(options?: { allowBeforeMerge?: boolean }): Promise<void> {
+//
+// mergeUserId binds the merge's push to the user the merge started for: if
+// the session switched accounts meanwhile, reject rather than push this
+// device's (by then cleared) local state over another account's cloud row.
+export async function pushAllToCloud(options?: {
+  allowBeforeMerge?: boolean;
+  mergeUserId?: string;
+}): Promise<void> {
   const userId = await getLoggedInUserId();
   if (!userId) {
     // The merge's own push (allowBeforeMerge) must not "succeed" without
@@ -337,6 +344,9 @@ export async function pushAllToCloud(options?: { allowBeforeMerge?: boolean }): 
       throw new Error("[sync] merge push aborted: could not resolve the signed-in user");
     }
     return;
+  }
+  if (options && options.mergeUserId && userId !== options.mergeUserId) {
+    throw new Error("[sync] merge push aborted: the signed-in user changed");
   }
   if (!(options && options.allowBeforeMerge) && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
     return;
@@ -608,16 +618,21 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
 
 // --- Pull all cloud data into localStorage and invalidate caches ---
 //
-// requireUser (the first-login merge): an unresolved user throws instead of a
-// silent no-op, so the merge aborts and SYNCED_USER_ID stays unset.
+// Resolves true when applied (or signed out), false when skipped for a
+// mid-pull local write (caller re-pulls), "discarded" when the rows belonged
+// to a user who is no longer the one this pull was bound to.
+//
+// mergeUserId (the first-login merge): the pull must be for that user. An
+// unresolved or different user, before or after the fetch, throws instead of
+// a silent no-op, so the merge aborts and SYNCED_USER_ID stays unset.
 // expectedUserId (realtime): the pull is bound to the user that passed the
 // merge gate; if the signed-in user or the merge marker no longer matches by
 // the time rows arrive, they are discarded rather than applied.
 export async function pullFromCloud(options?: {
   skipIfLocalWriteDuringPull?: boolean;
-  requireUser?: boolean;
+  mergeUserId?: string;
   expectedUserId?: string;
-}): Promise<boolean> {
+}): Promise<boolean | "discarded"> {
   // Snapshot the local-write counter before any network round-trip. When the
   // realtime path sets skipIfLocalWriteDuringPull, a change here before we
   // apply means a local save landed mid-pull and the full-row overwrites below
@@ -627,14 +642,18 @@ export async function pullFromCloud(options?: {
   const skipIfLocalWrite = !!(options && options.skipIfLocalWriteDuringPull);
   const seqAtStart = localWriteSeq;
   const expectedUserId = options && options.expectedUserId;
+  const mergeUserId = options && options.mergeUserId;
   const userId = await getLoggedInUserId();
   if (!userId) {
-    if (options && options.requireUser) {
+    if (mergeUserId) {
       throw new Error("[sync] merge pull aborted: could not resolve the signed-in user");
     }
     return true;
   }
-  if (expectedUserId && userId !== expectedUserId) return true;
+  if (mergeUserId && userId !== mergeUserId) {
+    throw new Error("[sync] merge pull aborted: the signed-in user changed");
+  }
+  if (expectedUserId && userId !== expectedUserId) return "discarded";
 
   const results = await Promise.all([
     window.supabaseClient.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
@@ -648,6 +667,12 @@ export async function pullFromCloud(options?: {
   if (errored && errored.error) {
     reportError("sync.pull", errored.error);
     throw errored.error;
+  }
+
+  // The session may have switched accounts while we fetched; never apply a
+  // merge user's rows to whatever the device holds for someone else.
+  if (mergeUserId && (await getLoggedInUserId()) !== mergeUserId) {
+    throw new Error("[sync] merge pull aborted: the signed-in user changed mid-pull");
   }
 
   if (skipIfLocalWrite && localWriteSeq !== seqAtStart) {
@@ -670,7 +695,7 @@ export async function pullFromCloud(options?: {
     // them and let the next merge's catch-up pull reconcile.
     console.warn("[sync] pull discarded: signed-in user or merge state changed mid-pull");
     realtimePullDeferred = true;
-    return true;
+    return "discarded";
   }
 
   // Re-bind userId as `string` (not `string | null`) so the forEach
@@ -1083,11 +1108,11 @@ export async function handleFirstLoginMerge(): Promise<void> {
 
     if (!cloudExists) {
       // Brand new user: push local data to initialize cloud
-      await pushAllToCloud({ allowBeforeMerge: true });
+      await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
     } else {
       if (isDefaultData()) {
         // Returning user on a fresh device: pull cloud data down
-        await pullFromCloud({ requireUser: true });
+        await pullFromCloud({ mergeUserId: userId });
       } else {
         // Both local and cloud have non-default data: ask the user
         const choice = await showMergeDialog();
@@ -1097,13 +1122,20 @@ export async function handleFirstLoginMerge(): Promise<void> {
           // preferences: fold the cloud's into local first so choosing
           // "local" can't erase concentrates saved on another device.
           await foldCloudConcentratesIntoLocal(userId);
-          await pushAllToCloud({ allowBeforeMerge: true });
+          await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
         } else {
-          await pullFromCloud({ requireUser: true });
+          await pullFromCloud({ mergeUserId: userId });
         }
       }
     }
 
+    // Only mark this device merged for the user it merged for. A sign-out or
+    // account switch mid-merge (null included: sign-out clears local data, and
+    // a stale marker would let the next sign-in push that empty state) leaves
+    // the marker unset so the next load re-runs the merge.
+    if ((await getLoggedInUserId()) !== userId) {
+      throw new Error("[sync] merge aborted: the signed-in user changed during the merge");
+    }
     safeSetItem(KEYS.SYNCED_USER_ID, userId);
     // Catch up on realtime changes that arrived while the merge was pending.
     if (realtimePullDeferred) {
@@ -1290,6 +1322,9 @@ function scheduleRealtimePull(): void {
           return pullFromCloud({ skipIfLocalWriteDuringPull: true, expectedUserId: gatedUserId });
         })
         .then(function (applied) {
+          // Discarded rows were never written, so nothing changed locally;
+          // the deferred flag set by pullFromCloud drives the catch-up.
+          if (applied === "discarded") return;
           if (applied === false) {
             // pullFromCloud bailed because a local write landed mid-pull. Re-arm
             // so the remote change still lands once that write has been pushed
