@@ -38,7 +38,7 @@ Resulting Apple rating: **4+**
 
 User-generated content note for the reviewer:
 
-> Recipes shared to the public library have a name field that any signed-in user can fill. Names are short (<200 chars) and shown to other users on the library page. We moderate reactively: the app exposes no reporting flow yet because v1 has a small invite-only audience, but inappropriate names can be removed by a database-side query. A public reporting UI is planned for a future release.
+> Recipes shared to the public library have a name field that any signed-in user can fill. Names are short (<200 chars) and shown to other users on the library page. We moderate reactively: anyone can report a name through the in-app Support page contact form, and inappropriate names are removed by a database-side query.
 
 ## Google Play age rating
 
@@ -64,7 +64,7 @@ Resulting Play rating: **Everyone**, with an "Interactive Elements" disclosure o
 
 Interactivity note for the Play Console reviewer (paste into the relevant "Tell us about interaction features" prompt):
 
-> Signed-in users can publish recipes they save to a public library that all users can browse. There is no chat, direct messaging, comments, or any other channel for direct user-to-user communication. The shared field is the recipe name (under 200 chars) plus the mineral target values. Reactive moderation: inappropriate names can be removed via a database-side query; a public reporting UI is planned for a future release.
+> Signed-in users can publish recipes they save to a public library that all users can browse. There is no chat, direct messaging, comments, or any other channel for direct user-to-user communication. The shared field is the recipe name (under 200 chars) plus the mineral target values. Reactive moderation: anyone can report a name through the in-app Support page contact form, and inappropriate names are removed via a database-side query.
 
 ## Open moderation gap
 
@@ -73,4 +73,6 @@ Both stores' user-generated-content rules ask for more than the app has today:
 - **Apple** (App Review Guideline 1.2): a way to report offensive content with timely responses, and the ability to block abusive users, alongside filtering and published contact info.
 - **Google Play** (User Generated Content policy): apps with publicly accessible UGC "must implement in-app functionality to report users and content, and to block users", plus clear terms of use.
 
-Today the only channel is the Support page contact form and email; names are removed by hand. Apple has approved 1.0 and 1.1 with the reviewer notes above, but an in-app report action (and user blocking) should ship before the first Play production release.
+Today there is no pre-publication filter, no per-recipe report action, and no user blocking: the only channel is the Support page contact form and email, and names are removed by hand. Apple approved 1.0 and 1.1 with the reviewer notes above.
+
+**Decision (2026-11-06): deferred until a store review flags it.** Build in-app reporting (and user blocking, which Play requires) only if an Apple or Google review cites Guideline 1.2 or the UGC policy. No deadline is set for either platform until then.
