@@ -4,12 +4,12 @@
 module.exports = {
   test: {
     environment: "node",
-    include: ["**/*.test.{js,ts}"],
+    include: ["tests/**/*.test.{js,ts}"],
     exclude: ["node_modules", "coverage", "supabase", "e2e", ".claude"],
     // Installs browser-global stubs (window, localStorage, isLoggedInSync...)
     // BEFORE any test file's `import` of src/lib/storage.ts or src/lib/sync.ts.
     // Tests can't stub these inline because ESM imports hoist above sibling
     // top-level code, and storage.ts reads localStorage at module-eval time.
-    setupFiles: ["./vitest.setup.js"],
+    setupFiles: ["./tests/setup.js"],
   },
 };

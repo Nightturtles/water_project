@@ -16,22 +16,28 @@ reviews:
     - "!supabase/migrations/**"
     - "!**/*.svg"
   path_instructions:
-    - path: "**/*.js"
+    - path: "theme-init.js"
       instructions: |
-        The remaining root-level *.js files are LEGACY classic scripts (loaded
-        via <script> tags, global scope via window) being actively migrated to
-        TypeScript ES modules under src/. The project has no UI framework, but
-        it IS bundled by Vite (vite.config.mts), typechecked with tsc, deployed
-        to GitHub Pages via GitHub Actions (.github/workflows/ci.yml), and
-        shipped as native iOS/Android via Capacitor; it is not "served as-is".
-        constants.js and metrics.js carry `// @ts-check` with JSDoc types; the
-        other classic files are untyped pending migration. Prefer review
-        comments about runtime correctness, security (XSS via innerHTML, token
-        handling), and Supabase row-level-security implications. DO flag when a
-        touched classic .js file (the Phase-3 migration set named in CLAUDE.md)
-        should be converted to a TS module under src/ and wired through
-        src/lib/legacy-globals.ts; this migration is in progress, not deferred.
-        Also flag if existing JSDoc types diverge from actual usage.
+        The classic-JS to TypeScript migration is COMPLETE; all app code lives
+        in TypeScript modules under src/ (bundled by Vite, typechecked with
+        tsc, deployed to GitHub Pages, shipped as native iOS/Android via
+        Capacitor). theme-init.js is the one intentional, permanent classic
+        script: a render-blocking <head> primer loaded via
+        partials/head-bottom.html. Do NOT suggest converting it to an ES
+        module or moving it under src/: a deferred module runs after first
+        paint and reintroduces the theme flash (FOUC) and the native
+        inter-page flash, which e2e/smoke-index.spec.ts guards against. It is
+        `// @ts-check`'d and linted, so flag JSDoc types that diverge from
+        usage, and keep it small, synchronous, and dependency-free.
+    - path: "**/*.ts"
+      instructions: |
+        Prefer review comments about runtime correctness, security (XSS via
+        innerHTML: user-authored text must go through escapeHtml from
+        src/lib/html.ts or textContent; auth token handling), and Supabase
+        row-level-security implications. src/lib/legacy-globals.ts copies
+        module exports onto window for the inline <script> blocks in the HTML
+        pages and for e2e page-context reads; that bridge is intentional and
+        permanent, not leftover migration debt.
     - path: "**/*.html"
       instructions: |
         Ten HTML files are independent Vite entry points (index, recipe, taste,

@@ -18,7 +18,7 @@
       "Skill(pr-babysit-merge)",
       "Skill(pr-babysit-merge:*)",
       "mcp__playwright",
-      "mcp__Claude_Preview",
+      "mcp__Claude_Browser",
       "WebFetch(domain:api.anthropic.com)",
       "WebFetch(domain:empiricalwater.com)",
       "WebFetch(domain:lotuscoffeeproducts.com)",
@@ -72,7 +72,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "INPUT=$(cat); if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*gh pr create'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"gh pr create just completed. Start a watcher now: invoke /loop with this prompt — watch PR #<N> CI + CodeRabbit status; report when all checks are terminal. Self-pace the polling. Read the PR number from the output URL (format: https://github.com/OWNER/REPO/pull/<N>).\"}}'; fi"
+            "command": "INPUT=$(cat); [ \"$CLAUDE_CODE_ENTRYPOINT\" = \"claude-desktop\" ] && exit 0; if echo \"$INPUT\" | grep -qE '\"command\"[[:space:]]*:[[:space:]]*\"[^\"]*gh pr create'; then echo '{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"gh pr create just completed. Unless you are running /pr-babysit-merge (it has its own watch loop; do not start a second one), start a watcher now: invoke /loop with this prompt — watch PR #<N> CI + CodeRabbit status; report when all checks are terminal. Self-pace the polling. Read the PR number from the output URL (format: https://github.com/OWNER/REPO/pull/<N>).\"}}'; fi"
           }
         ]
       },

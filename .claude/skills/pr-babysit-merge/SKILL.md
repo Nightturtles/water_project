@@ -1,7 +1,7 @@
 ---
 name: pr-babysit-merge
 description: Full GitHub PR-lifecycle automation — attach to one or more PRs, keep CI green, address actionable CodeRabbit (and similar bot) feedback in a loop, recover from CI failures via logs and reruns, merge when mergeable, then output a brief post-merge recap. Handles a single PR or several at once in dependency-aware order. **Explicit-token invocation only:** run this skill when the user asks to run it by including the literal token `/pr-babysit-merge` in their message — whether the harness expanded it as a slash command or it arrived as plain text (e.g. a remote-control session that does not expand slash commands). Do not invoke from paraphrased intent ("babysit my PR", "merge when green"), and do not invoke when the user is only discussing or editing the skill rather than asking to run it. PR URLs/numbers (or "all my open PRs") may follow the token as arguments; otherwise resolve the PR from the current branch.
-allowed-tools: Bash, Read, Edit, Write, Grep, Glob, TodoWrite
+allowed-tools: Bash, Read, Edit, Write, Grep, Glob
 ---
 
 # PR babysit and merge
@@ -13,6 +13,20 @@ End-to-end: ensure each PR exists, keep CI green, address actionable CodeRabbit 
 - GitHub repo; GitHub CLI installed and authenticated (`gh auth status`).
 - Permission to push the PR branch and merge (per branch protection).
 - If merge is blocked by **required human reviewers** or policy the bot cannot satisfy, **stop** on that PR and say exactly what is blocking; do not imply CodeRabbit fixes will unlock merge. With multiple PRs, set the blocked one aside and continue with the rest (see Ordering) rather than aborting the whole run.
+
+## This repo (Nightturtles/water_project)
+
+These facts override the generic guidance below. Re-check them if the workflows change.
+
+- **What "green" means.** `main` has no branch protection, so `gh pr checks --required` lists nothing and "required checks pass" would be vacuously true. Treat **all six** of these as required: `typecheck-and-test`, `e2e`, `edge-functions` (CI workflow), `ios-build`, `android-build` (Native build workflow), and `CodeRabbit`. `deploy` shows `skipping` on every PR; that is expected.
+- **CI timing.** typecheck-and-test ~1 min, e2e ~1.5-2.5 min, ios-build ~2-3 min. The `e2e` job is serialized repo-wide (`concurrency: e2e-shared-test-account`), so it can sit `pending` while another PR's e2e runs. An e2e job that shows **cancelled** was bumped from that queue by a newer run, not a failure: `gh run rerun <run-id> --failed`.
+- **Merge style:** squash (every merged PR on `main` is `title (#N)`).
+- **Merge gates by changed files** (`gh pr diff <n> --name-only`). Check these before the merge step, not after:
+  - `src/lib/sync.ts`, `src/lib/storage.ts`, `src/lib/supabase-client.ts`, or the `window.*` auth surface → the **full** `npm run test:e2e` (not just smoke-sync) must have passed locally on the final head with `.env.test` credentials, per CLAUDE.md "Supabase safety". Before running it locally, confirm no CI e2e job is in progress (`gh run list --workflow CI --status in_progress`): the local run signs in as the same shared prod test account and the CI concurrency group cannot see it.
+  - `supabase/migrations/**` → **stop before merging and ask.** Only the user runs `supabase db push` (it is denied to Claude), and merging deploys the web app immediately, so the user must decide the order (usually: migration applied first, then merge).
+  - `supabase/functions/**` → same: only the user runs `supabase functions deploy <name>`; stop and ask about order.
+  - `@capacitor/*` version bumps (including Dependabot PRs) → `npm run build && npx cap sync` output must be committed (`ios/App/CapApp-SPM/Package.swift` exact-pins capacitor-swift-pm; `Package.resolved` follows). Dependabot does not do this.
+- **Dependabot PRs** get no Actions secrets, so the signed-in e2e describes skip on them. For `@supabase/supabase-js` bumps, run the full local e2e before merging.
 
 ## Remote / non-interactive runs
 
@@ -58,23 +72,46 @@ Merging a PR moves its base branch, which can invalidate the PRs still in the qu
 
 ## Main loop (run per PR)
 
-Run this loop for one PR at a time, in the order decided above. Use TodoWrite to track progress across the whole run: a parent item per PR (in processing order), and under the active PR one item per unresolved CodeRabbit thread, one per failing required check, and a final `merge` item. Re-evaluate the list after each push, since new comments or checks may surface.
+Run this loop for one PR at a time, in the order decided above. Track progress with the harness's task list (TodoWrite / the task tools in the CLI; the pinned task list in the Claude desktop app): a parent item per PR (in processing order), and under the active PR one item per unresolved CodeRabbit thread, one per failing check, and a final `merge` item. Re-evaluate the list after each push, since new comments or checks may surface.
 
-Repeat until the PR is mergeable, required checks are green, and there is no remaining **actionable** bot feedback to address.
+Repeat until the PR is mergeable, the checks are green, and there is no remaining **actionable** bot feedback to address.
 
-Wait for CI to register and finish after PR creation or each push — use `gh pr checks --watch` to block until checks complete. CodeRabbit's initial review usually arrives within ~5 minutes of a push; do not conclude "no comments" until at least that long has passed since the most recent push.
+Wait for CI to register and finish after PR creation or each push. `gh pr checks <n> --watch --fail-fast --interval 30` blocks until checks complete, but CI here routinely outlasts a default 2-minute shell timeout: run it as a background command (or with an explicit timeout of at least 10 minutes) rather than letting the call time out mid-wait. CodeRabbit's initial review usually arrives within ~5 minutes of a push; do not conclude "no comments" until at least that long has passed since the most recent push.
 
-**Hard gate:** Never proceed to merge (or claim the PR is ready) until CodeRabbit feedback has been explicitly fetched and reviewed after the most recent push. If CodeRabbit is delayed, keep waiting and re-checking; do not bypass this gate due to time.
+**Desktop app:** if the Claude desktop app is already monitoring this PR (its Auto-fix / CI monitor), let it deliver CI and review events instead of running a second `gh` polling loop, and don't start `/loop` or cron watchers on top of this skill.
+
+**Hard gate:** Never proceed to merge (or claim the PR is ready) until CodeRabbit feedback has been explicitly fetched and reviewed after the most recent push. If CodeRabbit is delayed, keep waiting and re-checking; do not bypass this gate due to time. A rate-limited CodeRabbit is not "delayed forever": recover as described below.
 
 ### Comments and review threads
 
-- Fetch PR data in parallel — issue `gh pr view --json ...`, `gh pr checks`, and `gh api .../pulls/<n>/comments` in a single Bash batch. Read only the JSON paths needed; do not paste full payloads back into context.
-- Skip resolved threads when deciding what still needs work.
-- **CodeRabbit:** Treat feedback as CodeRabbit when the comment author's login contains `coderabbit`.
-- After every push, repeatedly poll CodeRabbit comments until review has clearly arrived (or updated) for that push; only then triage and continue.
-- If CodeRabbit status is ambiguous (e.g., pending/skipped/no new review), fetch both issue comments and PR review comments again and confirm whether there are actionable items before proceeding.
-- For each actionable comment (bug, correctness, security, suggestion that fixes CI or clears a defect): `Read` the referenced file, apply the minimal fix with `Edit`, stage just that file, and commit with a one-line message that references the thread (e.g., `address coderabbit: handle null branch_name`).
-- Skip subjective nits or large refactors unless the user asked to clear **all** comments.
+CodeRabbit spreads its feedback over three places; read all three after every push. Fetch them (plus `gh pr view <n> --json headRefOid,mergeStateStatus,mergeable` and `gh pr checks <n>`) in one Bash batch, and keep only the JSON paths you need:
+
+```bash
+# 1. Walkthrough / status comment: rate-limit notices and "Review skipped" text live here.
+gh api "repos/{owner}/{repo}/issues/<n>/comments?per_page=100" \
+  --jq '.[] | select(.user.login|test("coderabbit")) | {updated_at, body: (.body|gsub("<!--[^>]*-->";"")|.[0:600])}'
+# 2. Review bodies: "Actionable comments posted: N", plus nitpicks and
+#    "Outside diff range" comments that never become inline threads.
+gh api "repos/{owner}/{repo}/pulls/<n>/reviews?per_page=100" \
+  --jq '.[] | select(.user.login|test("coderabbit")) | {commit_id, submitted_at, body: .body[0:2000]}'
+# 3. Unresolved inline threads. REST cannot tell resolved from unresolved; GraphQL can.
+gh api graphql -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
+  query($o:String!,$r:String!,$n:Int!){repository(owner:$o,name:$r){pullRequest(number:$n){
+    reviewThreads(first:100){nodes{isResolved isOutdated path line
+      comments(first:1){nodes{author{login} body url}}}}}}}' \
+  --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+        | select((.isResolved|not) and (.comments.nodes[0].author.login|test("coderabbit")))
+        | {path, line, isOutdated, url: .comments.nodes[0].url, body: .comments.nodes[0].body[0:800]}'
+```
+
+- **CodeRabbit:** treat feedback as CodeRabbit when the author login contains `coderabbit` (REST shows `coderabbitai[bot]`, GraphQL shows `coderabbitai`).
+- **Has it reviewed the latest push?** Yes when a CodeRabbit review's `commit_id` equals the PR's `headRefOid`, or when its walkthrough comment's `updated_at` is after the push and says the review finished. Keep polling until one of those is true.
+- **Misleading statuses** (all seen on this repo):
+  - Check passes with **"Review skipped"** → CodeRabbit usually still reviewed. Read the comments; never merge on the status alone.
+  - Check passes with **"Review rate limited"** → **no review ran.** The walkthrough comment says "Review limit reached" with a retry window ("Next review available in: N minutes"). Wait out the window, then `gh pr comment <n> --body "@coderabbitai review"` and poll ~5 minutes for the review. Do not enable CodeRabbit's paid usage-based reviews, and do not merge on the rate-limited pass.
+  - **Docstring Coverage** pre-merge warning (~0% vs 80%) → non-blocking on this codebase, which documents with inline comments. Ignore it; don't add docstrings to satisfy it.
+- For each actionable item (bug, correctness, security, suggestion that fixes CI or clears a defect), wherever it came from (inline thread, outside-diff comment, or review body): `Read` the referenced file, apply the minimal fix in the file's own idiom with `Edit`, stage just that file, and commit with a one-line message that references the thread (e.g., `address coderabbit: handle null branch_name`).
+- Skip subjective nits or large refactors unless the user asked to clear **all** comments. Outdated threads (`isOutdated: true`) on code you have since changed usually need no further action.
 
 ### Merge conflicts
 
@@ -91,23 +128,28 @@ Wait for CI to register and finish after PR creation or each push — use `gh pr
 ### Exit conditions for the loop
 
 - `mergeable` / merge state is clean (no conflicts).
-- Required status checks are successful (as defined by the repo/branch).
-- CodeRabbit comments/reviews were fetched and reviewed after the latest push (hard requirement, regardless of delay).
+- Every check listed under **This repo** is successful for the latest head commit (not just the ones branch protection marks required; here, none are).
+- CodeRabbit comments/reviews were fetched and reviewed after the latest push (hard requirement, regardless of delay); a rate-limited pass does not count.
 - No unresolved CodeRabbit (or similar) items remain that were committed-to — or any disagreement/uncertainty is documented with the user.
+- Every file-based merge gate under **This repo** is satisfied, or the PR is stopped and waiting on the user.
 
 ## Merge
 
 When the loop conditions are met:
 
 ```bash
-gh pr merge --squash
+gh pr merge <n> --squash
 ```
 
 In a remote / non-interactive run, get the explicit go-ahead from the **Remote / non-interactive runs** gate above *before* running this.
 
-Use `--merge` instead of `--squash` if this repo's standard is merge commits (check recent merged-PR history if unsure). Add `--delete-branch` if the user wants the remote branch removed after merge. Confirm merge succeeded (`gh pr view` on the closed PR or default branch state).
+This repo squash-merges (see **This repo**); on another repo, use `--merge` if its standard is merge commits (check recent merged-PR history if unsure). Confirm the merge succeeded (`gh pr view <n> --json state,mergeCommit`).
 
-With more than one PR, after a successful merge run the **Between PRs** steps above, then start the Main loop on the next PR in the order. Continue until the queue is empty (every PR merged or set aside).
+**Head branch:** if the repo's "Automatically delete head branches" setting is on, GitHub already removed it. Otherwise delete the remote branch after a confirmed merge unless the user asked to keep it: `gh api -X DELETE "repos/{owner}/{repo}/git/refs/heads/<branch>"`. Prefer this over `gh pr merge --delete-branch`, which also tries to switch and delete the local branch and errors when the branch is checked out in a worktree.
+
+**Watch the deploy.** Merging pushes to `main`, which runs CI again and then the `deploy` job (GitHub Pages). Find the run (`gh run list --branch main --event push --limit 3`) and wait for it in the background (`gh run watch <run-id> --exit-status`). If `deploy` fails at `actions/deploy-pages` with "Deployment failed, try again later", that is GitHub-side and transient: `gh run rerun <run-id> --failed`. A red `e2e` on `main` blocks the deploy; triage it like any CI failure (the flake tracker issue logs main-branch flakes). Report the deploy outcome in the recap.
+
+With more than one PR, after a successful merge run the **Between PRs** steps above, then start the Main loop on the next PR in the order. Continue until the queue is empty (every PR merged or set aside). You can start the next PR's loop while the previous merge's deploy is still running, but check its outcome before the final recap.
 
 ## Post-merge summary (mandatory)
 
@@ -117,7 +159,8 @@ Output a **compact** recap of notable events. For a single PR, do this immediate
 - For a multi-PR run, **lead with the processing order and its one-line rationale** (e.g. "did #148 before #150 because #150 was stacked on it"), then a short sub-list per PR.
 - **Each distinct event:** at most **two sentences** — first sentence = what happened; second = how it was resolved.
 - Group related CodeRabbit fixes into **one** item if they were handled in a single pass; use **separate** items if there were separate CI/review cycles.
-- **Call out anything set aside** — drafts and PRs blocked by required review/policy — with the exact blocker, so the user knows what still needs them.
+- **Call out anything set aside** — drafts, PRs blocked by required review/policy, and PRs stopped at a merge gate (migration / function deploy) — with the exact blocker, so the user knows what still needs them.
+- **State the deploy outcome** for each merge (deployed, re-run after a transient failure, or blocked and why).
 - Omit noise (e.g., "lint passed on first try"). If nothing notable happened on a PR, say so in one line.
 
 ## Anti-patterns
@@ -127,6 +170,7 @@ Output a **compact** recap of notable events. For a single PR, do this immediate
 - Do not bypass branch protection or required reviews by asking for unsafe workarounds.
 - Do not use `--no-verify` to skip hooks.
 - Do not merge, or report merge-ready, before explicitly reading CodeRabbit comments/reviews for the latest push.
+- Do not merge a PR containing `supabase/migrations/**` or `supabase/functions/**` changes without the user confirming the deploy order; never run `supabase db push` or `supabase functions deploy` yourself.
 - Do not merge a stacked PR before the PR it depends on, and do not reorder around a dependency to chase a quick merge.
 - With multiple PRs, do not abort the whole run because one PR is blocked — set it aside and continue with the rest.
 

@@ -9,7 +9,7 @@ import { describe, test, expect } from "vitest";
 import {
   persistedSessionStorageKey,
   extractUserIdFromPersistedSession,
-} from "./src/lib/auth-session";
+} from "../src/lib/auth-session";
 
 describe("persistedSessionStorageKey", () => {
   test("derives the sb-<ref>-auth-token key from the project URL", () => {

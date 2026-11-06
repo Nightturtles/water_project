@@ -15,7 +15,7 @@
 // vitest.setup.js so this file can use ES `import` directly.
 
 import { describe, test, expect, beforeEach } from "vitest";
-import type { StockConcentrateSpec } from "./src/lib/storage";
+import type { StockConcentrateSpec } from "../src/lib/storage";
 import {
   loadStockConcentrateSpecs,
   saveStockConcentrateSpecs,
@@ -33,7 +33,7 @@ import {
   getActiveStockSpec,
   getActiveStockSpecs,
   setStockEnabled,
-} from "./src/lib/storage";
+} from "../src/lib/storage";
 
 function resetState() {
   global.localStorage.clear();

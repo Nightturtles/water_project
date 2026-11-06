@@ -4,7 +4,7 @@
 //   - script.js formatStockResultDetail     (labelMode:"formula", includeBottleDose:false)
 
 import { describe, test, expect } from "vitest";
-import { formatStockSpec, STOCK_MINERAL_SHORT } from "./src/lib/stock-format";
+import { formatStockSpec, STOCK_MINERAL_SHORT } from "../src/lib/stock-format";
 
 // ---------------------------------------------------------------------------
 // STOCK_MINERAL_SHORT

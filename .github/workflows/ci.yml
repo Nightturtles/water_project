@@ -6,12 +6,24 @@ on:
   push:
     branches: [main]
 
+# Least-privilege GITHUB_TOKEN by default; the e2e and deploy jobs widen it
+# per-job for exactly what they need (issue comments, Pages deploy).
+permissions:
+  contents: read
+
+# Actions are pinned to commit SHAs (same policy as native.yml): mutable tags
+# can be force-pushed by a compromised maintainer account, SHAs cannot. The
+# trailing comment is the human-readable tag; Dependabot
+# (.github/dependabot.yml) bumps the SHA and the comment together.
+
 jobs:
   typecheck-and-test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -34,12 +46,26 @@ jobs:
     # Fail fast if webServer hangs or browser wedges — protects the runner from
     # burning minutes on a stuck job.
     timeout-minutes: 15
+    # smoke-sync + smoke-recipe sign in as ONE shared test account on prod
+    # Supabase. e2e/_shared-account-lock.ts serializes them across workers on a
+    # single runner, but two workflow runs (e.g. two open PRs pushed together)
+    # land on separate runners, where that file lock can't reach. Concurrent
+    # signed-in runs on one account are the race that planted the smoke-recipe
+    # shadow row, so serialize the e2e job repo-wide. cancel-in-progress: false
+    # lets the running job finish. GitHub keeps only ONE pending job per group:
+    # a third overlapping run cancels the older pending one, which then needs a
+    # manual re-run (gh run rerun <id> --failed).
+    concurrency:
+      group: e2e-shared-test-account
+      cancel-in-progress: false
     permissions:
       issues: write
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -47,7 +73,7 @@ jobs:
       # Use cached browser downloads when possible; fall back to a fresh install.
       - name: Cache Playwright browsers
         id: pw-cache
-        uses: actions/cache@v4
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
@@ -75,7 +101,7 @@ jobs:
           body=$(node scripts/append-flake-log.cjs)
           gh issue comment "${{ vars.FLAKE_TRACKING_ISSUE }}" --body "$body" --repo "$GITHUB_REPOSITORY"
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: playwright-report
           path: playwright-report/
@@ -84,8 +110,10 @@ jobs:
   edge-functions:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: denoland/setup-deno@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
           deno-version: v2.x
       - run: deno lint
@@ -102,6 +130,9 @@ jobs:
   # Builds dist/ with Vite and publishes to GitHub Pages.
   # Gated to push-to-main; PRs never deploy. Depends on the full PR-gating
   # suite so a red typecheck/test/build or red e2e blocks the publish.
+  # deploy-pages occasionally fails with "Deployment failed, try again later"
+  # (GitHub-side, seen when several pushes land within a minute); that is
+  # transient, so re-run the job rather than debugging it.
   deploy:
     needs: [typecheck-and-test, e2e, edge-functions]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -116,8 +147,10 @@ jobs:
       group: pages
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -131,9 +164,12 @@ jobs:
       - run: npm run build
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+      # v4+ excludes dotfiles from the artifact. dist/ has none today; if one is
+      # ever added (e.g. .well-known/ for universal links), set
+      # include-hidden-files: true here or it silently won't deploy.
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: dist
-      - uses: actions/deploy-pages@v4
+      - uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
         id: deployment

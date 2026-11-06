@@ -5,15 +5,14 @@ name: Native build
 # regression can't sneak through to a store submission.
 #
 # These jobs do NOT sign for distribution and do NOT upload anywhere.
-# They just confirm the projects build. Actual uploads run from
-# scripts/upload-{testflight,play-internal}.sh once Apple Developer +
-# Play Console accounts exist.
+# They just confirm the projects build. Signed store uploads run locally
+# from scripts/upload-{testflight,play-internal}.sh.
 #
-# Cost note: macOS runners bill at ~10x the Linux rate. The ios-build
-# job runs on every push for v1 because store-rejection bugs are
-# expensive in a different way. If macOS minutes become a concern,
-# gate this workflow with a `paths:` filter targeting ios/**,
-# android/**, capacitor.config.ts, package*.json, and src/lib/*.
+# Cost note: the repo is public, so standard GitHub-hosted runners
+# (macOS included) cost nothing today. If the repo ever goes private,
+# macOS bills at ~10x the Linux rate; gate this workflow with a
+# `paths:` filter targeting ios/**, android/**, capacitor.config.ts,
+# package*.json, and src/lib/* at that point.
 
 on:
   pull_request:
@@ -42,15 +41,15 @@ jobs:
     steps:
       # Actions are pinned to commit SHAs (CodeRabbit / zizmor finding):
       # mutable tags like @v4 can be force-pushed by a compromised maintainer
-      # account, while SHAs are immutable. Dependabot updates the SHA when
-      # a new release is cut. Comment the human-readable tag for legibility.
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      # account, while SHAs are immutable. Dependabot (.github/dependabot.yml)
+      # updates the SHA and the trailing tag comment when a release is cut.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Don't leave the GITHUB_TOKEN sitting in the local git config after
           # checkout — none of these jobs run subsequent git operations that
           # need to push, so persistence has no upside and a small leak surface.
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
@@ -84,14 +83,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: "npm"
-      - uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9 # v4
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
         with:
           distribution: "temurin"
           # Capacitor 8.3 requires JDK 21 (the bundled

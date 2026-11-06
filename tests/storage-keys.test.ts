@@ -16,7 +16,7 @@ import {
   USER_CONTENT_KEYS_PREFIX,
   TRANSIENT_KEYS,
   TRANSIENT_KEYS_PREFIX,
-} from "./src/lib/storage-keys";
+} from "../src/lib/storage-keys";
 
 // Ground-truth key strings (independent of the registry's own arrays).
 const CATEGORY_A_EXPECTED = [

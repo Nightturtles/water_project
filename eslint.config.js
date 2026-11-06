@@ -60,11 +60,6 @@ module.exports = tseslint.config(
       sourceType: "script",
       globals: {
         ...globals.browser,
-        module: "writable",
-        globalThis: "writable",
-        // Sentry global re-exposed by src/lib/sentry-init.ts so classic
-        // scripts (estimate-water-ui.js) can call window.Sentry.captureException.
-        Sentry: "readonly",
       },
     },
     rules: {
@@ -75,8 +70,8 @@ module.exports = tseslint.config(
       eqeqeq: ["error", "smart"],
       "no-implicit-coercion": ["warn", { boolean: false }],
       "prefer-const": "error",
-      // Defensive `catch (e) {}` is intentional in storage.js / sync.js for
-      // localStorage quota errors etc. Let it pass.
+      // Defensive `catch (e) {}` around localStorage reads is intentional here
+      // (private-mode / quota errors must never block first paint). Let it pass.
       "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },
@@ -117,7 +112,7 @@ module.exports = tseslint.config(
   // that import describe/test/expect from "vitest" explicitly). Test files
   // lean on `any` for loosely-shaped fixtures.
   {
-    files: ["vitest.config.js", "vitest.setup.js", "**/*.test.{js,ts}"],
+    files: ["vitest.config.js", "tests/setup.js", "tests/**/*.test.{js,ts}"],
     languageOptions: {
       sourceType: "commonjs",
       globals: {
@@ -126,7 +121,7 @@ module.exports = tseslint.config(
       },
     },
     rules: {
-      // vitest.config.js / vitest.setup.js are CJS (package.json has no
+      // vitest.config.js / tests/setup.js are CJS (package.json has no
       // "type": "module"), so require()/module.exports is correct there.
       "@typescript-eslint/no-require-imports": "off",
       "@typescript-eslint/no-explicit-any": "off",
