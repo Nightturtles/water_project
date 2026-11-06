@@ -461,14 +461,16 @@
     const recipeStockGrams = loadRecipeStockGrams();
     let recipeDispenseMode = hasAnyActiveStock ? loadRecipeDispenseMode() : "manual";
 
-    function normalizeRecipeLotusInputValue(savedVal) {
+    // Drops-capable rows (Lotus, or a Mineral Concentrate with a dropper size)
+    // persist { ml, drops }; mL-only rows persist a bare number. Accept either
+    // shape so toggling a dropper size on/off never loses the saved amount.
+    function normalizeRecipeDropsInputValue(savedVal, dropMl) {
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
         const ml = Math.max(0, parseFloat(savedVal.ml) || 0);
         const drops = Math.max(0, parseFloat(savedVal.drops) || 0);
         return { ml, drops };
       }
       const ml = Math.max(0, parseFloat(savedVal) || 0);
-      const dropMl = getLotusDropMl();
       const drops = (dropMl > 0) ? Math.round(ml / dropMl) : 0;
       return { ml, drops };
     }
@@ -515,7 +517,8 @@
         mineralInputsEl.appendChild(div);
       });
 
-      // Concentrates (DIY + brand) — mL (Lotus supports mL or drops)
+      // Concentrates (DIY + brand) — mL, or drops/mL for Lotus and for any
+      // Mineral Concentrate with a dropper size set
       selectedConcentrates.forEach((concentrateId) => {
         const mineralId = getConcentrateMineralId(concentrateId);
         if (!mineralId) return;
@@ -525,9 +528,13 @@
         if (!mineral) return;
 
         const isLotusConcentrate = concentrateId.startsWith("brand:lotus:");
+        const dropMl = getConcentrateDropMl(concentrateId);
+        const isDropsCapable = dropMl > 0;
         const savedVal = recipeConcentrateInputs[concentrateId];
         let savedMl = "0";
-        if (savedVal != null && typeof savedVal !== "object") {
+        if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
+          savedMl = String(Math.max(0, parseFloat(savedVal.ml) || 0));
+        } else if (savedVal != null) {
           savedMl = String(savedVal);
         }
 
@@ -536,6 +543,7 @@
         div.dataset.concentrateId = concentrateId;
         div.dataset.mineralId = mineralId;
         if (isLotusConcentrate) div.dataset.lotusConcentrate = "true";
+        if (isDropsCapable) div.dataset.dropsCapable = "true";
         const info = document.createElement("div");
         info.className = "mineral-input-info";
         const nameSpan = document.createElement("span");
@@ -558,8 +566,8 @@
         info.appendChild(formulaSpan);
         const field = document.createElement("div");
         field.className = "mineral-input-field";
-        if (isLotusConcentrate) {
-          const normalized = normalizeRecipeLotusInputValue(savedVal);
+        if (isDropsCapable) {
+          const normalized = normalizeRecipeDropsInputValue(savedVal, dropMl);
           recipeConcentrateInputs[concentrateId] = normalized;
           const unit = loadLotusConcentrateUnitFor(concentrateId);
           const input = document.createElement("input");
@@ -628,19 +636,19 @@
         } else if (el && el.dataset && el.dataset.concentrate) {
           const key = el.dataset.concentrate;
           const row = el.closest(".mineral-input-row");
-          if (row && row.dataset.lotusConcentrate === "true") {
+          if (row && row.dataset.dropsCapable === "true") {
             const inputValue = Math.max(0, parseFloat(el.value) || 0);
             const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
             const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
+            const dropMl = getConcentrateDropMl(key);
             if (unit === "ml") {
-              const dropMl = getLotusDropMl();
               recipeConcentrateInputs[key] = {
                 ml: inputValue,
                 drops: (dropMl > 0) ? Math.round(inputValue / dropMl) : 0
               };
             } else {
               recipeConcentrateInputs[key] = {
-                ml: inputValue * getLotusDropMl(),
+                ml: inputValue * dropMl,
                 drops: Math.round(inputValue)
               };
             }
@@ -663,7 +671,7 @@
         const previousUnit = normalizeLotusConcentrateUnit(el.dataset.currentUnit);
         const nextUnit = normalizeLotusConcentrateUnit(el.value);
         const currentValue = Math.max(0, parseFloat(input.value) || 0);
-        const dropMl = getLotusDropMl();
+        const dropMl = getConcentrateDropMl(key);
         let ml = 0;
         let drops = 0;
         if (previousUnit === "ml") {
@@ -976,14 +984,14 @@
           const concentrateId = row.dataset.concentrateId;
           const mineralId = row.dataset.mineralId;
           if (!concentrateId || !mineralId) return;
-          const isLotusConcentrate = row.dataset.lotusConcentrate === "true";
+          const isDropsCapable = row.dataset.dropsCapable === "true";
           let ml = 0;
-          if (isLotusConcentrate) {
+          if (isDropsCapable) {
             const lotusInput = row.querySelector('input[data-concentrate-field="lotus-value"]');
             const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
             const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
             const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
-            ml = unit === "ml" ? value : (value * getLotusDropMl());
+            ml = unit === "ml" ? value : (value * getConcentrateDropMl(concentrateId));
           } else {
             const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
             ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);

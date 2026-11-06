@@ -62,7 +62,7 @@ import {
   getAllPresets,
   getConcentrateGramsPerMl,
   getConcentrateMineralId,
-  getLotusDropMl,
+  getConcentrateDropMl,
   getTargetPresetsForBrewMethod,
   getTargetProfileByKey,
   isAdvancedMineralDisplayMode,
@@ -342,13 +342,15 @@ function main(): void {
       resultInfo.appendChild(nameSpan);
       resultInfo.appendChild(detailSpan);
       div.appendChild(resultInfo);
-      if (item.kind === "concentrate" && item.id.startsWith("brand:lotus:")) {
+      // Drops-capable concentrates (Lotus, or a Mineral Concentrate with a
+      // dropper size set) get a drops/mL toggle; everything else is mL-only.
+      if (item.kind === "concentrate" && getConcentrateDropMl(item.id) > 0) {
         const valueWrap = document.createElement("div");
         valueWrap.className = "lotus-value-field";
         const valueSpan = document.createElement("span");
         valueSpan.className = "result-value";
         const defaultUnit = loadLotusConcentrateUnitFor(item.id);
-        valueSpan.textContent = formatLotusConcentrateValue(0, defaultUnit);
+        valueSpan.textContent = formatDropsOrMl(0, defaultUnit, getConcentrateDropMl(item.id));
         const unitSelect = document.createElement("select");
         unitSelect.className = "lotus-unit-select";
         unitSelect.dataset.lotusUnitFor = item.id;
@@ -1651,12 +1653,11 @@ function main(): void {
     return ml.toFixed(3) + " mL";
   }
 
-  function formatLotusConcentrateValue(ml: number, unit: string): string {
+  function formatDropsOrMl(ml: number, unit: string, dropMl: number): string {
     if (unit === "ml") {
       if (!Number.isFinite(ml) || ml <= 0) return "0.000";
       return ml.toFixed(3);
     }
-    const dropMl = getLotusDropMl();
     const drops = Number.isFinite(dropMl) && dropMl > 0 ? Math.round(ml / dropMl) : 0;
     return String(drops);
   }
@@ -1717,17 +1718,18 @@ function main(): void {
       );
       if (!item) continue;
       const valEl = item.querySelector(".result-value");
-      const isLotus = concentrateId.startsWith("brand:lotus:");
-      const unitSelect = isLotus
-        ? item.querySelector<HTMLSelectElement>("[data-lotus-unit-for]")
-        : null;
+      // The row's unit select is present only for drops-capable concentrates
+      // (renderResultItems decides), so its presence is the switch here.
+      const unitSelect = item.querySelector<HTMLSelectElement>("[data-lotus-unit-for]");
+      const dropMl = getConcentrateDropMl(concentrateId);
       const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
-      const displayValue = isLotus ? formatLotusConcentrateValue(ml, unit) : formatMl(ml);
+      const displayValue =
+        unitSelect && dropMl > 0 ? formatDropsOrMl(ml, unit, dropMl) : formatMl(ml);
       if (valEl) valEl.textContent = displayValue;
       if (ml > 0) {
         const nameEl = item.querySelector(".result-name");
         const name = nameEl ? nameEl.textContent : concentrateId;
-        const ariaValue = isLotus ? displayValue + " " + unit : displayValue;
+        const ariaValue = unitSelect ? displayValue + " " + unit : displayValue;
         item.setAttribute("aria-label", name + ", " + ariaValue);
       } else {
         item.removeAttribute("aria-label");

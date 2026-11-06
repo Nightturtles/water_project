@@ -1323,6 +1323,14 @@ select:focus {
   gap: 0.75rem;
 }
 
+.concentrate-inputs .concentrate-drop-group {
+  grid-column: 1 / -1;
+}
+
+.concentrate-drop-group .hint {
+  margin: 0.25rem 0 0;
+}
+
 .concentrate-item:not(.selected) .concentrate-inputs {
   display: none;
 }
@@ -2626,7 +2634,7 @@ input[type="range"]::-moz-range-thumb {
   margin-top: 0.35rem;
 }
 
-.mineral-input-row[data-lotus-concentrate="true"] {
+.mineral-input-row[data-drops-capable="true"] {
   flex-wrap: wrap;
   align-items: flex-start;
 }
@@ -2779,7 +2787,7 @@ footer {
     flex-wrap: nowrap;
   }
 
-  .mineral-input-row[data-lotus-concentrate="true"] {
+  .mineral-input-row[data-drops-capable="true"] {
     flex-wrap: wrap;
   }
 
@@ -2941,15 +2949,15 @@ footer {
     justify-self: end;
   }
 
-  .mineral-input-row[data-lotus-concentrate="true"] {
+  .mineral-input-row[data-drops-capable="true"] {
     align-items: center;
   }
 
-  .mineral-input-row[data-lotus-concentrate="true"] .lotus-concentrate-inputs {
+  .mineral-input-row[data-drops-capable="true"] .lotus-concentrate-inputs {
     align-items: flex-start;
   }
 
-  .mineral-input-row[data-lotus-concentrate="true"] .concentrate-input-error {
+  .mineral-input-row[data-drops-capable="true"] .concentrate-input-error {
     grid-column: 1 / -1;
     margin-top: 0.1rem;
   }

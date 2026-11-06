@@ -384,6 +384,7 @@
         const spec = currentDiySpecs && currentDiySpecs[mineralId] ? currentDiySpecs[mineralId] : {};
         const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
         const gramsPerBottle = Number.isFinite(Number(spec.gramsPerBottle)) ? Number(spec.gramsPerBottle) : 0;
+        const dropMl = normalizeDropMl(spec.dropMl);
 
         const div = document.createElement("div");
         div.className = "concentrate-item" + (checked ? " selected" : "");
@@ -404,6 +405,11 @@
             <div class="input-group">
               <label>Grams per bottle</label>
               <input type="number" min="0" step="0.01" value="${gramsPerBottle}" data-field="grams-per-bottle">
+            </div>
+            <div class="input-group concentrate-drop-group">
+              <label>Dropper size (mL per drop, optional)</label>
+              <input type="number" min="0" step="0.001" inputmode="decimal" ${dropMl ? `value="${dropMl}"` : 'placeholder="e.g. 0.050"'} data-field="drop-ml">
+              <p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>
             </div>
           </div>
           <div class="concentrate-warning" style="display:none;">You’ve reached the solubility limit for this mineral, try a lower concentration.</div>
@@ -434,9 +440,13 @@
         const gramsEl = item.querySelector('input[data-field="grams-per-bottle"]');
         const bottleMl = bottleEl ? Math.max(0, parseFloat(bottleEl.value) || 0) : 0;
         const gramsPerBottle = gramsEl ? Math.max(0, parseFloat(gramsEl.value) || 0) : 0;
+        const dropEl = item.querySelector('input[data-field="drop-ml"]');
+        const dropMl = dropEl ? normalizeDropMl(dropEl.value) : null;
 
         const specs = loadDiyConcentrateSpecs();
-        specs[mineralId] = { bottleMl, gramsPerBottle };
+        const nextSpec = { bottleMl, gramsPerBottle };
+        if (dropMl !== null) nextSpec.dropMl = dropMl;
+        specs[mineralId] = nextSpec;
         saveDiyConcentrateSpecs(specs);
         updateDiySolubilityWarning(mineralId, item);
         showSaved();

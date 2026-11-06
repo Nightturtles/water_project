@@ -27,6 +27,7 @@ import {
   saveDiyConcentrateSpecs,
   loadSelectedConcentrates,
   saveSelectedConcentrates,
+  normalizeDropMl,
 } from "../lib/storage";
 
 // Local mirror of storage.ts's (non-exported) DiyConcentrateSpec, used for the
@@ -35,6 +36,7 @@ import {
 interface DiySpec {
   bottleMl?: number;
   gramsPerBottle?: number;
+  dropMl?: number;
 }
 
 export interface OpenDiyEditorOptions {
@@ -48,12 +50,15 @@ interface DiyEditorSession {
   mineralId: string;
   bottleMl: number;
   gramsPerBottle: number;
+  dropMl: number | null;
   onSaved: ((mineralId: string) => void) | null;
 }
 
 interface DiyDraft {
   bottleMl: number;
   gramsPerBottle: number;
+  // Raw text of the optional dropper field: "" = unset.
+  dropMlRaw: string;
 }
 
 function getSolubilityLimitGPerL(mineralId: string): number | null {
@@ -119,9 +124,11 @@ function ensureOverlay(): void {
 function readDraft(): DiyDraft {
   const bottleEl = formEl.querySelector<HTMLInputElement>("#diy-editor-bottle-ml");
   const gramsEl = formEl.querySelector<HTMLInputElement>("#diy-editor-grams-per-bottle");
+  const dropEl = formEl.querySelector<HTMLInputElement>("#diy-editor-drop-ml");
   return {
     bottleMl: bottleEl ? Math.max(0, parseFloat(bottleEl.value) || 0) : 0,
     gramsPerBottle: gramsEl ? Math.max(0, parseFloat(gramsEl.value) || 0) : 0,
+    dropMlRaw: dropEl ? dropEl.value.trim() : "",
   };
 }
 
@@ -163,6 +170,7 @@ function renderForm(): void {
   const bottleAttr = s.bottleMl > 0 ? 'value="' + s.bottleMl + '"' : 'placeholder="e.g. 1000"';
   const gramsAttr =
     s.gramsPerBottle > 0 ? 'value="' + s.gramsPerBottle + '"' : 'placeholder="e.g. 50"';
+  const dropAttr = s.dropMl ? 'value="' + s.dropMl + '"' : 'placeholder="e.g. 0.050"';
 
   const hintHtml = isNew
     ? '<p class="hint diy-editor-hint">Tell the calculator how much ' +
@@ -195,6 +203,13 @@ function renderForm(): void {
     gramsAttr +
     ">" +
     "</div>" +
+    "</div>" +
+    '<div class="input-group diy-editor-drop-group">' +
+    '<label for="diy-editor-drop-ml">Dropper size (mL per drop, optional)</label>' +
+    '<input type="number" id="diy-editor-drop-ml" min="0" step="0.001" inputmode="decimal" ' +
+    dropAttr +
+    ">" +
+    '<p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>' +
     "</div>" +
     '<div class="concentrate-warning diy-editor-warning" hidden>You’ve reached the solubility limit for this mineral, try a lower concentration.</div>' +
     '<div class="stock-editor-actions">' +
@@ -244,9 +259,16 @@ function handleSave(): void {
     showError("Grams per bottle must be greater than 0.");
     return;
   }
+  const dropMl = normalizeDropMl(d.dropMlRaw);
+  if (d.dropMlRaw !== "" && dropMl === null) {
+    showError("Dropper size must be at least 0.001 mL, or leave it blank.");
+    return;
+  }
 
   const specs = loadDiyConcentrateSpecs();
-  specs[s.mineralId] = { bottleMl: d.bottleMl, gramsPerBottle: d.gramsPerBottle };
+  const nextSpec: DiySpec = { bottleMl: d.bottleMl, gramsPerBottle: d.gramsPerBottle };
+  if (dropMl !== null) nextSpec.dropMl = dropMl;
+  specs[s.mineralId] = nextSpec;
   saveDiyConcentrateSpecs(specs);
 
   // Auto-enable the concentrate id if it wasn't already enabled. Stocks
@@ -290,6 +312,7 @@ function openEditor(opts?: OpenDiyEditorOptions): void {
     mineralId: mineralId,
     bottleMl: Number(existing.bottleMl) || 0,
     gramsPerBottle: Number(existing.gramsPerBottle) || 0,
+    dropMl: normalizeDropMl(existing.dropMl),
     onSaved: typeof opts.onSaved === "function" ? opts.onSaved : null,
   };
 
