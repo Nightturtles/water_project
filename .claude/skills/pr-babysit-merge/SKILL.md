@@ -166,7 +166,20 @@ gh run view <run-id> --json jobs --jq '.jobs[] | select(.name=="deploy")
 ```
 
   - `guarded` → re-running is safe (details below). Every guarded run also has the `pages` group's `queue: max`: only pushes to `main` deploy, and the guard and the queue setting reached `main` in the same squash commit.
-  - `no-guard` → it predates the guard. **Never re-run it**, even if its commit is still `main`'s tip: `main` can advance after any check you make, and the unguarded, unqueued re-run could then cancel or overwrite a newer deploy. Report the deploy of the newest guarded run instead; every push to `main` after the guard landed gets one, and it supersedes the old run. If no guarded run newer than it exists yet, report this deploy as **blocked** (the commit is not live) until the next push to `main` produces a guarded run that deploys it, and tell the user, since only a new push can unblock it.
+  - `no-guard` → it predates the guard. **Never re-run it**, even if its commit is still `main`'s tip: `main` can advance after any check you make, and the unguarded, unqueued re-run could then cancel or overwrite a newer deploy. Report the deploy of the newest guarded run instead; every push to `main` after the guard landed gets one, and it supersedes the old run. If no guarded run newer than it exists yet, first check whether the commit is live anyway (a newer unguarded run may have deployed a descendant of it):
+
+```bash
+c=<merge-commit-sha>; git fetch -q origin main
+gh api graphql --paginate -F o='{owner}' -F r='{repo}' -f query='
+  query($o:String!,$r:String!,$endCursor:String){repository(owner:$o,name:$r){
+    deployments(environments:["github-pages"],first:100,after:$endCursor){
+      pageInfo{hasNextPage endCursor} nodes{commitOid latestStatus{state}}}}}' \
+  --jq '.data.repository.deployments.nodes[]
+        | select(.latestStatus.state == "SUCCESS" or .latestStatus.state == "INACTIVE") | .commitOid' \
+| sort -u | while read -r d; do git merge-base --is-ancestor "$c" "$d" 2>/dev/null && { echo "live via ${d:0:7}"; break; }; done
+```
+
+  "live via <sha>" → report it as live through that deploy. No output → report this deploy as **blocked** (the commit is not live) until the next push to `main` produces a guarded run that deploys it, and tell the user, since only a new push can unblock it. Either way, still never re-run the old job.
 
 In a guarded run, the "Skip if a newer commit has already deployed" step checks that commit against the full `github-pages` deployment history (every `SUCCESS` or `INACTIVE` deployment, all pages) inside the serialized `pages` group (`queue: max`, so a re-run waits behind newer pending deploys instead of cancelling them) and skips the deploy if any newer commit has already deployed, so a stale re-run cannot roll the site back. Read that step's output, not just the job status:
   - **Skip notice** (job still green) → `main` has moved on; report the newer push's deploy instead (`gh run list --workflow CI --branch main --event push --commit <tip-sha>`, tip from `gh api repos/{owner}/{repo}/commits/main --jq .sha`).
