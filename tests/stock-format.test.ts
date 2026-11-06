@@ -45,7 +45,7 @@ describe("formatStockSpec — labelMode:short", () => {
       bottleMl: 500,
       doseGramsPerL: 2,
     };
-    expect(formatStockSpec(spec, opts)).toBe("5 g epsom · 3 g NaHCO₃ in 500 mL - 2 g/L");
+    expect(formatStockSpec(spec, opts)).toBe("5 g epsom · 3 g NaHCO₃ in 500 mL - 2 mL/L");
   });
 
   test("zero-gram entry is KEPT (not filtered out)", () => {

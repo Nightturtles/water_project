@@ -35,6 +35,11 @@ interface SourceProfile {
 interface DiyConcentrateSpec {
   bottleMl?: number;
   gramsPerBottle?: number;
+  // Optional: average mL per drop from the user's own dropper. When set, the
+  // calculator and recipe builder show this concentrate in drops (with an mL
+  // toggle) instead of mL only. Rides along in the diy_concentrate_specs
+  // jsonb, so it syncs with the spec and needs no schema change.
+  dropMl?: number;
 }
 
 interface StockMineralEntry {
@@ -45,7 +50,12 @@ interface StockMineralEntry {
 export interface StockConcentrateSpec {
   label?: string;
   bottleMl?: number;
+  // Dose of concentrate per liter of brew water, in mL. (Named "grams" for
+  // historical reasons: the library recipes quoted it by weight, and the math
+  // has always treated 1 g of this dilute concentrate as 1 mL.)
   doseGramsPerL?: number;
+  // Optional: average mL per drop from the user's dropper (see DiyConcentrateSpec).
+  dropMl?: number;
   minerals?: StockMineralEntry[];
   createdFrom?: string;
   source?: string;
@@ -1063,6 +1073,46 @@ export function getDiyConcentrateGramsPerMl(mineralId: string | null | undefined
   return gramsPerBottle / bottleMl;
 }
 
+// Dropper sizes are entered to the 1,000th of a mL (e.g. 0.045).
+export const DROP_ML_DECIMALS = 3;
+
+/**
+ * Normalize a user-entered mL-per-drop value: a positive finite number
+ * rounded to DROP_ML_DECIMALS, or null when blank / zero / invalid (null
+ * means "no dropper set", so the concentrate stays mL-only). Values that
+ * round to 0 are treated as unset.
+ */
+export function normalizeDropMl(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const n = typeof value === "number" ? value : parseFloat(String(value));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const factor = Math.pow(10, DROP_ML_DECIMALS);
+  const rounded = Math.round(n * factor) / factor;
+  return rounded > 0 ? rounded : null;
+}
+
+/**
+ * mL per drop for a concentrate, or 0 when it isn't dosed in drops.
+ * Lotus brand concentrates use the selected Lotus dropper style; Mineral
+ * (diy:) and Recipe (stock:) Concentrates use the dropper size saved on their
+ * spec, if any.
+ */
+export function getConcentrateDropMl(concentrateId: unknown): number {
+  if (typeof concentrateId !== "string") return 0;
+  if (concentrateId.startsWith("brand:lotus:")) return getLotusDropMl();
+  if (concentrateId.startsWith("diy:")) {
+    const mineralId = parseDiyConcentrateId(concentrateId);
+    if (!mineralId) return 0;
+    const spec = loadDiyConcentrateSpecs()[mineralId];
+    return (spec && normalizeDropMl(spec.dropMl)) || 0;
+  }
+  if (concentrateId.startsWith("stock:")) {
+    const spec = getStockSpec(concentrateId);
+    return (spec && normalizeDropMl(spec.dropMl)) || 0;
+  }
+  return 0;
+}
+
 /**
  * Grams of equivalent mineral salt per mL of concentrate. Works for DIY (from
  * specs) and brand (from BRAND_CONCENTRATES).
@@ -1668,6 +1718,8 @@ if (typeof window !== "undefined") {
     getConcentrateMineralId,
     getDiyConcentrateGramsPerMl,
     getConcentrateGramsPerMl,
+    normalizeDropMl,
+    getConcentrateDropMl,
     getAvailableMineralIds,
     getEffectiveAlkalinitySources,
     getEffectiveCalciumSources,

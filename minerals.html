@@ -53,7 +53,7 @@
       <button type="button" class="card-collapsible-summary" id="stock-concentrates-summary" aria-expanded="false" aria-controls="stock-concentrates-content">
         <span class="card-collapsible-title">Recipe Concentrates</span>
       </button>
-      <p class="hint">Multi-mineral concentrates: dissolve several salts into one bottle, then dose by grams of concentrate per liter of brew water. Enable any number; each will appear in the recipe builder and the calculator sums their contributions.</p>
+      <p class="hint">Multi-mineral concentrates: dissolve several salts into one bottle, then dose by mL of concentrate per liter of brew water. Enable any number; each will appear in the recipe builder and the calculator sums their contributions.</p>
       <div class="card-collapsible-content" id="stock-concentrates-content">
         <div class="stock-new-form" id="stock-new-form" hidden>
           <!-- Populated by JS when an editor is opened via "+ Create Concentrate" in this modal or on a library recipe card. -->
@@ -384,6 +384,7 @@
         const spec = currentDiySpecs && currentDiySpecs[mineralId] ? currentDiySpecs[mineralId] : {};
         const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
         const gramsPerBottle = Number.isFinite(Number(spec.gramsPerBottle)) ? Number(spec.gramsPerBottle) : 0;
+        const dropMl = normalizeDropMl(spec.dropMl);
 
         const div = document.createElement("div");
         div.className = "concentrate-item" + (checked ? " selected" : "");
@@ -404,6 +405,11 @@
             <div class="input-group">
               <label>Grams per bottle</label>
               <input type="number" min="0" step="0.01" value="${gramsPerBottle}" data-field="grams-per-bottle">
+            </div>
+            <div class="input-group concentrate-drop-group">
+              <label>Dropper size (mL per drop, optional)</label>
+              <input type="number" min="0" step="0.001" inputmode="decimal" ${dropMl ? `value="${dropMl}"` : 'placeholder="e.g. 0.050"'} data-field="drop-ml">
+              <p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>
             </div>
           </div>
           <div class="concentrate-warning" style="display:none;">You’ve reached the solubility limit for this mineral, try a lower concentration.</div>
@@ -434,9 +440,19 @@
         const gramsEl = item.querySelector('input[data-field="grams-per-bottle"]');
         const bottleMl = bottleEl ? Math.max(0, parseFloat(bottleEl.value) || 0) : 0;
         const gramsPerBottle = gramsEl ? Math.max(0, parseFloat(gramsEl.value) || 0) : 0;
+        const dropEl = item.querySelector('input[data-field="drop-ml"]');
+        const dropMl = dropEl ? normalizeDropMl(dropEl.value) : null;
+        // A non-blank size that rounds to nothing (e.g. 0.0004) must not
+        // silently erase a saved dropper size; blank is how you clear it.
+        if (dropEl && dropEl.value.trim() !== "" && dropMl === null) {
+          showSaveStatus("Dropper size must be at least 0.001 mL, or leave it blank.", true);
+          return;
+        }
 
         const specs = loadDiyConcentrateSpecs();
-        specs[mineralId] = { bottleMl, gramsPerBottle };
+        const nextSpec = { bottleMl, gramsPerBottle };
+        if (dropMl !== null) nextSpec.dropMl = dropMl;
+        specs[mineralId] = nextSpec;
         saveDiyConcentrateSpecs(specs);
         updateDiySolubilityWarning(mineralId, item);
         showSaved();
@@ -594,6 +610,7 @@
       const label = spec.label || slug;
       const bottleMl = Number.isFinite(Number(spec.bottleMl)) ? Number(spec.bottleMl) : 0;
       const doseGramsPerL = Number.isFinite(Number(spec.doseGramsPerL)) ? Number(spec.doseGramsPerL) : 0;
+      const dropMl = normalizeDropMl(spec.dropMl);
       const sourceKind = parseStockSourceKind(spec.createdFrom);
       const overLimitIds = getStockOverLimitMineralIds(spec);
       const overLimitNames = overLimitIds.map(
@@ -654,8 +671,14 @@
             '<input type="number" min="0" step="1" value="' + bottleMl + '" data-field="bottle-ml">' +
           "</div>" +
           '<div class="input-group">' +
-            "<label>Dose g/L</label>" +
+            "<label>Dose mL/L</label>" +
             '<input type="number" min="0" step="0.01" value="' + doseGramsPerL + '" data-field="dose-g-per-l">' +
+          "</div>" +
+          '<div class="input-group concentrate-drop-group">' +
+            "<label>Dropper size (mL per drop, optional)</label>" +
+            '<input type="number" min="0" step="0.001" inputmode="decimal" ' +
+              (dropMl ? 'value="' + dropMl + '"' : 'placeholder="e.g. 0.050"') + ' data-field="drop-ml">' +
+            '<p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>' +
           "</div>" +
         "</div>" +
         '<button type="button" class="stock-recipe-toggle" data-action="toggle-recipe" aria-expanded="false">Recipe</button>' +
@@ -783,6 +806,10 @@
           spec.bottleMl = Math.max(0, parseFloat(input.value) || 0);
         } else if (field === "dose-g-per-l") {
           spec.doseGramsPerL = Math.max(0, parseFloat(input.value) || 0);
+        } else if (field === "drop-ml") {
+          const dropMl = normalizeDropMl(input.value);
+          if (dropMl === null) delete spec.dropMl;
+          else spec.dropMl = dropMl;
         } else if (field === "mineral-grams") {
           const row = input.closest(".stock-mineral-row");
           if (!row) return;
@@ -867,6 +894,8 @@
               createdFrom: spec.createdFrom,
               source: row.stockFormula.source || spec.source,
             };
+            // The dropper is the user's own hardware, not part of the recipe.
+            if (normalizeDropMl(spec.dropMl)) specs[slug].dropMl = normalizeDropMl(spec.dropMl);
             saveStockConcentrateSpecs(specs);
             discardStockDraft(slug);
             renderStockConcentrates();
@@ -918,6 +947,8 @@
               minerals: derived.minerals,
               createdFrom: spec.createdFrom,
             };
+            // The dropper is the user's own hardware, not part of the recipe.
+            if (normalizeDropMl(spec.dropMl)) specs[slug].dropMl = normalizeDropMl(spec.dropMl);
             saveStockConcentrateSpecs(specs);
             discardStockDraft(slug);
             renderStockConcentrates();
@@ -971,6 +1002,14 @@
           }
           if (!isStockDirty(slug)) return;
           const draft = stockDrafts[slug];
+          // The draft drops dropMl for any value that normalizes to null, so
+          // check the raw field: blank clears the size, but a non-blank size
+          // that rounds to nothing (e.g. 0.0004) is an error, not a delete.
+          const dropInput = item.querySelector('input[data-field="drop-ml"]');
+          if (dropInput && dropInput.value.trim() !== "" && normalizeDropMl(dropInput.value) === null) {
+            showSaveStatus("Dropper size must be at least 0.001 mL, or leave it blank.", true);
+            return;
+          }
           const error = validateStockSpec(draft);
           if (error) {
             showSaveStatus(error, true);
@@ -1060,8 +1099,13 @@
             '<input type="number" id="stock-new-bottle-ml" min="0" step="1" value="' + bottleVal + '">' +
           "</div>" +
           '<div class="input-group">' +
-            '<label for="stock-new-dose">Dose g/L</label>' +
+            '<label for="stock-new-dose">Dose mL/L</label>' +
             '<input type="number" id="stock-new-dose" min="0" step="0.01" value="' + doseVal + '">' +
+          "</div>" +
+          '<div class="input-group concentrate-drop-group">' +
+            '<label for="stock-new-drop-ml">Dropper size (mL per drop, optional)</label>' +
+            '<input type="number" id="stock-new-drop-ml" min="0" step="0.001" inputmode="decimal" placeholder="e.g. 0.050">' +
+            '<p class="hint">Average mL from one drop of your dropper. Set it to see doses in drops instead of mL.</p>' +
           "</div>" +
         "</div>" +
         '<div class="stock-mineral-list" id="stock-new-mineral-list">' + buildStockNewMineralListHtml() + "</div>" +
@@ -1328,6 +1372,13 @@
           const doseGramsPerL = Math.max(0, parseFloat(doseInput.value) || 0);
           if (bottleMl <= 0) { showStockNewError("Bottle volume must be greater than 0."); return; }
           if (doseGramsPerL <= 0) { showStockNewError("Dose must be greater than 0."); return; }
+          const dropInput = stockNewForm.querySelector("#stock-new-drop-ml");
+          const dropRaw = dropInput ? dropInput.value.trim() : "";
+          const dropMl = normalizeDropMl(dropRaw);
+          if (dropRaw !== "" && dropMl === null) {
+            showStockNewError("Dropper size must be at least 0.001 mL, or leave it blank.");
+            return;
+          }
           if (stockNewMinerals.length === 0) { showStockNewError("Add at least one mineral."); return; }
           const cleaned = [];
           for (const m of stockNewMinerals) {
@@ -1361,6 +1412,7 @@
             ? baseSlug
             : uniqueStockSlug(baseSlug, Object.keys(specs));
           const spec = { label, bottleMl, doseGramsPerL, minerals: cleaned };
+          if (dropMl !== null) spec.dropMl = dropMl;
           if (ds.deriveSlug) {
             spec.createdFrom = "derived:" + ds.deriveSlug;
           } else if (ds.importSlug) {
