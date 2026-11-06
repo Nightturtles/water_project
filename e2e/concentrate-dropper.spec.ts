@@ -160,6 +160,32 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
     await expect(input).toHaveValue("1");
   });
 
+  test("recipe builder keeps a legacy drops-only dose saved with 0 mL", async ({ page }) => {
+    await seed(page, "/recipe.html");
+    // Early-2026 builds stored separate mL/drops fields, so 20 drops could be
+    // saved as { ml: "0", drops: "20" }; the drop count is the dose.
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "cw_recipe_concentrate_inputs",
+        JSON.stringify({ "diy:epsom-salt": { ml: "0", drops: "20" } }),
+      );
+    });
+    await page.reload();
+
+    const row = page.locator('.mineral-input-row[data-concentrate-id="diy:epsom-salt"]');
+    await expect(row.locator('input[data-concentrate-field="lotus-value"]')).toHaveValue("20");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("cw_recipe_concentrate_inputs") || "{}")[
+              "diy:epsom-salt"
+            ],
+        ),
+      )
+      .toEqual({ ml: 20 * DROP_ML, drops: 20 });
+  });
+
   test("recipe builder keeps a saved mL dose that whole drops can only approximate", async ({
     page,
   }) => {

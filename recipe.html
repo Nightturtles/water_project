@@ -472,6 +472,13 @@
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
         const ml = Math.max(0, parseFloat(savedVal.ml) || 0);
         const savedDrops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        if (ml <= 0 && savedDrops > 0 && dropMl > 0) {
+          // Legacy shape (early 2026 builds kept separate mL and drops fields):
+          // a drops-only dose. Current writers always store the matching mL,
+          // so 0 mL with a nonzero count can only mean the count is the dose.
+          const drops = Math.round(savedDrops);
+          return { ml: drops * dropMl, drops };
+        }
         const drops = dropMl > 0 ? Math.round(ml / dropMl) : savedDrops;
         return { ml, drops };
       }
