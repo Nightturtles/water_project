@@ -442,6 +442,12 @@
         const gramsPerBottle = gramsEl ? Math.max(0, parseFloat(gramsEl.value) || 0) : 0;
         const dropEl = item.querySelector('input[data-field="drop-ml"]');
         const dropMl = dropEl ? normalizeDropMl(dropEl.value) : null;
+        // A non-blank size that rounds to nothing (e.g. 0.0004) must not
+        // silently erase a saved dropper size; blank is how you clear it.
+        if (dropEl && dropEl.value.trim() !== "" && dropMl === null) {
+          showSaveStatus("Dropper size must be at least 0.001 mL, or leave it blank.", true);
+          return;
+        }
 
         const specs = loadDiyConcentrateSpecs();
         const nextSpec = { bottleMl, gramsPerBottle };
@@ -996,6 +1002,14 @@
           }
           if (!isStockDirty(slug)) return;
           const draft = stockDrafts[slug];
+          // The draft drops dropMl for any value that normalizes to null, so
+          // check the raw field: blank clears the size, but a non-blank size
+          // that rounds to nothing (e.g. 0.0004) is an error, not a delete.
+          const dropInput = item.querySelector('input[data-field="drop-ml"]');
+          if (dropInput && dropInput.value.trim() !== "" && normalizeDropMl(dropInput.value) === null) {
+            showSaveStatus("Dropper size must be at least 0.001 mL, or leave it blank.", true);
+            return;
+          }
           const error = validateStockSpec(draft);
           if (error) {
             showSaveStatus(error, true);

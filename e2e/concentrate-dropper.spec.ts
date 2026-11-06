@@ -144,6 +144,11 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
     await dropInput.fill("0.0456");
     await expect.poll(readSpec).toEqual({ bottleMl: 200, gramsPerBottle: 10, dropMl: 0.046 });
 
+    // A non-blank size that rounds to nothing is rejected, not saved as "unset".
+    await dropInput.fill("0.0004");
+    await expect(page.locator("#save-status")).toContainText("Dropper size must be at least");
+    await expect.poll(readSpec).toEqual({ bottleMl: 200, gramsPerBottle: 10, dropMl: 0.046 });
+
     // Clearing it returns the concentrate to mL-only.
     await dropInput.fill("");
     await expect.poll(readSpec).toEqual({ bottleMl: 200, gramsPerBottle: 10 });
@@ -268,6 +273,19 @@ test.describe("Recipe Concentrates in mL, with drops when a dropper size is set"
     await expect(row.locator("label", { hasText: "Dose mL/L" })).toHaveCount(1);
     const dropInput = row.locator('input[data-field="drop-ml"]');
     await expect(dropInput).toHaveValue(String(STOCK_DROP_ML));
+
+    const readDropMl = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("cw_stock_concentrate_specs") || "{}")["drop-stock"]
+            .dropMl,
+      );
+
+    // A non-blank size that rounds to nothing is rejected on save.
+    await dropInput.fill("0.0004");
+    await row.locator('[data-action="save-stock"]').click();
+    await expect(page.locator("#save-status")).toContainText("Dropper size must be at least");
+    expect(await readDropMl()).toBe(STOCK_DROP_ML);
 
     await dropInput.fill("0.0333");
     await row.locator('[data-action="save-stock"]').click();
