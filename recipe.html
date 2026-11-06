@@ -647,9 +647,12 @@
                 drops: (dropMl > 0) ? Math.round(inputValue / dropMl) : 0
               };
             } else {
+              // Round once and derive ml from the rounded count, so the
+              // stored ml and drops agree (drops drives the reload display).
+              const drops = Math.round(inputValue);
               recipeConcentrateInputs[key] = {
-                ml: inputValue * dropMl,
-                drops: Math.round(inputValue)
+                ml: drops * dropMl,
+                drops: drops
               };
             }
           } else {

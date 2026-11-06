@@ -118,6 +118,20 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
       )
       .toEqual({ ml: 20 * DROP_ML, drops: 20 });
 
+    // A fractional drop count rounds once, and the stored ml follows the
+    // rounded count, so the saved dose doesn't change on reload.
+    await row.locator('input[data-concentrate-field="lotus-value"]').fill("2.6");
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            JSON.parse(localStorage.getItem("cw_recipe_concentrate_inputs") || "{}")[
+              "diy:epsom-salt"
+            ],
+        ),
+      )
+      .toEqual({ ml: 3 * DROP_ML, drops: 3 });
+
     const sodaRow = page.locator('.mineral-input-row[data-concentrate-id="diy:baking-soda"]');
     await expect(sodaRow).not.toHaveAttribute("data-drops-capable", "true");
     await expect(sodaRow.locator('input[data-concentrate-field="ml"]')).toHaveCount(1);
