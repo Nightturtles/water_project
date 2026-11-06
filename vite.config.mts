@@ -58,13 +58,16 @@ export default defineConfig({
     target: "es2022",
     // Free safety net; consumed by PR f's Sentry sourcemap upload.
     sourcemap: true,
-    rollupOptions: {
+    // Vite 8 bundles with Rolldown; rolldownOptions replaces the deprecated
+    // rollupOptions alias.
+    rolldownOptions: {
       input: Object.fromEntries(
         htmlEntries.map((f): [string, string] => [
-          // Rollup input names can't contain "/"; turn "privacy/index.html"
-          // into "privacy-index" so it stays a valid key while the resolved
-          // path still points at the real file. Rollup keeps the on-disk
-          // directory structure in the output regardless of the key.
+          // Keep input names free of "/" (Rollup rejected them, and the name
+          // doubles as the entry chunk's name): turn "privacy/index.html" into
+          // "privacy-index" while the resolved path still points at the real
+          // file. The HTML output keeps its on-disk directory structure
+          // regardless of the key.
           f.replace(/\.html$/, "").replace(/\//g, "-"),
           resolve(root, f),
         ]),

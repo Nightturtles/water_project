@@ -6,13 +6,7 @@
 
 // --- Shared ion/mineral types ---
 export type IonName =
-  | "calcium"
-  | "magnesium"
-  | "potassium"
-  | "sodium"
-  | "sulfate"
-  | "chloride"
-  | "bicarbonate";
+  "calcium" | "magnesium" | "potassium" | "sodium" | "sulfate" | "chloride" | "bicarbonate";
 
 export type IonMap = Partial<Record<IonName, number>>;
 
