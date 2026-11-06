@@ -607,8 +607,16 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
 }
 
 // --- Pull all cloud data into localStorage and invalidate caches ---
+//
+// requireUser (the first-login merge): an unresolved user throws instead of a
+// silent no-op, so the merge aborts and SYNCED_USER_ID stays unset.
+// expectedUserId (realtime): the pull is bound to the user that passed the
+// merge gate; if the signed-in user or the merge marker no longer matches by
+// the time rows arrive, they are discarded rather than applied.
 export async function pullFromCloud(options?: {
   skipIfLocalWriteDuringPull?: boolean;
+  requireUser?: boolean;
+  expectedUserId?: string;
 }): Promise<boolean> {
   // Snapshot the local-write counter before any network round-trip. When the
   // realtime path sets skipIfLocalWriteDuringPull, a change here before we
@@ -618,8 +626,15 @@ export async function pullFromCloud(options?: {
   // leave the option unset and apply unconditionally, as before.
   const skipIfLocalWrite = !!(options && options.skipIfLocalWriteDuringPull);
   const seqAtStart = localWriteSeq;
+  const expectedUserId = options && options.expectedUserId;
   const userId = await getLoggedInUserId();
-  if (!userId) return true;
+  if (!userId) {
+    if (options && options.requireUser) {
+      throw new Error("[sync] merge pull aborted: could not resolve the signed-in user");
+    }
+    return true;
+  }
+  if (expectedUserId && userId !== expectedUserId) return true;
 
   const results = await Promise.all([
     window.supabaseClient.from("user_settings").select("*").eq("user_id", userId).maybeSingle(),
@@ -643,6 +658,19 @@ export async function pullFromCloud(options?: {
     // the cloud, and the realtime caller re-pulls to bring remote changes down.
     console.warn("[sync] pull skipped: local write landed mid-pull; will reconcile after push");
     return false;
+  }
+
+  if (
+    expectedUserId &&
+    (window._cachedAuthUserId !== expectedUserId ||
+      safeGetItem(KEYS.SYNCED_USER_ID) !== expectedUserId)
+  ) {
+    // The account changed or the merge marker was cleared while we fetched.
+    // These rows belong to the gated user, not to whatever is local now; drop
+    // them and let the next merge's catch-up pull reconcile.
+    console.warn("[sync] pull discarded: signed-in user or merge state changed mid-pull");
+    realtimePullDeferred = true;
+    return true;
   }
 
   // Re-bind userId as `string` (not `string | null`) so the forEach
@@ -1059,7 +1087,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
     } else {
       if (isDefaultData()) {
         // Returning user on a fresh device: pull cloud data down
-        await pullFromCloud();
+        await pullFromCloud({ requireUser: true });
       } else {
         // Both local and cloud have non-default data: ask the user
         const choice = await showMergeDialog();
@@ -1071,7 +1099,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
           await foldCloudConcentratesIntoLocal(userId);
           await pushAllToCloud({ allowBeforeMerge: true });
         } else {
-          await pullFromCloud();
+          await pullFromCloud({ requireUser: true });
         }
       }
     }
@@ -1248,14 +1276,18 @@ function scheduleRealtimePull(): void {
   pullDebounceTimer = setTimeout(function () {
     pullDebounceTimer = undefined;
     enqueueSerialized(function () {
-      if (realtimePullBlockedByMerge(realtimeUserId, safeGetItem(KEYS.SYNCED_USER_ID))) {
+      const gatedUserId = realtimeUserId;
+      if (
+        !gatedUserId ||
+        realtimePullBlockedByMerge(gatedUserId, safeGetItem(KEYS.SYNCED_USER_ID))
+      ) {
         realtimePullDeferred = true;
         return Promise.resolve();
       }
       const pendingPush = syncTimer ? syncNow() : Promise.resolve();
       return Promise.resolve(pendingPush)
         .then(function () {
-          return pullFromCloud({ skipIfLocalWriteDuringPull: true });
+          return pullFromCloud({ skipIfLocalWriteDuringPull: true, expectedUserId: gatedUserId });
         })
         .then(function (applied) {
           if (applied === false) {
