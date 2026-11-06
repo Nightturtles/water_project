@@ -751,6 +751,12 @@ describe("pullFromCloud user binding", () => {
     (global as any).window._cachedAuthUserId = savedCachedUser;
   });
 
+  test("a realtime pull that can't resolve the user reports discarded (no change event)", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
+    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe("discarded");
+    expect(reads).toEqual([]);
+  });
+
   test("an ordinary pull is a silent no-op when the user lookup fails", async () => {
     (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
     await expect(pullFromCloud()).resolves.toBe(true);
@@ -860,6 +866,7 @@ describe("foldCloudConcentratesIntoLocal", () => {
   beforeEach(() => {
     savedClient = (global as any).window.supabaseClient;
     (global as any).window.supabaseClient = {
+      auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
       from: () => ({
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: cloudRow, error: null }) }),
@@ -880,6 +887,14 @@ describe("foldCloudConcentratesIntoLocal", () => {
       "epsom-salt",
     ]);
     expect(Object.keys(storage.loadStockConcentrateSpecs())).toEqual(["mine"]);
+  });
+
+  test("throws without writing when the signed-in user changed during the fetch", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({
+      data: { user: { id: "someone-else" } },
+    });
+    await expect(foldCloudConcentratesIntoLocal("u1")).rejects.toThrow(/signed-in user changed/);
+    expect(storage.loadDiyConcentrateSpecs()).toEqual({});
   });
 
   test("throws (aborting the keep-local push) when a local write fails", async () => {

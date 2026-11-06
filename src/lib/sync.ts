@@ -648,7 +648,9 @@ export async function pullFromCloud(options?: {
     if (mergeUserId) {
       throw new Error("[sync] merge pull aborted: could not resolve the signed-in user");
     }
-    return true;
+    // Realtime: nothing was read, so nothing changed locally; don't let the
+    // caller announce a change (sign-out or a failed lookup mid-pull).
+    return expectedUserId ? "discarded" : true;
   }
   if (mergeUserId && userId !== mergeUserId) {
     throw new Error("[sync] merge pull aborted: the signed-in user changed");
@@ -1058,6 +1060,11 @@ export async function foldCloudConcentratesIntoLocal(userId: string): Promise<vo
   }
   const cloud = res && res.data;
   if (!cloud) return;
+  // The account may have switched while we fetched; never fold one account's
+  // concentrates into whatever the device now holds for another.
+  if ((await getLoggedInUserId()) !== userId) {
+    throw new Error("[sync] merge aborted: the signed-in user changed while folding concentrates");
+  }
   const writes: Array<[string, string]> = [
     [
       KEYS.DIY_CONCENTRATE_SPECS,
@@ -1100,7 +1107,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
     // Already set up for this user on this device — just pull latest
     const syncedUserId = safeGetItem(KEYS.SYNCED_USER_ID);
     if (syncedUserId === userId) {
-      await pullFromCloud();
+      await pullFromCloud({ mergeUserId: userId });
       return;
     }
 
