@@ -39,6 +39,8 @@ import {
   unionConcentrateSpecs,
   unionConcentrateIds,
   foldCloudConcentratesIntoLocal,
+  realtimePullBlockedByMerge,
+  pullFromCloud,
 } from "../src/lib/sync";
 
 const { invalidateAllCaches } = storage;
@@ -680,9 +682,140 @@ describe("pushAllToCloud merge gate", () => {
     expect(settings!.payload.diy_concentrate_specs).toEqual({ "epsom-salt": { gramsPerMl: 0.1 } });
   });
 
+  test("ordinary push is a silent no-op when the user lookup fails", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
+    await expect(pushAllToCloud()).resolves.toBeUndefined();
+    expect(upserts).toEqual([]);
+  });
+
+  test("merge push rejects when the user lookup fails, so the merge isn't marked done", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => {
+      throw new Error("Failed to fetch");
+    };
+    await expect(pushAllToCloud({ allowBeforeMerge: true })).rejects.toThrow(
+      /could not resolve the signed-in user/,
+    );
+    expect(upserts).toEqual([]);
+  });
+
+  test("merge push rejects when the signed-in user is not the merge user", async () => {
+    await expect(
+      pushAllToCloud({ allowBeforeMerge: true, mergeUserId: "someone-else" }),
+    ).rejects.toThrow(/signed-in user changed/);
+    expect(upserts).toEqual([]);
+  });
+
   test("allowBeforeMerge (merge's own new-user / keep-local push) bypasses the gate", async () => {
     await pushAllToCloud({ allowBeforeMerge: true });
     expect(upserts.some((u) => u.table === "user_settings")).toBe(true);
+  });
+});
+
+// The merge's own pulls and realtime pulls must not apply cloud rows (or count
+// as a successful merge) for the wrong user.
+describe("pullFromCloud user binding", () => {
+  const USER = "user-123";
+  let reads: string[];
+  let savedClient: any;
+  let savedCachedUser: any;
+
+  beforeEach(() => {
+    reads = [];
+    savedClient = (global as any).window.supabaseClient;
+    savedCachedUser = (global as any).window._cachedAuthUserId;
+    (global as any).window._cachedAuthUserId = USER;
+    const rows: Record<string, any> = {
+      user_settings: { user_id: USER, brew_method: "espresso" },
+      user_selections: null,
+      source_profiles: [],
+      target_profiles: [],
+    };
+    (global as any).window.supabaseClient = {
+      auth: { getUser: async () => ({ data: { user: { id: USER } } }) },
+      from: (table: string) => ({
+        select: () => ({
+          eq: () => {
+            reads.push(table);
+            const result = { data: rows[table], error: null };
+            const p: any = Promise.resolve(result);
+            p.maybeSingle = async () => result;
+            return p;
+          },
+        }),
+      }),
+    };
+  });
+
+  afterEach(() => {
+    (global as any).window.supabaseClient = savedClient;
+    (global as any).window._cachedAuthUserId = savedCachedUser;
+  });
+
+  test("a realtime pull that can't resolve the user reports discarded (no change event)", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
+    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe("discarded");
+    expect(reads).toEqual([]);
+  });
+
+  test("an ordinary pull is a silent no-op when the user lookup fails", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({ data: { user: null } });
+    await expect(pullFromCloud()).resolves.toBe(true);
+    expect(reads).toEqual([]);
+  });
+
+  test("a merge pull rejects when the user lookup fails, so the merge isn't marked done", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => {
+      throw new Error("Failed to fetch");
+    };
+    await expect(pullFromCloud({ mergeUserId: USER })).rejects.toThrow(
+      /could not resolve the signed-in user/,
+    );
+    expect(reads).toEqual([]);
+  });
+
+  test("a merge pull rejects, without applying, when the user changes mid-pull", async () => {
+    let calls = 0;
+    (global as any).window.supabaseClient.auth.getUser = async () => ({
+      data: { user: { id: calls++ === 0 ? USER : "someone-else" } },
+    });
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ mergeUserId: USER })).rejects.toThrow(/signed-in user changed/);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("filter");
+  });
+
+  test("a merge pull for the signed-in merge user applies rows", async () => {
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ mergeUserId: USER })).resolves.toBe(true);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("espresso");
+  });
+
+  test("a realtime pull bound to another user reads nothing", async () => {
+    global.localStorage.setItem("cw_synced_user_id", "user-a");
+    await expect(pullFromCloud({ expectedUserId: "user-a" })).resolves.toBe("discarded");
+    expect(reads).toEqual([]);
+  });
+
+  test("a realtime pull discards rows when the merge marker no longer matches", async () => {
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe("discarded");
+    expect(reads.length).toBeGreaterThan(0);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("filter");
+  });
+
+  test("a realtime pull for the merged, signed-in user applies rows", async () => {
+    global.localStorage.setItem("cw_synced_user_id", USER);
+    global.localStorage.setItem("cw_brew_method", "filter");
+    await expect(pullFromCloud({ expectedUserId: USER })).resolves.toBe(true);
+    expect(global.localStorage.getItem("cw_brew_method")).toBe("espresso");
+  });
+});
+
+describe("realtimePullBlockedByMerge", () => {
+  test("defers realtime pulls until this device has merged the subscribed user", () => {
+    expect(realtimePullBlockedByMerge("user-a", null)).toBe(true);
+    expect(realtimePullBlockedByMerge("user-a", "user-b")).toBe(true);
+    expect(realtimePullBlockedByMerge(null, "user-a")).toBe(true);
+    expect(realtimePullBlockedByMerge("user-a", "user-a")).toBe(false);
   });
 });
 
@@ -733,6 +866,7 @@ describe("foldCloudConcentratesIntoLocal", () => {
   beforeEach(() => {
     savedClient = (global as any).window.supabaseClient;
     (global as any).window.supabaseClient = {
+      auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
       from: () => ({
         select: () => ({
           eq: () => ({ maybeSingle: async () => ({ data: cloudRow, error: null }) }),
@@ -753,6 +887,14 @@ describe("foldCloudConcentratesIntoLocal", () => {
       "epsom-salt",
     ]);
     expect(Object.keys(storage.loadStockConcentrateSpecs())).toEqual(["mine"]);
+  });
+
+  test("throws without writing when the signed-in user changed during the fetch", async () => {
+    (global as any).window.supabaseClient.auth.getUser = async () => ({
+      data: { user: { id: "someone-else" } },
+    });
+    await expect(foldCloudConcentratesIntoLocal("u1")).rejects.toThrow(/signed-in user changed/);
+    expect(storage.loadDiyConcentrateSpecs()).toEqual({});
   });
 
   test("throws (aborting the keep-local push) when a local write fails", async () => {
