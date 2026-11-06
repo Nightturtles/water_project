@@ -464,10 +464,15 @@
     // Drops-capable rows (Lotus, or a Mineral Concentrate with a dropper size)
     // persist { ml, drops }; mL-only rows persist a bare number. Accept either
     // shape so toggling a dropper size on/off never loses the saved amount.
+    // The saved mL is the real dose: drops are re-derived from it with the
+    // current dropper size, so changing the dropper (or the Lotus dropper
+    // style) keeps the same amount of concentrate instead of reusing a stale
+    // drop count at the new size.
     function normalizeRecipeDropsInputValue(savedVal, dropMl) {
       if (savedVal != null && typeof savedVal === "object" && !Array.isArray(savedVal)) {
         const ml = Math.max(0, parseFloat(savedVal.ml) || 0);
-        const drops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        const savedDrops = Math.max(0, parseFloat(savedVal.drops) || 0);
+        const drops = dropMl > 0 ? Math.round(ml / dropMl) : savedDrops;
         return { ml, drops };
       }
       const ml = Math.max(0, parseFloat(savedVal) || 0);

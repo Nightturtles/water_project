@@ -137,6 +137,29 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
     await expect(sodaRow.locator('input[data-concentrate-field="ml"]')).toHaveCount(1);
   });
 
+  test("recipe builder re-derives drops from the saved mL when the dropper size changes", async ({
+    page,
+  }) => {
+    await seed(page, "/recipe.html");
+    // 1 mL saved as 20 drops of a 0.05 mL dropper; the spec now says 0.1 mL.
+    await page.evaluate(() => {
+      const specs = JSON.parse(localStorage.getItem("cw_diy_concentrate_specs") || "{}");
+      specs["epsom-salt"].dropMl = 0.1;
+      localStorage.setItem("cw_diy_concentrate_specs", JSON.stringify(specs));
+      localStorage.setItem(
+        "cw_recipe_concentrate_inputs",
+        JSON.stringify({ "diy:epsom-salt": { ml: 1, drops: 20 } }),
+      );
+    });
+    await page.reload();
+
+    const row = page.locator('.mineral-input-row[data-concentrate-id="diy:epsom-salt"]');
+    const input = row.locator('input[data-concentrate-field="lotus-value"]');
+    await expect(input).toHaveValue("10");
+    await row.locator('select[data-lotus-unit-select="true"]').selectOption("ml");
+    await expect(input).toHaveValue("1");
+  });
+
   test("minerals page edits keep the dropper size and round it to 3 decimals", async ({ page }) => {
     await seed(page, "/minerals.html");
 
