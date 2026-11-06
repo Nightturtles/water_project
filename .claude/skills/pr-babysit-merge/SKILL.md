@@ -18,7 +18,8 @@ End-to-end: ensure each PR exists, keep CI green, address actionable CodeRabbit 
 
 These facts override the generic guidance below. Re-check them if the workflows change.
 
-- **What "green" means.** `main` has no branch protection, so `gh pr checks --required` lists nothing and "required checks pass" would be vacuously true. Treat **all six** of these as required: `typecheck-and-test`, `e2e`, `edge-functions` (CI workflow), `ios-build`, `android-build` (Native build workflow), and `CodeRabbit`. `deploy` shows `skipping` on every PR; that is expected.
+- **What "green" means.** The `main: require CI` ruleset requires exactly six checks: `typecheck-and-test`, `e2e`, `edge-functions` (CI workflow), `ios-build`, `android-build` (Native build workflow), and `CodeRabbit` (`gh pr checks <n> --required` lists them). `deploy` shows `skipping` on every PR; that is expected. CodeRabbit's check can pass without a review having run (see below), so a green required set is necessary but not sufficient.
+- **Ruleset bypass.** Repo admins (the owner) can bypass that ruleset, which keeps direct release pushes to `main` working. Never use it to merge: no `gh pr merge --admin`, and never merge while a required check is red or pending.
 - **CI timing.** typecheck-and-test ~1 min, e2e ~1.5-2.5 min, ios-build ~2-3 min. The `e2e` job is serialized repo-wide (`concurrency: e2e-shared-test-account`), so it can sit `pending` while another PR's e2e runs. An e2e job that shows **cancelled** was bumped from that queue by a newer run, not a failure: `gh run rerun <run-id> --failed`.
 - **Merge style:** squash (every merged PR on `main` is `title (#N)`).
 - **Merge gates by changed files** (`gh pr diff <n> --name-only`). Check these before the merge step, not after:
@@ -128,7 +129,7 @@ gh api graphql -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
 ### Exit conditions for the loop
 
 - `mergeable` / merge state is clean (no conflicts).
-- Every check listed under **This repo** is successful for the latest head commit (not just the ones branch protection marks required; here, none are).
+- All six required checks listed under **This repo** are successful for the latest head commit.
 - CodeRabbit comments/reviews were fetched and reviewed after the latest push (hard requirement, regardless of delay); a rate-limited pass does not count.
 - No unresolved CodeRabbit (or similar) items remain that were committed-to — or any disagreement/uncertainty is documented with the user.
 - Every file-based merge gate under **This repo** is satisfied, or the PR is stopped and waiting on the user.
