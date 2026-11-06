@@ -3,8 +3,8 @@
 // getConcentrateDropMl (which concentrates are shown in drops, and at what size).
 
 import { describe, test, expect, beforeEach } from "vitest";
-import * as storage from "./src/lib/storage";
-import { LOTUS_DROPPER_ML } from "./src/lib/constants";
+import * as storage from "../src/lib/storage";
+import { LOTUS_DROPPER_ML } from "../src/lib/constants";
 
 const { normalizeDropMl, getConcentrateDropMl, saveDiyConcentrateSpecs, invalidateAllCaches } =
   storage;
