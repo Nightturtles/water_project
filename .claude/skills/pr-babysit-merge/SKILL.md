@@ -165,8 +165,8 @@ gh run view <run-id> --json jobs --jq '.jobs[] | select(.name=="deploy")
   | if ([.steps[].name] | index("Skip if a newer commit has already deployed")) then "guarded" else "no-guard" end'
 ```
 
-  - `guarded` → re-running is safe (details below).
-  - `no-guard` → it predates the guard. Re-run it only if its `headSha` is still `main`'s tip (`gh api repos/{owner}/{repo}/commits/main --jq .sha`), i.e. nothing newer exists to roll back; otherwise don't re-run it, and report the newer (guarded) push's deploy instead.
+  - `guarded` → re-running is safe (details below). Every guarded run also has the `pages` group's `queue: max`: only pushes to `main` deploy, and the guard and the queue setting reached `main` in the same squash commit.
+  - `no-guard` → it predates the guard. **Never re-run it**, even if its commit is still `main`'s tip: `main` can advance after any check you make, and the unguarded, unqueued re-run could then cancel or overwrite a newer deploy. Report the deploy of the newest guarded run instead; every push to `main` after the guard landed gets one, and it supersedes the old run.
 
 In a guarded run, the "Skip if a newer commit has already deployed" step checks that commit against the full `github-pages` deployment history (every `SUCCESS` or `INACTIVE` deployment, all pages) inside the serialized `pages` group (`queue: max`, so a re-run waits behind newer pending deploys instead of cancelling them) and skips the deploy if any newer commit has already deployed, so a stale re-run cannot roll the site back. Read that step's output, not just the job status:
   - **Skip notice** (job still green) → `main` has moved on; report the newer push's deploy instead (`gh run list --workflow CI --branch main --event push --commit <tip-sha>`, tip from `gh api repos/{owner}/{repo}/commits/main --jq .sha`).
