@@ -160,6 +160,49 @@ test.describe("custom dropper size for Mineral Concentrates", () => {
     await expect(input).toHaveValue("1");
   });
 
+  test("recipe builder keeps a saved mL dose that whole drops can only approximate", async ({
+    page,
+  }) => {
+    await seed(page, "/recipe.html");
+    // 0.05 mL at a 0.1 mL dropper displays as 1 drop. 0.5 g/mL Epsom in 1 L:
+    // 0.05 mL -> ~2.5 ppm Mg (shown "2"); 1 drop x 0.1 mL would be ~4.9 ("5").
+    await page.evaluate(() => {
+      const specs = JSON.parse(localStorage.getItem("cw_diy_concentrate_specs") || "{}");
+      specs["epsom-salt"] = { bottleMl: 100, gramsPerBottle: 50, dropMl: 0.1 };
+      localStorage.setItem("cw_diy_concentrate_specs", JSON.stringify(specs));
+      localStorage.setItem(
+        "cw_recipe_concentrate_inputs",
+        JSON.stringify({ "diy:epsom-salt": { ml: 0.05, drops: 1 } }),
+      );
+    });
+    await page.reload();
+
+    const readSaved = () =>
+      page.evaluate(
+        () =>
+          JSON.parse(localStorage.getItem("cw_recipe_concentrate_inputs") || "{}")[
+            "diy:epsom-salt"
+          ],
+      );
+    const row = page.locator('.mineral-input-row[data-concentrate-id="diy:epsom-salt"]');
+    const input = row.locator('input[data-concentrate-field="lotus-value"]');
+    const unit = row.locator('select[data-lotus-unit-select="true"]');
+    const mg = page.locator("#ppm-magnesium");
+
+    await expect(input).toHaveValue("1");
+    await expect(mg).toHaveText("2");
+
+    await unit.selectOption("ml");
+    await expect(input).toHaveValue("0.05");
+    await expect(mg).toHaveText("2");
+    expect(await readSaved()).toEqual({ ml: 0.05, drops: 1 });
+
+    await unit.selectOption("drops");
+    await expect(input).toHaveValue("1");
+    await expect(mg).toHaveText("2");
+    expect(await readSaved()).toEqual({ ml: 0.05, drops: 1 });
+  });
+
   test("minerals page edits keep the dropper size and round it to 3 decimals", async ({ page }) => {
     await seed(page, "/minerals.html");
 

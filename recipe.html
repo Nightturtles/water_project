@@ -480,6 +480,17 @@
       return { ml, drops };
     }
 
+    // mL for a drops entry. When the drop count is still the one derived from
+    // the saved mL (e.g. 0.05 mL shown as 1 drop of a 0.1 mL dropper), the
+    // saved mL is the real dose; only a count the user typed is drops x size.
+    function recipeDropsToMl(concentrateId, drops) {
+      const saved = recipeConcentrateInputs[concentrateId];
+      if (saved != null && typeof saved === "object" && saved.drops === drops) {
+        return Math.max(0, parseFloat(saved.ml) || 0);
+      }
+      return drops * getConcentrateDropMl(concentrateId);
+    }
+
     if (selectedMinerals.length === 0 && selectedConcentrates.length === 0) {
       const p = document.createElement("p");
       p.className = "hint";
@@ -686,9 +697,10 @@
           ml = currentValue;
           drops = dropMl > 0 ? Math.round(currentValue / dropMl) : 0;
         } else {
-          // Same whole-drop rounding as the input handler, so ml and drops agree.
+          // Same whole-drop rounding as the input handler; an untouched count
+          // keeps the saved mL rather than collapsing it to drops x size.
           drops = Math.round(currentValue);
-          ml = drops * dropMl;
+          ml = recipeDropsToMl(key, drops);
         }
         recipeConcentrateInputs[key] = { ml, drops };
         input.step = nextUnit === "ml" ? "0.001" : "1";
@@ -1062,7 +1074,7 @@
             const unitSelect = row.querySelector('select[data-lotus-unit-select="true"]');
             const unit = unitSelect ? normalizeLotusConcentrateUnit(unitSelect.value) : "drops";
             const value = Math.max(0, parseFloat(lotusInput && lotusInput.value) || 0);
-            ml = unit === "ml" ? value : (value * getConcentrateDropMl(concentrateId));
+            ml = unit === "ml" ? value : recipeDropsToMl(concentrateId, Math.round(value));
           } else {
             const mlInput = row.querySelector('input[data-concentrate-field="ml"]');
             ml = Math.max(0, parseFloat(mlInput && mlInput.value) || 0);
