@@ -90,11 +90,11 @@ CodeRabbit spreads its feedback over three places; read all three after every pu
 ```bash
 # 1. Walkthrough / status comment: rate-limit notices and "Review skipped" text live here.
 gh api --paginate "repos/{owner}/{repo}/issues/<n>/comments?per_page=100" \
-  --jq '.[] | select(.user.login|test("coderabbit")) | {updated_at, body: (.body|gsub("<!--[^>]*-->";""))}'
+  --jq '.[] | select((.user.login // "")|test("coderabbit")) | {updated_at, body: (.body|gsub("<!--[^>]*-->";""))}'
 # 2. Review bodies: "Actionable comments posted: N", plus nitpicks and
 #    "Outside diff range" comments that never become inline threads.
 gh api --paginate "repos/{owner}/{repo}/pulls/<n>/reviews?per_page=100" \
-  --jq '.[] | select(.user.login|test("coderabbit")) | {commit_id, submitted_at, body: (.body|gsub("<!--[^>]*-->";""))}'
+  --jq '.[] | select((.user.login // "")|test("coderabbit")) | {commit_id, submitted_at, body: (.body|gsub("<!--[^>]*-->";""))}'
 # 3. Unresolved inline threads, with EVERY comment in each (CodeRabbit often follows up
 #    in a reply, e.g. "this still misses X"). REST cannot tell resolved from unresolved; GraphQL can.
 gh api graphql --paginate -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
@@ -105,15 +105,15 @@ gh api graphql --paginate -F o='{owner}' -F r='{repo}' -F n=<n> -f query='
           nodes{author{login} createdAt url body}}}}}}}' \
   --jq '.data.repository.pullRequest.reviewThreads.nodes[]
         | select((.isResolved|not)
-                 and (any(.comments.nodes[]; .author.login|test("coderabbit")) or .comments.pageInfo.hasNextPage))
+                 and (any(.comments.nodes[]; (.author.login // "")|test("coderabbit")) or .comments.pageInfo.hasNextPage))
         | {id, path, line, isOutdated, totalComments: .comments.totalCount,
            moreComments: .comments.pageInfo.hasNextPage, commentsCursor: .comments.pageInfo.endCursor,
-           comments: [.comments.nodes[] | {author: .author.login, createdAt, url, body: (.body|gsub("<!--[^>]*-->";""))}]}'
+           comments: [.comments.nodes[] | {author: (.author.login // "ghost"), createdAt, url, body: (.body|gsub("<!--[^>]*-->";""))}]}'
 ```
 
 Read the **whole** comment list of each thread, newest last: the latest CodeRabbit reply is what decides whether the thread is still open. `--paginate` walks the thread pages; comments inside a thread come 100 at a time. A thread with `moreComments: true` is kept even if no CodeRabbit comment is in its first page, so fetch the rest from `commentsCursor` (`node(id:"<id>"){... on PullRequestReviewThread{comments(first:100,after:"<commentsCursor>"){pageInfo{hasNextPage endCursor} nodes{author{login} body url}}}}`, repeating until `hasNextPage` is false), then apply the CodeRabbit filter before judging it.
 
-- **CodeRabbit:** treat feedback as CodeRabbit when the author login contains `coderabbit` (REST shows `coderabbitai[bot]`, GraphQL shows `coderabbitai`).
+- **CodeRabbit:** treat feedback as CodeRabbit when the author login contains `coderabbit` (REST shows `coderabbitai[bot]`, GraphQL shows `coderabbitai`). The filters default a missing author (deleted account) to an empty login, because `null | test(...)` would abort the whole query.
 - **Has it reviewed the latest push?** Yes when a CodeRabbit review's `commit_id` equals the PR's `headRefOid`, or when its walkthrough comment's `updated_at` is after the push and says the review finished. Keep polling until one of those is true.
 - **Misleading statuses** (all seen on this repo):
   - Check passes with **"Review skipped"** → CodeRabbit usually still reviewed. Read the comments; never merge on the status alone.
