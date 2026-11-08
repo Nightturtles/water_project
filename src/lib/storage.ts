@@ -1169,6 +1169,25 @@ export function getEffectiveAlkalinitySources(): string[] {
  * Prefer the dihydrate when both are enabled to preserve prior behavior.
  */
 function getEffectiveCalciumChlorideForm(selected: string[]): string | null {
+  if (selected.includes("calcium-chloride") && selected.includes("calcium-chloride-anhydrous")) {
+    // Both forms available. A form backed by an enabled single-mineral
+    // concentrate (DIY / brand) wins over a powder of the other form, matching
+    // the calculator's "concentrate beats powder" conflict rule. Without this,
+    // an anhydrous CaCl2 concentrate next to the default dihydrate starter kit
+    // was never dosed at all (its row didn't render).
+    const concentrateForms = new Set(
+      loadSelectedConcentrates()
+        .map(getConcentrateMineralId)
+        .filter((id): id is string => !!id),
+    );
+    if (
+      concentrateForms.has("calcium-chloride-anhydrous") &&
+      !concentrateForms.has("calcium-chloride")
+    ) {
+      return "calcium-chloride-anhydrous";
+    }
+    return "calcium-chloride";
+  }
   if (selected.includes("calcium-chloride")) return "calcium-chloride";
   if (selected.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
   return null;

@@ -18,7 +18,11 @@
 // matters because storage.ts (imported directly and via metrics) touches
 // localStorage at module-eval time.
 import { describe, test, expect, beforeEach } from "vitest";
-import { saveSelectedMinerals } from "../src/lib/storage";
+import {
+  saveSelectedMinerals,
+  saveSelectedConcentrates,
+  getEffectiveCalciumSources,
+} from "../src/lib/storage";
 import { MINERAL_DB } from "../src/lib/constants";
 import * as metrics from "../src/lib/metrics";
 
@@ -32,9 +36,39 @@ function resetState() {
   // return for an empty store keeps each test starting from the same
   // canonical baseline.
   saveSelectedMinerals(["calcium-chloride", "epsom-salt", "baking-soda", "potassium-bicarbonate"]);
+  // Same for the selected-concentrates cache, so a concentrate enabled in one
+  // test can't leak into the next.
+  saveSelectedConcentrates([]);
 }
 
 beforeEach(resetState);
+
+// ---------------------------------------------------------------------------
+// getEffectiveCalciumSources — which calcium-chloride form fills the slot
+// ---------------------------------------------------------------------------
+
+describe("getEffectiveCalciumSources: calcium-chloride form", () => {
+  test("dihydrate powder only → dihydrate", () => {
+    expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride"]);
+  });
+
+  test("dihydrate powder + anhydrous DIY concentrate → the concentrate's anhydrous form", () => {
+    // Previously the dihydrate always won, so the anhydrous concentrate the
+    // user enabled was never dosed (its calculator row didn't render).
+    saveSelectedConcentrates(["diy:calcium-chloride-anhydrous"]);
+    expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride-anhydrous"]);
+  });
+
+  test("both forms as powders (no concentrate) → dihydrate, as before", () => {
+    saveSelectedMinerals(["calcium-chloride", "calcium-chloride-anhydrous", "epsom-salt"]);
+    expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride"]);
+  });
+
+  test("concentrates in both forms → dihydrate, as before", () => {
+    saveSelectedConcentrates(["diy:calcium-chloride-anhydrous", "diy:calcium-chloride"]);
+    expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride"]);
+  });
+});
 
 // ---------------------------------------------------------------------------
 // pickBestCaMgSources

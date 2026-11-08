@@ -49,6 +49,12 @@ export type MineralGrams = Record<string, number>;
 
 type Severity = "danger" | "warn" | "info";
 
+// Atomic masses (g/mol) matching the fractions MINERAL_DB uses for NaHCO3 /
+// KHCO3. Used to split a bicarbonate target between the two buffer salts by
+// equivalents rather than by mass.
+const NA_ATOMIC_MASS = 22.99;
+const K_ATOMIC_MASS = 39.098;
+
 /**
  * Convert grams-per-liter of mineral salts into ion concentrations (mg/L).
  */
@@ -672,9 +678,16 @@ export function splitAlkalinityDelta(
   const deltaK = targetK != null ? Math.max(0, targetK - sourceK) : 0;
 
   if (deltaNa > 0 && deltaK > 0) {
-    const total = deltaNa + deltaK;
-    result["baking-soda"] = (deltaAlkAsCaCO3 * deltaNa) / total;
-    result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * deltaK) / total;
+    // Split by equivalents, not mass: each mmol of Na (from NaHCO3) or K (from
+    // KHCO3) carries exactly one mmol of HCO3, so the alkalinity share each
+    // buffer must supply is proportional to the Na:K *molar* ratio. Splitting
+    // by mg/L over-allocated to KHCO3 (K is ~1.7x heavier than Na), overshooting
+    // K and undershooting Na on every two-buffer recipe.
+    const naEq = deltaNa / NA_ATOMIC_MASS;
+    const kEq = deltaK / K_ATOMIC_MASS;
+    const totalEq = naEq + kEq;
+    result["baking-soda"] = (deltaAlkAsCaCO3 * naEq) / totalEq;
+    result["potassium-bicarbonate"] = (deltaAlkAsCaCO3 * kEq) / totalEq;
   } else if (deltaNa > 0) {
     result["baking-soda"] = deltaAlkAsCaCO3;
   } else {
@@ -733,7 +746,18 @@ export function deriveStockFormulaFromTarget(
   const tNa = num("sodium");
   const tSO4 = num("sulfate");
   const tCl = num("chloride");
-  const tHCO3 = num("bicarbonate");
+  // Alkalinity (mg/L as CaCO3) is the user-facing buffer field; bicarbonate is
+  // only trusted when it agrees with it. Spec-style targets (SCA, Rao, Hendon
+  // Espresso) store alkalinity with bicarbonate 0, and profiles saved from the
+  // calculator can carry a stale hidden bicarbonate. Deriving HCO3 from
+  // alkalinity in those cases keeps the concentrate's buffer instead of
+  // silently dropping it.
+  const tBicarb = num("bicarbonate");
+  const tAlk = num("alkalinity");
+  const tHCO3 =
+    tAlk > 0 && Math.abs(Math.round(tBicarb * HCO3_TO_CACO3) - Math.round(tAlk)) > 1
+      ? tAlk * CACO3_TO_HCO3
+      : tBicarb;
 
   if (tCa + tMg + tK + tNa + tSO4 + tCl + tHCO3 === 0) {
     notes.push("Distilled / RO target: no minerals to derive.");
@@ -801,9 +825,11 @@ export function deriveStockFormulaFromTarget(
         hcoNa = directNaHCO3;
         hcoK = directKHCO3;
       } else {
-        const sumNaK = tNa + tK;
-        hcoNa = (tHCO3 * tNa) / sumNaK;
-        hcoK = (tHCO3 * tK) / sumNaK;
+        // Proportional fallback, by equivalents (see splitAlkalinityDelta).
+        const naEq = tNa / NA_ATOMIC_MASS;
+        const kEq = tK / K_ATOMIC_MASS;
+        hcoNa = (tHCO3 * naEq) / (naEq + kEq);
+        hcoK = (tHCO3 * kEq) / (naEq + kEq);
       }
     } else if (tNa > 0) {
       hcoNa = tHCO3;
@@ -1248,10 +1274,13 @@ function _solveLinear(M: number[][], c: number[]): number[] | null {
 /**
  * Non-negative least squares. Find x ≥ 0 minimizing ||A·x - b||².
  *
- * Active-set algorithm: start with all variables active, solve the
- * unconstrained problem on the active set, drop any variable whose solved
- * value is negative (clamp to 0), and re-solve. Converges in O(n) iterations
- * for the small problems the calculator generates.
+ * Lawson–Hanson active-set algorithm. Start with every variable held at 0,
+ * repeatedly free the variable whose gradient most reduces the error, solve
+ * the unconstrained problem over the free ("passive") set, and when that
+ * solution goes negative step back to the feasible boundary and re-bind the
+ * variables that hit 0. Unlike dropping every negative variable at once (the
+ * previous approach), this converges to the true constrained optimum: a
+ * variable bound at 0 can be freed again later if the gradient says it helps.
  *
  * @param A — m×n matrix
  * @param b — m-vector
@@ -1261,55 +1290,101 @@ export function solveNNLS(A: number[][], b: number[]): number[] {
   if (!A || A.length === 0) return [];
   const n = A[0]?.length || 0;
   if (n === 0) return [];
+  const m = A.length;
 
-  const active = new Set<number>();
-  for (let j = 0; j < n; j++) active.add(j);
+  const col = (j: number) => A.map((row) => (row && row[j]) || 0);
+  const residual = (x: number[]) =>
+    A.map((row, i) => {
+      let s = b[i] || 0;
+      for (let j = 0; j < n; j++) s -= ((row && row[j]) || 0) * (x[j] || 0);
+      return s;
+    });
+
+  // Scale-aware tolerance so the stopping test works for mg/L-sized inputs.
+  let normA = 0;
+  let normB = 0;
+  for (let i = 0; i < m; i++) {
+    normB += (b[i] || 0) * (b[i] || 0);
+    for (let j = 0; j < n; j++) {
+      const v = (A[i] && A[i]![j]) || 0;
+      normA += v * v;
+    }
+  }
+  const tol = 1e-10 * Math.max(1, Math.sqrt(normA) * Math.sqrt(normB));
+
+  // Least squares over the passive set; null when its columns are singular.
+  function solvePassive(passive: number[]): number[] | null {
+    const Ap: number[][] = A.map((row) => passive.map((j) => (row && row[j]) || 0));
+    const At = _matTranspose(Ap);
+    return _solveLinear(_matMul(At, Ap), _matVec(At, b));
+  }
 
   const x: number[] = new Array(n).fill(0);
+  const passive = new Set<number>();
+  // Variables whose column is (numerically) dependent on the passive set are
+  // never freed again; freeing them could only reproduce the same fit.
+  const blocked = new Set<number>();
 
   // Cap iterations defensively — convergence is fast for well-posed
   // problems but a malformed input shouldn't hang the UI.
-  for (let iter = 0; iter < 100; iter++) {
-    const activeIdx = [...active].sort((a, b) => a - b);
-    if (activeIdx.length === 0) break;
-
-    // Build A_active: m × |active| by picking columns.
-    const A_active: number[][] = A.map((row) => activeIdx.map((j) => (row && row[j]) || 0));
-    const At = _matTranspose(A_active);
-    const AtA = _matMul(At, A_active);
-    const Atb = _matVec(At, b);
-    const solved = _solveLinear(AtA, Atb);
-    if (solved === null) {
-      // Singular normal equations — drop the last variable and retry.
-      const lastIdx = activeIdx[activeIdx.length - 1];
-      if (lastIdx === undefined) break;
-      active.delete(lastIdx);
-      x[lastIdx] = 0;
-      continue;
-    }
-
-    // Check for negative components in the solved active-set values.
-    let droppedAny = false;
-    for (let i = 0; i < activeIdx.length; i++) {
-      if ((solved[i] || 0) < 0) {
-        const idx = activeIdx[i];
-        if (idx === undefined) continue;
-        active.delete(idx);
-        x[idx] = 0;
-        droppedAny = true;
+  for (let outer = 0; outer < 3 * n + 30; outer++) {
+    const r = residual(x);
+    let bestJ = -1;
+    let bestW = tol;
+    for (let j = 0; j < n; j++) {
+      if (passive.has(j) || blocked.has(j)) continue;
+      const cj = col(j);
+      let w = 0;
+      for (let i = 0; i < m; i++) w += (cj[i] || 0) * (r[i] || 0);
+      if (w > bestW) {
+        bestW = w;
+        bestJ = j;
       }
     }
+    if (bestJ < 0) break; // KKT conditions hold: optimal.
+    passive.add(bestJ);
 
-    if (!droppedAny) {
-      for (let i = 0; i < activeIdx.length; i++) {
-        const idx = activeIdx[i];
-        if (idx === undefined) continue;
-        x[idx] = Math.max(0, solved[i] || 0);
+    for (let inner = 0; inner < 3 * n + 30; inner++) {
+      const idx = [...passive].sort((a, c) => a - c);
+      const z = solvePassive(idx);
+      if (z === null) {
+        // The newly freed column adds nothing independent. Re-bind it and
+        // stop considering it.
+        passive.delete(bestJ);
+        blocked.add(bestJ);
+        x[bestJ] = 0;
+        break;
       }
-      return x;
+      if (z.every((v) => v > 0)) {
+        idx.forEach((j, k) => {
+          x[j] = z[k] || 0;
+        });
+        break;
+      }
+      // Step from x toward z only as far as feasibility allows.
+      let alpha = 1;
+      idx.forEach((j, k) => {
+        const zj = z[k] || 0;
+        if (zj <= 0) {
+          const xj = x[j] || 0;
+          const denom = xj - zj;
+          if (denom > 0) alpha = Math.min(alpha, xj / denom);
+        }
+      });
+      idx.forEach((j, k) => {
+        const xj = x[j] || 0;
+        x[j] = xj + alpha * ((z[k] || 0) - xj);
+      });
+      idx.forEach((j) => {
+        if ((x[j] || 0) <= tol) {
+          x[j] = 0;
+          passive.delete(j);
+        }
+      });
+      if (passive.size === 0) break;
     }
   }
-  return x;
+  return x.map((v) => Math.max(0, v || 0));
 }
 
 /**
@@ -1388,10 +1463,26 @@ export function solveCalculatorDosing(
     mineralOrder.push(mid);
   }
 
+  // Weight each ion row. Ions the target actually specifies (> 0) drive the
+  // dose; ions the target leaves at 0 are almost always "unspecified" rather
+  // than "must be zero" (SCA / Rao / spec-style targets store K/Na/SO4/Cl as
+  // 0), so they get a small tie-break weight instead of acting as hard 0 mg/L
+  // targets. Weighting them fully made the solver shrink a concentrate's dose
+  // to dodge the chloride/sulfate it inevitably carries, under-dosing the
+  // calcium/magnesium the user asked for (an SCA concentrate prescribed at
+  // 4 mL/L solved to ~0.74). Residuals below stay unweighted.
+  const UNSPECIFIED_ION_WEIGHT = 0.01; // row scale; squared weight 1e-4
+  const rowScale: number[] = ION_FIELDS.map((ion) => {
+    const tgt = target && target[ion] != null ? Number(target[ion]) : 0;
+    return Number.isFinite(tgt) && tgt > 0 ? 1 : UNSPECIFIED_ION_WEIGHT;
+  });
+  const weightedA: number[][] = A.map((row, i) => row.map((v) => v * (rowScale[i] ?? 1)));
+  const weightedB: number[] = b.map((v, i) => v * (rowScale[i] ?? 1));
+
   // Skip the solve when there are no variables; downstream just sees zeros.
   let x: number[] = [];
   if (concentrateOrder.length + mineralOrder.length > 0) {
-    x = solveNNLS(A, b);
+    x = solveNNLS(weightedA, weightedB);
   }
 
   // Snap pass: clean up two artifacts of NNLS on derived-from-target
