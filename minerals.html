@@ -657,7 +657,9 @@
       div.innerHTML =
         '<div class="stock-row-header">' +
           '<label class="concentrate-label">' +
-            '<input type="checkbox" value="' + concentrateId + '"' + (checked ? " checked" : "") + ">" +
+            // concentrateId embeds the stock key, which a library import takes
+            // verbatim from another user's recipe slug; escape it like label.
+            '<input type="checkbox" value="' + escapeHtml(concentrateId) + '"' + (checked ? " checked" : "") + ">" +
             '<div class="concentrate-info">' +
               '<span class="mineral-name">' + escapeHtml(label) + badgeHtml + "</span>" +
             "</div>" +
