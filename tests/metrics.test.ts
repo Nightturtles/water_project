@@ -826,6 +826,55 @@ describe("solveCalculatorDosing", () => {
     expect(result.concentrateGramsPerL["stock:my-sca-water"]).toBe(4);
   });
 
+  test("an empty concentrate made for the recipe doesn't relax the weights for another one", () => {
+    // SCA leaves every counter-ion blank, so its own concentrate would relax
+    // them. An empty one (re-derived from an all-zero recipe) carries SCA's id
+    // but adds nothing, so Rao 2013's concentrate must be dosed exactly as with
+    // full weights.
+    const sca = {
+      calcium: 51,
+      magnesium: 17,
+      alkalinity: 40,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40, 0),
+    };
+    const rao2013 = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "magnesium-chloride", grams: 4 },
+        { mineralId: "calcium-chloride", grams: 4 },
+        { mineralId: "baking-soda", grams: 3.4 },
+      ],
+      createdFrom: "library:rao-2013",
+    };
+    const emptyOwn = { bottleMl: 200, doseGramsPerL: 4, minerals: [], createdFrom: "derived:sca" };
+    const fullWeights = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [{ id: "stock:rao-2013", spec: rao2013 }],
+      [],
+      { recipeSlug: "sca" },
+    );
+    const withEmptyOwn = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [
+        { id: "stock:sca", spec: emptyOwn },
+        { id: "stock:rao-2013", spec: rao2013 },
+      ],
+      [],
+      { recipeSlug: "sca" },
+    );
+    expect(withEmptyOwn.concentrateGramsPerL["stock:rao-2013"]).toBeCloseTo(
+      fullWeights.concentrateGramsPerL["stock:rao-2013"]!,
+      6,
+    );
+  });
+
   test("a concentrate made for another recipe keeps every ion at full weight", () => {
     // Rao 2013's library concentrate against Matt Perger, a recipe with no
     // calcium or chloride. Relaxing the zeros (as for a recipe's own

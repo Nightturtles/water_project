@@ -1423,6 +1423,13 @@ function isConcentrateMadeFor(
   return entry.id === "stock:" + slug;
 }
 
+// True when a concentrate's formula adds anything at its dose.
+function concentrateAddsMinerals(entry: { spec: StockConcentrateSpec }): boolean {
+  const spec = entry.spec;
+  if (!spec || !(Number(spec.doseGramsPerL) > 0) || !Array.isArray(spec.minerals)) return false;
+  return spec.minerals.some((mm) => !!mm && Number(mm.grams) > 0);
+}
+
 export function solveCalculatorDosing(
   sourceWater: IonMap | null | undefined,
   target:
@@ -1509,9 +1516,16 @@ export function solveCalculatorDosing(
   // unweighted.
   const UNSPECIFIED_ION_WEIGHT = 0.01; // row scale; squared weight 1e-4
   const recipeSlug = options && options.recipeSlug ? String(options.recipeSlug) : "";
+  // Only a concentrate that actually adds minerals counts: an empty one (say,
+  // re-derived from a recipe that was all zeros at the time) still carries the
+  // recipe's id but contributes nothing, and must not relax the weights for
+  // whatever else is being dosed.
   const madeForRecipe =
     entries.length === 0 ||
-    (recipeSlug !== "" && entries.some((e) => !!e && isConcentrateMadeFor(e, recipeSlug)));
+    (recipeSlug !== "" &&
+      entries.some(
+        (e) => !!e && isConcentrateMadeFor(e, recipeSlug) && concentrateAddsMinerals(e),
+      ));
   const targetOf = (ion: IonName): number => {
     const v = target && target[ion] != null ? Number(target[ion]) : 0;
     return Number.isFinite(v) ? v : 0;
