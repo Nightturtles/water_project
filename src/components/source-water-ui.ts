@@ -58,6 +58,7 @@ export interface InitSourceWaterOptions {
 export interface SourceWaterSection {
   getSourceWater: () => IonMap;
   getActivePreset: () => string;
+  refreshFromStorage: () => boolean;
 }
 
 /**
@@ -490,12 +491,65 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
   }
   activateSourcePreset(activeSourcePreset);
 
+  // Re-read the stored source water / preset into the section after a cloud
+  // pull (another device's change), without saving anything. Before this the
+  // inputs kept their pre-pull values, and the next keystroke's debounced
+  // save wrote every stale ion back over the newer stored ones. Skipped while
+  // the user is typing in one of the source fields. Returns true if anything
+  // on screen changed.
+  // Only touches the DOM when the stored data actually differs from what's
+  // shown, so a save's own echo leaves an in-progress preset edit (and its
+  // "Editing: ..." save bar) alone.
+  function presetListSignature(presets: Record<string, { label?: string }>): string {
+    return JSON.stringify(
+      Object.keys(presets).map(function (k) {
+        return [k, presets[k] ? presets[k]!.label : ""];
+      }),
+    );
+  }
+  // The buttons rendered during initialization above.
+  let renderedPresetListSignature = presetListSignature(getAllPresets());
+  function refreshFromStorage(): boolean {
+    const active = document.activeElement as HTMLElement | null;
+    if (active && typeof active.id === "string" && active.id.indexOf("src-") === 0) return false;
+    const presets = getAllPresets();
+    const storedPreset = loadSourcePresetName();
+    const stored = loadSourceWater();
+    const listChanged = presetListSignature(presets) !== renderedPresetListSignature;
+    const presetChanged = storedPreset !== activeSourcePreset && !!presets[storedPreset];
+    const valuesChanged = ION_FIELDS.some(function (ion) {
+      const input = document.getElementById("src-" + ion) as HTMLInputElement | null;
+      return !!input && (parseFloat(input.value) || 0) !== (Number(stored[ion]) || 0);
+    });
+    if (!listChanged && !presetChanged && !valuesChanged) return false;
+    if (listChanged) {
+      renderSourcePresetButtons();
+      renderedPresetListSignature = presetListSignature(presets);
+    }
+    if (presetChanged) activeSourcePreset = storedPreset;
+    if (listChanged || presetChanged) {
+      highlightSourcePreset(activeSourcePreset);
+      applySourcePresetsCollapsed();
+    }
+    if (valuesChanged) {
+      ION_FIELDS.forEach(function (ion) {
+        const input = document.getElementById("src-" + ion) as HTMLInputElement | null;
+        if (input) input.value = String(stored[ion] || 0);
+      });
+    }
+    updateSourceAlkalinityFromBicarbonate();
+    renderSourceReadonlyTags();
+    onActivated(activeSourcePreset);
+    return true;
+  }
+
   // --- Public API ---
   return {
     getSourceWater: getSourceWater,
     getActivePreset: function () {
       return activeSourcePreset;
     },
+    refreshFromStorage: refreshFromStorage,
   };
 }
 

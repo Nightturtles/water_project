@@ -1312,12 +1312,16 @@ export function getAllTargetPresets(): Record<string, TargetProfile> {
   // 2. Supabase library — overrides shim at the same slug with canonical DB
   //    values. Canonical rows (userId == null) pass only if is_starter OR the
   //    user explicitly added the slug via library.html. User-published rows
-  //    (userId != null) bypass the starter filter and flow through as before
-  //    — the starter/added gating is canonical-row-only.
+  //    (userId != null) never enter the rail from here: saving one copies it
+  //    into the user's custom profiles (tier 3), and the user's own published
+  //    recipes are already there. Letting them through put every stranger's
+  //    public recipe into every user's rail (undoing the 8-recipe starter
+  //    rail) and let a user-published row shadow a canonical slug.
   for (const row of library) {
     if (!row || !row.slug) continue;
+    if (row.userId != null) continue;
     if (tombstoned.has(row.slug)) continue;
-    if (row.userId == null && !row.isStarter && !added.has(row.slug)) continue;
+    if (!row.isStarter && !added.has(row.slug)) continue;
     result[row.slug] = {
       label: row.label,
       brewMethod: row.brewMethod,

@@ -102,6 +102,45 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     expect(result["sca"]!.calcium).toBe(999);
   });
 
+  test("user-published library rows never enter the rail (and can't shadow a canonical slug)", () => {
+    fakeLibraryRows = [
+      {
+        slug: "someone-elses-recipe",
+        label: "Someone else's recipe",
+        brewMethod: "filter",
+        calcium: 30,
+        magnesium: 10,
+        alkalinity: 20,
+        userId: "other-user",
+      },
+      {
+        // A stranger reusing a canonical slug must not replace the canonical row.
+        slug: "sca",
+        label: "Hijacked SCA",
+        brewMethod: "filter",
+        calcium: 1,
+        magnesium: 1,
+        alkalinity: 1,
+        userId: "attacker",
+      },
+      {
+        slug: "sca",
+        label: "SCA Standard",
+        brewMethod: "filter",
+        calcium: 51,
+        magnesium: 17,
+        alkalinity: 40,
+        userId: null,
+        isStarter: true,
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const result = getAllTargetPresets();
+    expect(result["someone-elses-recipe"]).toBeUndefined();
+    expect(result["sca"]!.label).toBe("SCA Standard");
+    expect(result["sca"]!.calcium).toBe(51);
+  });
+
   test("custom row overrides library at the same slug", () => {
     fakeLibraryRows = [
       {

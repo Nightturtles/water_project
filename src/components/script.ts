@@ -1831,6 +1831,25 @@ function main(): void {
   }
   // Cross-device sync: re-render when sync.js Realtime pull writes new data.
   window.addEventListener("cw:cloud-data-changed", refreshPresetRail);
+  // A pull can also change the source water, volume, and enabled minerals /
+  // concentrates this page rendered from. Re-read them (nothing is saved) so
+  // the results reflect the account and the next edit doesn't write stale
+  // values back over another device's change. Fields the user is typing in
+  // are left alone.
+  window.addEventListener("cw:cloud-data-changed", function () {
+    sourceSection.refreshFromStorage();
+    const active = document.activeElement;
+    if (active !== volumeInput && active !== volumeUnit) {
+      const stored = loadVolumePreference("calculator", {
+        value: volumeInput.value,
+        unit: volumeUnit.value,
+      });
+      volumeInput.value = stored.value;
+      volumeUnit.value = stored.unit;
+    }
+    renderResultItems();
+    calculate();
+  });
 
   // --- Multi-tab sync: refresh results when mineral/concentrate selection changes in another tab ---
   // Include cw_stock_concentrate_specs: the calculator reads concentrate specs

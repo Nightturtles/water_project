@@ -461,6 +461,70 @@ describe("pickFeaturedFromFiltered", () => {
   test("non-array filtered → null", () => {
     expect(pickFeaturedFromFiltered(null, "filter")).toBeNull();
   });
+
+  test("a newer user-published row reusing the featured slug can't take the hero", () => {
+    // Rows arrive created_at DESC, so the attacker's copy comes first.
+    const rows = [
+      { slug: "cafelytic-filter", label: "Hijack", userId: "attacker" },
+      { slug: "cafelytic-filter", label: "Cafelytic Filter", userId: null },
+    ];
+    expect(pickFeaturedFromFiltered(rows, "filter")!.label).toBe("Cafelytic Filter");
+    expect(pickFeaturedFromFiltered([rows[0]!], "filter")).toBeNull();
+  });
+});
+
+describe("partitionByCategory: curated trays are canonical-only", () => {
+  test("a user-published row claiming tray 'original' lands in classic", () => {
+    const result = partitionByCategory([
+      { slug: "x", label: "Spoof", category: "original", userId: "someone" },
+      { slug: "cafelytic-filter", label: "Cafelytic Filter", category: "original", userId: null },
+    ]);
+    expect(result.original!.map((r) => r.slug)).toEqual(["cafelytic-filter"]);
+    expect(result.classic!.map((r) => r.slug)).toEqual(["x"]);
+  });
+});
+
+describe("fetchPublicRecipes: canonical rows can't be crowded out", () => {
+  test("fetches canonical and community rows separately and merges newest-first", async () => {
+    const calls: Array<{ filters: string[] }> = [];
+    function query(rows: unknown[]) {
+      const call = { filters: [] as string[] };
+      calls.push(call);
+      const builder: any = {
+        select: () => builder,
+        eq: (c: string, v: unknown) => (call.filters.push(`eq:${c}=${v}`), builder),
+        is: (c: string, v: unknown) => (call.filters.push(`is:${c}=${v}`), builder),
+        not: (c: string, op: string, v: unknown) => (
+          call.filters.push(`not:${c} ${op} ${v}`),
+          builder
+        ),
+        order: () => builder,
+        range: (a: number, b: number) => (call.filters.push(`range:${a}-${b}`), builder),
+        then: (resolve: (v: unknown) => void) => resolve({ data: rows, error: null }),
+      };
+      return builder;
+    }
+    const canonical = [
+      { slug: "sca", label: "SCA", user_id: null, created_at: "2026-04-01T00:00:00Z" },
+    ];
+    const community = [
+      { slug: "mine", label: "Mine", user_id: "u1", created_at: "2099-01-01T00:00:00Z" },
+    ];
+    const queue = [canonical, community];
+    const g: any = globalThis;
+    const prev = g.window.supabaseClient;
+    g.window.supabaseClient = { from: () => query(queue.shift() || []) };
+    try {
+      const rows = await library.fetchPublicRecipes(true);
+      expect(rows.map((r) => r.slug)).toEqual(["mine", "sca"]);
+      expect(calls[0]!.filters).toContain("is:user_id=null");
+      expect(calls[1]!.filters).toContain("not:user_id is null");
+      expect(calls[1]!.filters.some((f) => f.startsWith("range:0-"))).toBe(true);
+    } finally {
+      g.window.supabaseClient = prev;
+      library.invalidatePublicRecipesCache();
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

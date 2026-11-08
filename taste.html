@@ -409,7 +409,10 @@
           document.getElementById("cur-alkalinity").value = profile.alkalinity;
           curBicarbonateInput.value = toStableBicarbonateFromAlkalinity(profile.alkalinity, values.bicarbonate || 0);
         }
-        saveTargetPresetName(presetKey);
+        // persist: false re-renders without saving: used when the rail
+        // refreshes for a cloud pull or library load, where re-saving the
+        // on-screen preset would push it back over the account's newer one.
+        if (options.persist !== false) saveTargetPresetName(presetKey);
         if (reset) resetSliders();
         recalculate();
       }
@@ -455,7 +458,7 @@
       const initialKey = (activePreset && activePreset !== "library" && realKeys.includes(activePreset))
         ? activePreset
         : (realKeys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
-      if (initialKey) activateTastePreset(initialKey, { resetSliders });
+      if (initialKey) activateTastePreset(initialKey, { resetSliders, persist: options.persist });
     }
 
     function renderTasteReadonlyTags() {
@@ -959,11 +962,18 @@
       // the user hasn't manually picked something else since render — i.e.
       // activeKey is still the fallback we landed on at init time.
       let preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      // Re-rendering for a cloud pull or library load must not re-save the
+      // on-screen preset: that pushed this page's (possibly stale) choice back
+      // over a preset changed on another device, and two open Taste pages
+      // kept overwriting each other. Only the URL-requested preset (an
+      // explicit navigation) is saved, as before.
+      let persist = false;
       if (pendingPresetFromUrl && merged[pendingPresetFromUrl]) {
         preserveKey = pendingPresetFromUrl;
         pendingPresetFromUrl = null;
+        persist = true;
       }
-      renderTastePresets(preserveKey, { resetSliders: false });
+      renderTastePresets(preserveKey, { resetSliders: false, persist });
     }
     if (typeof window.onLibraryDataLoaded === "function") {
       window.onLibraryDataLoaded(refreshTasteRail);
