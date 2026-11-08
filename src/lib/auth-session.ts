@@ -12,14 +12,12 @@ export function persistedSessionStorageKey(supabaseUrl: string): string {
   return `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`;
 }
 
-// Pull the user id out of the raw persisted-session JSON string. Returns null
-// for a missing, malformed, or user-less value. Handles the bare v2 session
-// shape ({ user: { id } }) and, defensively, a v1-style { currentSession }
-// wrapper. Never throws — any parse failure degrades to null (treated as
-// "not logged in", which falls back to the prior pre-auth behavior).
 // Read the `sub` (user id) claim from a JWT without verifying it. Only used to
-// compare an incoming callback token against the signed-in user; the token is
-// still validated server-side by auth-js before any session is adopted.
+// compare an incoming callback token against the signed-in user, so a match is
+// just a claim, never proof: on the web, auth-js checks the access token with
+// the server before adopting it; for a native deep link, the refresh token is
+// exchanged and its account checked first (verifyCallbackRefreshToken), and
+// only the pair that exchange returns is adopted.
 export function jwtSubject(token: string | null | undefined): string | null {
   if (!token) return null;
   const payload = token.split(".")[1];
@@ -91,6 +89,11 @@ export async function verifyCallbackRefreshToken(
   }
 }
 
+// Pull the user id out of the raw persisted-session JSON string. Returns null
+// for a missing, malformed, or user-less value. Handles the bare v2 session
+// shape ({ user: { id } }) and, defensively, a v1-style { currentSession }
+// wrapper. Never throws — any parse failure degrades to null (treated as
+// "not logged in", which falls back to the prior pre-auth behavior).
 export function extractUserIdFromPersistedSession(raw: string | null): string | null {
   if (!raw) return null;
   try {
