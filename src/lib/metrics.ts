@@ -30,6 +30,7 @@ import {
   getSourceWaterByPreset,
   loadSourcePresetName,
   loadBrewMethod,
+  loadSelectedMinerals,
   computeStockMineralGramsPerL,
 } from "./storage";
 import type { StockConcentrateSpec } from "./storage";
@@ -887,8 +888,18 @@ export function deriveStockFormulaFromTarget(
   // --- 3. Calcium (CaCl2 default; gypsum is impractical at concentrate strength) ---
   if (tCa > 0) {
     // Both calcium-chloride forms add the same Ca:Cl ratio, so only the gram
-    // weight differs. Use whichever form the user has (dihydrate by default).
-    const caForm = getEffectiveCalciumSource();
+    // weight differs. A Recipe Concentrate is mixed from powders, so use the
+    // form the user has as a powder (dihydrate when both are enabled). An
+    // enabled single-mineral concentrate of the other form fills the
+    // calculator's calcium slot, but it doesn't change what gets weighed
+    // here: following it switched the formula to anhydrous grams, about 25%
+    // light for someone weighing dihydrate.
+    const powders = loadSelectedMinerals();
+    const caForm = powders.includes("calcium-chloride")
+      ? "calcium-chloride"
+      : powders.includes("calcium-chloride-anhydrous")
+        ? "calcium-chloride-anhydrous"
+        : getEffectiveCalciumSource();
     // Trust calciumChlorideId only if it names a known CaCl2 form; otherwise
     // fall back to the user's effective source so a bad id can't silently
     // skip calcium addition for a non-zero target.
@@ -1399,6 +1410,19 @@ export function solveNNLS(A: number[][], b: number[]): number[] {
  * target − sourceWater per ion. Solver units are grams per liter of brew
  * water; multiply by volumeL outside to get displayed amounts.
  */
+// True when a Recipe Concentrate was made for the recipe `slug`: imported from
+// its library formula or derived from its targets (createdFrom), or saved
+// under the recipe's own slug.
+function isConcentrateMadeFor(
+  entry: { id: string; spec: StockConcentrateSpec },
+  slug: string,
+): boolean {
+  const from =
+    entry.spec && typeof entry.spec.createdFrom === "string" ? entry.spec.createdFrom : "";
+  if (from === "library:" + slug || from === "derived:" + slug) return true;
+  return entry.id === "stock:" + slug;
+}
+
 export function solveCalculatorDosing(
   sourceWater: IonMap | null | undefined,
   target:
@@ -1408,6 +1432,9 @@ export function solveCalculatorDosing(
     | undefined,
   concentrateEntries: Array<{ id: string; spec: StockConcentrateSpec }>,
   mineralIds: string[],
+  // recipeSlug: the recipe being dosed for (the calculator's active target),
+  // so the concentrate made for it can be recognised (see the row weights).
+  options?: { recipeSlug?: string | null },
 ): {
   concentrateGramsPerL: Record<string, number>;
   mineralGramsPerL: Record<string, number>;
@@ -1463,18 +1490,43 @@ export function solveCalculatorDosing(
     mineralOrder.push(mid);
   }
 
-  // Weight each ion row. Ions the target actually specifies (> 0) drive the
-  // dose; ions the target leaves at 0 are almost always "unspecified" rather
-  // than "must be zero" (SCA / Rao / spec-style targets store K/Na/SO4/Cl as
-  // 0), so they get a small tie-break weight instead of acting as hard 0 mg/L
-  // targets. Weighting them fully made the solver shrink a concentrate's dose
-  // to dodge the chloride/sulfate it inevitably carries, under-dosing the
-  // calcium/magnesium the user asked for (an SCA concentrate prescribed at
-  // 4 mL/L solved to ~0.74). Residuals below stay unweighted.
+  // Weight each ion row. Spec-style recipes (SCA, Rao, Hendon Espresso) give
+  // only calcium, magnesium and alkalinity and store every counter-ion as 0,
+  // yet no real water reaches them without some: chloride or sulfate comes
+  // with the calcium and magnesium, sodium or potassium with the alkalinity.
+  // Weighting those zeros fully made the solver shrink the concentrate built
+  // for the recipe to dodge the counter-ions it must carry (SCA's own
+  // concentrate, prescribed at 4 mL/L, solved to 0.74).
+  //
+  // So a counter-ion group the recipe leaves entirely blank gets a small
+  // tie-break weight, but only while the concentrate made for this recipe is
+  // in use, or when no concentrate is in the solve (single-salt minerals have
+  // to carry their counter-ion too). A concentrate made for another recipe
+  // keeps full weights, as before: relaxing them let it overshoot (up to
+  // ~4.5x its dose, with 100+ mg/L chloride) chasing the recipe's hardness and
+  // alkalinity. Zeros for calcium, magnesium and alkalinity always count, as
+  // does a counter-ion whose group the recipe does give. Residuals below stay
+  // unweighted.
   const UNSPECIFIED_ION_WEIGHT = 0.01; // row scale; squared weight 1e-4
+  const recipeSlug = options && options.recipeSlug ? String(options.recipeSlug) : "";
+  const madeForRecipe =
+    entries.length === 0 ||
+    (recipeSlug !== "" && entries.some((e) => !!e && isConcentrateMadeFor(e, recipeSlug)));
+  const targetOf = (ion: IonName): number => {
+    const v = target && target[ion] != null ? Number(target[ion]) : 0;
+    return Number.isFinite(v) ? v : 0;
+  };
+  const anionsBlank =
+    (targetOf("calcium") > 0 || targetOf("magnesium") > 0) &&
+    targetOf("sulfate") <= 0 &&
+    targetOf("chloride") <= 0;
+  const cationsBlank =
+    targetOf("bicarbonate") > 0 && targetOf("sodium") <= 0 && targetOf("potassium") <= 0;
   const rowScale: number[] = ION_FIELDS.map((ion) => {
-    const tgt = target && target[ion] != null ? Number(target[ion]) : 0;
-    return Number.isFinite(tgt) && tgt > 0 ? 1 : UNSPECIFIED_ION_WEIGHT;
+    if (!madeForRecipe || targetOf(ion) > 0) return 1;
+    if ((ion === "sulfate" || ion === "chloride") && anionsBlank) return UNSPECIFIED_ION_WEIGHT;
+    if ((ion === "sodium" || ion === "potassium") && cationsBlank) return UNSPECIFIED_ION_WEIGHT;
+    return 1;
   });
   const weightedA: number[][] = A.map((row, i) => row.map((v) => v * (rowScale[i] ?? 1)));
   const weightedB: number[] = b.map((v, i) => v * (rowScale[i] ?? 1));

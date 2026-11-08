@@ -790,11 +790,75 @@ describe("solveCalculatorDosing", () => {
       solverTarget,
       [{ id: "stock:sca", spec: { bottleMl: 200, doseGramsPerL: 4, minerals: derived.minerals } }],
       [],
+      { recipeSlug: "sca" },
     );
     expect(result.concentrateGramsPerL["stock:sca"]).toBe(4);
     expect(Math.abs(result.residualIons.calcium)).toBeLessThan(2);
     expect(Math.abs(result.residualIons.magnesium)).toBeLessThan(1);
     expect(Math.abs(result.residualIons.bicarbonate)).toBeLessThan(2);
+  });
+
+  test("a concentrate derived from the recipe is recognised by createdFrom, whatever it's named", () => {
+    const sca = {
+      calcium: 51,
+      magnesium: 17,
+      alkalinity: 40,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40, 0),
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(sca, { bottleMl: 200, doseGramsPerL: 4 });
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: derived.minerals,
+      createdFrom: "derived:sca",
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [{ id: "stock:my-sca-water", spec }],
+      [],
+      { recipeSlug: "sca" },
+    );
+    expect(result.concentrateGramsPerL["stock:my-sca-water"]).toBe(4);
+  });
+
+  test("a concentrate made for another recipe keeps every ion at full weight", () => {
+    // Rao 2013's library concentrate against Matt Perger, a recipe with no
+    // calcium or chloride. Relaxing the zeros (as for a recipe's own
+    // concentrate) dosed it at 4.00, giving ~22 mg/L calcium; full weights
+    // keep the conservative 1.53 the calculator has always shown.
+    const perger = {
+      calcium: 0,
+      magnesium: 19.7,
+      alkalinity: 40.5,
+      potassium: 0,
+      sodium: 18.6,
+      sulfate: 77.9,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40.5, 49.4),
+    };
+    const rao2013 = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "magnesium-chloride", grams: 4 },
+        { mineralId: "calcium-chloride", grams: 4 },
+        { mineralId: "baking-soda", grams: 3.4 },
+      ],
+      createdFrom: "library:rao-2013",
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      perger,
+      [{ id: "stock:rao-2013", spec: rao2013 }],
+      [],
+      { recipeSlug: "matt-perger" },
+    );
+    expect(result.concentrateGramsPerL["stock:rao-2013"]).toBeCloseTo(1.53, 2);
   });
 
   test("doses are never negative", () => {

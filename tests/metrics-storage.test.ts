@@ -70,6 +70,29 @@ describe("getEffectiveCalciumSources: calcium-chloride form", () => {
   });
 });
 
+// A Recipe Concentrate is mixed from powders, so the derived formula follows
+// the calcium-chloride powder the user has, even when an enabled concentrate
+// of the other form fills the calculator's calcium slot. Following the
+// concentrate gave anhydrous grams, ~25% light for someone weighing dihydrate.
+describe("deriveStockFormulaFromTarget: calcium-chloride form", () => {
+  const target = { calcium: 40, magnesium: 10, alkalinity: 30 };
+  const caIds = () =>
+    metrics
+      .deriveStockFormulaFromTarget(target)
+      .minerals.map((m) => m.mineralId)
+      .filter((id) => id.startsWith("calcium-chloride"));
+
+  test("dihydrate powder + anhydrous concentrate → dihydrate grams", () => {
+    saveSelectedConcentrates(["diy:calcium-chloride-anhydrous"]);
+    expect(caIds()).toEqual(["calcium-chloride"]);
+  });
+
+  test("anhydrous powder only → anhydrous grams", () => {
+    saveSelectedMinerals(["calcium-chloride-anhydrous", "epsom-salt", "baking-soda"]);
+    expect(caIds()).toEqual(["calcium-chloride-anhydrous"]);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // pickBestCaMgSources
 // ---------------------------------------------------------------------------

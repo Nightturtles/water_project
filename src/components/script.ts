@@ -1005,7 +1005,9 @@ function main(): void {
 
     // Stage 1: best-fit concentrate doses (snapped). No mineral variables — the
     // concentrate is the primary, minerals only top up the residual in Stage 2.
-    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, []);
+    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, [], {
+      recipeSlug: currentProfile,
+    });
 
     // Stage 2: residual after the concentrate contribution, gap-filled with
     // individually-enabled minerals.
