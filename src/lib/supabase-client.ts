@@ -9,7 +9,9 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   persistedSessionStorageKey,
   extractUserIdFromPersistedSession,
-  shouldAdoptCallbackSession,
+  decideCallbackSession,
+  verifyCallbackRefreshToken,
+  type CallbackDecision,
 } from "./auth-session";
 
 const SUPABASE_URL = "https://srlwgayrxzamxlodpsrq.supabase.co";
@@ -21,8 +23,9 @@ const SUPABASE_ANON_KEY = "sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq";
 // for cafelytic:// deep links), replacing whatever session exists. A crafted
 // link carrying another account's tokens would then silently move a signed-in
 // user into that account, and the first-login merge would push their local
-// recipes into it. Only adopt a callback when nobody is signed in, when it's
-// for the signed-in account, or when this app started an auth flow recently.
+// recipes into it. Only adopt a callback when nobody is signed in, when this
+// app started an auth flow recently, or when it's proven to be for the
+// signed-in account (decideCallbackSession, verifiedCallbackTokens).
 const AUTH_FLOW_PENDING_KEY = "cw_auth_flow_pending_at";
 
 function markAuthFlowPending(): void {
@@ -62,29 +65,70 @@ function readPersistedUserId(): string | null {
   }
 }
 
-// True when an auth callback carrying `accessToken` may replace the current
-// session (see shouldAdoptCallbackSession). Used for both the URL-hash path
-// below and native deep links (capacitor-bootstrap.ts).
-export function isAuthCallbackAllowed(accessToken: string | null): boolean {
-  const allowed = shouldAdoptCallbackSession({
+// How an auth callback carrying `accessToken` may replace the current session
+// (see decideCallbackSession). Used for both the URL-hash path below and
+// native deep links (capacitor-bootstrap.ts).
+export function authCallbackDecision(accessToken: string | null): CallbackDecision {
+  return decideCallbackSession({
     incomingAccessToken: accessToken,
     existingUserId: readPersistedUserId(),
     pendingFlowStartedAt: readAuthFlowPending(),
     now: Date.now(),
   });
-  if (allowed && accessToken) clearAuthFlowPending();
-  return allowed;
+}
+
+// A callback session was adopted: the auth flow this app started, if any, is
+// done, so a different-account callback needs a new flow again.
+export function noteAuthCallbackAdopted(): void {
+  clearAuthFlowPending();
+}
+
+// For a "verify" callback: prove the refresh token belongs to the account
+// signed in on this device. auth-js's setSession reads the access token
+// without checking its signature and, when that token looks expired, adopts
+// whatever account the refresh token belongs to; a crafted link could claim
+// this account in the access token and carry another account's refresh token.
+// So exchange the refresh token on a throwaway client (no storage, no auto
+// refresh) and return the new token pair only when it's this account's.
+// Refresh tokens are single-use: adopt the returned pair, not the original.
+// Null when the exchange fails or the account differs. Expired access tokens
+// in a legitimate link still work, since only the refresh token is used.
+export async function verifiedCallbackTokens(
+  refreshToken: string,
+): Promise<{ access_token: string; refresh_token: string } | null> {
+  return verifyCallbackRefreshToken(refreshToken, readPersistedUserId(), async function (token) {
+    const probe = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+        storageKey: "cw-auth-callback-probe",
+      },
+    });
+    const { data, error } = await probe.auth.refreshSession({ refresh_token: token });
+    if (error || !data || !data.session || !data.user) return null;
+    return {
+      userId: data.user.id,
+      accessToken: data.session.access_token,
+      refreshToken: data.session.refresh_token,
+    };
+  });
 }
 
 // auth-js's own test for "this URL is an implicit-grant callback", gated by
-// isAuthCallbackAllowed. A refused callback keeps the current session and the
-// foreign tokens are dropped from the address bar.
+// authCallbackDecision. On this path auth-js checks the access token with the
+// server (getUser) before adopting it, so a "verify" callback can proceed: a
+// forged token claiming this account fails there. A refused callback keeps
+// the current session and the foreign tokens are dropped from the address bar.
 function detectSessionInUrlGuarded(url: URL, params: { [parameter: string]: string }): boolean {
   const isImplicitCallback = Boolean(
     params.access_token || params.error || params.error_description || params.error_code,
   );
   if (!isImplicitCallback) return false;
-  if (isAuthCallbackAllowed(params.access_token || null)) return true;
+  if (authCallbackDecision(params.access_token || null) !== "refuse") {
+    if (params.access_token) noteAuthCallbackAdopted();
+    return true;
+  }
   try {
     history.replaceState(history.state, "", url.pathname + url.search);
   } catch (_) {
@@ -165,7 +209,7 @@ trySet("signInWithEmail", async function (email: string, password: string) {
 });
 
 // The flows below land back on this app with tokens in the URL (or a deep
-// link), so each one marks itself as started; isAuthCallbackAllowed then
+// link), so each one marks itself as started; authCallbackDecision then
 // accepts the callback even if some other account is signed in on this
 // device.
 trySet("signUpWithEmail", async function (email: string, password: string) {

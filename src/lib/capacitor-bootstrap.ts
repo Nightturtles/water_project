@@ -21,7 +21,11 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Share } from "@capacitor/share";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { SplashScreen } from "@capacitor/splash-screen";
-import { isAuthCallbackAllowed } from "./supabase-client";
+import {
+  authCallbackDecision,
+  noteAuthCallbackAdopted,
+  verifiedCallbackTokens,
+} from "./supabase-client";
 
 // Public privacy-policy URL, registered with both app stores. Hard-coded
 // rather than derived from window.location.origin because on native the
@@ -203,16 +207,23 @@ async function handleDeepLink(url: string): Promise<void> {
     if (accessToken && refreshToken) {
       // Any app or web page can open a cafelytic:// link, so refuse one that
       // would swap the signed-in account for a different one this app didn't
-      // start a sign-in for (see isAuthCallbackAllowed).
-      if (!isAuthCallbackAllowed(accessToken)) {
+      // start a sign-in for (see authCallbackDecision). A link claiming the
+      // signed-in account must prove it before setSession sees it: setSession
+      // trusts an unverified access token and, if it looks expired, adopts
+      // whatever account the refresh token belongs to.
+      const decision = authCallbackDecision(accessToken);
+      let tokens: { access_token: string; refresh_token: string } | null = {
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      };
+      if (decision === "verify") tokens = await verifiedCallbackTokens(refreshToken);
+      if (decision === "refuse" || !tokens) {
         console.warn("[capacitor-bootstrap] ignored a deep link for a different account");
         return;
       }
-      const { error } = await client.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken,
-      });
+      const { error } = await client.auth.setSession(tokens);
       if (error) throw error;
+      noteAuthCallbackAdopted();
       isRecovery = hashType === "recovery";
     } else if (code) {
       const { error } = await client.auth.exchangeCodeForSession(code);

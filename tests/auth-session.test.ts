@@ -10,7 +10,8 @@ import {
   persistedSessionStorageKey,
   extractUserIdFromPersistedSession,
   jwtSubject,
-  shouldAdoptCallbackSession,
+  decideCallbackSession,
+  verifyCallbackRefreshToken,
   AUTH_FLOW_PENDING_WINDOW_MS,
 } from "../src/lib/auth-session";
 
@@ -84,69 +85,103 @@ describe("jwtSubject", () => {
   });
 });
 
-describe("shouldAdoptCallbackSession", () => {
+describe("decideCallbackSession", () => {
   const now = 1_800_000_000_000;
   const base = { pendingFlowStartedAt: null, now };
 
   test("nobody signed in → adopt (ordinary sign-in / confirmation landing)", () => {
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         ...base,
         incomingAccessToken: fakeJwt("user-b"),
         existingUserId: null,
       }),
-    ).toBe(true);
+    ).toBe("adopt");
   });
 
-  test("callback for the signed-in account → adopt (e.g. a password-reset link)", () => {
+  test("callback claiming the signed-in account → verify before adopting (e.g. a password-reset link)", () => {
+    // The sub claim is read without checking the signature, so a crafted link
+    // can carry it; the caller must prove the session is this account's.
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         ...base,
         incomingAccessToken: fakeJwt("user-a"),
         existingUserId: "user-a",
       }),
-    ).toBe(true);
+    ).toBe("verify");
   });
 
   test("unsolicited callback for a different account → refuse", () => {
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         ...base,
         incomingAccessToken: fakeJwt("attacker"),
         existingUserId: "user-a",
       }),
-    ).toBe(false);
+    ).toBe("refuse");
   });
 
   test("different account after this app started an auth flow → adopt", () => {
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         incomingAccessToken: fakeJwt("user-b"),
         existingUserId: "user-a",
         pendingFlowStartedAt: now - 60_000,
         now,
       }),
-    ).toBe(true);
+    ).toBe("adopt");
   });
 
   test("a pending flow older than the window doesn't count", () => {
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         incomingAccessToken: fakeJwt("user-b"),
         existingUserId: "user-a",
         pendingFlowStartedAt: now - AUTH_FLOW_PENDING_WINDOW_MS - 1,
         now,
       }),
-    ).toBe(false);
+    ).toBe("refuse");
   });
 
   test("error-only callback (no token) → let auth-js handle it", () => {
     expect(
-      shouldAdoptCallbackSession({
+      decideCallbackSession({
         ...base,
         incomingAccessToken: null,
         existingUserId: "user-a",
       }),
-    ).toBe(true);
+    ).toBe("adopt");
+  });
+});
+
+describe("verifyCallbackRefreshToken", () => {
+  const pair = (userId: string | null) => async () => ({
+    userId,
+    accessToken: "new-access",
+    refreshToken: "new-refresh",
+  });
+
+  test("refresh token for the signed-in account → the new token pair", async () => {
+    expect(await verifyCallbackRefreshToken("rt", "user-a", pair("user-a"))).toEqual({
+      access_token: "new-access",
+      refresh_token: "new-refresh",
+    });
+  });
+
+  test("a link claiming this account but carrying another account's refresh token → null", async () => {
+    expect(await verifyCallbackRefreshToken("rt", "user-a", pair("attacker"))).toBeNull();
+  });
+
+  test("a failed or throwing exchange → null", async () => {
+    expect(await verifyCallbackRefreshToken("rt", "user-a", async () => null)).toBeNull();
+    expect(
+      await verifyCallbackRefreshToken("rt", "user-a", async () => {
+        throw new Error("network");
+      }),
+    ).toBeNull();
+  });
+
+  test("nobody signed in → null (nothing to verify against)", async () => {
+    expect(await verifyCallbackRefreshToken("rt", null, pair("user-a"))).toBeNull();
   });
 });

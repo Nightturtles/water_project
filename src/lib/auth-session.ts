@@ -39,26 +39,56 @@ export function jwtSubject(token: string | null | undefined): string | null {
 // links (Supabase's link expiry is at most a day) with margin.
 export const AUTH_FLOW_PENDING_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-// Decide whether an auth callback (tokens in the URL hash, or a native deep
-// link) may replace the current session. Accept it when nobody is signed in
-// (an ordinary sign-in / confirmation landing), when it's for the account
-// already signed in (e.g. a password-reset link), or when this app itself
-// started an auth flow recently. Otherwise it's an unsolicited link for some
-// other account: adopting it would silently move the signed-in user into that
-// account and their local data along with it.
-export function shouldAdoptCallbackSession(input: {
+// Decide how an auth callback (tokens in the URL hash, or a native deep link)
+// may replace the current session:
+//   "adopt"  nobody is signed in (an ordinary sign-in / confirmation landing),
+//            or this app itself started an auth flow recently;
+//   "verify" the token claims to be for the account already signed in (e.g. a
+//            password-reset link). The claim is read without checking the
+//            token's signature, so the session must be proven to be that
+//            account's before it's adopted (see the callers);
+//   "refuse" an unsolicited link for some other account: adopting it would
+//            silently move the signed-in user into that account and their
+//            local data along with it.
+export type CallbackDecision = "adopt" | "verify" | "refuse";
+
+export function decideCallbackSession(input: {
   incomingAccessToken: string | null;
   existingUserId: string | null;
   pendingFlowStartedAt: number | null;
   now: number;
-}): boolean {
-  if (!input.incomingAccessToken) return true; // error-only callback: nothing to adopt
-  if (!input.existingUserId) return true;
-  if (jwtSubject(input.incomingAccessToken) === input.existingUserId) return true;
+}): CallbackDecision {
+  if (!input.incomingAccessToken) return "adopt"; // error-only callback: nothing to adopt
+  if (!input.existingUserId) return "adopt";
   const started = input.pendingFlowStartedAt;
-  if (started == null || !Number.isFinite(started)) return false;
-  const age = input.now - started;
-  return age >= 0 && age <= AUTH_FLOW_PENDING_WINDOW_MS;
+  if (started != null && Number.isFinite(started)) {
+    const age = input.now - started;
+    if (age >= 0 && age <= AUTH_FLOW_PENDING_WINDOW_MS) return "adopt";
+  }
+  if (jwtSubject(input.incomingAccessToken) === input.existingUserId) return "verify";
+  return "refuse";
+}
+
+// For a "verify" callback: exchange its refresh token (via `refresh`, which
+// must not touch this device's session) and return the new token pair only if
+// it belongs to the account signed in on this device. Null when nobody is
+// signed in, the exchange fails, or the account differs. Refresh tokens are
+// single-use, so the caller adopts the returned pair, not the original.
+export async function verifyCallbackRefreshToken(
+  refreshToken: string,
+  signedInUserId: string | null,
+  refresh: (
+    token: string,
+  ) => Promise<{ userId: string | null; accessToken: string; refreshToken: string } | null>,
+): Promise<{ access_token: string; refresh_token: string } | null> {
+  if (!signedInUserId) return null;
+  try {
+    const result = await refresh(refreshToken);
+    if (!result || result.userId !== signedInUserId) return null;
+    return { access_token: result.accessToken, refresh_token: result.refreshToken };
+  } catch (_) {
+    return null;
+  }
 }
 
 export function extractUserIdFromPersistedSession(raw: string | null): string | null {
