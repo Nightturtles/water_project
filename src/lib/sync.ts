@@ -2,6 +2,7 @@ import { THEME_KEY } from "./constants";
 import {
   safeGetItem,
   safeSetItem,
+  safeRemoveItem,
   safeParse,
   loadSourceWater,
   loadSourcePresetName,
@@ -187,7 +188,9 @@ export function scheduleSyncToCloud(): void {
   syncTimer = setTimeout(function () {
     pushAllToCloud()
       .then(function () {
-        dispatchSaveStatus("saved");
+        // Refused by the first-login merge gate: still "saving" until the
+        // merge completes and pushes (handleFirstLoginMerge), not "saved".
+        if (!lastPushDeferredByMergeGate) dispatchSaveStatus("saved");
       })
       .catch(function (err) {
         reportError("sync.push", err);
@@ -203,7 +206,7 @@ export function syncNow(): Promise<void> {
   dispatchSaveStatus("saving");
   return pushAllToCloud()
     .then(function () {
-      dispatchSaveStatus("saved");
+      if (!lastPushDeferredByMergeGate) dispatchSaveStatus("saved");
     })
     .catch(function (err) {
       reportError("sync.push-immediate", err);
@@ -211,14 +214,19 @@ export function syncNow(): Promise<void> {
     });
 }
 
-// --- Get currently logged-in user ID, or null ---
+// --- Get currently logged-in user ID ---
+// Resolves the user id, or null when genuinely signed out (no session). A
+// lookup that FAILED (offline, a network blip, a server error) throws instead.
+// It used to collapse into null, which made every push a silent no-op that
+// still reported "saved", and let logout treat an unreachable account as
+// "nothing to flush" and wipe unsynced edits.
 async function getLoggedInUserId(): Promise<string | null> {
-  try {
-    const result = await window.supabaseClient.auth.getUser();
-    return result.data && result.data.user ? result.data.user.id : null;
-  } catch (_) {
-    return null;
-  }
+  const result = await window.supabaseClient.auth.getUser();
+  const user = result && result.data && result.data.user;
+  if (user) return user.id;
+  const error = result && result.error;
+  if (!error || (error as { name?: string }).name === "AuthSessionMissingError") return null;
+  throw error;
 }
 
 // --- Collect all cw_volume_* entries from localStorage into one object ---
@@ -312,6 +320,400 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
   return stableStringify(copy);
 }
 
+// --- Three-way merge of the single-row tables ---------------------------------
+//
+// user_settings / user_selections each hold one row per user that several
+// devices edit. Every pull and push merges three versions of a field:
+//   base  — what this device last synced (the LAST_PUSHED_* snapshot),
+//   local — what this device holds now,
+//   cloud — what the cloud row holds now.
+// A field this device hasn't touched since it last synced (local == base)
+// takes the cloud value; a field it has changed keeps the local value. Sets
+// and keyed dicts merge element-by-element, so two devices adding different
+// concentrates (or tombstones, or rail additions) both survive. Before this,
+// pulls overwrote unpushed local edits and pushes overwrote other devices'
+// changes wholesale.
+export type FieldKind = "scalar" | "set" | "dict";
+
+export const SETTINGS_FIELD_KINDS: Record<string, FieldKind> = {
+  theme: "scalar",
+  mineral_display_mode: "scalar",
+  brew_method: "scalar",
+  lotus_dropper_type: "scalar",
+  selected_minerals: "set",
+  selected_concentrates: "set",
+  diy_concentrate_specs: "dict",
+  stock_concentrate_specs: "dict",
+  lotus_concentrate_units: "dict",
+  volume_preferences: "dict",
+  creator_display_name: "scalar",
+  drafts: "dict",
+};
+
+export const SELECTIONS_FIELD_KINDS: Record<string, FieldKind> = {
+  source_preset: "scalar",
+  source_water: "scalar",
+  target_preset: "scalar",
+  deleted_source_presets: "set",
+  deleted_target_presets: "set",
+  added_target_presets: "set",
+};
+
+// "pull": a field with no base (first sync on this device) takes the cloud
+// value, as the fresh-device pull always has. "push": a field with no base
+// (the first-login merge's "keep local" / new-account push) keeps local data
+// but unions collections with the cloud, so choosing "Keep local data" can't
+// erase concentrates, tombstones or rail additions saved on other devices.
+export type MergeMode = "pull" | "push";
+
+function sameValue(a: unknown, b: unknown): boolean {
+  return (
+    stableStringify(a === undefined ? null : a) === stableStringify(b === undefined ? null : b)
+  );
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === "object" && !Array.isArray(v);
+}
+
+function mergeScalar(
+  base: unknown,
+  hasBase: boolean,
+  local: unknown,
+  cloud: unknown,
+  mode: MergeMode,
+): unknown {
+  if (cloud === undefined || cloud === null) return local;
+  if (!hasBase) {
+    if (mode === "pull") return cloud;
+    return local === undefined || local === null || local === "" ? cloud : local;
+  }
+  return sameValue(local, base) ? cloud : local;
+}
+
+function mergeSet(
+  base: unknown,
+  hasBase: boolean,
+  local: unknown,
+  cloud: unknown,
+  mode: MergeMode,
+): unknown[] {
+  const L = Array.isArray(local) ? local : [];
+  if (!Array.isArray(cloud)) return L.slice();
+  const C = cloud;
+  if (!hasBase && mode === "pull") return C.slice();
+  const B = hasBase && Array.isArray(base) ? base : [];
+  const out: unknown[] = [];
+  const has = (list: unknown[], x: unknown) => list.some((y) => sameValue(x, y));
+  // Kept if both sides have it, or one side added it since the last sync.
+  // Something one side removed since the last sync stays removed.
+  L.forEach(function (x) {
+    if ((has(C, x) || !has(B, x)) && !has(out, x)) out.push(x);
+  });
+  C.forEach(function (x) {
+    if (!has(L, x) && !has(B, x) && !has(out, x)) out.push(x);
+  });
+  return out;
+}
+
+function mergeDict(
+  base: unknown,
+  hasBase: boolean,
+  local: unknown,
+  cloud: unknown,
+  mode: MergeMode,
+): Record<string, unknown> {
+  const L = isPlainObject(local) ? local : {};
+  if (!isPlainObject(cloud)) return Object.assign({}, L);
+  const C = cloud;
+  if (!hasBase) {
+    // Union either way; on a shared key the first-sync pull takes the cloud's
+    // value and the keep-local push takes this device's.
+    return mode === "pull" ? Object.assign({}, L, C) : Object.assign({}, C, L);
+  }
+  const B = isPlainObject(base) ? base : {};
+  const out: Record<string, unknown> = {};
+  const keys = new Set([...Object.keys(L), ...Object.keys(C), ...Object.keys(B)]);
+  keys.forEach(function (k) {
+    const lk = Object.prototype.hasOwnProperty.call(L, k) ? L[k] : undefined;
+    const bk = Object.prototype.hasOwnProperty.call(B, k) ? B[k] : undefined;
+    const ck = Object.prototype.hasOwnProperty.call(C, k) ? C[k] : undefined;
+    const v = sameValue(lk, bk) ? ck : lk;
+    if (v !== undefined) out[k] = v;
+  });
+  return out;
+}
+
+// Merge every field listed in `kinds`. `base` is the parsed LAST_PUSHED_*
+// snapshot (null when this device has never synced the row).
+export function mergeRowFields(
+  kinds: Record<string, FieldKind>,
+  base: Record<string, unknown> | null,
+  local: Record<string, unknown>,
+  cloud: Record<string, unknown>,
+  mode: MergeMode,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  Object.keys(kinds).forEach(function (field) {
+    const hasBase = !!base && Object.prototype.hasOwnProperty.call(base, field);
+    const b = hasBase ? base![field] : undefined;
+    const l = local[field];
+    const c = cloud[field];
+    const kind = kinds[field];
+    const v =
+      kind === "set"
+        ? mergeSet(b, hasBase, l, c, mode)
+        : kind === "dict"
+          ? mergeDict(b, hasBase, l, c, mode)
+          : mergeScalar(b, hasBase, l, c, mode);
+    if (v !== undefined) out[field] = v;
+  });
+  return out;
+}
+
+function pickFields(
+  kinds: Record<string, FieldKind>,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  Object.keys(kinds).forEach(function (field) {
+    if (row[field] !== undefined) out[field] = row[field];
+  });
+  return out;
+}
+
+function parseSnapshot(raw: string | null): Record<string, unknown> | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return isPlainObject(parsed) ? parsed : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Read-merge-write one single-row table. Returns the payload actually written
+// (the new base) and whether it carries changes from other devices that this
+// device doesn't have yet.
+async function pushMergedRow(
+  userId: string,
+  table: "user_settings" | "user_selections",
+  kinds: Record<string, FieldKind>,
+  local: Record<string, unknown>,
+  baseSnapshot: string | null,
+  now: string,
+): Promise<{ error?: unknown; pushed?: Record<string, unknown>; foldsRemoteChanges?: boolean }> {
+  const read = await window.supabaseClient
+    .from(table)
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (read && read.error) return { error: read.error };
+  const cloud = read && isPlainObject(read.data) ? read.data : null;
+  const localFields = pickFields(kinds, local);
+  const merged = cloud
+    ? mergeRowFields(kinds, parseSnapshot(baseSnapshot), localFields, cloud, "push")
+    : localFields;
+  const payload = Object.assign({ user_id: userId }, merged, { updated_at: now });
+  const write = await window.supabaseClient.from(table).upsert(payload, { onConflict: "user_id" });
+  if (write && write.error) return { error: write.error };
+  return { pushed: payload, foldsRemoteChanges: !sameValue(localFields, merged) };
+}
+
+// The cloud row reduced to the payload shape buildSettingsPayload /
+// buildSelectionsPayload produce, for the LAST_PUSHED_* base snapshot.
+function cloudRowAsPayload(
+  kinds: Record<string, FieldKind>,
+  userId: string,
+  row: Record<string, unknown>,
+): Record<string, unknown> {
+  return Object.assign({ user_id: userId }, pickFields(kinds, row));
+}
+
+// The recipe-builder / target drafts bundled in user_settings.drafts, and the
+// storage key each one lives under.
+const DRAFT_KEYS: Array<{ field: string; key: string; kind: "object" | "dispense" }> = [
+  { field: "recipe_mineral_inputs", key: KEYS.RECIPE_MINERAL_INPUTS, kind: "object" },
+  { field: "recipe_concentrate_inputs", key: KEYS.RECIPE_CONCENTRATE_INPUTS, kind: "object" },
+  { field: "recipe_stock_grams", key: KEYS.RECIPE_STOCK_GRAMS, kind: "object" },
+  { field: "recipe_dispense_mode", key: KEYS.RECIPE_DISPENSE_MODE, kind: "dispense" },
+  { field: "target_draft_ions", key: KEYS.TARGET_DRAFT_IONS, kind: "object" },
+];
+
+// Write a (merged) user_settings row into localStorage.
+function applySettingsRow(settings: Record<string, any>): void {
+  if (settings.theme) safeSetItem(THEME_KEY, settings.theme);
+  if (settings.mineral_display_mode)
+    safeSetItem(KEYS.MINERAL_DISPLAY_MODE, settings.mineral_display_mode);
+  if (settings.brew_method) safeSetItem(KEYS.BREW_METHOD, settings.brew_method);
+  if (settings.lotus_dropper_type)
+    safeSetItem(KEYS.LOTUS_DROPPER_TYPE, settings.lotus_dropper_type);
+  if (settings.selected_minerals)
+    safeSetItem(KEYS.SELECTED_MINERALS, JSON.stringify(settings.selected_minerals));
+  if (settings.selected_concentrates)
+    safeSetItem(KEYS.SELECTED_CONCENTRATES, JSON.stringify(settings.selected_concentrates));
+  if (settings.diy_concentrate_specs)
+    safeSetItem(KEYS.DIY_CONCENTRATE_SPECS, JSON.stringify(settings.diy_concentrate_specs));
+  if (settings.stock_concentrate_specs)
+    safeSetItem(KEYS.STOCK_CONCENTRATE_SPECS, JSON.stringify(settings.stock_concentrate_specs));
+  if (settings.lotus_concentrate_units)
+    safeSetItem(KEYS.LOTUS_CONCENTRATE_UNITS, JSON.stringify(settings.lotus_concentrate_units));
+  if (settings.volume_preferences && typeof settings.volume_preferences === "object") {
+    Object.entries(settings.volume_preferences).forEach(function (entry) {
+      safeSetItem(VOLUME_PREFIX + entry[0], JSON.stringify(entry[1]));
+    });
+  }
+  if (settings.creator_display_name)
+    safeSetItem(KEYS.CREATOR_DISPLAY_NAME, settings.creator_display_name);
+  // Drafts mirror the merged set exactly: a draft another device cleared (and
+  // this device hadn't touched) is cleared here too. A missing drafts blob
+  // leaves local drafts alone.
+  if (isPlainObject(settings.drafts)) {
+    const drafts = settings.drafts;
+    DRAFT_KEYS.forEach(function (d) {
+      const v = drafts[d.field];
+      if (d.kind === "dispense") {
+        if (v === "manual" || v === "stock") safeSetItem(d.key, v);
+        else safeRemoveItem(d.key);
+      } else if (v && typeof v === "object") {
+        safeSetItem(d.key, JSON.stringify(v));
+      } else {
+        safeRemoveItem(d.key);
+      }
+    });
+  }
+}
+
+// Write a (merged) user_selections row into localStorage.
+function applySelectionsRow(selections: Record<string, any>): void {
+  if (selections.source_preset) safeSetItem(KEYS.SOURCE_PRESET, selections.source_preset);
+  if (selections.source_water)
+    safeSetItem(KEYS.SOURCE_WATER, JSON.stringify(selections.source_water));
+  if (selections.target_preset) safeSetItem(KEYS.TARGET_PRESET, selections.target_preset);
+  if (selections.deleted_source_presets)
+    safeSetItem(KEYS.DELETED_PRESETS, JSON.stringify(selections.deleted_source_presets));
+  if (selections.deleted_target_presets)
+    safeSetItem(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(selections.deleted_target_presets));
+  if (selections.added_target_presets)
+    safeSetItem(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(selections.added_target_presets));
+}
+
+// Merge the cloud's custom-profile rows with this device's profile dict.
+// `base` holds the per-slug snapshot this device last synced. Returns the
+// merged dict and the new per-slug base: the cloud's version of every cloud
+// slug (so a profile kept locally stays dirty until pushed), and nothing for
+// local-only profiles that never reached the cloud.
+export function mergeProfileRows<P>(
+  cloudRows: any[],
+  local: Record<string, P>,
+  tombstoned: string[],
+  base: Record<string, string>,
+  toProfile: (row: any) => P,
+  toSnapshot: (slug: string, profile: P) => string,
+): { profiles: Record<string, P>; snapshots: Record<string, string> } {
+  const tomb = new Set(tombstoned);
+  const profiles: Record<string, P> = {};
+  const snapshots: Record<string, string> = {};
+  const cloudSlugs = new Set<string>();
+  cloudRows.forEach(function (row) {
+    if (!row || typeof row.slug !== "string") return;
+    const slug = row.slug;
+    if (tomb.has(slug)) return;
+    cloudSlugs.add(slug);
+    const cloudProfile = toProfile(row);
+    const cloudSnap = toSnapshot(slug, cloudProfile);
+    snapshots[slug] = cloudSnap;
+    const localProfile = Object.prototype.hasOwnProperty.call(local, slug)
+      ? local[slug]
+      : undefined;
+    if (localProfile !== undefined) {
+      const localSnap = toSnapshot(slug, localProfile);
+      // Local changed since the last sync and differs from the cloud: keep
+      // it (an unpushed edit; on a true conflict this device's newer edit
+      // wins and is pushed next).
+      if (localSnap !== base[slug] && localSnap !== cloudSnap) {
+        profiles[slug] = localProfile;
+        return;
+      }
+    }
+    profiles[slug] = cloudProfile;
+  });
+  Object.keys(local).forEach(function (slug) {
+    if (cloudSlugs.has(slug) || tomb.has(slug)) return;
+    // Never synced: an unpushed creation, keep it. Synced before and now gone
+    // from the cloud: deleted on another device, drop it.
+    if (base[slug] === undefined) profiles[slug] = local[slug]!;
+  });
+  return { profiles, snapshots };
+}
+
+// Drop confirmed-delete entries for slugs that are no longer tombstoned.
+function pruneConfirmedDeletes(key: string, tombstoned: string[]): void {
+  const confirmed: unknown = safeParse(safeGetItem(key), null);
+  if (!Array.isArray(confirmed)) return;
+  const tomb = new Set(tombstoned);
+  const kept = confirmed.filter(function (s) {
+    return typeof s === "string" && tomb.has(s);
+  });
+  if (kept.length !== confirmed.length) safeSetItem(key, JSON.stringify(kept));
+}
+
+// True when this device holds changes the cloud doesn't have yet: a settings
+// or selections field, a custom profile, or a tombstone whose DELETE hasn't
+// been confirmed. Mirrors the dirty checks pushAllToCloud makes. False before
+// the first-login merge (nothing can be pushed yet) and when signed out.
+export function hasUnpushedChanges(): boolean {
+  const userId = safeGetItem(KEYS.SYNCED_USER_ID);
+  if (!userId) return false;
+  if (
+    snapshotForCompare(buildSettingsPayload(userId, "")) !== safeGetItem(LAST_PUSHED_SETTINGS_KEY)
+  )
+    return true;
+  if (
+    snapshotForCompare(buildSelectionsPayload(userId, "")) !==
+    safeGetItem(LAST_PUSHED_SELECTIONS_KEY)
+  )
+    return true;
+  const profileTables: Array<{
+    profiles: Record<string, unknown>;
+    tombstones: string[];
+    snapshotsKey: string;
+    confirmedKey: string;
+    build: (slug: string, p: any) => unknown;
+  }> = [
+    {
+      profiles: loadCustomProfiles(),
+      tombstones: loadDeletedPresets(),
+      snapshotsKey: LAST_PUSHED_SOURCES_KEY,
+      confirmedKey: KEYS.CONFIRMED_DELETED_SOURCE_PROFILES,
+      build: function (slug, p) {
+        return buildSourceRow(userId, slug, p);
+      },
+    },
+    {
+      profiles: loadCustomTargetProfiles(),
+      tombstones: loadDeletedTargetPresets(),
+      snapshotsKey: LAST_PUSHED_TARGETS_KEY,
+      confirmedKey: KEYS.CONFIRMED_DELETED_TARGET_PROFILES,
+      build: function (slug, p) {
+        return buildTargetRow(userId, slug, p);
+      },
+    },
+  ];
+  return profileTables.some(function (t) {
+    const snaps: Record<string, string> = safeParse(safeGetItem(t.snapshotsKey), null) || {};
+    const tomb = new Set(t.tombstones);
+    const profileDirty = Object.keys(t.profiles).some(function (slug) {
+      return !tomb.has(slug) && snaps[slug] !== stableStringify(t.build(slug, t.profiles[slug]));
+    });
+    if (profileDirty) return true;
+    const confirmed = new Set<string>(safeParse(safeGetItem(t.confirmedKey), []));
+    return t.tombstones.some(function (s) {
+      return !confirmed.has(s);
+    });
+  });
+}
+
 // --- Push all localStorage data to Supabase ---
 //
 // Merge gate: refuses to push until this device has completed
@@ -329,11 +731,57 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // mergeUserId binds the merge's push to the user the merge started for: if
 // the session switched accounts meanwhile, reject rather than push this
 // device's (by then cleared) local state over another account's cloud row.
-export async function pushAllToCloud(options?: {
+//
+// Pushes are serialized (pushQueue): a second push starts only after the
+// previous one settles, so logout's flush can await an in-flight push and two
+// pushes can't interleave their read-merge-write of the same row.
+let pushQueue: Promise<unknown> = Promise.resolve();
+// Set when the most recent push was refused by the merge gate, so the save
+// indicator doesn't claim "saved"; mergeGateRefusedPush stays set until the
+// merge completes and pushes the held-back changes.
+let lastPushDeferredByMergeGate = false;
+let mergeGateRefusedPush = false;
+
+// Clear this device's user content when it was last merged for a different
+// account than `userId` (an account switch without a sign-out), so that
+// account's data is never pushed into or mixed with the new one.
+function clearLocalDataIfAccountChanged(userId: string): void {
+  const syncedUserId = safeGetItem(KEYS.SYNCED_USER_ID);
+  if (syncedUserId && syncedUserId !== userId) clearLocalUserContent();
+}
+
+export function pushAllToCloud(options?: {
   allowBeforeMerge?: boolean;
   mergeUserId?: string;
 }): Promise<void> {
-  const userId = await getLoggedInUserId();
+  const run = function () {
+    return pushAllToCloudNow(options);
+  };
+  const next = pushQueue.then(run, run);
+  pushQueue = next.then(
+    function () {},
+    function () {},
+  );
+  return next;
+}
+
+// Resolve the signed-in user for a push/pull, wrapping a failed lookup in an
+// error callers can recognise (the underlying error is kept as `cause`, so
+// reportError still classifies an offline blip as transient).
+async function lookupUserIdForSync(): Promise<string | null> {
+  try {
+    return await getLoggedInUserId();
+  } catch (err) {
+    throw new Error("[sync] could not resolve the signed-in user", { cause: err });
+  }
+}
+
+async function pushAllToCloudNow(options?: {
+  allowBeforeMerge?: boolean;
+  mergeUserId?: string;
+}): Promise<void> {
+  lastPushDeferredByMergeGate = false;
+  const userId = await lookupUserIdForSync();
   if (!userId) {
     // The merge's own push (allowBeforeMerge) must not "succeed" without
     // pushing: handleFirstLoginMerge would then mark the device merged, and a
@@ -349,10 +797,15 @@ export async function pushAllToCloud(options?: {
     throw new Error("[sync] merge push aborted: the signed-in user changed");
   }
   if (!(options && options.allowBeforeMerge) && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
+    // Refused until the first-login merge completes; the merge pushes
+    // afterwards (see handleFirstLoginMerge). Not a "saved".
+    lastPushDeferredByMergeGate = true;
+    mergeGateRefusedPush = true;
     return;
   }
 
   const now = new Date().toISOString();
+  const seqAtStart = localWriteSeq;
 
   const settingsPayload = buildSettingsPayload(userId, now);
   const selectionsPayload = buildSelectionsPayload(userId, now);
@@ -370,45 +823,69 @@ export async function pushAllToCloud(options?: {
   const settingsChanged = settingsSnapshot !== lastSettingsSnapshot;
   const selectionsChanged = selectionsSnapshot !== lastSelectionsSnapshot;
 
-  const upserts: Array<{ table: string; promise: any; snapshot: string; key: string }> = [];
+  // Each row is pushed as read-merge-write: fetch the cloud row, three-way
+  // merge it with this device's state (base = what this device last synced),
+  // then upsert the merge. A blind whole-row upsert let a device with one
+  // stale pending change overwrite fields other devices had since changed
+  // (concentrate specs, the curated rail, tombstones, the creator name).
+  const rows: Array<{
+    table: "user_settings" | "user_selections";
+    kinds: Record<string, FieldKind>;
+    local: Record<string, unknown>;
+    baseSnapshot: string | null;
+    key: string;
+  }> = [];
   if (settingsChanged) {
-    upserts.push({
+    rows.push({
       table: "user_settings",
-      promise: window.supabaseClient
-        .from("user_settings")
-        .upsert(settingsPayload, { onConflict: "user_id" }),
-      snapshot: settingsSnapshot,
+      kinds: SETTINGS_FIELD_KINDS,
+      local: settingsPayload,
+      baseSnapshot: lastSettingsSnapshot,
       key: LAST_PUSHED_SETTINGS_KEY,
     });
   }
   if (selectionsChanged) {
-    upserts.push({
+    rows.push({
       table: "user_selections",
-      promise: window.supabaseClient
-        .from("user_selections")
-        .upsert(selectionsPayload, { onConflict: "user_id" }),
-      snapshot: selectionsSnapshot,
+      kinds: SELECTIONS_FIELD_KINDS,
+      local: selectionsPayload,
+      baseSnapshot: lastSelectionsSnapshot,
       key: LAST_PUSHED_SELECTIONS_KEY,
     });
   }
 
-  if (upserts.length > 0) {
+  if (rows.length > 0) {
     const results = await Promise.all(
-      upserts.map(function (u) {
-        return u.promise;
+      rows.map(function (r) {
+        return pushMergedRow(userId, r.table, r.kinds, r.local, r.baseSnapshot, now);
       }),
     );
     const pushErrors: unknown[] = [];
-    results.forEach(function (r, idx) {
-      const u = upserts[idx];
-      if (!u) return;
-      if (r.error) {
-        reportError("sync.upsert", r.error, { table: u.table });
-        pushErrors.push(r.error);
-      } else {
-        safeSetItem(u.key, u.snapshot);
+    let foldedRemoteChanges = false;
+    results.forEach(function (res, idx) {
+      const r = rows[idx];
+      if (!r) return;
+      if (res.error) {
+        reportError("sync.upsert", res.error, { table: r.table });
+        pushErrors.push(res.error);
+        return;
+      }
+      safeSetItem(r.key, snapshotForCompare(res.pushed!));
+      // Fold the other devices' changes the merge picked up into local
+      // storage, unless the user edited something while we were away on the
+      // network (then the push that edit scheduled will merge again).
+      if (res.foldsRemoteChanges && localWriteSeq === seqAtStart) {
+        if (r.table === "user_settings") applySettingsRow(res.pushed!);
+        else applySelectionsRow(res.pushed!);
+        foldedRemoteChanges = true;
       }
     });
+    if (foldedRemoteChanges) {
+      invalidateAllCaches();
+      if (typeof window.dispatchEvent === "function") {
+        window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+      }
+    }
     if (pushErrors.length > 0) {
       // Carry the underlying upsert errors so reportError can tell a transient
       // network blip (self-heals on the next push) apart from a real Postgrest
@@ -501,16 +978,34 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
   // SELECT+diff pattern, which could delete rows created on other devices
   // whenever local state was stale (e.g. a debounced push that ran without
   // a fresh pull).  Tombstones are the authoritative record of deletion.
+  //
+  // Each tombstone's DELETE is sent until it succeeds once, then recorded as
+  // confirmed and never replayed. Replaying every tombstone on every push let
+  // a device holding an old tombstone delete a recipe another device had
+  // since re-created under the same slug (re-saving lifts the tombstone on
+  // that device, but the stale device still had it and pushed before pulling).
+  const confirmedSources = new Set<string>(
+    safeParse(safeGetItem(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES), []),
+  );
+  const confirmedTargets = new Set<string>(
+    safeParse(safeGetItem(KEYS.CONFIRMED_DELETED_TARGET_PROFILES), []),
+  );
+  const sourceDeletes = deletedSources.filter(function (s) {
+    return !confirmedSources.has(s);
+  });
+  const targetDeletes = deletedTargets.filter(function (s) {
+    return !confirmedTargets.has(s);
+  });
   const deleteCalls: any[] = [];
-  const deletedSourcesPending = deletedSources.length > 0;
-  const deletedTargetsPending = deletedTargets.length > 0;
+  const deletedSourcesPending = sourceDeletes.length > 0;
+  const deletedTargetsPending = targetDeletes.length > 0;
   if (deletedSourcesPending) {
     deleteCalls.push(
       window.supabaseClient
         .from("source_profiles")
         .delete()
         .eq("user_id", userId)
-        .in("slug", deletedSources),
+        .in("slug", sourceDeletes),
     );
   }
   if (deletedTargetsPending) {
@@ -519,7 +1014,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
         .from("target_profiles")
         .delete()
         .eq("user_id", userId)
-        .in("slug", deletedTargets),
+        .in("slug", targetDeletes),
     );
   }
   if (deleteCalls.length > 0) {
@@ -532,8 +1027,9 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
         reportError("sync.tombstone-delete", srcDel.error);
         deleteErrors.push(srcDel.error);
       } else {
-        deletedSources.forEach(function (s) {
+        sourceDeletes.forEach(function (s) {
           delete lastSourceSnapshots[s];
+          confirmedSources.add(s);
         });
       }
     }
@@ -543,11 +1039,22 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
         reportError("sync.tombstone-delete", tgtDel.error);
         deleteErrors.push(tgtDel.error);
       } else {
-        deletedTargets.forEach(function (s) {
+        targetDeletes.forEach(function (s) {
           delete lastTargetSnapshots[s];
+          confirmedTargets.add(s);
         });
       }
     }
+    // Keep only slugs that are still tombstoned, so a slug that is re-saved
+    // and later deleted again has its DELETE sent again.
+    safeSetItem(
+      KEYS.CONFIRMED_DELETED_SOURCE_PROFILES,
+      JSON.stringify(deletedSources.filter((s) => confirmedSources.has(s))),
+    );
+    safeSetItem(
+      KEYS.CONFIRMED_DELETED_TARGET_PROFILES,
+      JSON.stringify(deletedTargets.filter((s) => confirmedTargets.has(s))),
+    );
     if (deleteErrors.length > 0) {
       throw new Error("[sync] failed to delete one or more tombstoned rows");
     }
@@ -632,6 +1139,7 @@ export async function pullFromCloud(options?: {
   skipIfLocalWriteDuringPull?: boolean;
   mergeUserId?: string;
   expectedUserId?: string;
+  markMergedFor?: string;
 }): Promise<boolean | "discarded"> {
   // Snapshot the local-write counter before any network round-trip. When the
   // realtime path sets skipIfLocalWriteDuringPull, a change here before we
@@ -643,7 +1151,7 @@ export async function pullFromCloud(options?: {
   const seqAtStart = localWriteSeq;
   const expectedUserId = options && options.expectedUserId;
   const mergeUserId = options && options.mergeUserId;
-  const userId = await getLoggedInUserId();
+  const userId = await lookupUserIdForSync();
   if (!userId) {
     if (mergeUserId) {
       throw new Error("[sync] merge pull aborted: could not resolve the signed-in user");
@@ -673,7 +1181,7 @@ export async function pullFromCloud(options?: {
 
   // The session may have switched accounts while we fetched; never apply a
   // merge user's rows to whatever the device holds for someone else.
-  if (mergeUserId && (await getLoggedInUserId()) !== mergeUserId) {
+  if (mergeUserId && (await lookupUserIdForSync()) !== mergeUserId) {
     throw new Error("[sync] merge pull aborted: the signed-in user changed mid-pull");
   }
 
@@ -710,167 +1218,141 @@ export async function pullFromCloud(options?: {
   const sourceRows = results[2] && results[2].data;
   const targetRows = results[3] && results[3].data;
 
-  // Apply user_settings
+  // Every pull MERGES the cloud into local state rather than overwriting it
+  // (see mergeRowFields / mergeProfileRows): anything this device changed
+  // since it last synced and hasn't pushed yet is kept, and the next push
+  // sends it. Local state is read here, after the network round trip, so it
+  // includes edits made while the fetch was in flight. Overwriting used to
+  // erase recipes and settings saved while offline or while a push failed,
+  // whenever a realtime / reconnect / sign-in pull ran before a successful
+  // push.
   if (settings) {
-    if (settings.theme) safeSetItem(THEME_KEY, settings.theme);
-    if (settings.mineral_display_mode)
-      safeSetItem(KEYS.MINERAL_DISPLAY_MODE, settings.mineral_display_mode);
-    if (settings.brew_method) safeSetItem(KEYS.BREW_METHOD, settings.brew_method);
-    if (settings.lotus_dropper_type)
-      safeSetItem(KEYS.LOTUS_DROPPER_TYPE, settings.lotus_dropper_type);
-    if (settings.selected_minerals)
-      safeSetItem(KEYS.SELECTED_MINERALS, JSON.stringify(settings.selected_minerals));
-    if (settings.selected_concentrates)
-      safeSetItem(KEYS.SELECTED_CONCENTRATES, JSON.stringify(settings.selected_concentrates));
-    if (settings.diy_concentrate_specs)
-      safeSetItem(KEYS.DIY_CONCENTRATE_SPECS, JSON.stringify(settings.diy_concentrate_specs));
-    if (settings.stock_concentrate_specs)
-      safeSetItem(KEYS.STOCK_CONCENTRATE_SPECS, JSON.stringify(settings.stock_concentrate_specs));
-    if (settings.lotus_concentrate_units)
-      safeSetItem(KEYS.LOTUS_CONCENTRATE_UNITS, JSON.stringify(settings.lotus_concentrate_units));
-    if (settings.volume_preferences && typeof settings.volume_preferences === "object") {
-      Object.entries(settings.volume_preferences).forEach(function (entry) {
-        safeSetItem(VOLUME_PREFIX + entry[0], JSON.stringify(entry[1]));
-      });
-    }
-    if (settings.creator_display_name)
-      safeSetItem(KEYS.CREATOR_DISPLAY_NAME, settings.creator_display_name);
-    // Drafts: restore each known key only if present. An empty/missing
-    // drafts blob shouldn't blow away the user's local in-progress edits —
-    // their local draft is the more recent write in that case.
-    if (settings.drafts && typeof settings.drafts === "object") {
-      const drafts = settings.drafts;
-      if (drafts.recipe_mineral_inputs && typeof drafts.recipe_mineral_inputs === "object")
-        safeSetItem(KEYS.RECIPE_MINERAL_INPUTS, JSON.stringify(drafts.recipe_mineral_inputs));
-      if (drafts.recipe_concentrate_inputs && typeof drafts.recipe_concentrate_inputs === "object")
-        safeSetItem(
-          KEYS.RECIPE_CONCENTRATE_INPUTS,
-          JSON.stringify(drafts.recipe_concentrate_inputs),
-        );
-      if (drafts.recipe_stock_grams && typeof drafts.recipe_stock_grams === "object")
-        safeSetItem(KEYS.RECIPE_STOCK_GRAMS, JSON.stringify(drafts.recipe_stock_grams));
-      if (drafts.recipe_dispense_mode === "manual" || drafts.recipe_dispense_mode === "stock")
-        safeSetItem(KEYS.RECIPE_DISPENSE_MODE, drafts.recipe_dispense_mode);
-      if (drafts.target_draft_ions && typeof drafts.target_draft_ions === "object")
-        safeSetItem(KEYS.TARGET_DRAFT_IONS, JSON.stringify(drafts.target_draft_ions));
-    }
+    const merged = mergeRowFields(
+      SETTINGS_FIELD_KINDS,
+      parseSnapshot(safeGetItem(LAST_PUSHED_SETTINGS_KEY)),
+      pickFields(SETTINGS_FIELD_KINDS, buildSettingsPayload(sessionUserId, "")),
+      settings,
+      "pull",
+    );
+    applySettingsRow(merged);
   }
-
-  // Apply user_selections
   if (selections) {
-    if (selections.source_preset) safeSetItem(KEYS.SOURCE_PRESET, selections.source_preset);
-    if (selections.source_water)
-      safeSetItem(KEYS.SOURCE_WATER, JSON.stringify(selections.source_water));
-    if (selections.target_preset) safeSetItem(KEYS.TARGET_PRESET, selections.target_preset);
-    if (selections.deleted_source_presets)
-      safeSetItem(KEYS.DELETED_PRESETS, JSON.stringify(selections.deleted_source_presets));
-    if (selections.deleted_target_presets)
-      safeSetItem(KEYS.DELETED_TARGET_PRESETS, JSON.stringify(selections.deleted_target_presets));
-    if (selections.added_target_presets)
-      safeSetItem(KEYS.ADDED_TARGET_PRESETS, JSON.stringify(selections.added_target_presets));
+    const merged = mergeRowFields(
+      SELECTIONS_FIELD_KINDS,
+      parseSnapshot(safeGetItem(LAST_PUSHED_SELECTIONS_KEY)),
+      pickFields(SELECTIONS_FIELD_KINDS, buildSelectionsPayload(sessionUserId, "")),
+      selections,
+      "pull",
+    );
+    applySelectionsRow(merged);
   }
+  // The profile merges below read the merged tombstones and the profile
+  // dicts through cached loaders.
+  invalidateAllCaches();
 
-  // Apply source profiles, skipping any that are tombstoned locally.
-  // (Cloud deletion and tombstone push aren't atomic, so a slug can still
-  // be present in source_profiles briefly after deletion.)
-  //
-  // An empty array is authoritative: if the cloud query succeeded with
-  // no rows, the user has no source profiles, and any stale local entries
-  // must be cleared. Otherwise a recipe deleted on another device stays
-  // in our localStorage forever, and the next push resurrects it on the
-  // cloud (the cleanup in syncCustomProfiles incorrectly classifies the
-  // local-and-tombstone overlap as "user re-saved").
+  const tombstonedSources = loadDeletedPresets();
+  const tombstonedTargets = loadDeletedTargetPresets();
+  // A tombstone another device lifted (the recipe was re-saved there) drops
+  // out of the confirmed-delete set, so deleting it again later re-sends.
+  pruneConfirmedDeletes(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES, tombstonedSources);
+  pruneConfirmedDeletes(KEYS.CONFIRMED_DELETED_TARGET_PROFILES, tombstonedTargets);
+
+  // Cloud rows win for profiles this device hasn't changed since it last
+  // synced; tombstoned slugs are skipped (cloud deletion and the tombstone
+  // push aren't atomic). A local profile missing from the cloud is dropped
+  // when this device had synced it before (it was deleted elsewhere — the
+  // empty-result-is-authoritative rule that stops deleted recipes resurrecting)
+  // and kept when it never reached the cloud (a recipe created while offline,
+  // during the sign-in merge, or while a push was failing).
   if (Array.isArray(sourceRows)) {
-    const tombstonedSources = loadDeletedPresets();
-    const srcProfiles: Record<string, any> = {};
-    const newSourceSnapshots: Record<string, string> = {};
-    sourceRows.forEach(function (row: any) {
-      if (tombstonedSources.indexOf(row.slug) !== -1) return;
-      const profile = {
-        label: row.label,
-        calcium: row.calcium,
-        magnesium: row.magnesium,
-        potassium: row.potassium,
-        sodium: row.sodium,
-        sulfate: row.sulfate,
-        chloride: row.chloride,
-        bicarbonate: row.bicarbonate,
-      };
-      srcProfiles[row.slug] = profile;
-      // Refresh lastPushed snapshot for dirty-tracking — we just learned
-      // what cloud has, so a follow-up push of the same data is a no-op
-      // and should be skipped.
-      newSourceSnapshots[row.slug] = stableStringify(
-        buildSourceRow(sessionUserId, row.slug, profile),
-      );
-    });
-    safeSetItem(KEYS.CUSTOM_PROFILES, JSON.stringify(srcProfiles));
-    safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(newSourceSnapshots));
+    const result = mergeProfileRows(
+      sourceRows,
+      loadCustomProfiles(),
+      tombstonedSources,
+      safeParse(safeGetItem(LAST_PUSHED_SOURCES_KEY), null) || {},
+      function (row: any) {
+        return {
+          label: row.label,
+          calcium: row.calcium,
+          magnesium: row.magnesium,
+          potassium: row.potassium,
+          sodium: row.sodium,
+          sulfate: row.sulfate,
+          chloride: row.chloride,
+          bicarbonate: row.bicarbonate,
+        };
+      },
+      function (slug: string, profile: any) {
+        return stableStringify(buildSourceRow(sessionUserId, slug, profile));
+      },
+    );
+    safeSetItem(KEYS.CUSTOM_PROFILES, JSON.stringify(result.profiles));
+    safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(result.snapshots));
   }
 
-  // Apply target profiles, skipping any that are tombstoned locally
-  // (cloud deletion and tombstone push aren't atomic, so a slug may still
-  // be in cloud target_profiles briefly after deletion). Same empty-array-
-  // is-authoritative reasoning as the source-profiles branch above.
   if (Array.isArray(targetRows)) {
-    const tombstonedTargets = loadDeletedTargetPresets();
-    const tgtProfiles: Record<string, TargetProfile> = {};
-    const newTargetSnapshots: Record<string, string> = {};
-    targetRows.forEach(function (row: any) {
-      if (tombstonedTargets.indexOf(row.slug) !== -1) return;
-      const profile: TargetProfile = {
-        label: row.label,
-        brewMethod: row.brew_method,
-        calcium: row.calcium,
-        magnesium: row.magnesium,
-        alkalinity: row.alkalinity,
-        potassium: row.potassium,
-        sodium: row.sodium,
-        sulfate: row.sulfate,
-        chloride: row.chloride,
-        bicarbonate: row.bicarbonate,
-        description: row.description,
-        isPublic: !!row.is_public,
-        creatorDisplayName: row.creator_display_name || "",
-        creatorUserId: row.creator_user_id || null,
-        tags: Array.isArray(row.tags) ? row.tags : [],
-        roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
-      };
-      tgtProfiles[row.slug] = profile;
-      newTargetSnapshots[row.slug] = stableStringify(
-        buildTargetRow(sessionUserId, row.slug, profile),
-      );
-    });
-    safeSetItem(KEYS.CUSTOM_TARGET_PROFILES, JSON.stringify(tgtProfiles));
-    safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(newTargetSnapshots));
+    const result = mergeProfileRows(
+      targetRows,
+      loadCustomTargetProfiles(),
+      tombstonedTargets,
+      safeParse(safeGetItem(LAST_PUSHED_TARGETS_KEY), null) || {},
+      function (row: any): TargetProfile {
+        return {
+          label: row.label,
+          brewMethod: row.brew_method,
+          calcium: row.calcium,
+          magnesium: row.magnesium,
+          alkalinity: row.alkalinity,
+          potassium: row.potassium,
+          sodium: row.sodium,
+          sulfate: row.sulfate,
+          chloride: row.chloride,
+          bicarbonate: row.bicarbonate,
+          description: row.description,
+          isPublic: !!row.is_public,
+          creatorDisplayName: row.creator_display_name || "",
+          creatorUserId: row.creator_user_id || null,
+          tags: Array.isArray(row.tags) ? row.tags : [],
+          roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
+        };
+      },
+      function (slug: string, profile: any) {
+        return stableStringify(buildTargetRow(sessionUserId, slug, profile));
+      },
+    );
+    safeSetItem(KEYS.CUSTOM_TARGET_PROFILES, JSON.stringify(result.profiles));
+    safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(result.snapshots));
   }
 
-  // Invalidate all storage caches so next read picks up the new data.
-  // Done BEFORE building the lastPushed snapshots below, so the load*()
-  // helpers inside buildSettingsPayload/buildSelectionsPayload read the
-  // just-pulled values (some load helpers use module-level caches that
-  // would otherwise return pre-pull state).
+  // Invalidate all storage caches so the next read picks up the new data.
   if (typeof invalidateAllCaches === "function") invalidateAllCaches();
 
-  // Refresh single-row lastPushed snapshots so the next pushAllToCloud
-  // doesn't re-upload data that already matches cloud. Guard each on the
-  // corresponding pull actually returning a row — if cloud has no
-  // user_settings/user_selections row yet, we have NOT pushed it, and
-  // claiming we did would let the next push skip the seed-upsert and
-  // leave the row missing forever. Snapshots are built via the same
-  // buildXxxPayload + snapshotForCompare path push uses, so a no-op push
-  // immediately after pull is correctly detected as no-op.
+  // The new single-row base is what the cloud holds now. Where the merge kept
+  // a local change, local != base, so the next push sends it. Guard each on
+  // the pull actually returning a row: if the cloud has no user_settings /
+  // user_selections row yet, nothing has been pushed, and recording a base
+  // would let the next push skip the seed upsert.
   if (settings) {
     safeSetItem(
       LAST_PUSHED_SETTINGS_KEY,
-      snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
+      snapshotForCompare(cloudRowAsPayload(SETTINGS_FIELD_KINDS, sessionUserId, settings)),
     );
   }
   if (selections) {
     safeSetItem(
       LAST_PUSHED_SELECTIONS_KEY,
-      snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
+      snapshotForCompare(cloudRowAsPayload(SELECTIONS_FIELD_KINDS, sessionUserId, selections)),
     );
+  }
+
+  // A first-login merge marks the device merged in the same synchronous step
+  // that applies the account's data (the user was re-checked after the fetch,
+  // above). Marking it one network round trip later left a window where a
+  // navigation (e.g. tapping another page right after signing in) kept the
+  // pulled data without the marker, and the next page then asked "keep local
+  // or use cloud data?" about what was really the cloud's own data.
+  if (options && options.markMergedFor && options.markMergedFor === sessionUserId) {
+    safeSetItem(KEYS.SYNCED_USER_ID, sessionUserId);
   }
 
   return true;
@@ -1104,6 +1586,11 @@ export async function handleFirstLoginMerge(): Promise<void> {
     const userId = await getLoggedInUserId();
     if (!userId) return;
 
+    // This device holds another account's data (it was merged for someone
+    // else and never signed out). Clear it before merging so none of it is
+    // pushed into, or mixed with, the account now signed in.
+    clearLocalDataIfAccountChanged(userId);
+
     // Already set up for this user on this device — just pull latest
     const syncedUserId = safeGetItem(KEYS.SYNCED_USER_ID);
     if (syncedUserId === userId) {
@@ -1119,7 +1606,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
     } else {
       if (isDefaultData()) {
         // Returning user on a fresh device: pull cloud data down
-        await pullFromCloud({ mergeUserId: userId });
+        await pullFromCloud({ mergeUserId: userId, markMergedFor: userId });
       } else {
         // Both local and cloud have non-default data: ask the user
         const choice = await showMergeDialog();
@@ -1131,7 +1618,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
           await foldCloudConcentratesIntoLocal(userId);
           await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
         } else {
-          await pullFromCloud({ mergeUserId: userId });
+          await pullFromCloud({ mergeUserId: userId, markMergedFor: userId });
         }
       }
     }
@@ -1144,6 +1631,12 @@ export async function handleFirstLoginMerge(): Promise<void> {
       throw new Error("[sync] merge aborted: the signed-in user changed during the merge");
     }
     safeSetItem(KEYS.SYNCED_USER_ID, userId);
+    // Saves made while the merge was running were held back by the merge gate
+    // (and the merge's pull kept them locally); push them now.
+    if (mergeGateRefusedPush || hasUnpushedChanges()) {
+      mergeGateRefusedPush = false;
+      syncNow();
+    }
     // Catch up on realtime changes that arrived while the merge was pending.
     if (realtimePullDeferred) {
       realtimePullDeferred = false;
@@ -1323,7 +1816,11 @@ function scheduleRealtimePull(): void {
         realtimePullDeferred = true;
         return Promise.resolve();
       }
-      const pendingPush = syncTimer ? syncNow() : Promise.resolve();
+      // Push anything this device hasn't synced yet: a pending debounced save,
+      // or an earlier push that failed (offline, a blip). Gating this on the
+      // debounce timer alone skipped the second case. The pull below merges,
+      // so it keeps unpushed local edits even if this push fails too.
+      const pendingPush = syncTimer || hasUnpushedChanges() ? syncNow() : Promise.resolve();
       return Promise.resolve(pendingPush)
         .then(function () {
           return pullFromCloud({ skipIfLocalWriteDuringPull: true, expectedUserId: gatedUserId });
@@ -1394,19 +1891,29 @@ async function initSync(): Promise<void> {
 }
 
 // --- Flush pending sync when navigating away ---
-// Returns a promise that resolves when the inflight push settles, and
-// rejects if the push fails.  Logout awaits this before calling signOut()
-// so a debounced edit (made within SYNC_DEBOUNCE_MS of clicking Log out)
-// reaches the cloud before the session is cleared; if the push fails the
-// caller MUST abort logout to avoid wiping unsynced edits.  Background
-// callers (visibilitychange, pagehide) can ignore the rejection.
-export function flushPendingSync(): Promise<void> {
+// Resolves once everything this device hasn't synced is in the cloud, and
+// rejects if that can't be confirmed. Logout awaits this before signing out
+// and clearing local data; if it rejects the caller MUST NOT wipe without the
+// user's say-so. Background callers (visibilitychange, pagehide) ignore the
+// rejection.
+//
+// It waits for a push that is already in flight (pushes are serialized), then
+// pushes whenever anything is still unsynced — not only when a debounced save
+// is pending. An earlier push that failed, or one that silently no-oped while
+// offline, used to leave edits that a logout then wiped.
+export async function flushPendingSync(): Promise<void> {
   if (syncTimer) {
     clearTimeout(syncTimer);
     syncTimer = undefined;
-    return pushAllToCloud();
   }
-  return Promise.resolve();
+  await pushQueue;
+  if (!hasUnpushedChanges()) return;
+  await pushAllToCloud();
+  // A push that was refused or couldn't reach the account leaves the changes
+  // unsynced; say so rather than letting the caller wipe them.
+  if (hasUnpushedChanges()) {
+    throw new Error("[sync] some changes could not be synced to the cloud");
+  }
 }
 
 // Wipe all Category A/B/C keys from both localStorage and sessionStorage.
@@ -1555,6 +2062,10 @@ if (window.supabaseClient && window.supabaseClient.auth) {
       // discarding it when the storage namespace flips to localStorage. This
       // and the (idempotent) subscribe run on every SIGNED_IN, including
       // recovery re-fires, so Realtime stays bound regardless.
+      // A sign-in as a different account than this device last synced must
+      // not carry that account's local data along (see
+      // clearLocalDataIfAccountChanged); clear it before anything migrates.
+      clearLocalDataIfAccountChanged(session.user.id);
       migrateAnonTransientToLocal();
       subscribeToCloudChanges(session.user.id);
       // Skip the first-login merge ONLY when it would be pure redundant work:

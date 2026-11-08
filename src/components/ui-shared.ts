@@ -900,16 +900,34 @@ async function performLogout(): Promise<void> {
     try {
       await window.flushPendingSync();
     } catch (err) {
-      console.warn("[auth] flushPendingSync failed; aborting logout:", err);
+      // Some changes aren't in the cloud yet (offline, or the push failed).
+      // Logging out clears this device's copy, so it would lose them: ask
+      // instead of silently doing either.
+      console.warn("[auth] flushPendingSync failed:", err);
+      showConfirm(
+        "Some of your recent changes haven't synced to your account yet. Logging out now will remove them from this device. Log out anyway?",
+        function () {
+          void finishLogout();
+        },
+        { yesLabel: "Log out anyway", noLabel: "Stay signed in" },
+      );
       return;
     }
   }
-  // If signOut() throws (network blip, transient Supabase error), the auth
-  // token survives — wiping local state and redirecting in that case would
-  // leave the next page load authenticated, which defeats the purpose of
-  // logout. Bail loudly instead.
+  await finishLogout();
+}
+
+async function finishLogout(): Promise<void> {
+  // signOut() resolves with { error } rather than throwing on a network or
+  // server failure, and auth-js still removes this device's session in that
+  // case, so the device is signed out locally either way. A real throw (an
+  // unexpected client failure) leaves the session in place; bail then so we
+  // don't wipe local data while still signed in.
   try {
-    await (window as any).signOut();
+    const result = await (window as any).signOut();
+    if (result && result.error) {
+      console.warn("[auth] signOut reported an error (local session cleared):", result.error);
+    }
   } catch (err) {
     console.warn("[auth] signOut failed:", err);
     return;

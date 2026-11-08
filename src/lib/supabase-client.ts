@@ -102,8 +102,12 @@ trySet("signInWithApple", async function () {
   });
 });
 
+// scope "local" ends only this device's session. The auth-js default is
+// "global", which revoked every session for the account: logging out on one
+// device signed out all the others, and their SIGNED_OUT handler then wiped
+// any edits there that hadn't synced yet.
 trySet("signOut", async function () {
-  return supabaseClient.auth.signOut();
+  return supabaseClient.auth.signOut({ scope: "local" });
 });
 
 // Synchronous auth cache. storage.ts and applyAuthGate need to know

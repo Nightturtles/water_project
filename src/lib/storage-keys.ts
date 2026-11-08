@@ -56,6 +56,10 @@ export const KEYS = {
   LAST_PUSHED_SELECTIONS: "cw_last_pushed_selections",
   LAST_PUSHED_SOURCE_PROFILES: "cw_last_pushed_source_profiles",
   LAST_PUSHED_TARGET_PROFILES: "cw_last_pushed_target_profiles",
+  // Tombstoned slugs whose cloud DELETE has already succeeded, so pushes don't
+  // replay them (a replayed delete erased recipes re-created on other devices).
+  CONFIRMED_DELETED_SOURCE_PROFILES: "cw_confirmed_deleted_source_profiles",
+  CONFIRMED_DELETED_TARGET_PROFILES: "cw_confirmed_deleted_target_profiles",
   SYNCED_USER_ID: "cw_synced_user_id",
   STARTER_MIGRATION_APPLIED: "cw_starter_migration_applied",
 } as const;
@@ -105,6 +109,8 @@ export const CATEGORY_C: string[] = [
   KEYS.LAST_PUSHED_SELECTIONS,
   KEYS.LAST_PUSHED_SOURCE_PROFILES,
   KEYS.LAST_PUSHED_TARGET_PROFILES,
+  KEYS.CONFIRMED_DELETED_SOURCE_PROFILES,
+  KEYS.CONFIRMED_DELETED_TARGET_PROFILES,
   KEYS.SYNCED_USER_ID,
   KEYS.STARTER_MIGRATION_APPLIED,
 ];

@@ -53,6 +53,8 @@ const CATEGORY_C_EXPECTED = [
   "cw_last_pushed_selections",
   "cw_last_pushed_source_profiles",
   "cw_last_pushed_target_profiles",
+  "cw_confirmed_deleted_source_profiles",
+  "cw_confirmed_deleted_target_profiles",
   "cw_synced_user_id",
   "cw_starter_migration_applied",
 ];

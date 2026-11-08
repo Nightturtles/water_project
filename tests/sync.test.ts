@@ -648,6 +648,8 @@ describe("pushAllToCloud merge gate", () => {
         getUser: async () => ({ data: { user: { id: USER } } }),
       },
       from: (table: string) => ({
+        // The push reads the cloud row before its merge-write; none exists.
+        select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: null, error: null }) }) }),
         upsert: async (payload: any) => {
           upserts.push({ table, payload });
           return { error: null };
