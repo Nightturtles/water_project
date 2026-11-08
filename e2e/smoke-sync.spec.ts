@@ -152,6 +152,15 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       },
       { timeout: 10_000 },
     );
+    // Wait for this device's first-login merge to finish before the test
+    // navigates anywhere. Navigating mid-merge can leave cw_synced_user_id
+    // unset after the merge already pulled the account's data, so the next
+    // page sees non-default local data plus cloud data and stops at the merge
+    // dialog ("sync not ready"). The spec only passed while that merge
+    // happened to finish before the navigation.
+    await page.waitForFunction(() => !!localStorage.getItem("cw_synced_user_id"), null, {
+      timeout: 20_000,
+    });
     console.log(`[smoke-sync] ${ctxName}: signed in`);
   }
 
