@@ -10,6 +10,7 @@ import {
   loadBrewMethod,
   loadLotusDropperType,
   loadSelectedMinerals,
+  _getTransient,
   DEFAULT_SELECTED_MINERALS,
   loadSelectedConcentrates,
   loadDiyConcentrateSpecs,
@@ -728,20 +729,33 @@ function keepUnpushedProfilesOverIncomingTombstones(
   filter("deleted_target_presets", loadDeletedTargetPresets(), unpushed.targets);
 }
 
-// Tombstones that arrive from the cloud (another device deleted the recipe)
-// are that device's DELETE to send. Record them as confirmed so this device
-// never replays the DELETE and doesn't count them as unpushed changes: a
-// replayed DELETE (the realtime push-first ran on exactly that) erased the
-// recipe whenever another device re-created it before this one pulled again.
+// Tombstones that arrive in a pull (another device deleted the recipe) whose
+// row is already gone from the cloud need no DELETE from this device. Record
+// them as confirmed, so this device doesn't count them as unsynced changes
+// (that made the realtime push-first replay the DELETE and erase the recipe
+// if another device re-created it meanwhile). A tombstoned row that is still
+// there (its deleting device's DELETE failed or hasn't run, or a stale device
+// re-uploaded it) stays unconfirmed, so this device deletes it once instead
+// of leaving it in the cloud, and in the public library, for good.
+// syncCustomProfiles checks the cloud still tombstones a slug before deleting.
 function confirmIncomingTombstones(
   before: { sources: unknown; targets: unknown },
   merged: Record<string, unknown>,
+  cloudRows: { sources: unknown; targets: unknown },
 ): void {
-  const confirm = function (key: string, prev: unknown, next: unknown) {
+  const slugsIn = function (rows: unknown): Set<string> {
+    return new Set(
+      Array.isArray(rows)
+        ? rows.map((r) => (r && typeof r.slug === "string" ? r.slug : "")).filter(Boolean)
+        : [],
+    );
+  };
+  const confirm = function (key: string, prev: unknown, next: unknown, rows: unknown) {
     if (!Array.isArray(next)) return;
     const had = new Set(Array.isArray(prev) ? prev : []);
+    const present = slugsIn(rows);
     const arrived = next.filter(function (s): s is string {
-      return typeof s === "string" && !had.has(s);
+      return typeof s === "string" && !had.has(s) && !present.has(s);
     });
     if (arrived.length === 0) return;
     const current: unknown = safeParse(safeGetItem(key), []);
@@ -753,8 +767,18 @@ function confirmIncomingTombstones(
     });
     safeSetItem(key, JSON.stringify([...confirmed]));
   };
-  confirm(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES, before.sources, merged.deleted_source_presets);
-  confirm(KEYS.CONFIRMED_DELETED_TARGET_PROFILES, before.targets, merged.deleted_target_presets);
+  confirm(
+    KEYS.CONFIRMED_DELETED_SOURCE_PROFILES,
+    before.sources,
+    merged.deleted_source_presets,
+    cloudRows.sources,
+  );
+  confirm(
+    KEYS.CONFIRMED_DELETED_TARGET_PROFILES,
+    before.targets,
+    merged.deleted_target_presets,
+    cloudRows.targets,
+  );
 }
 
 // False once the user this push or pull is for is no longer the one signed in
@@ -1010,11 +1034,10 @@ async function pushAllToCloudNow(options?: {
         if (r.table === "user_settings") {
           applySettingsRow(res.pushed!);
         } else {
+          // Tombstones arriving here stay unconfirmed: this push hasn't read
+          // the profile rows, so the DELETE below (checked against the cloud's
+          // tombstones) settles them.
           applySelectionsRow(res.pushed!);
-          confirmIncomingTombstones(
-            { sources: r.local.deleted_source_presets, targets: r.local.deleted_target_presets },
-            res.pushed!,
-          );
         }
         foldedRemoteChanges = true;
       }
@@ -1140,12 +1163,37 @@ async function syncCustomProfiles(
   const confirmedTargets = new Set<string>(
     safeParse(safeGetItem(KEYS.CONFIRMED_DELETED_TARGET_PROFILES), []),
   );
-  const sourceDeletes = deletedSources.filter(function (s) {
+  let sourceDeletes = deletedSources.filter(function (s) {
     return !confirmedSources.has(s);
   });
-  const targetDeletes = deletedTargets.filter(function (s) {
+  let targetDeletes = deletedTargets.filter(function (s) {
     return !confirmedTargets.has(s);
   });
+  // Delete only what the cloud still tombstones. A tombstone another device
+  // has since lifted (the recipe was re-created there) is stale here, and
+  // deleting would erase the re-created recipe; this device drops the stale
+  // tombstone on its next pull. One read, and only when a delete is pending.
+  if (sourceDeletes.length > 0 || targetDeletes.length > 0) {
+    const sel = await window.supabaseClient
+      .from("user_selections")
+      .select("deleted_source_presets, deleted_target_presets")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (sel && sel.error) {
+      reportError("sync.tombstone-check", sel.error);
+      throw sel.error;
+    }
+    const row = sel && isPlainObject(sel.data) ? sel.data : null;
+    if (row) {
+      const listed = function (v: unknown): Set<unknown> {
+        return new Set(Array.isArray(v) ? v : []);
+      };
+      const stillSources = listed(row.deleted_source_presets);
+      const stillTargets = listed(row.deleted_target_presets);
+      sourceDeletes = sourceDeletes.filter((s) => stillSources.has(s));
+      targetDeletes = targetDeletes.filter((s) => stillTargets.has(s));
+    }
+  }
   const deleteCalls: any[] = [];
   const deletedSourcesPending = sourceDeletes.length > 0;
   const deletedTargetsPending = targetDeletes.length > 0;
@@ -1408,6 +1456,7 @@ export async function pullFromCloud(options?: {
         targets: localSelections.deleted_target_presets,
       },
       merged,
+      { sources: sourceRows, targets: targetRows },
     );
   }
   // The profile merges below read the merged tombstones and the profile
@@ -1698,7 +1747,9 @@ export function unionConcentrateIds(local: unknown, cloud: unknown): string[] {
 export async function foldCloudConcentratesIntoLocal(userId: string): Promise<void> {
   const res = await window.supabaseClient
     .from("user_settings")
-    .select("diy_concentrate_specs, stock_concentrate_specs, selected_concentrates")
+    .select(
+      "diy_concentrate_specs, stock_concentrate_specs, selected_concentrates, selected_minerals",
+    )
     .eq("user_id", userId)
     .maybeSingle();
   if (res && res.error) {
@@ -1728,6 +1779,17 @@ export async function foldCloudConcentratesIntoLocal(userId: string): Promise<vo
       JSON.stringify(unionConcentrateIds(loadSelectedConcentrates(), cloud.selected_concentrates)),
     ],
   ];
+  // "Keep local data" keeps this device's mineral selection, but only one the
+  // user actually chose here. With none saved, loadSelectedMinerals reports
+  // the starter defaults, and keeping those replaced the account's chosen
+  // selection on every device; take the account's instead.
+  if (
+    _getTransient(KEYS.SELECTED_MINERALS) == null &&
+    Array.isArray(cloud.selected_minerals) &&
+    cloud.selected_minerals.length > 0
+  ) {
+    writes.push([KEYS.SELECTED_MINERALS, JSON.stringify(cloud.selected_minerals)]);
+  }
   // A failed write (e.g. storage quota) would leave local without the cloud's
   // concentrates, and the keep-local push that follows would then erase them
   // from the cloud. Abort the merge instead: SYNCED_USER_ID stays unset, so

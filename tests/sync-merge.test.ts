@@ -26,6 +26,7 @@ import {
   mergeRowFields,
   mergeProfileRows,
   replaceLocalWithCloud,
+  foldCloudConcentratesIntoLocal,
   clearLocalUserContent,
   SETTINGS_FIELD_KINDS,
   SELECTIONS_FIELD_KINDS,
@@ -515,6 +516,28 @@ function duringUpsert(table: string, during: () => void) {
   };
 }
 
+// Make the next profile DELETE fail (as a dropped connection would).
+function failNextDelete() {
+  const original = g.window.supabaseClient.from;
+  let failed = false;
+  g.window.supabaseClient.from = (t: string) => {
+    const tbl = original(t);
+    if (failed || (t !== "target_profiles" && t !== "source_profiles")) return tbl;
+    tbl.delete = () => ({
+      eq: () => ({
+        in: async () => {
+          failed = true;
+          return { error: { message: "Failed to fetch" } };
+        },
+      }),
+    });
+    return tbl;
+  };
+  return () => {
+    g.window.supabaseClient.from = original;
+  };
+}
+
 const cloudSlugs = () => cloud.profiles.target_profiles!.map((r: any) => r.slug);
 
 describe("review regressions: tombstones", () => {
@@ -614,6 +637,81 @@ describe("review regressions: tombstones", () => {
   });
 });
 
+describe("review regressions: tombstoned rows left in the cloud", () => {
+  test("a recipe deleted while another device holds an unpushed edit doesn't stay in the cloud", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("s", "S", 40)];
+    await syncedBaseline();
+    let a = deviceImage();
+    let b = deviceImage();
+    // B edits s; its push hasn't run yet.
+    useDevice(b);
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      s: profile("S", 44),
+    });
+    b = deviceImage();
+    // A deletes s.
+    useDevice(a);
+    storage.deleteCustomTargetProfile("s");
+    await pushAllToCloud();
+    a = deviceImage();
+    // B syncs push-first (its realtime events, the second from its own echo):
+    // the re-uploaded row must not outlive the tombstone.
+    useDevice(b);
+    await realtimeEvent();
+    await realtimeEvent();
+    expect(cloudSlugs()).not.toContain("s");
+    expect(storage.loadCustomTargetProfiles()["s"]).toBeUndefined();
+  });
+
+  test("a tombstoned row whose DELETE never went through is deleted by another device", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("s", "S", 40)];
+    await syncedBaseline();
+    const b = deviceImage();
+    // A deletes s; the tombstone reaches the cloud but the DELETE fails, and A
+    // then logs out (its unsent DELETE goes with its local data).
+    const restore = failNextDelete();
+    storage.deleteCustomTargetProfile("s");
+    await pushAllToCloud().catch(() => {});
+    restore();
+    clearLocalUserContent();
+    expect(cloudSlugs()).toContain("s");
+    useDevice(b);
+    await realtimeEvent();
+    await realtimeEvent();
+    expect(cloudSlugs()).not.toContain("s");
+  });
+
+  test("a pulled tombstone lifted by a re-creation before this device deletes doesn't erase the new recipe", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("s", "S", 40)];
+    await syncedBaseline();
+    let a = deviceImage();
+    let b = deviceImage();
+    // A deletes s, but its DELETE fails, so the row is still there when B pulls.
+    useDevice(a);
+    const restore = failNextDelete();
+    storage.deleteCustomTargetProfile("s");
+    await pushAllToCloud().catch(() => {});
+    restore();
+    a = deviceImage();
+    useDevice(b);
+    await pullFromCloud();
+    b = deviceImage();
+    // A re-creates s before B gets to push.
+    useDevice(a);
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      s: profile("S", 60),
+    });
+    await pushAllToCloud();
+    a = deviceImage();
+    useDevice(b);
+    await realtimeEvent();
+    expect(cloudSlugs()).toContain("s");
+    expect(storage.loadCustomTargetProfiles()["s"]!.calcium).toBe(60);
+  });
+});
+
 describe("review regressions: folding a push", () => {
   test("a save made while a push is on the network doesn't lose another device's change", async () => {
     await syncedBaseline();
@@ -673,6 +771,18 @@ describe("review regressions: folding a push", () => {
 });
 
 describe("review regressions: merge choices, order, drafts, stalls", () => {
+  test('"Keep local data" takes the account\'s mineral selection when this device never chose one', async () => {
+    cloud.rows.user_settings = {
+      user_id: USER,
+      selected_minerals: ["gypsum", "magnesium-chloride"],
+    };
+    storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: 12 });
+    await foldCloudConcentratesIntoLocal(USER);
+    await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: USER });
+    expect(storage.loadSelectedMinerals()).toEqual(["gypsum", "magnesium-chloride"]);
+    expect(cloud.rows.user_settings.selected_minerals).toEqual(["gypsum", "magnesium-chloride"]);
+  });
+
   test('"Use cloud data" neither keeps nor uploads local-only recipes', async () => {
     cloud.profiles.target_profiles = [cloudTarget("cloud-recipe", "Cloud Recipe", 30)];
     cloud.rows.user_settings = { user_id: USER, selected_minerals: ["gypsum"] };
@@ -912,7 +1022,7 @@ describe("randomized multi-device simulation", () => {
   }, 60_000);
 
   test("concurrent changes converge without losing anything never removed", async () => {
-    for (let seed = 1; seed <= 60; seed++) {
+    for (let seed = 1; seed <= 150; seed++) {
       const rand = seededRandom(1000 + seed);
       await freshAccount();
       const devices = [deviceImage(), deviceImage(), deviceImage()];
@@ -965,6 +1075,12 @@ describe("randomized multi-device simulation", () => {
       ).toEqual([false, false, false]);
       expect(states[1]!.obs, where).toEqual(states[0]!.obs);
       expect(states[2]!.obs, where).toEqual(states[0]!.obs);
+      // Nothing a delete removed lingers in the cloud (or the public library).
+      const tombstoned = new Set(cloud.rows.user_selections?.deleted_target_presets || []);
+      expect(
+        cloudSlugs().filter((slug: string) => tombstoned.has(slug)),
+        `${where}: rows left in the cloud after their delete`,
+      ).toEqual([]);
       const final = states[0]!.obs;
       for (const k of added) {
         if (removed.has(k)) continue;
