@@ -1005,7 +1005,9 @@ function main(): void {
 
     // Stage 1: best-fit concentrate doses (snapped). No mineral variables — the
     // concentrate is the primary, minerals only top up the residual in Stage 2.
-    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, []);
+    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, [], {
+      recipeSlug: currentProfile,
+    });
 
     // Stage 2: residual after the concentrate contribution, gap-filled with
     // individually-enabled minerals.
@@ -1333,10 +1335,18 @@ function main(): void {
     const selectedMinerals = loadSelectedMinerals();
     const selectedConcentrates = selectedConcentratesEarly;
     const conflictMineralIds = new Set<string>();
+    // The two calcium-chloride forms fill one calcium slot, so a dihydrate
+    // powder plus an anhydrous concentrate (or vice versa) is the same
+    // "both versions" conflict; the concentrate's form wins
+    // (getEffectiveCalciumSources).
+    const CACL2_FORMS = ["calcium-chloride", "calcium-chloride-anhydrous"];
     selectedConcentrates.forEach((cid) => {
       const mineralId = getConcentrateMineralId(cid);
       if (!mineralId) return;
-      if (selectedMinerals.includes(mineralId)) conflictMineralIds.add(mineralId);
+      const sameSlot = CACL2_FORMS.includes(mineralId)
+        ? CACL2_FORMS.some((form) => selectedMinerals.includes(form))
+        : selectedMinerals.includes(mineralId);
+      if (sameSlot) conflictMineralIds.add(mineralId);
     });
     if (conflictMineralIds.size > 0) {
       warnings.push(
@@ -1389,10 +1399,23 @@ function main(): void {
       });
       if (usedSources.length === 1) {
         const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
+        // Say why the split is one-sided: the unused buffer's ion is either
+        // already met by the source water, absent from the target, or neither
+        // ion is targeted at all.
+        const targetNa = Number(targetProfile && targetProfile.sodium) || 0;
+        const targetK = Number(targetProfile && targetProfile.potassium) || 0;
+        const usedSodium = usedSources[0] === "baking-soda";
+        const unusedIon = usedSodium ? "potassium" : "sodium";
+        const unusedTarget = usedSodium ? targetK : targetNa;
+        const usedTarget = usedSodium ? targetNa : targetK;
+        const reason =
+          unusedTarget > 0
+            ? "your source water already meets the " + unusedIon + " target"
+            : usedTarget > 0
+              ? "the target profile only calls for " + (usedSodium ? "sodium" : "potassium")
+              : "the target profile has no Na/K targets to guide the split";
         warnings.push(
-          "Both alkalinity sources are enabled, but the target profile has no Na/K targets to guide the split: using only " +
-            usedName +
-            ".",
+          "Both alkalinity sources are enabled, but " + reason + ": using only " + usedName + ".",
         );
       }
     }
@@ -1422,6 +1445,13 @@ function main(): void {
     updateResultValues(displayMineralGrams);
 
     const concentrateValues: Record<string, number> = {};
+    // Each salt's dose is delivered once. When two enabled concentrates map to
+    // the same salt (e.g. Lotus Calcium + a DIY calcium-chloride concentrate),
+    // the first usable one carries the whole dose and the rest show 0; giving
+    // every one of them the full dose doubled the salt for anyone following
+    // the rows (the ion summary below only ever counted it once).
+    const dosedByConcentrate: Record<string, string> = {};
+    const sharedSaltNames = new Set<string>();
     selectedConcentrates.forEach((cid) => {
       const mineralId = getConcentrateMineralId(cid);
       if (!mineralId) return;
@@ -1429,11 +1459,24 @@ function main(): void {
       const gramsPerMl = getConcentrateGramsPerMl(cid);
       if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
         concentrateValues[cid] = 0;
-        if (grams > 0)
+        if (grams > 0 && !dosedByConcentrate[mineralId])
           warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
         return;
       }
+      if (dosedByConcentrate[mineralId]) {
+        concentrateValues[cid] = 0;
+        if (grams > 0) sharedSaltNames.add(MINERAL_DB[mineralId]?.name || mineralId);
+        return;
+      }
+      dosedByConcentrate[mineralId] = cid;
       concentrateValues[cid] = Math.max(0, grams / gramsPerMl);
+    });
+    sharedSaltNames.forEach((name) => {
+      warnings.push(
+        "More than one enabled concentrate supplies " +
+          name +
+          ". Only the first one is dosed; use just that one.",
+      );
     });
     updateConcentrateValues(concentrateValues);
     if (warningsEl) warningsEl.textContent = warnings.join("\n");

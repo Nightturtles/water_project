@@ -340,17 +340,42 @@ describe("splitAlkalinityDelta", () => {
     expect(result["baking-soda"]).toBeUndefined();
   });
 
-  test("both sources, both Na and K positive → split proportional to deltas", () => {
-    // deltaNa = 30 - 0 = 30, deltaK = 10 - 0 = 10, total = 40.
-    // baking-soda gets 100 * 30/40 = 75, potassium-bicarbonate gets 100 * 10/40 = 25.
+  test("both sources, both Na and K positive → split proportional to Na:K equivalents", () => {
+    // deltaNa = 30 mg/L = 30/22.99 = 1.3049 mmol; deltaK = 10 mg/L =
+    // 10/39.098 = 0.2558 mmol. Each mmol of Na or K arrives with one mmol of
+    // HCO3, so the alkalinity splits by those molar shares (not by mass):
+    // baking-soda 100 * 1.3049/1.5607 = 83.61, KHCO3 100 * 0.2558/1.5607 = 16.39.
     const result = metrics.splitAlkalinityDelta(
       ["baking-soda", "potassium-bicarbonate"],
       100,
       { sodium: 0, potassium: 0 },
       { sodium: 30, potassium: 10 },
     );
-    expect(result["baking-soda"]).toBeCloseTo(75, 5);
-    expect(result["potassium-bicarbonate"]).toBeCloseTo(25, 5);
+    expect(result["baking-soda"]).toBeCloseTo(83.612, 2);
+    expect(result["potassium-bicarbonate"]).toBeCloseTo(16.388, 2);
+  });
+
+  test("equivalents split hits both Na and K on a self-consistent recipe (Lotus Simple Sweet)", () => {
+    // Lotus Simple Sweet: Na 11.169, K 12.628, HCO3 49.35 (alk 40.476) — all of
+    // its Na and K come from the bicarbonate buffers, so a correct split must
+    // reproduce both exactly. The old mass split gave Na 8.73 / K 16.78.
+    const target = { sodium: 11.169, potassium: 12.628, alkalinity: 40.476 };
+    const split = metrics.splitAlkalinityDelta(
+      ["baking-soda", "potassium-bicarbonate"],
+      40.476,
+      { sodium: 0, potassium: 0 },
+      target,
+    );
+    const naMgL =
+      (split["baking-soda"] || 0) *
+      constants.ALK_TO_BAKING_SODA *
+      (constants.MINERAL_DB["baking-soda"]!.ions.sodium || 0);
+    const kMgL =
+      (split["potassium-bicarbonate"] || 0) *
+      constants.ALK_TO_POTASSIUM_BICARB *
+      (constants.MINERAL_DB["potassium-bicarbonate"]!.ions.potassium || 0);
+    expect(naMgL).toBeCloseTo(11.169, 1);
+    expect(kMgL).toBeCloseTo(12.628, 1);
   });
 
   test("both sources, target Na/K both absent or zero → fallback to potassium-bicarbonate", () => {
@@ -568,6 +593,108 @@ describe("solveNNLS", () => {
     expect(x[0]).toBeGreaterThanOrEqual(0);
     expect(x[0]).toBeCloseTo(1, 6);
   });
+
+  // Brute-force reference: the constrained optimum is the best feasible
+  // unconstrained least-squares fit over some subset of columns.
+  function bruteForceResidual(A: number[][], b: number[]): number {
+    const n = A[0]!.length;
+    const resid = (x: number[]) =>
+      A.reduce((s, row, i) => s + (b[i]! - row.reduce((a, v, j) => a + v * x[j]!, 0)) ** 2, 0);
+    let best = resid(new Array(n).fill(0));
+    for (let mask = 1; mask < 1 << n; mask++) {
+      const cols: number[] = [];
+      for (let j = 0; j < n; j++) if (mask & (1 << j)) cols.push(j);
+      const k = cols.length;
+      const M = cols.map((p) => cols.map((q) => A.reduce((s, row) => s + row[p]! * row[q]!, 0)));
+      const v = cols.map((p) => A.reduce((s, row, i) => s + row[p]! * b[i]!, 0));
+      // Gauss-Jordan on the k×k normal equations.
+      let ok = true;
+      for (let c = 0; c < k && ok; c++) {
+        let piv = c;
+        for (let r = c + 1; r < k; r++) if (Math.abs(M[r]![c]!) > Math.abs(M[piv]![c]!)) piv = r;
+        if (Math.abs(M[piv]![c]!) < 1e-12) ok = false;
+        else {
+          [M[c], M[piv]] = [M[piv]!, M[c]!];
+          [v[c], v[piv]] = [v[piv]!, v[c]!];
+          for (let r = 0; r < k; r++) {
+            if (r === c) continue;
+            const f = M[r]![c]! / M[c]![c]!;
+            for (let q = c; q < k; q++) M[r]![q]! -= f * M[c]![q]!;
+            v[r]! -= f * v[c]!;
+          }
+        }
+      }
+      if (!ok) continue;
+      const z = v.map((val, i) => val / M[i]![i]!);
+      if (z.some((val) => val < -1e-12)) continue;
+      const x = new Array(n).fill(0);
+      cols.forEach((c, i) => (x[c] = Math.max(0, z[i]!)));
+      best = Math.min(best, resid(x));
+    }
+    return best;
+  }
+
+  test("reaches the true constrained optimum where drop-all-negatives did not", () => {
+    // Real mineral columns (CaCl2, Epsom, NaHCO3, KHCO3, NaCl). The old
+    // active-set loop (which dropped every negative variable at once and never
+    // re-added one) left a squared residual of ~450 here; the optimum is ~397.8.
+    const ids = [
+      "calcium-chloride",
+      "epsom-salt",
+      "baking-soda",
+      "potassium-bicarbonate",
+      "sodium-chloride",
+    ];
+    const ions = constants.ION_FIELDS as readonly string[];
+    const A = ions.map((ion) =>
+      ids.map((id) => (metrics.calculateIonPPMs({ [id]: 1 }) as Record<string, number>)[ion]!),
+    );
+    const b = [1.6, 9.5, 43.5, 5.9, 37.6, 25.2, 32.2];
+    const x = metrics.solveNNLS(A, b);
+    const resid = A.reduce(
+      (s, row, i) => s + (b[i]! - row.reduce((a, v, j) => a + v * x[j]!, 0)) ** 2,
+      0,
+    );
+    expect(x.every((v) => v >= 0)).toBe(true);
+    expect(resid).toBeLessThanOrEqual(bruteForceResidual(A, b) * (1 + 1e-6) + 1e-9);
+  });
+
+  test("matches the brute-force optimum on randomized mineral problems", () => {
+    const ids = Object.keys(constants.MINERAL_DB);
+    const ions = constants.ION_FIELDS as readonly string[];
+    const full = ions.map((ion) =>
+      ids.map((id) => (metrics.calculateIonPPMs({ [id]: 1 }) as Record<string, number>)[ion]!),
+    );
+    let seed = 7;
+    const rnd = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    for (let t = 0; t < 300; t++) {
+      const cols = ids.map((_, j) => j).filter(() => rnd() < 0.6);
+      if (cols.length < 2) continue;
+      const A = full.map((row) => cols.map((c) => row[c]!));
+      const b = ions.map(() => rnd() * 60);
+      const x = metrics.solveNNLS(A, b);
+      const resid = A.reduce(
+        (s, row, i) => s + (b[i]! - row.reduce((a, v, j) => a + v * x[j]!, 0)) ** 2,
+        0,
+      );
+      expect(x.every((v) => v >= 0)).toBe(true);
+      expect(resid).toBeLessThanOrEqual(bruteForceResidual(A, b) * (1 + 1e-6) + 1e-9);
+    }
+  });
+
+  test("duplicate / dependent columns don't zero out an independent one", () => {
+    // Two identical CaCl2-like columns plus an independent Mg column, ordered
+    // so the independent one is last (the old singular fallback dropped the
+    // last variable).
+    const A = [
+      [1, 1, 0],
+      [2, 2, 0],
+      [0, 0, 1],
+    ];
+    const x = metrics.solveNNLS(A, [1, 2, 3]);
+    expect(x[2]).toBeCloseTo(3, 6);
+    expect((x[0] || 0) + (x[1] || 0)).toBeCloseTo(1, 6);
+  });
 });
 
 describe("solveCalculatorDosing", () => {
@@ -620,19 +747,167 @@ describe("solveCalculatorDosing", () => {
     expect(Math.abs(result.residualIons.calcium)).toBeLessThan(1);
   });
 
-  test("squared-error compromise when target ignores a side-ion", () => {
-    // Target only specifies Ca; Cl is implicitly 0. Solver minimizes
-    // ||A·x - b||² across all 7 ions, so dosing CaCl2 to hit Ca exactly
-    // would incur a huge Cl-overshoot penalty. The optimal x balances the
-    // two: x = (50·272.7) / (272.7² + 482.6²) ≈ 0.044 g/L.
+  test("an unspecified side-ion (target 0) does not shrink the dose of a specified ion", () => {
+    // Target only specifies Ca; Cl is left at 0, i.e. unspecified. CaCl2 must
+    // carry its chloride, so the dose should still deliver the requested Ca
+    // (x ≈ 50 / 272.7 ≈ 0.183 g/L). Treating Cl = 0 as a hard target used to
+    // drag the dose down to ~0.044 g/L, delivering only ~12 mg/L Ca.
     const result = metrics.solveCalculatorDosing(
       distilled,
       { calcium: 50 },
       [],
       ["calcium-chloride"],
     );
-    expect(result.mineralGramsPerL["calcium-chloride"]).toBeGreaterThan(0.02);
-    expect(result.mineralGramsPerL["calcium-chloride"]).toBeLessThan(0.07);
+    expect(result.mineralGramsPerL["calcium-chloride"]).toBeGreaterThan(0.18);
+    expect(result.mineralGramsPerL["calcium-chloride"]).toBeLessThan(0.185);
+    expect(Math.abs(result.residualIons.calcium)).toBeLessThan(0.5);
+  });
+
+  test("SCA-derived concentrate doses at its prescribed amount against SCA", () => {
+    // SCA stores alkalinity 40 with bicarbonate 0 and leaves K/Na/SO4/Cl at 0.
+    // The derived concentrate must include a buffer (KH 40), and the solver
+    // must dose it at the prescribed 4 g/L rather than shrinking it to dodge
+    // the unspecified chloride/sulfate (previously ~0.74 g/L).
+    const sca = {
+      calcium: 51,
+      magnesium: 17,
+      alkalinity: 40,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: 0,
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(sca, { bottleMl: 200, doseGramsPerL: 4 });
+    const ids = derived.minerals.map((m) => m.mineralId);
+    expect(ids.some((id) => id === "baking-soda" || id === "potassium-bicarbonate")).toBe(true);
+    const solverTarget = {
+      ...sca,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40, 0),
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      solverTarget,
+      [{ id: "stock:sca", spec: { bottleMl: 200, doseGramsPerL: 4, minerals: derived.minerals } }],
+      [],
+      { recipeSlug: "sca" },
+    );
+    expect(result.concentrateGramsPerL["stock:sca"]).toBe(4);
+    expect(Math.abs(result.residualIons.calcium)).toBeLessThan(2);
+    expect(Math.abs(result.residualIons.magnesium)).toBeLessThan(1);
+    expect(Math.abs(result.residualIons.bicarbonate)).toBeLessThan(2);
+  });
+
+  test("a concentrate derived from the recipe is recognised by createdFrom, whatever it's named", () => {
+    const sca = {
+      calcium: 51,
+      magnesium: 17,
+      alkalinity: 40,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40, 0),
+    };
+    const derived = metrics.deriveStockFormulaFromTarget(sca, { bottleMl: 200, doseGramsPerL: 4 });
+    const spec = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: derived.minerals,
+      createdFrom: "derived:sca",
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [{ id: "stock:my-sca-water", spec }],
+      [],
+      { recipeSlug: "sca" },
+    );
+    expect(result.concentrateGramsPerL["stock:my-sca-water"]).toBe(4);
+  });
+
+  test("an empty concentrate made for the recipe doesn't relax the weights for another one", () => {
+    // SCA leaves every counter-ion blank, so its own concentrate would relax
+    // them. An empty one (re-derived from an all-zero recipe) carries SCA's id
+    // but adds nothing, so Rao 2013's concentrate must be dosed exactly as with
+    // full weights.
+    const sca = {
+      calcium: 51,
+      magnesium: 17,
+      alkalinity: 40,
+      potassium: 0,
+      sodium: 0,
+      sulfate: 0,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40, 0),
+    };
+    const rao2013 = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "magnesium-chloride", grams: 4 },
+        { mineralId: "calcium-chloride", grams: 4 },
+        { mineralId: "baking-soda", grams: 3.4 },
+      ],
+      createdFrom: "library:rao-2013",
+    };
+    const emptyOwn = { bottleMl: 200, doseGramsPerL: 4, minerals: [], createdFrom: "derived:sca" };
+    const fullWeights = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [{ id: "stock:rao-2013", spec: rao2013 }],
+      [],
+      { recipeSlug: "sca" },
+    );
+    const withEmptyOwn = metrics.solveCalculatorDosing(
+      distilled,
+      sca,
+      [
+        { id: "stock:sca", spec: emptyOwn },
+        { id: "stock:rao-2013", spec: rao2013 },
+      ],
+      [],
+      { recipeSlug: "sca" },
+    );
+    expect(withEmptyOwn.concentrateGramsPerL["stock:rao-2013"]).toBeCloseTo(
+      fullWeights.concentrateGramsPerL["stock:rao-2013"]!,
+      6,
+    );
+  });
+
+  test("a concentrate made for another recipe keeps every ion at full weight", () => {
+    // Rao 2013's library concentrate against Matt Perger, a recipe with no
+    // calcium or chloride. Relaxing the zeros (as for a recipe's own
+    // concentrate) dosed it at 4.00, giving ~22 mg/L calcium; full weights
+    // keep the conservative 1.53 the calculator has always shown.
+    const perger = {
+      calcium: 0,
+      magnesium: 19.7,
+      alkalinity: 40.5,
+      potassium: 0,
+      sodium: 18.6,
+      sulfate: 77.9,
+      chloride: 0,
+      bicarbonate: metrics.toStableBicarbonateFromAlkalinity(40.5, 49.4),
+    };
+    const rao2013 = {
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [
+        { mineralId: "magnesium-chloride", grams: 4 },
+        { mineralId: "calcium-chloride", grams: 4 },
+        { mineralId: "baking-soda", grams: 3.4 },
+      ],
+      createdFrom: "library:rao-2013",
+    };
+    const result = metrics.solveCalculatorDosing(
+      distilled,
+      perger,
+      [{ id: "stock:rao-2013", spec: rao2013 }],
+      [],
+      { recipeSlug: "matt-perger" },
+    );
+    expect(result.concentrateGramsPerL["stock:rao-2013"]).toBeCloseTo(1.53, 2);
   });
 
   test("doses are never negative", () => {

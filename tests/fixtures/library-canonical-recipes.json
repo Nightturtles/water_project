@@ -1,0 +1,710 @@
+[
+  {
+    "slug": "aviary-espresso",
+    "label": "Aviary Espresso",
+    "brewMethod": "espresso",
+    "calcium": 2.73,
+    "magnesium": 2.76,
+    "alkalinity": 59.57,
+    "potassium": 0,
+    "sodium": 27.37,
+    "sulfate": 10.91,
+    "chloride": 4.82,
+    "bicarbonate": 72.63
+  },
+  {
+    "slug": "aviary-filter",
+    "label": "Aviary Filter",
+    "brewMethod": "filter",
+    "calcium": 8.75,
+    "magnesium": 8.89,
+    "alkalinity": 27.02,
+    "potassium": 0,
+    "sodium": 12.42,
+    "sulfate": 35.13,
+    "chloride": 15.48,
+    "bicarbonate": 32.95
+  },
+  {
+    "slug": "bh-default",
+    "label": "Barista Hustle (default)",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 19.3,
+    "alkalinity": 40.5,
+    "potassium": 0,
+    "sodium": 18.6,
+    "sulfate": 76.4,
+    "chloride": 0,
+    "bicarbonate": 49.4,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 9.8
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.4
+        }
+      ]
+    }
+  },
+  {
+    "slug": "bh-hard",
+    "label": "BH Hard",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 30.4,
+    "alkalinity": 34.6,
+    "potassium": 0,
+    "sodium": 15.9,
+    "sulfate": 120,
+    "chloride": 0,
+    "bicarbonate": 42.1,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 15.4
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 2.9
+        }
+      ]
+    }
+  },
+  {
+    "slug": "bh-hard-af",
+    "label": "BH Hard AF",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 42.4,
+    "alkalinity": 45.3,
+    "potassium": 0,
+    "sodium": 20.8,
+    "sulfate": 167.6,
+    "chloride": 0,
+    "bicarbonate": 55.2,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 21.5
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.8
+        }
+      ]
+    }
+  },
+  {
+    "slug": "bh-simplified-hendon",
+    "label": "Hendon Water",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 24.1,
+    "alkalinity": 31,
+    "potassium": 0,
+    "sodium": 14.2,
+    "sulfate": 95.1,
+    "chloride": 0,
+    "bicarbonate": 37.8,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 12.2
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 2.6
+        }
+      ]
+    }
+  },
+  {
+    "slug": "bh-simplified-rao-2008",
+    "label": "BH Simplified Rao 2008",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 18.1,
+    "alkalinity": 50,
+    "potassium": 0,
+    "sodium": 23,
+    "sulfate": 71.7,
+    "chloride": 0,
+    "bicarbonate": 61,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 9.2
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 4.2
+        }
+      ]
+    }
+  },
+  {
+    "slug": "bh-simplified-sca-optimal",
+    "label": "BH Simplified SCA Optimal",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 16.6,
+    "alkalinity": 40.5,
+    "potassium": 0,
+    "sodium": 18.6,
+    "sulfate": 65.5,
+    "chloride": 0,
+    "bicarbonate": 49.4,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 8.4
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.4
+        }
+      ]
+    }
+  },
+  {
+    "slug": "cafelytic-espresso",
+    "label": "Cafelytic Espresso",
+    "brewMethod": "espresso",
+    "calcium": 2.16,
+    "magnesium": 8.65,
+    "alkalinity": 17.3,
+    "potassium": 13.51,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 29.19,
+    "bicarbonate": 21.09
+  },
+  {
+    "slug": "cafelytic-filter",
+    "label": "Cafelytic Filter",
+    "brewMethod": "filter",
+    "calcium": 4,
+    "magnesium": 10,
+    "alkalinity": 11,
+    "potassium": 8.65,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 34.05,
+    "bicarbonate": 13.18
+  },
+  {
+    "slug": "dan-eils",
+    "label": "Dan Eils",
+    "brewMethod": "all",
+    "calcium": 27.3,
+    "magnesium": 12,
+    "alkalinity": 50,
+    "potassium": 39.1,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 83.1,
+    "bicarbonate": 60.9,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "magnesium-chloride",
+          "grams": 5
+        },
+        {
+          "mineralId": "calcium-chloride",
+          "grams": 5
+        },
+        {
+          "mineralId": "potassium-bicarbonate",
+          "grams": 5
+        }
+      ]
+    }
+  },
+  {
+    "slug": "eaf-fam-29th-wave",
+    "label": "Fam's 29th Wave",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 4.9,
+    "alkalinity": 90,
+    "potassium": 0,
+    "sodium": 41,
+    "sulfate": 19,
+    "chloride": 0,
+    "bicarbonate": 109.7
+  },
+  {
+    "slug": "eaf-fam-69th-wave",
+    "label": "Fam's 69th Wave",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 14.6,
+    "alkalinity": 90,
+    "potassium": 0,
+    "sodium": 41,
+    "sulfate": 58,
+    "chloride": 0,
+    "bicarbonate": 109.7
+  },
+  {
+    "slug": "eaf-holy-water",
+    "label": "Holy Water",
+    "brewMethod": "filter",
+    "calcium": 0,
+    "magnesium": 15,
+    "alkalinity": 23,
+    "potassium": 18,
+    "sodium": 0,
+    "sulfate": 59,
+    "chloride": 0,
+    "bicarbonate": 28
+  },
+  {
+    "slug": "eaf-melbourne-water",
+    "label": "Melbourne Water",
+    "brewMethod": "filter",
+    "calcium": 0,
+    "magnesium": 12,
+    "alkalinity": 20.2,
+    "potassium": 0,
+    "sodium": 9,
+    "sulfate": 48,
+    "chloride": 0,
+    "bicarbonate": 24.7
+  },
+  {
+    "slug": "eaf-rpavlis",
+    "label": "RPavlis",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 0,
+    "alkalinity": 50,
+    "potassium": 39,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 0,
+    "bicarbonate": 60.9
+  },
+  {
+    "slug": "eaf-tww-espresso-inspired",
+    "label": "TWW Espresso Inspired",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 38.9,
+    "alkalinity": 67.5,
+    "potassium": 53,
+    "sodium": 0,
+    "sulfate": 154,
+    "chloride": 0,
+    "bicarbonate": 82.3
+  },
+  {
+    "slug": "empirical-glacial",
+    "label": "Empirical Glacial",
+    "brewMethod": "filter",
+    "calcium": 9.25,
+    "magnesium": 2.81,
+    "alkalinity": 23.95,
+    "potassium": 0.6,
+    "sodium": 3.4,
+    "sulfate": 8.77,
+    "chloride": 6.9,
+    "bicarbonate": 29.2
+  },
+  {
+    "slug": "empirical-spring",
+    "label": "Empirical Spring",
+    "brewMethod": "filter",
+    "calcium": 17.49,
+    "magnesium": 5.24,
+    "alkalinity": 22.55,
+    "potassium": 0,
+    "sodium": 0,
+    "sulfate": 20.71,
+    "chloride": 14.96,
+    "bicarbonate": 27.5
+  },
+  {
+    "slug": "hendon-espresso",
+    "label": "Hendon Water",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 24,
+    "alkalinity": 31,
+    "potassium": 0,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 0,
+    "bicarbonate": 0
+  },
+  {
+    "slug": "lotus-bright-juicy",
+    "label": "Bright & Juicy",
+    "brewMethod": "filter",
+    "calcium": 13.047,
+    "magnesium": 7.882,
+    "alkalinity": 16.186,
+    "potassium": 6.314,
+    "sodium": 3.723,
+    "sulfate": 0,
+    "chloride": 46.077,
+    "bicarbonate": 19.734
+  },
+  {
+    "slug": "lotus-light-bright",
+    "label": "Light & Bright",
+    "brewMethod": "filter",
+    "calcium": 22.832,
+    "magnesium": 0,
+    "alkalinity": 24.245,
+    "potassium": 18.941,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 40.395,
+    "bicarbonate": 29.56
+  },
+  {
+    "slug": "lotus-light-bright-espresso",
+    "label": "Light & Bright (espresso)",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 3.941,
+    "alkalinity": 44.449,
+    "potassium": 34.726,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 11.497,
+    "bicarbonate": 54.194
+  },
+  {
+    "slug": "lotus-simple-sweet",
+    "label": "Simple & Sweet",
+    "brewMethod": "filter",
+    "calcium": 22.832,
+    "magnesium": 7.882,
+    "alkalinity": 40.476,
+    "potassium": 12.628,
+    "sodium": 11.169,
+    "sulfate": 0,
+    "chloride": 63.389,
+    "bicarbonate": 49.35
+  },
+  {
+    "slug": "lotus-simple-sweet-espresso",
+    "label": "Simple & Sweet (espresso)",
+    "brewMethod": "espresso",
+    "calcium": 0,
+    "magnesium": 3.941,
+    "alkalinity": 56.73,
+    "potassium": 0,
+    "sodium": 26.061,
+    "sulfate": 0,
+    "chloride": 11.497,
+    "bicarbonate": 69.167
+  },
+  {
+    "slug": "matt-perger",
+    "label": "Matt Perger",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 19.7,
+    "alkalinity": 40.5,
+    "potassium": 0,
+    "sodium": 18.6,
+    "sulfate": 77.9,
+    "chloride": 0,
+    "bicarbonate": 49.4,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 10
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.4
+        }
+      ]
+    }
+  },
+  {
+    "slug": "melbourne-2013-wbc",
+    "label": "Melbourne 2013 WBC",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 5.7,
+    "alkalinity": 11.9,
+    "potassium": 0,
+    "sodium": 5.5,
+    "sulfate": 22.6,
+    "chloride": 0,
+    "bicarbonate": 14.5,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 2.9
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 1
+        }
+      ]
+    }
+  },
+  {
+    "slug": "rao",
+    "label": "Rao's Recipe",
+    "brewMethod": "filter",
+    "calcium": 20.9,
+    "magnesium": 8.5,
+    "alkalinity": 40,
+    "potassium": 0,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 0,
+    "bicarbonate": 0
+  },
+  {
+    "slug": "rao-2013",
+    "label": "Rao 2013",
+    "brewMethod": "all",
+    "calcium": 21.8,
+    "magnesium": 9.6,
+    "alkalinity": 40.5,
+    "potassium": 0,
+    "sodium": 18.6,
+    "sulfate": 0,
+    "chloride": 66.5,
+    "bicarbonate": 49.4,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "magnesium-chloride",
+          "grams": 4
+        },
+        {
+          "mineralId": "calcium-chloride",
+          "grams": 4
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.4
+        }
+      ]
+    }
+  },
+  {
+    "slug": "rao-perger",
+    "label": "Rao/Perger",
+    "brewMethod": "all",
+    "calcium": 10.9,
+    "magnesium": 14.6,
+    "alkalinity": 40.2,
+    "potassium": 15.6,
+    "sodium": 9.3,
+    "sulfate": 39,
+    "chloride": 33.2,
+    "bicarbonate": 49.1,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 5
+        },
+        {
+          "mineralId": "magnesium-chloride",
+          "grams": 2
+        },
+        {
+          "mineralId": "calcium-chloride",
+          "grams": 2
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 1.7
+        },
+        {
+          "mineralId": "potassium-bicarbonate",
+          "grams": 2
+        }
+      ]
+    }
+  },
+  {
+    "slug": "rasami-w1d1",
+    "label": "RAsami Week 1 Day 1",
+    "brewMethod": "filter",
+    "calcium": 0,
+    "magnesium": 14.79,
+    "alkalinity": 14.89,
+    "potassium": 0,
+    "sodium": 6.84,
+    "sulfate": 58.46,
+    "chloride": 0,
+    "bicarbonate": 18.16
+  },
+  {
+    "slug": "rasami-w1d2",
+    "label": "RAsami Week 1 Day 2",
+    "brewMethod": "filter",
+    "calcium": 12.0,
+    "magnesium": 0,
+    "alkalinity": 14.89,
+    "potassium": 0,
+    "sodium": 6.84,
+    "sulfate": 0,
+    "chloride": 21.22,
+    "bicarbonate": 18.16
+  },
+  {
+    "slug": "rasami-w1d3",
+    "label": "RAsami Week 1 Day 3",
+    "brewMethod": "filter",
+    "calcium": 6.0,
+    "magnesium": 9.86,
+    "alkalinity": 14.89,
+    "potassium": 0,
+    "sodium": 6.84,
+    "sulfate": 38.97,
+    "chloride": 10.61,
+    "bicarbonate": 18.16
+  },
+  {
+    "slug": "rasami-w1d4",
+    "label": "RAsami Week 1 Day 4",
+    "brewMethod": "filter",
+    "calcium": 12.0,
+    "magnesium": 4.93,
+    "alkalinity": 14.89,
+    "potassium": 0,
+    "sodium": 6.84,
+    "sulfate": 19.49,
+    "chloride": 21.22,
+    "bicarbonate": 18.16
+  },
+  {
+    "slug": "rasami-w1d5",
+    "label": "RAsami Week 1 Day 5",
+    "brewMethod": "filter",
+    "calcium": 9.0,
+    "magnesium": 7.3,
+    "alkalinity": 14.99,
+    "potassium": 11.72,
+    "sodium": 0,
+    "sulfate": 28.84,
+    "chloride": 15.92,
+    "bicarbonate": 18.28
+  },
+  {
+    "slug": "rasami-w1d6",
+    "label": "RAsami Week 1 Day 6",
+    "brewMethod": "filter",
+    "calcium": 4.63,
+    "magnesium": 7.24,
+    "alkalinity": 15.12,
+    "potassium": 3.91,
+    "sodium": 10.55,
+    "sulfate": 14.42,
+    "chloride": 27.76,
+    "bicarbonate": 18.44
+  },
+  {
+    "slug": "rasami-w1d7",
+    "label": "RAsami Week 1 Day 7",
+    "brewMethod": "filter",
+    "calcium": 4.63,
+    "magnesium": 3.65,
+    "alkalinity": 9.76,
+    "potassium": 3.91,
+    "sodium": 10.06,
+    "sulfate": 14.42,
+    "chloride": 20.33,
+    "bicarbonate": 11.9
+  },
+  {
+    "slug": "sca",
+    "label": "SCA Standard",
+    "brewMethod": "filter",
+    "calcium": 51,
+    "magnesium": 17,
+    "alkalinity": 40,
+    "potassium": 0,
+    "sodium": 0,
+    "sulfate": 0,
+    "chloride": 0,
+    "bicarbonate": 0
+  },
+  {
+    "slug": "sey",
+    "label": "Sey",
+    "brewMethod": "filter",
+    "calcium": 20,
+    "magnesium": 15,
+    "alkalinity": 15,
+    "potassium": 11.72,
+    "sodium": 0,
+    "sulfate": 59.29,
+    "chloride": 35.39,
+    "bicarbonate": 18.29
+  },
+  {
+    "slug": "world-of-coffee-budapest",
+    "label": "World of Coffee Budapest",
+    "brewMethod": "all",
+    "calcium": 0,
+    "magnesium": 12.2,
+    "alkalinity": 40.5,
+    "potassium": 0,
+    "sodium": 18.6,
+    "sulfate": 48.3,
+    "chloride": 0,
+    "bicarbonate": 49.4,
+    "stockFormula": {
+      "bottleMl": 200,
+      "doseGramsPerL": 4,
+      "minerals": [
+        {
+          "mineralId": "epsom-salt",
+          "grams": 6.2
+        },
+        {
+          "mineralId": "baking-soda",
+          "grams": 3.4
+        }
+      ]
+    }
+  }
+]

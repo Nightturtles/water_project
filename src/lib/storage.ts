@@ -1166,9 +1166,33 @@ export function getEffectiveAlkalinitySources(): string[] {
  * `calcium-chloride-anhydrous`) are chemically interchangeable: same Ca:Cl
  * ratio, differing only in grams per dose. The derivation logic treats them as
  * a single calcium-source slot, so collapse them to one representative here.
- * Prefer the dihydrate when both are enabled to preserve prior behavior.
+ * When both are enabled the dihydrate wins, unless the anhydrous form comes
+ * from a configured single-mineral concentrate and the dihydrate doesn't.
  */
 function getEffectiveCalciumChlorideForm(selected: string[]): string | null {
+  if (selected.includes("calcium-chloride") && selected.includes("calcium-chloride-anhydrous")) {
+    // Both forms available. A form backed by an enabled single-mineral
+    // concentrate (DIY / brand) wins over a powder of the other form, matching
+    // the calculator's "concentrate beats powder" conflict rule. Without this,
+    // an anhydrous CaCl2 concentrate next to the default dihydrate starter kit
+    // was never dosed at all (its row didn't render). Only a configured
+    // concentrate counts: one ticked before its bottle mL and grams are set
+    // can't dose anything, and letting it take the slot dropped the powder's
+    // calcium entirely.
+    const concentrateForms = new Set(
+      loadSelectedConcentrates()
+        .filter((cid) => getConcentrateGramsPerMl(cid) > 0)
+        .map(getConcentrateMineralId)
+        .filter((id): id is string => !!id),
+    );
+    if (
+      concentrateForms.has("calcium-chloride-anhydrous") &&
+      !concentrateForms.has("calcium-chloride")
+    ) {
+      return "calcium-chloride-anhydrous";
+    }
+    return "calcium-chloride";
+  }
   if (selected.includes("calcium-chloride")) return "calcium-chloride";
   if (selected.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
   return null;
