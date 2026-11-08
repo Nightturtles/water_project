@@ -9,6 +9,9 @@ import { describe, test, expect } from "vitest";
 import {
   persistedSessionStorageKey,
   extractUserIdFromPersistedSession,
+  jwtSubject,
+  shouldAdoptCallbackSession,
+  AUTH_FLOW_PENDING_WINDOW_MS,
 } from "../src/lib/auth-session";
 
 describe("persistedSessionStorageKey", () => {
@@ -59,5 +62,91 @@ describe("extractUserIdFromPersistedSession", () => {
     expect(extractUserIdFromPersistedSession("[]")).toBeNull();
     expect(extractUserIdFromPersistedSession('"hello"')).toBeNull();
     expect(extractUserIdFromPersistedSession("null")).toBeNull();
+  });
+});
+
+// Build an unsigned JWT-shaped token whose payload carries `sub`.
+function fakeJwt(sub: string): string {
+  const b64url = (s: string) =>
+    Buffer.from(s).toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return b64url('{"alg":"none"}') + "." + b64url(JSON.stringify({ sub })) + ".sig";
+}
+
+describe("jwtSubject", () => {
+  test("reads the sub claim from a base64url payload", () => {
+    expect(jwtSubject(fakeJwt("user-a"))).toBe("user-a");
+  });
+
+  test("malformed or missing tokens → null", () => {
+    expect(jwtSubject(null)).toBeNull();
+    expect(jwtSubject("not-a-jwt")).toBeNull();
+    expect(jwtSubject("a.%%%.c")).toBeNull();
+  });
+});
+
+describe("shouldAdoptCallbackSession", () => {
+  const now = 1_800_000_000_000;
+  const base = { pendingFlowStartedAt: null, now };
+
+  test("nobody signed in → adopt (ordinary sign-in / confirmation landing)", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        ...base,
+        incomingAccessToken: fakeJwt("user-b"),
+        existingUserId: null,
+      }),
+    ).toBe(true);
+  });
+
+  test("callback for the signed-in account → adopt (e.g. a password-reset link)", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        ...base,
+        incomingAccessToken: fakeJwt("user-a"),
+        existingUserId: "user-a",
+      }),
+    ).toBe(true);
+  });
+
+  test("unsolicited callback for a different account → refuse", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        ...base,
+        incomingAccessToken: fakeJwt("attacker"),
+        existingUserId: "user-a",
+      }),
+    ).toBe(false);
+  });
+
+  test("different account after this app started an auth flow → adopt", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        incomingAccessToken: fakeJwt("user-b"),
+        existingUserId: "user-a",
+        pendingFlowStartedAt: now - 60_000,
+        now,
+      }),
+    ).toBe(true);
+  });
+
+  test("a pending flow older than the window doesn't count", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        incomingAccessToken: fakeJwt("user-b"),
+        existingUserId: "user-a",
+        pendingFlowStartedAt: now - AUTH_FLOW_PENDING_WINDOW_MS - 1,
+        now,
+      }),
+    ).toBe(false);
+  });
+
+  test("error-only callback (no token) → let auth-js handle it", () => {
+    expect(
+      shouldAdoptCallbackSession({
+        ...base,
+        incomingAccessToken: null,
+        existingUserId: "user-a",
+      }),
+    ).toBe(true);
   });
 });

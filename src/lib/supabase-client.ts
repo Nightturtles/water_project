@@ -6,15 +6,101 @@
 // declared below — keep their signatures stable.
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { persistedSessionStorageKey, extractUserIdFromPersistedSession } from "./auth-session";
+import {
+  persistedSessionStorageKey,
+  extractUserIdFromPersistedSession,
+  shouldAdoptCallbackSession,
+} from "./auth-session";
 
 const SUPABASE_URL = "https://srlwgayrxzamxlodpsrq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq";
+
+// --- Auth-callback guard ----------------------------------------------------
+// The client uses the implicit flow, so auth-js adopts any access/refresh
+// token pair it finds in the URL hash (and capacitor-bootstrap does the same
+// for cafelytic:// deep links), replacing whatever session exists. A crafted
+// link carrying another account's tokens would then silently move a signed-in
+// user into that account, and the first-login merge would push their local
+// recipes into it. Only adopt a callback when nobody is signed in, when it's
+// for the signed-in account, or when this app started an auth flow recently.
+const AUTH_FLOW_PENDING_KEY = "cw_auth_flow_pending_at";
+
+function markAuthFlowPending(): void {
+  try {
+    localStorage.setItem(AUTH_FLOW_PENDING_KEY, String(Date.now()));
+  } catch (_) {
+    // Storage unavailable: a different-account callback will be refused,
+    // same as an unsolicited one. Signed-out callbacks are unaffected.
+  }
+}
+
+function readAuthFlowPending(): number | null {
+  try {
+    const raw = localStorage.getItem(AUTH_FLOW_PENDING_KEY);
+    const n = raw ? Number(raw) : NaN;
+    return Number.isFinite(n) ? n : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+function clearAuthFlowPending(): void {
+  try {
+    localStorage.removeItem(AUTH_FLOW_PENDING_KEY);
+  } catch (_) {
+    // ignore
+  }
+}
+
+function readPersistedUserId(): string | null {
+  try {
+    return extractUserIdFromPersistedSession(
+      localStorage.getItem(persistedSessionStorageKey(SUPABASE_URL)),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+// True when an auth callback carrying `accessToken` may replace the current
+// session (see shouldAdoptCallbackSession). Used for both the URL-hash path
+// below and native deep links (capacitor-bootstrap.ts).
+export function isAuthCallbackAllowed(accessToken: string | null): boolean {
+  const allowed = shouldAdoptCallbackSession({
+    incomingAccessToken: accessToken,
+    existingUserId: readPersistedUserId(),
+    pendingFlowStartedAt: readAuthFlowPending(),
+    now: Date.now(),
+  });
+  if (allowed && accessToken) clearAuthFlowPending();
+  return allowed;
+}
+
+// auth-js's own test for "this URL is an implicit-grant callback", gated by
+// isAuthCallbackAllowed. A refused callback keeps the current session and the
+// foreign tokens are dropped from the address bar.
+function detectSessionInUrlGuarded(url: URL, params: { [parameter: string]: string }): boolean {
+  const isImplicitCallback = Boolean(
+    params.access_token || params.error || params.error_description || params.error_code,
+  );
+  if (!isImplicitCallback) return false;
+  if (isAuthCallbackAllowed(params.access_token || null)) return true;
+  try {
+    history.replaceState(history.state, "", url.pathname + url.search);
+  } catch (_) {
+    // ignore
+  }
+  console.warn("[auth] ignored a sign-in link for a different account than the one signed in");
+  return false;
+}
 
 // Upgrade requests to keepalive: true when the page is being backgrounded or
 // unloaded. Lets in-flight pushes (from flushPendingSync) survive navigation.
 // 64 KB aggregate body cap, fine for this app's payloads.
 export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    detectSessionInUrl: detectSessionInUrlGuarded,
+  },
   global: {
     fetch: function (url, opts) {
       if (typeof document !== "undefined" && document.visibilityState === "hidden") {
@@ -78,17 +164,24 @@ trySet("signInWithEmail", async function (email: string, password: string) {
   return supabaseClient.auth.signInWithPassword({ email, password });
 });
 
+// The flows below land back on this app with tokens in the URL (or a deep
+// link), so each one marks itself as started; isAuthCallbackAllowed then
+// accepts the callback even if some other account is signed in on this
+// device.
 trySet("signUpWithEmail", async function (email: string, password: string) {
+  markAuthFlowPending();
   return supabaseClient.auth.signUp({ email, password });
 });
 
 trySet("resetPasswordForEmail", async function (email: string) {
+  markAuthFlowPending();
   return supabaseClient.auth.resetPasswordForEmail(email, {
     redirectTo: RESET_CALLBACK,
   });
 });
 
 trySet("signInWithGoogle", async function () {
+  markAuthFlowPending();
   return supabaseClient.auth.signInWithOAuth({
     provider: "google",
     options: { redirectTo: AUTH_CALLBACK },
@@ -96,6 +189,7 @@ trySet("signInWithGoogle", async function () {
 });
 
 trySet("signInWithApple", async function () {
+  markAuthFlowPending();
   return supabaseClient.auth.signInWithOAuth({
     provider: "apple",
     options: { redirectTo: AUTH_CALLBACK },

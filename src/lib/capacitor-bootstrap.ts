@@ -21,6 +21,7 @@ import { Haptics, ImpactStyle } from "@capacitor/haptics";
 import { Share } from "@capacitor/share";
 import { StatusBar, Style } from "@capacitor/status-bar";
 import { SplashScreen } from "@capacitor/splash-screen";
+import { isAuthCallbackAllowed } from "./supabase-client";
 
 // Public privacy-policy URL, registered with both app stores. Hard-coded
 // rather than derived from window.location.origin because on native the
@@ -200,6 +201,13 @@ async function handleDeepLink(url: string): Promise<void> {
     // through and navigate the recovery flow into reset-password.html
     // without an actual session.
     if (accessToken && refreshToken) {
+      // Any app or web page can open a cafelytic:// link, so refuse one that
+      // would swap the signed-in account for a different one this app didn't
+      // start a sign-in for (see isAuthCallbackAllowed).
+      if (!isAuthCallbackAllowed(accessToken)) {
+        console.warn("[capacitor-bootstrap] ignored a deep link for a different account");
+        return;
+      }
       const { error } = await client.auth.setSession({
         access_token: accessToken,
         refresh_token: refreshToken,
