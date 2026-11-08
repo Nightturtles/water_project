@@ -209,8 +209,9 @@ async function handleDeepLink(url: string): Promise<void> {
       // would swap the signed-in account for a different one this app didn't
       // start a sign-in for (see authCallbackDecision). A link claiming the
       // signed-in account must prove it before setSession sees it: setSession
-      // trusts an unverified access token and, if it looks expired, adopts
-      // whatever account the refresh token belongs to.
+      // checks an unexpired access token with the server, but when the
+      // token's (unverified) exp says it has expired, or it has none, it skips
+      // that check and adopts whatever account the refresh token belongs to.
       const decision = authCallbackDecision(accessToken);
       let tokens: { access_token: string; refresh_token: string } | null = {
         access_token: accessToken,
