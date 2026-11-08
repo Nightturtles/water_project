@@ -486,36 +486,61 @@
 
     // A cloud pull (another device's edits arriving) can change the drafts this
     // page rendered from. Reload to show them, the same way this page already
-    // reloads for edits made in another tab, but not while the user is typing
-    // in one of the recipe fields: wait until focus leaves it.
+    // reloads for edits made in another tab, but only when nothing on the page
+    // would be lost: not while a field is being typed in, a dialog is open,
+    // Starting Water has unsaved edits, or a profile name is typed but not
+    // saved. Until then the reload waits and is retried after each focus
+    // change or click.
     function recipeDraftsChangedSinceRender() {
       if (sortedJson(loadRecipeMineralInputs()) !== sortedJson(recipeMineralInputs)) return true;
       if (sortedJson(loadRecipeConcentrateInputs()) !== sortedJson(recipeConcentrateInputs)) return true;
       if (sortedJson(loadRecipeStockGrams()) !== sortedJson(recipeStockGrams)) return true;
       return hasAnyActiveStock && loadRecipeDispenseMode() !== recipeDispenseMode;
     }
-    function recipeFieldHasFocus() {
+    const NON_TEXT_INPUT_TYPES = ["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"];
+    function textFieldHasFocus() {
       const active = document.activeElement;
-      return !!(active && active.closest && active.closest("#mineral-inputs, #stock-dispense-inputs"));
+      if (!active || active === document.body) return false;
+      if (active.isContentEditable) return true;
+      if (active.tagName === "TEXTAREA" || active.tagName === "SELECT") return true;
+      return active.tagName === "INPUT" && !NON_TEXT_INPUT_TYPES.includes(active.type);
     }
+    const UNSAVED_NAME_FIELD_IDS = ["source-profile-name", "recipe-target-name"];
+    function pageHasUnsavedState() {
+      if (textFieldHasFocus()) return true;
+      if (sourceSection.hasUnsavedEdits()) return true;
+      if (UNSAVED_NAME_FIELD_IDS.some((id) => {
+        const field = document.getElementById(id);
+        return !!field && field.value.trim() !== "";
+      })) return true;
+      // Open dialogs. Some hide with visibility (the mobile More sheet slides
+      // off-screen) rather than display, so check both.
+      return Array.from(document.querySelectorAll(".confirm-overlay, [aria-modal='true']")).some((el) => {
+        const style = getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden" && el.getClientRects().length > 0;
+      });
+    }
+    function reloadIfSafe() {
+      if (pageHasUnsavedState()) return false;
+      // Save a source-water edit still inside its debounce first.
+      sourceSection.flushPendingSave();
+      location.reload();
+      return true;
+    }
+    // Once a pull has changed the drafts on screen, the reload stays owed even
+    // if a later keystroke re-reads the stored maps (refreshDraftMap) so the
+    // comparison above stops seeing a difference: the other fields still show
+    // pre-pull values until the page reloads.
     let recipeReloadPending = false;
     function reloadIfDraftsChanged() {
+      if (recipeReloadPending) return;
       if (!recipeDraftsChangedSinceRender()) return;
-      if (recipeFieldHasFocus()) {
-        if (recipeReloadPending) return;
-        recipeReloadPending = true;
-        document.addEventListener("focusout", function onFocusOut() {
-          // focusout fires before focus moves; check once the move settles.
-          setTimeout(() => {
-            if (recipeFieldHasFocus()) return;
-            document.removeEventListener("focusout", onFocusOut);
-            recipeReloadPending = false;
-            if (recipeDraftsChangedSinceRender()) location.reload();
-          }, 0);
-        });
-        return;
-      }
-      location.reload();
+      if (reloadIfSafe()) return;
+      recipeReloadPending = true;
+      // Re-check once the focus move or the click's own handlers have run.
+      const retry = () => setTimeout(reloadIfSafe, 0);
+      document.addEventListener("focusout", retry);
+      document.addEventListener("click", retry, true);
     }
     window.addEventListener("cw:cloud-data-changed", reloadIfDraftsChanged);
 

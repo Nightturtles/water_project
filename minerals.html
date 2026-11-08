@@ -745,12 +745,20 @@
     // both events fire without any data change (every save's own Realtime echo,
     // every token refresh / tab refocus), so only rebuild when the concentrate
     // data or the signed-in state actually differs from what's on screen.
+    // Compared ignoring key order and selection order: a pull hands back the
+    // same specs with Postgres jsonb's key order (e.g. a dropper size's dropMl
+    // moves), which must not count as a change.
+    function sortedJson(value) {
+      if (value === null || typeof value !== "object") return JSON.stringify(value);
+      if (Array.isArray(value)) return "[" + value.map(sortedJson).join(",") + "]";
+      return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + sortedJson(value[k])).join(",") + "}";
+    }
     function concentrateDataSignature() {
-      return JSON.stringify([
+      return sortedJson([
         typeof window.isLoggedInSync === "function" ? window.isLoggedInSync() : null,
         loadDiyConcentrateSpecs(),
         loadStockConcentrateSpecs(),
-        loadSelectedConcentrates(),
+        loadSelectedConcentrates().slice().sort(),
       ]);
     }
     let renderedConcentrateSignature = concentrateDataSignature();
@@ -900,7 +908,10 @@
               return;
             }
             const recipes = getPublicRecipesSync();
-            const row = recipes.find((r) => r.slug === librarySlug && r.stockFormula);
+            const row = findLibraryRowBySlug(
+              Array.isArray(recipes) ? recipes.filter((r) => r && r.stockFormula) : [],
+              librarySlug,
+            );
             if (!row || !row.stockFormula) {
               alert('No library entry found for slug "' + librarySlug + '".');
               return;
@@ -945,16 +956,18 @@
               alert("Recipe Concentrate derivation is unavailable. Please reload the page and try again.");
               return;
             }
-            // Resolve the source recipe. Public library + published customs
-            // come from getPublicRecipesSync; private customs fall through to
-            // getTargetProfileByKey (which merges the 3-tier preset stack).
+            // Resolve the source recipe: the user's own preset stack first
+            // (getTargetProfileByKey merges built-ins, rail recipes and their
+            // customs), then the public library. Library slugs are unique only
+            // per user, so a stranger's row with the same slug must not stand
+            // in for the recipe this concentrate was derived from: prefer the
+            // canonical row (findLibraryRowBySlug).
             let recipe = null;
-            if (typeof getPublicRecipesSync === "function") {
-              const recipes = getPublicRecipesSync();
-              if (Array.isArray(recipes)) recipe = recipes.find((r) => r && r.slug === recipeSlug);
-            }
-            if (!recipe && typeof getTargetProfileByKey === "function") {
+            if (typeof getTargetProfileByKey === "function") {
               recipe = getTargetProfileByKey(recipeSlug);
+            }
+            if (!recipe && typeof getPublicRecipesSync === "function") {
+              recipe = findLibraryRowBySlug(getPublicRecipesSync(), recipeSlug);
             }
             if (!recipe) {
               alert('No recipe found for slug "' + recipeSlug + '". It may have been deleted.');

@@ -75,7 +75,8 @@ interface RecipeHandlers {
   isStockImported?: (recipe: LibraryRecipeRow) => boolean;
   isStockDerived?: (recipe: LibraryRecipeRow) => boolean;
   isOwner?: (recipe: LibraryRecipeRow) => boolean;
-  onToggleSave?: (recipe: LibraryRecipeRow) => void;
+  // onChanged runs if the saved state changes later (after an unsave confirm).
+  onToggleSave?: (recipe: LibraryRecipeRow, onChanged?: () => void) => void;
   onAddStock?: (recipe: LibraryRecipeRow) => void;
   onDeriveStock?: (recipe: LibraryRecipeRow) => void;
   onUseRecipe?: (recipe: LibraryRecipeRow) => void;
@@ -701,11 +702,22 @@ function buildDetailBody(recipe: LibraryRecipeRow, handlers: RecipeHandlers): vo
   saveBtn.addEventListener("click", function (e) {
     e.preventDefault();
     e.stopPropagation();
-    if (handlers.onToggleSave) handlers.onToggleSave(recipe);
     // Re-render the modal body so the Save button icon / label / aria-pressed
-    // reflect the new saved state. Without this, the snapshot taken at
-    // open-time goes stale until the user closes and reopens the modal.
-    buildDetailBody(recipe, handlers);
+    // reflect the new saved state, and put focus back on the new button.
+    // Without this, the snapshot taken at open-time goes stale until the user
+    // closes and reopens the modal. Unsaving a user-published recipe asks
+    // first and changes nothing until the user confirms, so re-render then
+    // (onChanged) instead of now: otherwise the modal kept showing "Saved"
+    // after Remove and the next tap saved the recipe again. Not re-rendering
+    // now also leaves this button in place for the dialog to return focus to.
+    const rerender = function () {
+      if (!detailOverlay || detailOverlay.style.display === "none") return;
+      buildDetailBody(recipe, handlers);
+      const next = detailOverlay.querySelector<HTMLElement>(".rx-detail-save");
+      if (next) next.focus();
+    };
+    if (handlers.onToggleSave) handlers.onToggleSave(recipe, rerender);
+    if (!isConfirmDialogOpen()) rerender();
   });
   if (typeof window.applyAuthGate === "function") {
     window.applyAuthGate(saveBtn, { reason: "bookmark" });
@@ -890,6 +902,12 @@ function buildDetailBody(recipe: LibraryRecipeRow, handlers: RecipeHandlers): vo
   if (hasAnyAction) scroll.appendChild(actions);
 }
 
+// True while ui-shared's showConfirm dialog is showing.
+function isConfirmDialogOpen(): boolean {
+  const overlay = document.getElementById("confirm-overlay");
+  return !!overlay && overlay.style.display === "flex";
+}
+
 function openRecipeDetailModal(
   recipe: LibraryRecipeRow | null | undefined,
   handlers?: RecipeHandlers,
@@ -913,6 +931,10 @@ function openRecipeDetailModal(
   closeBtn.addEventListener("click", closeRecipeDetailModal);
 
   detailKeyHandler = function (e) {
+    // A confirm dialog opened from the modal (unsaving a recipe) sits on top.
+    // Leave Escape and Tab to it: this capture-phase handler would otherwise
+    // close the modal behind the still-open dialog, or trap focus under it.
+    if (isConfirmDialogOpen()) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       closeRecipeDetailModal();
@@ -1377,8 +1399,11 @@ function mountRecipeBrowser(root: HTMLElement | null): void {
     isOwner: function (recipe) {
       return !!(currentUserId && recipe && recipe.userId === currentUserId);
     },
-    onToggleSave: function (recipe) {
-      toggleBookmark(recipe, render);
+    onToggleSave: function (recipe, onChanged) {
+      toggleBookmark(recipe, function () {
+        render();
+        if (onChanged) onChanged();
+      });
       // Full re-render so every surface (hero + any carousel card) reflects
       // the new saved state. Cheap at 30 cards; revisit past ~200.
       render();
