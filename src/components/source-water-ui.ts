@@ -104,6 +104,9 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
   // the full categorized list. Collapse is CSS-driven (.presets-collapsed), so
   // moving the .active class is enough to keep the collapsed view correct.
   let sourcePresetsExpanded = false;
+  // Signature of the preset list as last rendered (renderSourcePresetButtons),
+  // so refreshFromStorage only re-renders for a list another device changed.
+  let renderedPresetListSignature = "";
   const showSourceSaveStatus = createStatusHandler(sourceSaveStatus);
 
   function applySourcePresetsCollapsed() {
@@ -329,6 +332,11 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
     sourcePresetsContainer.appendChild(moreToggle);
     applySourcePresetsCollapsed();
 
+    // Every render records what it drew. Local saves, deletes and restores
+    // re-render too; leaving the signature stale made their own sync echo look
+    // like another device's change, and that refresh cleared an in-progress
+    // "Editing: ..." preset edit.
+    renderedPresetListSignature = presetListSignature(allPresets);
     highlightSourcePreset(activeSourcePreset);
   }
 
@@ -534,8 +542,6 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
       }),
     );
   }
-  // The buttons rendered during initialization above.
-  let renderedPresetListSignature = presetListSignature(getAllPresets());
   function refreshFromStorage(): boolean {
     // An edit still inside the save debounce is newer than anything stored.
     // Save it first (only the edited fields), so the refresh below neither
@@ -558,10 +564,7 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
       );
     });
     if (!listChanged && !presetChanged && changedIons.length === 0) return false;
-    if (listChanged) {
-      renderSourcePresetButtons();
-      renderedPresetListSignature = presetListSignature(presets);
-    }
+    if (listChanged) renderSourcePresetButtons();
     if (presetChanged) activeSourcePreset = storedPreset;
     if (listChanged || presetChanged) {
       highlightSourcePreset(activeSourcePreset);

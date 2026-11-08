@@ -49,8 +49,15 @@ test.describe("cloud pull refresh", () => {
       saveSourceWater({ ...loadSourceWater(), magnesium: 7 });
       window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
     });
-    // Let the debounced save run.
-    await page.waitForTimeout(500);
+    // Wait for the debounced save to land in storage.
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          // @ts-expect-error - global from storage.ts
+          return Number(loadSourceWater().calcium);
+        }),
+      )
+      .toBe(12);
     const state = await page.evaluate(() => ({
       // @ts-expect-error - global from storage.ts
       stored: loadSourceWater() as Record<string, number>,
@@ -92,7 +99,9 @@ test.describe("cloud pull refresh", () => {
     await page.goto("/recipe.html");
     await page.locator("#src-calcium").fill("9");
     await pullDraftChange(page);
-    // Still typing in a source field: no reload yet.
+    // Still typing in a source field: no reload yet. The reload decision runs
+    // synchronously on the event and its retries on setTimeout(0) after a
+    // focus change or click, so 400 ms is far past any reload it would make.
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => window.__beforeReload === true)).toBe(true);
     await expect(page.locator("#src-calcium")).toBeFocused();
@@ -124,7 +133,14 @@ test.describe("cloud pull refresh", () => {
       sheet.textContent = "More";
       document.body.appendChild(sheet);
     });
-    await Promise.all([page.waitForEvent("load"), pullDraftChange(page).catch(() => {})]);
+    // The reload can tear down the page mid-evaluate; only that is expected.
+    const reloadedMidEvaluate = (e: Error) => {
+      if (!/Execution context was destroyed/.test(String(e && e.message))) throw e;
+    };
+    await Promise.all([
+      page.waitForEvent("load"),
+      pullDraftChange(page).catch(reloadedMidEvaluate),
+    ]);
     expect(await page.evaluate(() => window.__beforeReload === undefined)).toBe(true);
   });
 
@@ -138,8 +154,23 @@ test.describe("cloud pull refresh", () => {
     // Focus leaves the field, but a reload would re-apply the preset and drop
     // the unsaved edit, so the page stays put.
     await page.locator("h1").click();
+    // As above: any reload would already have happened by now.
     await page.waitForTimeout(400);
     expect(await page.evaluate(() => window.__beforeReload === true)).toBe(true);
     await expect(page.locator("#src-calcium")).toHaveValue("9");
+  });
+
+  test("taste: a pull that changed the selected preset shows it", async ({ page }) => {
+    await page.goto("/taste.html");
+    await expect(page.locator('#taste-presets [data-preset="cafelytic-filter"]')).toHaveClass(
+      /active/,
+    );
+    await page.evaluate(() => {
+      // Another device selected SCA; the pull stored it.
+      // @ts-expect-error - global from storage.ts
+      _setTransient("cw_target_preset", "sca");
+      window.dispatchEvent(new CustomEvent("cw:cloud-data-changed"));
+    });
+    await expect(page.locator('#taste-presets [data-preset="sca"]')).toHaveClass(/active/);
   });
 });

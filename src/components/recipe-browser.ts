@@ -218,7 +218,13 @@ function toggleBookmark(
     // than an open recipe-detail modal at the same z-index; move it last so it
     // paints on top.
     const confirmOverlay = document.getElementById("confirm-overlay");
-    if (confirmOverlay) document.body.appendChild(confirmOverlay);
+    if (confirmOverlay) {
+      document.body.appendChild(confirmOverlay);
+      // Moving the node drops the focus showConfirm gave its default button;
+      // put it back so Enter / Space and Tab still work from the keyboard.
+      const yes = document.getElementById("confirm-yes");
+      if (yes) yes.focus();
+    }
     return true;
   }
   return false;
