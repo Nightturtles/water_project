@@ -58,6 +58,9 @@ export interface InitSourceWaterOptions {
 export interface SourceWaterSection {
   getSourceWater: () => IonMap;
   getActivePreset: () => string;
+  refreshFromStorage: () => boolean;
+  flushPendingSave: () => void;
+  hasUnsavedEdits: () => boolean;
 }
 
 /**
@@ -101,6 +104,9 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
   // the full categorized list. Collapse is CSS-driven (.presets-collapsed), so
   // moving the .active class is enough to keep the collapsed view correct.
   let sourcePresetsExpanded = false;
+  // Signature of the preset list as last rendered (renderSourcePresetButtons),
+  // so refreshFromStorage only re-renders for a list another device changed.
+  let renderedPresetListSignature = "";
   const showSourceSaveStatus = createStatusHandler(sourceSaveStatus);
 
   function applySourcePresetsCollapsed() {
@@ -121,13 +127,37 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
     return water;
   }
 
+  // Fields typed into since the last save. The typing save writes only these
+  // over the stored values, so a cloud pull that changed other fields in the
+  // meantime isn't overwritten with what this page still shows for them.
+  const editedSourceIons = new Set<string>();
+
+  // Whole replacement: every field as shown (preset activation).
   function saveCurrentSourceWaterInputs() {
+    editedSourceIons.clear();
     saveSourceWater(getSourceWater());
+  }
+
+  // Typing save: only the fields edited since the last save, written over the
+  // stored values. A no-op when nothing is pending.
+  function saveEditedSourceWaterInputs() {
+    if (editedSourceIons.size === 0) return;
+    const stored = loadSourceWater();
+    const shown = getSourceWater();
+    const next: IonMap = {};
+    ION_FIELDS.forEach(function (ion) {
+      next[ion] =
+        editedSourceIons.has(ion) || stored[ion] == null
+          ? shown[ion] || 0
+          : Number(stored[ion]) || 0;
+    });
+    editedSourceIons.clear();
+    saveSourceWater(next);
   }
   const debouncedSave =
     typeof debounce === "function"
-      ? debounce(saveCurrentSourceWaterInputs, 300)
-      : saveCurrentSourceWaterInputs;
+      ? debounce(saveEditedSourceWaterInputs, 300)
+      : saveEditedSourceWaterInputs;
 
   function updateSourceAlkalinityFromBicarbonate() {
     const bicarb = parseFloat(sourceBicarbonateInput.value) || 0;
@@ -302,6 +332,11 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
     sourcePresetsContainer.appendChild(moreToggle);
     applySourcePresetsCollapsed();
 
+    // Every render records what it drew. Local saves, deletes and restores
+    // re-render too; leaving the signature stale made their own sync echo look
+    // like another device's change, and that refresh cleared an in-progress
+    // "Editing: ..." preset edit.
+    renderedPresetListSignature = presetListSignature(allPresets);
     highlightSourcePreset(activeSourcePreset);
   }
 
@@ -397,6 +432,7 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
             "Editing: " + (preset && preset.label ? preset.label : activeSourcePreset);
         }
       }
+      editedSourceIons.add(ion);
       debouncedSave();
       updateSourceAlkalinityFromBicarbonate();
       renderSourceReadonlyTags();
@@ -490,12 +526,74 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
   }
   activateSourcePreset(activeSourcePreset);
 
+  // Re-read the stored source water / preset into the section after a cloud
+  // pull (another device's change). Before this the inputs kept their
+  // pre-pull values, and the next keystroke's debounced save wrote every
+  // stale ion back over the newer stored ones. The field being typed in is
+  // left alone; the others are refreshed. Returns true if anything on screen
+  // changed.
+  // Only touches the DOM when the stored data actually differs from what's
+  // shown, so a save's own echo leaves an in-progress preset edit (and its
+  // "Editing: ..." save bar) alone.
+  function presetListSignature(presets: Record<string, { label?: string }>): string {
+    return JSON.stringify(
+      Object.keys(presets).map(function (k) {
+        return [k, presets[k] ? presets[k]!.label : ""];
+      }),
+    );
+  }
+  function refreshFromStorage(): boolean {
+    // An edit still inside the save debounce is newer than anything stored.
+    // Save it first (only the edited fields), so the refresh below neither
+    // reverts it on screen nor leaves the pending save to write it from
+    // reverted inputs.
+    saveEditedSourceWaterInputs();
+    const active = document.activeElement as HTMLElement | null;
+    const focusedId = active && typeof active.id === "string" ? active.id : "";
+    const presets = getAllPresets();
+    const storedPreset = loadSourcePresetName();
+    const stored = loadSourceWater();
+    const listChanged = presetListSignature(presets) !== renderedPresetListSignature;
+    const presetChanged = storedPreset !== activeSourcePreset && !!presets[storedPreset];
+    const changedIons = ION_FIELDS.filter(function (ion) {
+      const input = document.getElementById("src-" + ion) as HTMLInputElement | null;
+      return (
+        !!input &&
+        input.id !== focusedId &&
+        (parseFloat(input.value) || 0) !== (Number(stored[ion]) || 0)
+      );
+    });
+    if (!listChanged && !presetChanged && changedIons.length === 0) return false;
+    if (listChanged) renderSourcePresetButtons();
+    if (presetChanged) activeSourcePreset = storedPreset;
+    if (listChanged || presetChanged) {
+      highlightSourcePreset(activeSourcePreset);
+      applySourcePresetsCollapsed();
+    }
+    changedIons.forEach(function (ion) {
+      const input = document.getElementById("src-" + ion) as HTMLInputElement | null;
+      if (input) input.value = String(stored[ion] || 0);
+    });
+    // Alkalinity is derived from bicarbonate; don't rewrite it while it's
+    // the field being typed in.
+    if (focusedId !== "src-alkalinity") updateSourceAlkalinityFromBicarbonate();
+    renderSourceReadonlyTags();
+    onActivated(activeSourcePreset);
+    return true;
+  }
+
   // --- Public API ---
   return {
     getSourceWater: getSourceWater,
     getActivePreset: function () {
       return activeSourcePreset;
     },
+    refreshFromStorage: refreshFromStorage,
+    // Save an edit still inside the save debounce now (before a reload).
+    flushPendingSave: saveEditedSourceWaterInputs,
+    // A named preset's values edited on screen but not saved to it. A reload
+    // re-applies the preset and drops them.
+    hasUnsavedEdits: hasUnsavedSourceChanges,
   };
 }
 

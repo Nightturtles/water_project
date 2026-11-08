@@ -32,6 +32,7 @@
 import { LIBRARY_TAGS } from "../lib/constants";
 import { deriveStockFormulaFromTarget, recipeMetricsSummary } from "../lib/metrics";
 import { formatStockSpec } from "../lib/stock-format";
+import { showConfirm } from "./ui-shared";
 import {
   addDeletedTargetPreset,
   deleteCustomTargetProfile,
@@ -74,7 +75,8 @@ interface RecipeHandlers {
   isStockImported?: (recipe: LibraryRecipeRow) => boolean;
   isStockDerived?: (recipe: LibraryRecipeRow) => boolean;
   isOwner?: (recipe: LibraryRecipeRow) => boolean;
-  onToggleSave?: (recipe: LibraryRecipeRow) => void;
+  // onChanged runs if the saved state changes later (after an unsave confirm).
+  onToggleSave?: (recipe: LibraryRecipeRow, onChanged?: () => void) => void;
   onAddStock?: (recipe: LibraryRecipeRow) => void;
   onDeriveStock?: (recipe: LibraryRecipeRow) => void;
   onUseRecipe?: (recipe: LibraryRecipeRow) => void;
@@ -143,8 +145,12 @@ function writeFiltersToUrl(f: LibraryFilters): void {
 // Toggle the "in my profiles" state for a recipe. Works for both canonical
 // library rows (recipe.userId == null, toggled via tombstone) and user-
 // published rows (toggled via custom-profile add/delete by label match).
-// Returns the new saved state.
-function toggleBookmark(recipe: LibraryRecipeRow | null | undefined): boolean {
+// Returns the new saved state. When unsaving needs the user's confirmation
+// the state is unchanged on return and `onChanged` runs once they confirm.
+function toggleBookmark(
+  recipe: LibraryRecipeRow | null | undefined,
+  onChanged?: () => void,
+): boolean {
   if (!recipe) return false;
   const wasSaved =
     typeof window.isRecipeInMyProfiles === "function" && window.isRecipeInMyProfiles(recipe);
@@ -167,19 +173,59 @@ function toggleBookmark(recipe: LibraryRecipeRow | null | undefined): boolean {
       removeAddedTargetPreset(recipe.slug);
     }
   } else {
-    // User-published row — remove the custom profile that matches by label.
-    // Same identity heuristic used by isRecipeInMyProfiles.
+    // User-published row. isRecipeInMyProfiles reports "saved" on a label
+    // match, which is also true for the user's OWN published recipe and for an
+    // unrelated profile that happens to share the name. Deleting on that basis
+    // alone destroyed real recipes (and cascaded to a cloud DELETE), so only a
+    // provable copy is removed in one click.
     const profiles = loadCustomTargetProfiles();
     const target = String(recipe.label || "").toLowerCase();
-    for (const key in profiles) {
-      if (
-        Object.prototype.hasOwnProperty.call(profiles, key) &&
-        String(profiles[key]!.label || "").toLowerCase() === target
-      ) {
-        deleteCustomTargetProfile(key);
-        break;
-      }
+    const labelMatches = Object.keys(profiles).filter(function (key) {
+      return String(profiles[key]!.label || "").toLowerCase() === target;
+    });
+    // copyRecipeToMyProfiles stamps a copy with the author's id, and an author
+    // never "saves" their own recipe as a copy.
+    const myId = window._cachedAuthUserId || null;
+    const copyKey =
+      recipe.userId !== myId
+        ? labelMatches.find(function (key) {
+            return profiles[key]!.creatorUserId === recipe.userId;
+          })
+        : undefined;
+    if (copyKey) {
+      deleteCustomTargetProfile(copyKey);
+      return false;
     }
+    const isOwnRecipe = !!myId && recipe.userId === myId;
+    const ownKey =
+      isOwnRecipe && recipe.slug && profiles[recipe.slug] ? recipe.slug : labelMatches[0];
+    if (!ownKey) return false;
+    const label = recipe.label || ownKey;
+    const message = isOwnRecipe
+      ? '"' +
+        label +
+        '" is your own recipe. Removing it deletes it from your profiles and from the Recipe Library. Remove it?'
+      : 'Remove "' + label + '" from your profiles? This deletes your saved recipe with that name.';
+    showConfirm(
+      message,
+      function () {
+        deleteCustomTargetProfile(ownKey);
+        if (onChanged) onChanged();
+      },
+      { yesLabel: "Remove", noLabel: "Keep" },
+    );
+    // The confirm overlay is created lazily and can sit earlier in the DOM
+    // than an open recipe-detail modal at the same z-index; move it last so it
+    // paints on top.
+    const confirmOverlay = document.getElementById("confirm-overlay");
+    if (confirmOverlay) {
+      document.body.appendChild(confirmOverlay);
+      // Moving the node drops the focus showConfirm gave its default button;
+      // put it back so Enter / Space and Tab still work from the keyboard.
+      const yes = document.getElementById("confirm-yes");
+      if (yes) yes.focus();
+    }
+    return true;
   }
   return false;
 }
@@ -662,11 +708,22 @@ function buildDetailBody(recipe: LibraryRecipeRow, handlers: RecipeHandlers): vo
   saveBtn.addEventListener("click", function (e) {
     e.preventDefault();
     e.stopPropagation();
-    if (handlers.onToggleSave) handlers.onToggleSave(recipe);
     // Re-render the modal body so the Save button icon / label / aria-pressed
-    // reflect the new saved state. Without this, the snapshot taken at
-    // open-time goes stale until the user closes and reopens the modal.
-    buildDetailBody(recipe, handlers);
+    // reflect the new saved state, and put focus back on the new button.
+    // Without this, the snapshot taken at open-time goes stale until the user
+    // closes and reopens the modal. Unsaving a user-published recipe asks
+    // first and changes nothing until the user confirms, so re-render then
+    // (onChanged) instead of now: otherwise the modal kept showing "Saved"
+    // after Remove and the next tap saved the recipe again. Not re-rendering
+    // now also leaves this button in place for the dialog to return focus to.
+    const rerender = function () {
+      if (!detailOverlay || detailOverlay.style.display === "none") return;
+      buildDetailBody(recipe, handlers);
+      const next = detailOverlay.querySelector<HTMLElement>(".rx-detail-save");
+      if (next) next.focus();
+    };
+    if (handlers.onToggleSave) handlers.onToggleSave(recipe, rerender);
+    if (!isConfirmDialogOpen()) rerender();
   });
   if (typeof window.applyAuthGate === "function") {
     window.applyAuthGate(saveBtn, { reason: "bookmark" });
@@ -851,6 +908,12 @@ function buildDetailBody(recipe: LibraryRecipeRow, handlers: RecipeHandlers): vo
   if (hasAnyAction) scroll.appendChild(actions);
 }
 
+// True while ui-shared's showConfirm dialog is showing.
+function isConfirmDialogOpen(): boolean {
+  const overlay = document.getElementById("confirm-overlay");
+  return !!overlay && overlay.style.display === "flex";
+}
+
 function openRecipeDetailModal(
   recipe: LibraryRecipeRow | null | undefined,
   handlers?: RecipeHandlers,
@@ -874,6 +937,10 @@ function openRecipeDetailModal(
   closeBtn.addEventListener("click", closeRecipeDetailModal);
 
   detailKeyHandler = function (e) {
+    // A confirm dialog opened from the modal (unsaving a recipe) sits on top.
+    // Leave Escape and Tab to it: this capture-phase handler would otherwise
+    // close the modal behind the still-open dialog, or trap focus under it.
+    if (isConfirmDialogOpen()) return;
     if (e.key === "Escape") {
       e.stopPropagation();
       closeRecipeDetailModal();
@@ -1338,8 +1405,11 @@ function mountRecipeBrowser(root: HTMLElement | null): void {
     isOwner: function (recipe) {
       return !!(currentUserId && recipe && recipe.userId === currentUserId);
     },
-    onToggleSave: function (recipe) {
-      toggleBookmark(recipe);
+    onToggleSave: function (recipe, onChanged) {
+      toggleBookmark(recipe, function () {
+        render();
+        if (onChanged) onChanged();
+      });
       // Full re-render so every surface (hero + any carousel card) reflects
       // the new saved state. Cheap at 30 cards; revisit past ~200.
       render();

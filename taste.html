@@ -409,7 +409,10 @@
           document.getElementById("cur-alkalinity").value = profile.alkalinity;
           curBicarbonateInput.value = toStableBicarbonateFromAlkalinity(profile.alkalinity, values.bicarbonate || 0);
         }
-        saveTargetPresetName(presetKey);
+        // persist: false re-renders without saving: used when the rail
+        // refreshes for a cloud pull or library load, where re-saving the
+        // on-screen preset would push it back over the account's newer one.
+        if (options.persist !== false) saveTargetPresetName(presetKey);
         if (reset) resetSliders();
         recalculate();
       }
@@ -455,7 +458,7 @@
       const initialKey = (activePreset && activePreset !== "library" && realKeys.includes(activePreset))
         ? activePreset
         : (realKeys.includes(savedPreset) ? savedPreset : null) || findFallbackPreset(allPresets);
-      if (initialKey) activateTastePreset(initialKey, { resetSliders });
+      if (initialKey) activateTastePreset(initialKey, { resetSliders, persist: options.persist });
     }
 
     function renderTasteReadonlyTags() {
@@ -951,7 +954,7 @@
     // Supabase library rows appear without requiring a page navigation.
     // Preserve the currently-active preset if it still exists in the merged
     // rail; otherwise renderTastePresets(null) will pick a fallback.
-    function refreshTasteRail() {
+    function refreshTasteRail(options = {}) {
       const activeBtn = tastePresetsContainer.querySelector("[data-preset].active");
       const activeKey = activeBtn ? activeBtn.dataset.preset : null;
       const merged = typeof getAllTargetPresets === "function" ? getAllTargetPresets() : {};
@@ -959,20 +962,35 @@
       // the user hasn't manually picked something else since render — i.e.
       // activeKey is still the fallback we landed on at init time.
       let preserveKey = activeKey && merged[activeKey] ? activeKey : null;
+      // A cloud pull can store a different selected preset (picked on another
+      // device). Show it; otherwise the page kept displaying and calculating
+      // from the old one while storage held the new one. A library-only
+      // refresh keeps the current selection.
+      if (options.fromCloud && typeof loadTargetPresetName === "function") {
+        const storedKey = loadTargetPresetName(activeBrewMethod);
+        if (storedKey && storedKey !== activeKey && merged[storedKey]) preserveKey = storedKey;
+      }
+      // Re-rendering for a cloud pull or library load must not re-save the
+      // on-screen preset: that pushed this page's (possibly stale) choice back
+      // over a preset changed on another device, and two open Taste pages
+      // kept overwriting each other. Only the URL-requested preset (an
+      // explicit navigation) is saved, as before.
+      let persist = false;
       if (pendingPresetFromUrl && merged[pendingPresetFromUrl]) {
         preserveKey = pendingPresetFromUrl;
         pendingPresetFromUrl = null;
+        persist = true;
       }
-      renderTastePresets(preserveKey, { resetSliders: false });
+      renderTastePresets(preserveKey, { resetSliders: false, persist });
     }
     if (typeof window.onLibraryDataLoaded === "function") {
-      window.onLibraryDataLoaded(refreshTasteRail);
+      window.onLibraryDataLoaded(() => refreshTasteRail());
     }
     if (typeof window.ensurePublicRecipesLoaded === "function") {
       window.ensurePublicRecipesLoaded();
     }
     // Cross-device sync: re-render when sync.js Realtime pull writes new data.
-    window.addEventListener("cw:cloud-data-changed", refreshTasteRail);
+    window.addEventListener("cw:cloud-data-changed", () => refreshTasteRail({ fromCloud: true }));
     // In-tab edits via the inline mineral selector: refresh range guidance
     // (which depends on getEffective*Source) by re-running recalculate.
     window.addEventListener("cw:minerals-changed", function () {

@@ -20,8 +20,9 @@
 // Browser-global stubs (window, localStorage, isLoggedInSync, ...) come from
 // vitest.setup.js so this file can use ES `import` for the src/lib modules.
 
-import { describe, test, expect, beforeEach } from "vitest";
+import { describe, test, expect, beforeEach, vi } from "vitest";
 import {
+  saveTargetPresetName,
   getAllTargetPresets,
   getTargetProfileByKey,
   getTargetPresetsForBrewMethod,
@@ -100,6 +101,106 @@ describe("getAllTargetPresets: 3-tier merge (shim | library | custom)", () => {
     const result = getAllTargetPresets();
     expect(result["sca"]!.label).toBe("SCA from library");
     expect(result["sca"]!.calcium).toBe(999);
+  });
+
+  test("user-published library rows never enter the rail (and can't shadow a canonical slug)", () => {
+    fakeLibraryRows = [
+      {
+        slug: "someone-elses-recipe",
+        label: "Someone else's recipe",
+        brewMethod: "filter",
+        calcium: 30,
+        magnesium: 10,
+        alkalinity: 20,
+        userId: "other-user",
+      },
+      {
+        // A stranger reusing a canonical slug must not replace the canonical row.
+        slug: "sca",
+        label: "Hijacked SCA",
+        brewMethod: "filter",
+        calcium: 1,
+        magnesium: 1,
+        alkalinity: 1,
+        userId: "attacker",
+      },
+      {
+        slug: "sca",
+        label: "SCA Standard",
+        brewMethod: "filter",
+        calcium: 51,
+        magnesium: 17,
+        alkalinity: 40,
+        userId: null,
+        isStarter: true,
+      },
+    ];
+    invalidateTargetPresetsCache();
+    const result = getAllTargetPresets();
+    expect(result["someone-elses-recipe"]).toBeUndefined();
+    expect(result["sca"]!.label).toBe("SCA Standard");
+    expect(result["sca"]!.calcium).toBe(51);
+  });
+
+  // Before user-published rows stopped entering the rail, any of them could be
+  // picked from it. Dropping the selected one made the pages fall back to a
+  // different preset and save that over the user's choice.
+  const pickedCommunityRow = {
+    slug: "picked-community",
+    label: "Picked community recipe",
+    brewMethod: "filter",
+    calcium: 30,
+    magnesium: 10,
+    alkalinity: 20,
+    userId: "other-user",
+  };
+
+  test("the selected user-published row stays in the rail; other user-published rows don't", () => {
+    fakeLibraryRows = [
+      pickedCommunityRow,
+      { ...pickedCommunityRow, slug: "not-picked", label: "Not picked", userId: "someone" },
+    ];
+    saveTargetPresetName("picked-community");
+    invalidateTargetPresetsCache();
+    const result = getAllTargetPresets();
+    expect(result["picked-community"]!.calcium).toBe(30);
+    expect(result["not-picked"]).toBeUndefined();
+  });
+
+  test("a selected user-published row never shadows a canonical slug", () => {
+    fakeLibraryRows = [
+      { ...pickedCommunityRow, slug: "sca", label: "Hijacked SCA", userId: "attacker" },
+      {
+        slug: "sca",
+        label: "SCA Standard",
+        brewMethod: "filter",
+        calcium: 51,
+        magnesium: 17,
+        alkalinity: 40,
+        userId: null,
+        isStarter: true,
+      },
+    ];
+    saveTargetPresetName("sca");
+    invalidateTargetPresetsCache();
+    expect(getAllTargetPresets()["sca"]!.label).toBe("SCA Standard");
+  });
+
+  test("the selection stored when the rail was first built survives a fallback saved before the library loaded", async () => {
+    // A fresh module instance: the first rail build of a page load records the
+    // stored selection.
+    vi.resetModules();
+    const fresh = await import("../src/lib/storage");
+    fakeLibraryRows = [];
+    fresh.saveTargetPresetName("picked-community");
+    fresh.invalidateTargetPresetsCache();
+    // Cold load: the library hasn't arrived, so the page falls back and saves.
+    expect(fresh.getAllTargetPresets()["picked-community"]).toBeUndefined();
+    fresh.saveTargetPresetName("cafelytic-filter");
+    // The library arrives; the calculator then restores the original selection.
+    fakeLibraryRows = [pickedCommunityRow];
+    fresh.invalidateTargetPresetsCache();
+    expect(fresh.getAllTargetPresets()["picked-community"]!.calcium).toBe(30);
   });
 
   test("custom row overrides library at the same slug", () => {

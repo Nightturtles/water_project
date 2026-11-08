@@ -1221,6 +1221,9 @@ export function getEffectiveMagnesiumSource(): string | null {
 
 // --- Target presets aggregation + cache ---
 let targetPresetsCache: Record<string, TargetProfile> | null = null;
+// The selected target preset as stored when this page first built the rail
+// (see getAllTargetPresets 2b). Null until then.
+let firstSeenTargetPresetName: string | null = null;
 export function invalidateTargetPresetsCache(): void {
   targetPresetsCache = null;
 }
@@ -1312,31 +1315,59 @@ export function getAllTargetPresets(): Record<string, TargetProfile> {
   // 2. Supabase library — overrides shim at the same slug with canonical DB
   //    values. Canonical rows (userId == null) pass only if is_starter OR the
   //    user explicitly added the slug via library.html. User-published rows
-  //    (userId != null) bypass the starter filter and flow through as before
-  //    — the starter/added gating is canonical-row-only.
+  //    (userId != null) never enter the rail from here: saving one copies it
+  //    into the user's custom profiles (tier 3), and the user's own published
+  //    recipes are already there. Letting them through put every stranger's
+  //    public recipe into every user's rail (undoing the 8-recipe starter
+  //    rail) and let a user-published row shadow a canonical slug.
+  const libraryRowToPreset = (row: (typeof library)[number]): TargetProfile => ({
+    label: row.label,
+    brewMethod: row.brewMethod,
+    calcium: row.calcium,
+    magnesium: row.magnesium,
+    alkalinity: row.alkalinity,
+    potassium: row.potassium,
+    sodium: row.sodium,
+    sulfate: row.sulfate,
+    chloride: row.chloride,
+    bicarbonate: row.bicarbonate,
+    description: row.description || "",
+    creatorDisplayName: row.creatorDisplayName || "",
+    // Carry roast/flavor metadata through the merge so the Calculator's
+    // Target Profile filter (and any other rail consumer) can narrow by them.
+    // Shim/custom presets without these fields degrade to "shows under All".
+    roast: Array.isArray(row.roast) ? row.roast : ["all"],
+    tags: Array.isArray(row.tags) ? row.tags : [],
+  });
   for (const row of library) {
     if (!row || !row.slug) continue;
+    if (row.userId != null) continue;
     if (tombstoned.has(row.slug)) continue;
-    if (row.userId == null && !row.isStarter && !added.has(row.slug)) continue;
-    result[row.slug] = {
-      label: row.label,
-      brewMethod: row.brewMethod,
-      calcium: row.calcium,
-      magnesium: row.magnesium,
-      alkalinity: row.alkalinity,
-      potassium: row.potassium,
-      sodium: row.sodium,
-      sulfate: row.sulfate,
-      chloride: row.chloride,
-      bicarbonate: row.bicarbonate,
-      description: row.description || "",
-      creatorDisplayName: row.creatorDisplayName || "",
-      // Carry roast/flavor metadata through the merge so the Calculator's
-      // Target Profile filter (and any other rail consumer) can narrow by them.
-      // Shim/custom presets without these fields degrade to "shows under All".
-      roast: Array.isArray(row.roast) ? row.roast : ["all"],
-      tags: Array.isArray(row.tags) ? row.tags : [],
-    };
+    if (!row.isStarter && !added.has(row.slug)) continue;
+    result[row.slug] = libraryRowToPreset(row);
+  }
+
+  // 2b. Exception: a user-published row this device has selected. Before
+  //     user-published rows stopped entering the rail, any of them could be
+  //     picked from it; dropping the selected one made every page fall back to
+  //     another preset and save that over the user's choice. Keep it while it
+  //     is selected (as loaded when this page first built the rail, before any
+  //     fallback saved over it, or as saved now), never over a slug the shim
+  //     or a canonical row provides. Like the old merge, the last matching row
+  //     in library order wins.
+  if (firstSeenTargetPresetName === null) {
+    firstSeenTargetPresetName = _getTransient(KEYS.TARGET_PRESET) || "";
+  }
+  const selectedSlugs = new Set([
+    firstSeenTargetPresetName,
+    _getTransient(KEYS.TARGET_PRESET) || "",
+  ]);
+  const providedSlugs = new Set(Object.keys(result));
+  for (const row of library) {
+    if (!row || !row.slug || row.userId == null) continue;
+    if (!selectedSlugs.has(row.slug) || providedSlugs.has(row.slug)) continue;
+    if (tombstoned.has(row.slug)) continue;
+    result[row.slug] = libraryRowToPreset(row);
   }
 
   // 3. User custom — highest priority. Wins over library and shim at any slug

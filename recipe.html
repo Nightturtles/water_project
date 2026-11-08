@@ -363,6 +363,11 @@
         recalculate();
       }
     });
+    // A cloud pull can change the stored source water; show it (without
+    // saving) so the next edit doesn't write the stale on-screen values back.
+    window.addEventListener("cw:cloud-data-changed", () => {
+      if (sourceSection.refreshFromStorage()) recalculate();
+    });
 
     if (typeof initEstimateWaterUI === "function") {
       initEstimateWaterUI();
@@ -460,6 +465,84 @@
     const recipeConcentrateInputs = loadRecipeConcentrateInputs();
     const recipeStockGrams = loadRecipeStockGrams();
     let recipeDispenseMode = hasAnyActiveStock ? loadRecipeDispenseMode() : "manual";
+
+    // Re-read a draft map from storage before changing one key in it, so a
+    // save only changes that key. Writing the whole load-time map back used to
+    // overwrite values a cloud pull (another device's edit) had stored since
+    // this page rendered.
+    function refreshDraftMap(target, latest) {
+      Object.keys(target).forEach((k) => {
+        if (!Object.prototype.hasOwnProperty.call(latest, k)) delete target[k];
+      });
+      Object.assign(target, latest);
+    }
+
+    // Key-order-independent JSON for comparing draft maps.
+    function sortedJson(value) {
+      if (value === null || typeof value !== "object") return JSON.stringify(value);
+      if (Array.isArray(value)) return "[" + value.map(sortedJson).join(",") + "]";
+      return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + sortedJson(value[k])).join(",") + "}";
+    }
+
+    // A cloud pull (another device's edits arriving) can change the drafts this
+    // page rendered from. Reload to show them, the same way this page already
+    // reloads for edits made in another tab, but only when nothing on the page
+    // would be lost: not while a field is being typed in, a dialog is open,
+    // Starting Water has unsaved edits, or a profile name is typed but not
+    // saved. Until then the reload waits and is retried after each focus
+    // change or click.
+    function recipeDraftsChangedSinceRender() {
+      if (sortedJson(loadRecipeMineralInputs()) !== sortedJson(recipeMineralInputs)) return true;
+      if (sortedJson(loadRecipeConcentrateInputs()) !== sortedJson(recipeConcentrateInputs)) return true;
+      if (sortedJson(loadRecipeStockGrams()) !== sortedJson(recipeStockGrams)) return true;
+      return hasAnyActiveStock && loadRecipeDispenseMode() !== recipeDispenseMode;
+    }
+    const NON_TEXT_INPUT_TYPES = ["checkbox", "radio", "button", "submit", "reset", "range", "color", "file"];
+    function textFieldHasFocus() {
+      const active = document.activeElement;
+      if (!active || active === document.body) return false;
+      if (active.isContentEditable) return true;
+      if (active.tagName === "TEXTAREA" || active.tagName === "SELECT") return true;
+      return active.tagName === "INPUT" && !NON_TEXT_INPUT_TYPES.includes(active.type);
+    }
+    const UNSAVED_NAME_FIELD_IDS = ["source-profile-name", "recipe-target-name"];
+    function pageHasUnsavedState() {
+      if (textFieldHasFocus()) return true;
+      if (sourceSection.hasUnsavedEdits()) return true;
+      if (UNSAVED_NAME_FIELD_IDS.some((id) => {
+        const field = document.getElementById(id);
+        return !!field && field.value.trim() !== "";
+      })) return true;
+      // Open dialogs. Some hide with visibility (the mobile More sheet slides
+      // off-screen) rather than display, so check both.
+      return Array.from(document.querySelectorAll(".confirm-overlay, [aria-modal='true']")).some((el) => {
+        const style = getComputedStyle(el);
+        return style.display !== "none" && style.visibility !== "hidden" && el.getClientRects().length > 0;
+      });
+    }
+    function reloadIfSafe() {
+      if (pageHasUnsavedState()) return false;
+      // Save a source-water edit still inside its debounce first.
+      sourceSection.flushPendingSave();
+      location.reload();
+      return true;
+    }
+    // Once a pull has changed the drafts on screen, the reload stays owed even
+    // if a later keystroke re-reads the stored maps (refreshDraftMap) so the
+    // comparison above stops seeing a difference: the other fields still show
+    // pre-pull values until the page reloads.
+    let recipeReloadPending = false;
+    function reloadIfDraftsChanged() {
+      if (recipeReloadPending) return;
+      if (!recipeDraftsChangedSinceRender()) return;
+      if (reloadIfSafe()) return;
+      recipeReloadPending = true;
+      // Re-check once the focus move or the click's own handlers have run.
+      const retry = () => setTimeout(reloadIfSafe, 0);
+      document.addEventListener("focusout", retry);
+      document.addEventListener("click", retry, true);
+    }
+    window.addEventListener("cw:cloud-data-changed", reloadIfDraftsChanged);
 
     // Drops-capable rows (Lotus, or a Mineral Concentrate with a dropper size)
     // persist { ml, drops }; mL-only rows persist a bare number. Accept either
@@ -654,10 +737,12 @@
       input.addEventListener("input", (e) => {
         const el = e.target;
         if (el && el.dataset && el.dataset.mineral && !el.dataset.concentrate) {
+          refreshDraftMap(recipeMineralInputs, loadRecipeMineralInputs());
           recipeMineralInputs[el.dataset.mineral] = el.value;
           saveRecipeMineralInputs(recipeMineralInputs);
         } else if (el && el.dataset && el.dataset.concentrate) {
           const key = el.dataset.concentrate;
+          refreshDraftMap(recipeConcentrateInputs, loadRecipeConcentrateInputs());
           const row = el.closest(".mineral-input-row");
           if (row && row.dataset.dropsCapable === "true") {
             const inputValue = Math.max(0, parseFloat(el.value) || 0);
@@ -709,6 +794,7 @@
           drops = Math.round(currentValue);
           ml = recipeDropsToMl(key, drops);
         }
+        refreshDraftMap(recipeConcentrateInputs, loadRecipeConcentrateInputs());
         recipeConcentrateInputs[key] = { ml, drops };
         input.step = nextUnit === "ml" ? "0.001" : "1";
         input.value = nextUnit === "ml" ? String(ml) : String(drops);
@@ -902,6 +988,7 @@
           // than persisting "" (getEffectiveStockTotalGrams treats any non-null
           // entry as a hard override, which would otherwise freeze the row at
           // 0 g until the key is cleared).
+          refreshDraftMap(recipeStockGrams, loadRecipeStockGrams());
           if (input.value === "") {
             delete recipeStockGrams[stockId];
           } else {

@@ -201,6 +201,22 @@ function fireErrorCallbacks(err: unknown): void {
 // True only when we hold a non-empty catalog to render. An empty array counts
 // as "nothing cached": otherwise a fetch failure with publicRecipesCache===[]
 // would skip the error callback and leave the page silently blank.
+// Upper bound on user-published rows fetched per load (PostgREST's max_rows).
+const COMMUNITY_RECIPES_LIMIT = 1000;
+
+// Merge two created_at-DESC lists into one created_at-DESC list, preserving
+// the single-query ordering callers have always seen.
+function mergeByCreatedAtDesc(
+  a: RawPublicRecipeRow[],
+  b: RawPublicRecipeRow[],
+): RawPublicRecipeRow[] {
+  const time = (r: RawPublicRecipeRow) => {
+    const t = Date.parse(String(r.created_at || r.createdAt || ""));
+    return Number.isFinite(t) ? t : 0;
+  };
+  return a.concat(b).sort((x, y) => time(y) - time(x));
+}
+
 function hasCachedCatalog(): boolean {
   return Array.isArray(publicRecipesCache) && publicRecipesCache.length > 0;
 }
@@ -231,13 +247,33 @@ async function fetchPublicRecipes(forceRefresh?: boolean): Promise<LibraryRecipe
   if (typeof window.supabaseClient === "undefined") return [];
 
   try {
-    const result = await window.supabaseClient
-      .from("target_profiles")
-      .select(
-        "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter, stock_formula",
-      )
-      .eq("is_public", true)
-      .order("created_at", { ascending: false });
+    // Canonical rows (user_id IS NULL) and user-published rows are fetched
+    // separately. A single query is capped at PostgREST's max_rows (1000) and
+    // ordered newest-first, so enough community rows (or rows inserted with a
+    // client-chosen future created_at) silently pushed the official catalog,
+    // starters included, off the end. The canonical query is always complete;
+    // the community query keeps the newest rows up to the cap.
+    const columns =
+      "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, creator_display_name, tags, tray, roast, created_at, is_starter, stock_formula";
+    const [canonicalResult, communityResult] = await Promise.all([
+      window.supabaseClient
+        .from("target_profiles")
+        .select(columns)
+        .eq("is_public", true)
+        .is("user_id", null)
+        .order("created_at", { ascending: false }),
+      window.supabaseClient
+        .from("target_profiles")
+        .select(columns)
+        .eq("is_public", true)
+        .not("user_id", "is", null)
+        .order("created_at", { ascending: false })
+        .range(0, COMMUNITY_RECIPES_LIMIT - 1),
+    ]);
+    const result = {
+      error: canonicalResult.error || communityResult.error,
+      data: mergeByCreatedAtDesc(canonicalResult.data || [], communityResult.data || []),
+    };
 
     if (result.error) {
       console.warn("[library] failed to fetch public recipes:", result.error);
@@ -588,6 +624,12 @@ function partitionByCategory(
   recipes.forEach(function (r) {
     let cat = r && r.category ? r.category : "classic";
     if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
+    // The curated trays (Cafelytic Originals, Roaster, Brand, Intro) are for
+    // canonical rows. User-published rows are always created with the column
+    // default 'classic'; RLS can't stop a user from writing another tray value
+    // on their own row, so ignore it rather than let anyone publish into
+    // "House recipes from the Cafelytic team".
+    if (r && r.userId != null) cat = "classic";
     out[cat]!.push(r);
   });
   // Intro to Water is a learn-by-doing series — order by slug so
@@ -612,9 +654,12 @@ function pickFeaturedFromFiltered(
   if (!Array.isArray(filtered) || filtered.length === 0) return null;
   const slug = FEATURED_PICKS[method] || FEATURED_PICKS.all;
   if (!slug) return null;
+  // Slugs are unique only per user, so match the canonical row (userId null).
+  // Matching on slug alone let any user publish a row with slug
+  // 'cafelytic-filter' and, being newer, take over the Editor's pick hero.
   for (let i = 0; i < filtered.length; i++) {
     const item = filtered[i];
-    if (item && item.slug === slug) return item;
+    if (item && item.slug === slug && item.userId == null) return item;
   }
   return null;
 }

@@ -793,6 +793,94 @@ test.describe("library.html — Wave D recipe browser", () => {
     await ctx.close();
   });
 
+  test("detail modal: unsaving asks first, Escape closes only the dialog, and Remove flips the modal to Save", async ({
+    browser,
+  }) => {
+    const ctx = await browser.newContext();
+    const page = await ctx.newPage();
+    page.on("console", (msg) => {
+      if (msg.type() === "error") consoleErrors.push(msg.text());
+    });
+    page.on("pageerror", (err) => {
+      consoleErrors.push(err.message);
+    });
+    await stubLoggedIn(page, "stub-user-for-e2e");
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "getUser", {
+        value: () => Promise.resolve({ data: { user: { id: "stub-user-for-e2e" } } }),
+        writable: false,
+        configurable: false,
+      });
+      // Someone else's published recipe...
+      const fake = [
+        {
+          id: "fake-shared-id",
+          user_id: "another-author",
+          slug: "shared-name",
+          label: "Shared Name",
+          brew_method: "filter",
+          calcium: 20,
+          magnesium: 10,
+          alkalinity: 30,
+          potassium: 0,
+          sodium: 0,
+          sulfate: 0,
+          chloride: 0,
+          bicarbonate: 37,
+          description: "Seeded for the unsave-confirm e2e.",
+          creator_display_name: "Another Author",
+          tags: [],
+          category: "classic",
+          roast: ["all"],
+          created_at: "2026-01-01T00:00:00.000Z",
+        },
+      ];
+      sessionStorage.setItem("cw_library_public_recipes_v5", JSON.stringify(fake));
+      // ...and an unrelated profile of the user's with the same name, so
+      // unsaving can't prove it's a copy and asks before deleting it.
+      if (!localStorage.getItem("cw_custom_target_profiles")) {
+        localStorage.setItem(
+          "cw_custom_target_profiles",
+          JSON.stringify({
+            "my-shared-name": { label: "Shared Name", calcium: 5, magnesium: 5, alkalinity: 5 },
+          }),
+        );
+      }
+    });
+
+    await page.goto("/library.html");
+    const card = page.locator('.rx-recipe-card[data-slug="shared-name"]');
+    await expect(card).toBeVisible();
+    await card.click();
+    const save = page.locator(".rx-detail-save");
+    const saveLabel = page.locator(".rx-detail-save-label");
+    await expect(save).toHaveAttribute("aria-pressed", "true");
+    await expect(saveLabel).toHaveText("Saved");
+
+    // Unsaving asks first. Escape closes only the dialog, not the modal.
+    const confirm = page.locator("#confirm-overlay");
+    await save.click();
+    await expect(confirm).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(confirm).toBeHidden();
+    await expect(save).toBeVisible();
+    await expect(save).toHaveAttribute("aria-pressed", "true");
+
+    // Remove deletes the profile and the open modal shows Save straight away,
+    // so the next tap can't save the recipe again by mistake.
+    await save.click();
+    await expect(confirm).toBeVisible();
+    await page.locator("#confirm-yes").click();
+    await expect(save).toHaveAttribute("aria-pressed", "false");
+    await expect(saveLabel).toHaveText("Save");
+    const profiles = await page.evaluate(() =>
+      JSON.parse(localStorage.getItem("cw_custom_target_profiles") || "{}"),
+    );
+    expect(profiles["my-shared-name"]).toBeUndefined();
+
+    await ctx.close();
+  });
+
   // Owner write guard (zero-row UPDATE must not mirror locally) -----------
   // A Supabase v2 UPDATE resolves with error:null even when zero rows matched
   // (an RLS denial or a stale id). my-recipes-ui appends .select("id")

@@ -454,6 +454,9 @@
         if (dropMl !== null) nextSpec.dropMl = dropMl;
         specs[mineralId] = nextSpec;
         saveDiyConcentrateSpecs(specs);
+        // The rows already show this edit; record it so the save's own cloud
+        // echo doesn't rebuild the row out from under the field being typed in.
+        renderedConcentrateSignature = concentrateDataSignature();
         updateDiySolubilityWarning(mineralId, item);
         showSaved();
       });
@@ -739,7 +742,32 @@
     // the lists paint empty and the storage.js module caches get poisoned with
     // {}. Re-render once auth resolves (storage.js:1514 invalidates the caches
     // on cw:auth-changed) and again on any cross-device cloud pull.
+    //
+    // Rebuilding the rows destroys whatever field the user is typing in, and
+    // both events fire without any data change (every save's own Realtime echo,
+    // every token refresh / tab refocus), so only rebuild when the concentrate
+    // data or the signed-in state actually differs from what's on screen.
+    // Compared ignoring key order and selection order: a pull hands back the
+    // same specs with Postgres jsonb's key order (e.g. a dropper size's dropMl
+    // moves), which must not count as a change.
+    function sortedJson(value) {
+      if (value === null || typeof value !== "object") return JSON.stringify(value);
+      if (Array.isArray(value)) return "[" + value.map(sortedJson).join(",") + "]";
+      return "{" + Object.keys(value).sort().map((k) => JSON.stringify(k) + ":" + sortedJson(value[k])).join(",") + "}";
+    }
+    function concentrateDataSignature() {
+      return sortedJson([
+        typeof window.isLoggedInSync === "function" ? window.isLoggedInSync() : null,
+        loadDiyConcentrateSpecs(),
+        loadStockConcentrateSpecs(),
+        loadSelectedConcentrates().slice().sort(),
+      ]);
+    }
+    let renderedConcentrateSignature = concentrateDataSignature();
     function rerenderAuthGatedConcentrates() {
+      const signature = concentrateDataSignature();
+      if (signature === renderedConcentrateSignature) return;
+      renderedConcentrateSignature = signature;
       renderDiyConcentrates();
       renderStockConcentrates();
       renderBrandConcentrates();
@@ -747,6 +775,10 @@
     }
     document.addEventListener("cw:auth-changed", rerenderAuthGatedConcentrates);
     window.addEventListener("cw:cloud-data-changed", rerenderAuthGatedConcentrates);
+    // The mineral checkboxes are rebuilt from storage on every toggle, so a
+    // pull that changed the selection must re-render them too; otherwise the
+    // next toggle saves the stale on-screen selection over the account's.
+    window.addEventListener("cw:cloud-data-changed", () => renderMineralList());
 
     function updateStockSolubilityWarning(itemEl) {
       if (!itemEl) return;
@@ -878,7 +910,10 @@
               return;
             }
             const recipes = getPublicRecipesSync();
-            const row = recipes.find((r) => r.slug === librarySlug && r.stockFormula);
+            const row = findLibraryRowBySlug(
+              Array.isArray(recipes) ? recipes.filter((r) => r && r.stockFormula) : [],
+              librarySlug,
+            );
             if (!row || !row.stockFormula) {
               alert('No library entry found for slug "' + librarySlug + '".');
               return;
@@ -923,16 +958,18 @@
               alert("Recipe Concentrate derivation is unavailable. Please reload the page and try again.");
               return;
             }
-            // Resolve the source recipe. Public library + published customs
-            // come from getPublicRecipesSync; private customs fall through to
-            // getTargetProfileByKey (which merges the 3-tier preset stack).
+            // Resolve the source recipe: the user's own preset stack first
+            // (getTargetProfileByKey merges built-ins, rail recipes and their
+            // customs), then the public library. Library slugs are unique only
+            // per user, so a stranger's row with the same slug must not stand
+            // in for the recipe this concentrate was derived from: prefer the
+            // canonical row (findLibraryRowBySlug).
             let recipe = null;
-            if (typeof getPublicRecipesSync === "function") {
-              const recipes = getPublicRecipesSync();
-              if (Array.isArray(recipes)) recipe = recipes.find((r) => r && r.slug === recipeSlug);
-            }
-            if (!recipe && typeof getTargetProfileByKey === "function") {
+            if (typeof getTargetProfileByKey === "function") {
               recipe = getTargetProfileByKey(recipeSlug);
+            }
+            if (!recipe && typeof getPublicRecipesSync === "function") {
+              recipe = findLibraryRowBySlug(getPublicRecipesSync(), recipeSlug);
             }
             if (!recipe) {
               alert('No recipe found for slug "' + recipeSlug + '". It may have been deleted.');
@@ -1193,6 +1230,18 @@
       if (stockAddBtn) stockAddBtn.hidden = false;
     }
 
+    // Library slugs are unique only per user, so a slug can match both the
+    // canonical row and a user-published copy. Prefer the canonical row so a
+    // stranger's row can't stand in for an official recipe in a deep link.
+    function findLibraryRowBySlug(rows, slug) {
+      if (!Array.isArray(rows)) return null;
+      return (
+        rows.find((r) => r && r.slug === slug && r.userId == null) ||
+        rows.find((r) => r && r.slug === slug) ||
+        null
+      );
+    }
+
     // Handoff from recipe-browser.js: when minerals.html loads with hash
     // "#stock-derive=<slug>", look up the recipe in library-data, derive a
     // stock formula from its targets, and pre-fill the new-stock editor.
@@ -1229,7 +1278,7 @@
       const recipes =
         typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
       const found =
-        Array.isArray(recipes) && recipes.find((r) => r && r.slug === slug);
+        findLibraryRowBySlug(recipes, slug);
       if (found) {
         apply(found);
         return;
@@ -1250,7 +1299,7 @@
       // Library data hasn't landed yet (cold load). Wait for the fetch.
       if (typeof window.onLibraryDataLoaded === "function") {
         const off = window.onLibraryDataLoaded((rs) => {
-          const r = Array.isArray(rs) && rs.find((x) => x && x.slug === slug);
+          const r = findLibraryRowBySlug(rs, slug);
           if (r) {
             if (typeof off === "function") off();
             apply(r);
@@ -1295,14 +1344,14 @@
       const recipes =
         typeof window.getPublicRecipesSync === "function" ? window.getPublicRecipesSync() : [];
       const found =
-        Array.isArray(recipes) && recipes.find((r) => r && r.slug === slug);
+        findLibraryRowBySlug(recipes, slug);
       if (found) {
         apply(found);
         return;
       }
       if (typeof window.onLibraryDataLoaded === "function") {
         const off = window.onLibraryDataLoaded((rs) => {
-          const r = Array.isArray(rs) && rs.find((x) => x && x.slug === slug);
+          const r = findLibraryRowBySlug(rs, slug);
           if (r) {
             if (typeof off === "function") off();
             apply(r);
