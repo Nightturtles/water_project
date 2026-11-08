@@ -889,10 +889,10 @@ export function injectNav(): void {
 //   2. sign out (Supabase clears the session, fires SIGNED_OUT)
 //   3. wipe local user content (Categories A/B/C; D preserved)
 //   4. navigate to a clean page
-// If the pending push fails, abort logout. Continuing would call signOut()
-// and clearLocalUserContent() and silently drop the unsynced edit (e.g. a
-// save made within SYNC_DEBOUNCE_MS of clicking Log out). Better to leave the
-// user signed in so they can retry than to lose their data.
+// If the pending push fails (or times out), ask before continuing: signOut()
+// and clearLocalUserContent() would silently drop the unsynced edit (e.g. a
+// save made within SYNC_DEBOUNCE_MS of clicking Log out). "Stay signed in"
+// keeps it to retry; "Log out anyway" discards it knowingly.
 // Shared verbatim by the desktop top nav (_updateNavAuth) and the native
 // bottom sheet (injectBottomNav) so this sequence lives in exactly one place.
 async function performLogout(): Promise<void> {
@@ -920,9 +920,11 @@ async function performLogout(): Promise<void> {
 async function finishLogout(): Promise<void> {
   // signOut() resolves with { error } rather than throwing on a network or
   // server failure, and auth-js still removes this device's session in that
-  // case, so the device is signed out locally either way. A real throw (an
-  // unexpected client failure) leaves the session in place; bail then so we
-  // don't wipe local data while still signed in.
+  // case. (When it can't load the session at all, e.g. an expired token while
+  // offline, it returns early and the session stays: the next load is still
+  // signed in and re-runs the first-login merge.) A real throw (an unexpected
+  // client failure) leaves the session in place; bail then so we don't wipe
+  // local data while still signed in.
   try {
     const result = await (window as any).signOut();
     if (result && result.error) {

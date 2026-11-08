@@ -2,7 +2,6 @@ import { THEME_KEY } from "./constants";
 import {
   safeGetItem,
   safeSetItem,
-  safeRemoveItem,
   safeParse,
   loadSourceWater,
   loadSourcePresetName,
@@ -51,10 +50,11 @@ import { reportError } from "./report";
 
 let syncTimer: ReturnType<typeof setTimeout> | undefined = undefined;
 const SYNC_DEBOUNCE_MS = 500;
-// Monotonic counter bumped on every local save (scheduleSyncToCloud). The
-// realtime pull snapshots it before its network read and bails out of applying
-// cloud data if it changed — i.e. a local write landed mid-pull — so the
-// full-row overwrites can't clobber an edit made while the pull was in flight.
+// Monotonic counter bumped on every local save (scheduleSyncToCloud), paired
+// with a marker in localStorage that every tab of this browser bumps (see
+// localWriteMarker). A push snapshots the marker before its network round
+// trip and leaves local storage alone if it changed (a save landed mid-push,
+// in this tab or another); the realtime pull does the same before applying.
 let localWriteSeq = 0;
 let mergeInFlight: Promise<void> | null = null;
 
@@ -181,8 +181,23 @@ async function waitForAuthStateResolved(): Promise<void> {
 }
 
 // --- Debounced sync trigger (called from storage.js save functions) ---
-export function scheduleSyncToCloud(): void {
+// Record a local save. The localStorage half is what makes it visible to a
+// push or pull running in another tab of the same browser: the per-tab
+// counter alone missed those, and the push's fold then overwrote the save.
+function bumpLocalWriteMarker(): void {
   localWriteSeq += 1;
+  safeSetItem(
+    KEYS.LOCAL_WRITE_MARKER,
+    Date.now() + "-" + localWriteSeq + "-" + Math.random().toString(36).slice(2, 8),
+  );
+}
+
+function localWriteMarker(): string {
+  return localWriteSeq + "|" + (safeGetItem(KEYS.LOCAL_WRITE_MARKER) || "");
+}
+
+export function scheduleSyncToCloud(): void {
+  bumpLocalWriteMarker();
   dispatchSaveStatus("saving");
   clearTimeout(syncTimer);
   syncTimer = setTimeout(function () {
@@ -333,14 +348,17 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // concentrates (or tombstones, or rail additions) both survive. Before this,
 // pulls overwrote unpushed local edits and pushes overwrote other devices'
 // changes wholesale.
-export type FieldKind = "scalar" | "set" | "dict";
+// "selection" merges like "set" except that the first-login "Keep local data"
+// push keeps this device's list as is instead of adding the cloud's: it's a
+// preference (which powders are enabled), not a collection of saved things.
+export type FieldKind = "scalar" | "set" | "selection" | "dict";
 
 export const SETTINGS_FIELD_KINDS: Record<string, FieldKind> = {
   theme: "scalar",
   mineral_display_mode: "scalar",
   brew_method: "scalar",
   lotus_dropper_type: "scalar",
-  selected_minerals: "set",
+  selected_minerals: "selection",
   selected_concentrates: "set",
   diy_concentrate_specs: "dict",
   stock_concentrate_specs: "dict",
@@ -364,6 +382,9 @@ export const SELECTIONS_FIELD_KINDS: Record<string, FieldKind> = {
 // (the first-login merge's "keep local" / new-account push) keeps local data
 // but unions collections with the cloud, so choosing "Keep local data" can't
 // erase concentrates, tombstones or rail additions saved on other devices.
+// Two exceptions: the mineral selection stays exactly as chosen ("selection"
+// kind), and a cloud tombstone never deletes a recipe this device has
+// (keepUnpushedProfilesOverIncomingTombstones).
 export type MergeMode = "pull" | "push";
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -397,11 +418,13 @@ function mergeSet(
   local: unknown,
   cloud: unknown,
   mode: MergeMode,
+  keepLocalWithoutBase?: boolean,
 ): unknown[] {
   const L = Array.isArray(local) ? local : [];
   if (!Array.isArray(cloud)) return L.slice();
   const C = cloud;
   if (!hasBase && mode === "pull") return C.slice();
+  if (!hasBase && keepLocalWithoutBase) return L.slice();
   const B = hasBase && Array.isArray(base) ? base : [];
   const out: unknown[] = [];
   const has = (list: unknown[], x: unknown) => list.some((y) => sameValue(x, y));
@@ -413,6 +436,10 @@ function mergeSet(
   C.forEach(function (x) {
     if (!has(L, x) && !has(B, x) && !has(out, x)) out.push(x);
   });
+  // Same members as the cloud: take the cloud's order. Keeping this device's
+  // order instead left two devices holding the same items in different
+  // orders, each reading the other's order as a change and pushing it back.
+  if (out.length === C.length && out.every((x) => has(C, x))) return C.slice();
   return out;
 }
 
@@ -461,8 +488,8 @@ export function mergeRowFields(
     const c = cloud[field];
     const kind = kinds[field];
     const v =
-      kind === "set"
-        ? mergeSet(b, hasBase, l, c, mode)
+      kind === "set" || kind === "selection"
+        ? mergeSet(b, hasBase, l, c, mode, kind === "selection" && mode === "push")
         : kind === "dict"
           ? mergeDict(b, hasBase, l, c, mode)
           : mergeScalar(b, hasBase, l, c, mode);
@@ -502,6 +529,7 @@ async function pushMergedRow(
   local: Record<string, unknown>,
   baseSnapshot: string | null,
   now: string,
+  adjustMerged?: (merged: Record<string, unknown>) => void,
 ): Promise<{ error?: unknown; pushed?: Record<string, unknown>; foldsRemoteChanges?: boolean }> {
   const read = await window.supabaseClient
     .from(table)
@@ -514,6 +542,7 @@ async function pushMergedRow(
   const merged = cloud
     ? mergeRowFields(kinds, parseSnapshot(baseSnapshot), localFields, cloud, "push")
     : localFields;
+  if (cloud && adjustMerged) adjustMerged(merged);
   const payload = Object.assign({ user_id: userId }, merged, { updated_at: now });
   const write = await window.supabaseClient.from(table).upsert(payload, { onConflict: "user_id" });
   if (write && write.error) return { error: write.error };
@@ -565,20 +594,19 @@ function applySettingsRow(settings: Record<string, any>): void {
   }
   if (settings.creator_display_name)
     safeSetItem(KEYS.CREATOR_DISPLAY_NAME, settings.creator_display_name);
-  // Drafts mirror the merged set exactly: a draft another device cleared (and
-  // this device hadn't touched) is cleared here too. A missing drafts blob
-  // leaves local drafts alone.
+  // Drafts: restore each one the row has; never remove a local draft the row
+  // lacks. A 1.2-era client's whole-row upsert writes its own drafts blob,
+  // often empty, which reads the same as "another device cleared it":
+  // mirroring the row deleted this device's in-progress recipe. (The cost is
+  // that a draft cleared on another device stays here, as it always has.)
   if (isPlainObject(settings.drafts)) {
     const drafts = settings.drafts;
     DRAFT_KEYS.forEach(function (d) {
       const v = drafts[d.field];
       if (d.kind === "dispense") {
         if (v === "manual" || v === "stock") safeSetItem(d.key, v);
-        else safeRemoveItem(d.key);
       } else if (v && typeof v === "object") {
         safeSetItem(d.key, JSON.stringify(v));
-      } else {
-        safeRemoveItem(d.key);
       }
     });
   }
@@ -640,11 +668,103 @@ export function mergeProfileRows<P>(
   });
   Object.keys(local).forEach(function (slug) {
     if (cloudSlugs.has(slug) || tomb.has(slug)) return;
-    // Never synced: an unpushed creation, keep it. Synced before and now gone
-    // from the cloud: deleted on another device, drop it.
-    if (base[slug] === undefined) profiles[slug] = local[slug]!;
+    // Never synced (an unpushed creation) or edited since this device last
+    // synced it (an unpushed edit): keep it, and the next push sends it, as
+    // for an incoming tombstone (keepUnpushedProfilesOverIncomingTombstones).
+    // Synced, unchanged here, and now gone from the cloud: deleted on another
+    // device, drop it.
+    if (base[slug] === undefined || toSnapshot(slug, local[slug]!) !== base[slug]) {
+      profiles[slug] = local[slug]!;
+    }
   });
   return { profiles, snapshots };
+}
+
+// Slugs of local custom profiles with changes the cloud doesn't have: never
+// synced from this device, or edited since it last synced.
+function unpushedProfileSlugs(userId: string): { sources: Set<string>; targets: Set<string> } {
+  const dirty = function (
+    profiles: Record<string, unknown>,
+    snapshotsKey: string,
+    build: (slug: string, p: any) => unknown,
+  ): Set<string> {
+    const snaps: Record<string, string> = safeParse(safeGetItem(snapshotsKey), null) || {};
+    return new Set(
+      Object.keys(profiles).filter(function (slug) {
+        return snaps[slug] !== stableStringify(build(slug, profiles[slug]));
+      }),
+    );
+  };
+  return {
+    sources: dirty(loadCustomProfiles(), LAST_PUSHED_SOURCES_KEY, function (slug, p) {
+      return buildSourceRow(userId, slug, p);
+    }),
+    targets: dirty(loadCustomTargetProfiles(), LAST_PUSHED_TARGETS_KEY, function (slug, p) {
+      return buildTargetRow(userId, slug, p);
+    }),
+  };
+}
+
+// A tombstone from another device doesn't delete a recipe this device created
+// or edited and hasn't pushed yet (the rule mergeProfileRows applies to cloud
+// edits): drop it from the merged user_selections, so the recipe is pushed and
+// the tombstone lifted instead. Tombstones this device already held are left
+// alone. Without this, "Keep local data" deleted any local recipe whose slug
+// the cloud had tombstoned, and so did a pull racing an offline creation.
+function keepUnpushedProfilesOverIncomingTombstones(
+  merged: Record<string, unknown>,
+  userId: string,
+): void {
+  const unpushed = unpushedProfileSlugs(userId);
+  const filter = function (field: string, localTombstones: string[], protect: Set<string>) {
+    const list = merged[field];
+    if (!Array.isArray(list) || protect.size === 0) return;
+    const own = new Set(localTombstones);
+    merged[field] = list.filter(function (s) {
+      return own.has(s as string) || !protect.has(s as string);
+    });
+  };
+  filter("deleted_source_presets", loadDeletedPresets(), unpushed.sources);
+  filter("deleted_target_presets", loadDeletedTargetPresets(), unpushed.targets);
+}
+
+// Tombstones that arrive from the cloud (another device deleted the recipe)
+// are that device's DELETE to send. Record them as confirmed so this device
+// never replays the DELETE and doesn't count them as unpushed changes: a
+// replayed DELETE (the realtime push-first ran on exactly that) erased the
+// recipe whenever another device re-created it before this one pulled again.
+function confirmIncomingTombstones(
+  before: { sources: unknown; targets: unknown },
+  merged: Record<string, unknown>,
+): void {
+  const confirm = function (key: string, prev: unknown, next: unknown) {
+    if (!Array.isArray(next)) return;
+    const had = new Set(Array.isArray(prev) ? prev : []);
+    const arrived = next.filter(function (s): s is string {
+      return typeof s === "string" && !had.has(s);
+    });
+    if (arrived.length === 0) return;
+    const current: unknown = safeParse(safeGetItem(key), []);
+    const confirmed = new Set<string>(
+      Array.isArray(current) ? current.filter((s): s is string => typeof s === "string") : [],
+    );
+    arrived.forEach(function (s) {
+      confirmed.add(s);
+    });
+    safeSetItem(key, JSON.stringify([...confirmed]));
+  };
+  confirm(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES, before.sources, merged.deleted_source_presets);
+  confirm(KEYS.CONFIRMED_DELETED_TARGET_PROFILES, before.targets, merged.deleted_target_presets);
+}
+
+// False once the user this push or pull is for is no longer the one signed in
+// on this device (signed out, or switched accounts) while it was out on the
+// network: its rows must not be written into what's local now.
+function accountStillCurrent(userId: string, mergePush?: boolean): boolean {
+  const cached = window._cachedAuthUserId;
+  if (cached !== undefined && cached !== userId) return false;
+  // The first-login merge's own push runs before the device is marked merged.
+  return !!mergePush || safeGetItem(KEYS.SYNCED_USER_ID) === userId;
 }
 
 // Drop confirmed-delete entries for slugs that are no longer tombstoned.
@@ -805,7 +925,8 @@ async function pushAllToCloudNow(options?: {
   }
 
   const now = new Date().toISOString();
-  const seqAtStart = localWriteSeq;
+  const markerAtStart = localWriteMarker();
+  const mergePush = !!(options && options.allowBeforeMerge);
 
   const settingsPayload = buildSettingsPayload(userId, now);
   const selectionsPayload = buildSelectionsPayload(userId, now);
@@ -834,6 +955,7 @@ async function pushAllToCloudNow(options?: {
     local: Record<string, unknown>;
     baseSnapshot: string | null;
     key: string;
+    adjust?: (merged: Record<string, unknown>) => void;
   }> = [];
   if (settingsChanged) {
     rows.push({
@@ -851,17 +973,23 @@ async function pushAllToCloudNow(options?: {
       local: selectionsPayload,
       baseSnapshot: lastSelectionsSnapshot,
       key: LAST_PUSHED_SELECTIONS_KEY,
+      adjust: function (merged) {
+        keepUnpushedProfilesOverIncomingTombstones(merged, userId);
+      },
     });
   }
 
   if (rows.length > 0) {
     const results = await Promise.all(
       rows.map(function (r) {
-        return pushMergedRow(userId, r.table, r.kinds, r.local, r.baseSnapshot, now);
+        return pushMergedRow(userId, r.table, r.kinds, r.local, r.baseSnapshot, now, r.adjust);
       }),
     );
     const pushErrors: unknown[] = [];
     let foldedRemoteChanges = false;
+    // Signed out or switched accounts while the push was on the network: this
+    // device's data was cleared, so write nothing of this account's back.
+    const accountCurrent = accountStillCurrent(userId, mergePush);
     results.forEach(function (res, idx) {
       const r = rows[idx];
       if (!r) return;
@@ -870,15 +998,27 @@ async function pushAllToCloudNow(options?: {
         pushErrors.push(res.error);
         return;
       }
-      safeSetItem(r.key, snapshotForCompare(res.pushed!));
-      // Fold the other devices' changes the merge picked up into local
-      // storage, unless the user edited something while we were away on the
-      // network (then the push that edit scheduled will merge again).
-      if (res.foldsRemoteChanges && localWriteSeq === seqAtStart) {
-        if (r.table === "user_settings") applySettingsRow(res.pushed!);
-        else applySelectionsRow(res.pushed!);
+      if (!accountCurrent) return;
+      if (res.foldsRemoteChanges) {
+        // The merge picked up other devices' changes. Fold them into local
+        // storage and adopt the pushed row as the new base, together, unless
+        // a save landed (in any tab) while we were on the network. Then leave
+        // both alone: a base that includes changes local storage doesn't have
+        // makes the next push read them as removals and revert them on every
+        // device. That save's own push merges again from the old base.
+        if (localWriteMarker() !== markerAtStart) return;
+        if (r.table === "user_settings") {
+          applySettingsRow(res.pushed!);
+        } else {
+          applySelectionsRow(res.pushed!);
+          confirmIncomingTombstones(
+            { sources: r.local.deleted_source_presets, targets: r.local.deleted_target_presets },
+            res.pushed!,
+          );
+        }
         foldedRemoteChanges = true;
       }
+      safeSetItem(r.key, snapshotForCompare(res.pushed!));
     });
     if (foldedRemoteChanges) {
       invalidateAllCaches();
@@ -898,7 +1038,8 @@ async function pushAllToCloudNow(options?: {
     }
   }
 
-  await syncCustomProfiles(userId, now);
+  if (!accountStillCurrent(userId, mergePush)) return;
+  await syncCustomProfiles(userId, now, mergePush);
 }
 
 // Build the source_profiles row from a local profile entry (sans updated_at).
@@ -947,7 +1088,11 @@ export function buildTargetRow(userId: string, slug: string, p: any) {
 /**
  * Sync custom source and target profiles (upsert new/changed, delete removed).
  */
-async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
+async function syncCustomProfiles(
+  userId: string,
+  now?: string,
+  mergePush?: boolean,
+): Promise<void> {
   now = now || new Date().toISOString();
   const localSource = loadCustomProfiles();
   const localTarget = loadCustomTargetProfiles();
@@ -984,6 +1129,11 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
   // a device holding an old tombstone delete a recipe another device had
   // since re-created under the same slug (re-saving lifts the tombstone on
   // that device, but the stale device still had it and pushed before pulling).
+  // Forget confirmations for slugs no longer tombstoned (re-saved since), on
+  // every push. Pruning only when some delete was pending kept a re-created
+  // recipe's old confirmation, so deleting it again never sent the DELETE.
+  pruneConfirmedDeletes(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES, deletedSources);
+  pruneConfirmedDeletes(KEYS.CONFIRMED_DELETED_TARGET_PROFILES, deletedTargets);
   const confirmedSources = new Set<string>(
     safeParse(safeGetItem(KEYS.CONFIRMED_DELETED_SOURCE_PROFILES), []),
   );
@@ -1019,6 +1169,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
   }
   if (deleteCalls.length > 0) {
     const delResults = await Promise.all(deleteCalls);
+    if (!accountStillCurrent(userId, mergePush)) return;
     let nextIdx = 0;
     const deleteErrors: unknown[] = [];
     if (deletedSourcesPending) {
@@ -1118,7 +1269,9 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
   }
 
   // Persist updated snapshots back to localStorage (covers both
-  // tombstone-delete cleanup and successful upserts above).
+  // tombstone-delete cleanup and successful upserts above), unless the account
+  // changed while the requests were out (that data was cleared).
+  if (!accountStillCurrent(userId, mergePush)) return;
   safeSetItem(LAST_PUSHED_SOURCES_KEY, JSON.stringify(lastSourceSnapshots));
   safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(lastTargetSnapshots));
 }
@@ -1141,14 +1294,15 @@ export async function pullFromCloud(options?: {
   expectedUserId?: string;
   markMergedFor?: string;
 }): Promise<boolean | "discarded"> {
-  // Snapshot the local-write counter before any network round-trip. When the
+  // Snapshot the local-write marker before any network round-trip. When the
   // realtime path sets skipIfLocalWriteDuringPull, a change here before we
-  // apply means a local save landed mid-pull and the full-row overwrites below
-  // would clobber it — so we skip applying and return false (the caller
+  // apply means a local save landed mid-pull (in any tab). The merge below
+  // would keep it, but the new base would then be ahead of what that save's
+  // push merges against, so skip applying and return false (the caller
   // re-pulls once that write has been pushed). Page-load / first-login pulls
   // leave the option unset and apply unconditionally, as before.
   const skipIfLocalWrite = !!(options && options.skipIfLocalWriteDuringPull);
-  const seqAtStart = localWriteSeq;
+  const markerAtStart = localWriteMarker();
   const expectedUserId = options && options.expectedUserId;
   const mergeUserId = options && options.mergeUserId;
   const userId = await lookupUserIdForSync();
@@ -1185,12 +1339,10 @@ export async function pullFromCloud(options?: {
     throw new Error("[sync] merge pull aborted: the signed-in user changed mid-pull");
   }
 
-  if (skipIfLocalWrite && localWriteSeq !== seqAtStart) {
-    // A local save landed while we were fetching. The rows we just read are
-    // already stale for whatever the user touched, and the full-row
-    // safeSetItem calls below would overwrite that edit. Skip applying: the
-    // local write stays in localStorage, its own debounced push sends it to
-    // the cloud, and the realtime caller re-pulls to bring remote changes down.
+  if (skipIfLocalWrite && localWriteMarker() !== markerAtStart) {
+    // A local save landed while we were fetching. Skip applying: the local
+    // write stays in localStorage, its own debounced push merges it with the
+    // cloud, and the realtime caller re-pulls to bring remote changes down.
     console.warn("[sync] pull skipped: local write landed mid-pull; will reconcile after push");
     return false;
   }
@@ -1237,14 +1389,26 @@ export async function pullFromCloud(options?: {
     applySettingsRow(merged);
   }
   if (selections) {
+    const localSelections = pickFields(
+      SELECTIONS_FIELD_KINDS,
+      buildSelectionsPayload(sessionUserId, ""),
+    );
     const merged = mergeRowFields(
       SELECTIONS_FIELD_KINDS,
       parseSnapshot(safeGetItem(LAST_PUSHED_SELECTIONS_KEY)),
-      pickFields(SELECTIONS_FIELD_KINDS, buildSelectionsPayload(sessionUserId, "")),
+      localSelections,
       selections,
       "pull",
     );
+    keepUnpushedProfilesOverIncomingTombstones(merged, sessionUserId);
     applySelectionsRow(merged);
+    confirmIncomingTombstones(
+      {
+        sources: localSelections.deleted_source_presets,
+        targets: localSelections.deleted_target_presets,
+      },
+      merged,
+    );
   }
   // The profile merges below read the merged tombstones and the profile
   // dicts through cached loaders.
@@ -1260,10 +1424,11 @@ export async function pullFromCloud(options?: {
   // Cloud rows win for profiles this device hasn't changed since it last
   // synced; tombstoned slugs are skipped (cloud deletion and the tombstone
   // push aren't atomic). A local profile missing from the cloud is dropped
-  // when this device had synced it before (it was deleted elsewhere — the
-  // empty-result-is-authoritative rule that stops deleted recipes resurrecting)
-  // and kept when it never reached the cloud (a recipe created while offline,
-  // during the sign-in merge, or while a push was failing).
+  // when this device had synced it and not changed it since (it was deleted
+  // elsewhere; this is what stops deleted recipes resurrecting), and kept when
+  // it never reached the cloud or was edited here since (a recipe created or
+  // changed while offline, during the sign-in merge, or while a push was
+  // failing).
   if (Array.isArray(sourceRows)) {
     const result = mergeProfileRows(
       sourceRows,
@@ -1580,6 +1745,16 @@ export async function foldCloudConcentratesIntoLocal(userId: string): Promise<vo
 // Determines what to do based on whether cloud data exists and whether
 // local data has been customized. Skips the prompt on repeat logins
 // from the same device (tracked via cw_synced_user_id).
+// "Use cloud data" in the first-login merge: the account's data replaces this
+// device's, as it always has. Merging into the local data instead kept, then
+// uploaded, the local-only recipes and settings the user had just chosen not
+// to keep.
+export async function replaceLocalWithCloud(userId: string): Promise<void> {
+  clearLocalUserContent();
+  invalidateAllCaches();
+  await pullFromCloud({ mergeUserId: userId, markMergedFor: userId });
+}
+
 export async function handleFirstLoginMerge(): Promise<void> {
   if (mergeInFlight) return mergeInFlight;
   mergeInFlight = (async function () {
@@ -1618,7 +1793,7 @@ export async function handleFirstLoginMerge(): Promise<void> {
           await foldCloudConcentratesIntoLocal(userId);
           await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
         } else {
-          await pullFromCloud({ mergeUserId: userId, markMergedFor: userId });
+          await replaceLocalWithCloud(userId);
         }
       }
     }
@@ -1901,11 +2076,32 @@ async function initSync(): Promise<void> {
 // pushes whenever anything is still unsynced — not only when a debounced save
 // is pending. An earlier push that failed, or one that silently no-oped while
 // offline, used to leave edits that a logout then wiped.
+// Longest logout waits for pending changes to reach the cloud before it asks
+// instead (ui-shared performLogout).
+const FLUSH_TIMEOUT_MS = 12000;
+
 export async function flushPendingSync(): Promise<void> {
   if (syncTimer) {
     clearTimeout(syncTimer);
     syncTimer = undefined;
   }
+  // Bounded: a push stuck on a stalled connection used to hold logout (and
+  // every later push queued behind it) indefinitely. Timing out rejects like
+  // any failed flush, so logout asks before discarding unsynced changes.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>(function (_, reject) {
+    timer = setTimeout(function () {
+      reject(new Error("[sync] timed out syncing pending changes"));
+    }, FLUSH_TIMEOUT_MS);
+  });
+  try {
+    await Promise.race([flushPendingSyncNow(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function flushPendingSyncNow(): Promise<void> {
   await pushQueue;
   if (!hasUnpushedChanges()) return;
   await pushAllToCloud();

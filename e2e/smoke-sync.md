@@ -69,9 +69,9 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: pick a custom-only profile (one created by this test user, not a canonical starter). Click its `.preset-delete[data-delete="<slug>"]`. Confirm the deletion when the confirm-dialog appears.
 - Context B: **without reloading**, wait for `#profile-buttons [data-profile="<slug>"]` to disappear. Timeout 4 s.
 - **Resurrection regression guard** (this is the load-bearing assertion): after Step 9 succeeds, do NOT reload. On Context B, assert all three:
-  - `await page.evaluate(() => loadCustomTargetProfiles()[<slug>] || null)` returns `null` (B's local custom dict cleared by pullFromCloud's empty-array-is-authoritative branch).
+  - `await page.evaluate(() => loadCustomTargetProfiles()[<slug>] || null)` returns `null` (B's local custom dict cleared by pullFromCloud's merge: the slug is tombstoned, and B hadn't changed the recipe since it last synced).
   - `await page.evaluate(() => loadDeletedTargetPresets().includes(<slug>))` returns `true`.
-  - Force a push: `await page.evaluate(() => window.syncNow())`, then query Supabase: `await window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId)` returns `[]`. **If the row reappears, the resurrection bug is back** — the upsert filter in `syncCustomProfiles` and/or pullFromCloud's empty-clear regressed.
+  - Force a push: `await page.evaluate(() => window.syncNow())`, then query Supabase: `await window.supabaseClient.from('target_profiles').select('slug').eq('user_id', userId)` returns `[]`. **If the row reappears, the resurrection bug is back** — the upsert filter in `syncCustomProfiles` and/or the tombstone handling in pullFromCloud's `mergeProfileRows` regressed.
 
 ### 10. Survive A going away while B keeps changing
 - Context A: on `/index.html`, note the current target preset name as `aPresetBefore`.

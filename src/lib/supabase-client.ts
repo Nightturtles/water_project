@@ -11,6 +11,8 @@ import { persistedSessionStorageKey, extractUserIdFromPersistedSession } from ".
 const SUPABASE_URL = "https://srlwgayrxzamxlodpsrq.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_X_Ui23hNRO1Uss-iLVSKiQ_cLqApXFq";
 
+const REST_REQUEST_TIMEOUT_MS = 20000;
+
 // Upgrade requests to keepalive: true when the page is being backgrounded or
 // unloaded. Lets in-flight pushes (from flushPendingSync) survive navigation.
 // 64 KB aggregate body cap, fine for this app's payloads.
@@ -20,7 +22,28 @@ export const supabaseClient: SupabaseClient = createClient(SUPABASE_URL, SUPABAS
       if (typeof document !== "undefined" && document.visibilityState === "hidden") {
         opts = Object.assign({}, opts ?? {}, { keepalive: true });
       }
-      return fetch(url, opts);
+      // Database (PostgREST) requests give up after REST_REQUEST_TIMEOUT_MS,
+      // so a stalled connection fails the push or pull instead of hanging it.
+      // Pushes run one at a time, so a push that never settled blocked every
+      // later save and logout's flush. Auth and Edge Function calls keep the
+      // browser's own timeouts.
+      if (typeof AbortController === "undefined" || String(url).indexOf("/rest/v1/") === -1) {
+        return fetch(url, opts);
+      }
+      const controller = new AbortController();
+      const outer = opts && opts.signal;
+      if (outer) {
+        if (outer.aborted) controller.abort(outer.reason);
+        else outer.addEventListener("abort", () => controller.abort(outer.reason), { once: true });
+      }
+      const timer = setTimeout(function () {
+        controller.abort(new Error("Request timed out"));
+      }, REST_REQUEST_TIMEOUT_MS);
+      return fetch(url, Object.assign({}, opts ?? {}, { signal: controller.signal })).finally(
+        function () {
+          clearTimeout(timer);
+        },
+      );
     },
   },
 });

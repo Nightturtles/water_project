@@ -60,6 +60,9 @@ export const KEYS = {
   // replay them (a replayed delete erased recipes re-created on other devices).
   CONFIRMED_DELETED_SOURCE_PROFILES: "cw_confirmed_deleted_source_profiles",
   CONFIRMED_DELETED_TARGET_PROFILES: "cw_confirmed_deleted_target_profiles",
+  // Bumped on every local save by any tab, so a push or pull in flight in
+  // another tab can tell its fold would overwrite something (sync.ts).
+  LOCAL_WRITE_MARKER: "cw_local_write_marker",
   SYNCED_USER_ID: "cw_synced_user_id",
   STARTER_MIGRATION_APPLIED: "cw_starter_migration_applied",
 } as const;
@@ -111,6 +114,7 @@ export const CATEGORY_C: string[] = [
   KEYS.LAST_PUSHED_TARGET_PROFILES,
   KEYS.CONFIRMED_DELETED_SOURCE_PROFILES,
   KEYS.CONFIRMED_DELETED_TARGET_PROFILES,
+  KEYS.LOCAL_WRITE_MARKER,
   KEYS.SYNCED_USER_ID,
   KEYS.STARTER_MIGRATION_APPLIED,
 ];

@@ -25,9 +25,12 @@ import {
   handleFirstLoginMerge,
   mergeRowFields,
   mergeProfileRows,
+  replaceLocalWithCloud,
+  clearLocalUserContent,
   SETTINGS_FIELD_KINDS,
   SELECTIONS_FIELD_KINDS,
 } from "../src/lib/sync";
+import { KEYS } from "../src/lib/storage-keys";
 
 const USER = "u1";
 const clone = <T>(v: T): T => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
@@ -457,4 +460,523 @@ describe("mergeProfileRows", () => {
     expect(profiles).toEqual({});
     expect(snapshots).toEqual({});
   });
+});
+
+// ---------------------------------------------------------------------------
+// Regressions found reviewing the merge-based sync. Several devices share the
+// fake cloud; each keeps its own localStorage image, swapped in around fully
+// awaited operations (one module instance, so no device runs in the
+// background while another is loaded).
+// ---------------------------------------------------------------------------
+
+function deviceImage(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (let i = 0; i < g.localStorage.length; i++) {
+    const k = g.localStorage.key(i)!;
+    out[k] = g.localStorage.getItem(k)!;
+  }
+  return out;
+}
+
+function useDevice(image: Record<string, string>) {
+  vi.clearAllTimers(); // no debounced push from the previous device
+  g.localStorage.clear();
+  for (const k of Object.keys(image)) g.localStorage.setItem(k, image[k]!);
+  storage.invalidateAllCaches();
+}
+
+// What a realtime event does on a device: push first if it holds unsynced
+// changes, then pull.
+async function realtimeEvent() {
+  if (hasUnpushedChanges()) await pushAllToCloud();
+  await pullFromCloud();
+}
+
+// Run `during` once, inside the first upsert to `table` (i.e. while a push is
+// out on the network).
+function duringUpsert(table: string, during: () => void) {
+  const original = g.window.supabaseClient.from;
+  let done = false;
+  g.window.supabaseClient.from = (t: string) => {
+    const tbl = original(t);
+    if (t !== table) return tbl;
+    const upsert = tbl.upsert;
+    tbl.upsert = async (payload: any) => {
+      if (!done) {
+        done = true;
+        during();
+      }
+      return upsert(payload);
+    };
+    return tbl;
+  };
+  return () => {
+    g.window.supabaseClient.from = original;
+  };
+}
+
+const cloudSlugs = () => cloud.profiles.target_profiles!.map((r: any) => r.slug);
+
+describe("review regressions: tombstones", () => {
+  test("an idle device's pulled tombstone doesn't delete a recipe re-created on another device", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("morning-filter", "Morning Filter", 40)];
+    await syncedBaseline();
+    let phone = deviceImage();
+    let laptop = deviceImage();
+
+    useDevice(phone);
+    storage.deleteCustomTargetProfile("morning-filter");
+    await pushAllToCloud();
+    phone = deviceImage();
+
+    useDevice(laptop);
+    await realtimeEvent();
+    // Learning about another device's delete isn't an unsynced change.
+    expect(hasUnpushedChanges()).toBe(false);
+    laptop = deviceImage();
+
+    useDevice(phone);
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      "morning-filter": profile("Morning Filter", 55),
+    });
+    await pushAllToCloud();
+    phone = deviceImage();
+
+    useDevice(laptop);
+    await realtimeEvent();
+    expect(cloudSlugs()).toContain("morning-filter");
+    expect(storage.loadCustomTargetProfiles()["morning-filter"]!.calcium).toBe(55);
+  });
+
+  test("a recipe deleted, re-created and deleted again with no pull between is deleted from the cloud", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("r", "R", 40)];
+    await syncedBaseline();
+    storage.deleteCustomTargetProfile("r");
+    await pushAllToCloud();
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      r: profile("R", 41),
+    });
+    await pushAllToCloud();
+    expect(cloudSlugs()).toContain("r");
+    storage.deleteCustomTargetProfile("r");
+    await pushAllToCloud();
+    expect(cloudSlugs()).not.toContain("r");
+  });
+
+  test('"Keep local data" keeps local recipes the cloud had tombstoned, and the local mineral selection', async () => {
+    cloud.rows.user_settings = {
+      user_id: USER,
+      selected_minerals: ["gypsum", "magnesium-chloride", "potassium-bicarbonate"],
+    };
+    cloud.rows.user_selections = { user_id: USER, deleted_target_presets: ["my-recipe", "gone"] };
+    storage.saveSelectedMinerals(["calcium-chloride", "epsom-salt", "baking-soda"]);
+    storage.saveCustomTargetProfiles({ "my-recipe": profile("My Recipe", 40) });
+
+    await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: USER });
+    g.localStorage.setItem("cw_synced_user_id", USER);
+    await pullFromCloud();
+
+    expect(storage.loadSelectedMinerals().slice().sort()).toEqual([
+      "baking-soda",
+      "calcium-chloride",
+      "epsom-salt",
+    ]);
+    expect(storage.loadCustomTargetProfiles()["my-recipe"]).toBeDefined();
+    expect(cloudSlugs()).toContain("my-recipe");
+    // The cloud's other tombstones still stand.
+    expect(cloud.rows.user_selections.deleted_target_presets).toEqual(["gone"]);
+  });
+
+  test("a recipe edited here and deleted on another device before this device pushed is kept and pushed", async () => {
+    cloud.profiles.target_profiles = [cloudTarget("r", "R", 40)];
+    await syncedBaseline();
+    let other = deviceImage();
+    // This device edits r but doesn't push yet.
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      r: profile("R", 47),
+    });
+    const here = deviceImage();
+    // Another device deletes r.
+    useDevice(other);
+    storage.deleteCustomTargetProfile("r");
+    await pushAllToCloud();
+    other = deviceImage();
+    // This device pulls, then pushes.
+    useDevice(here);
+    await pullFromCloud();
+    expect(storage.loadCustomTargetProfiles()["r"]!.calcium).toBe(47);
+    await pushAllToCloud();
+    expect(cloudSlugs()).toContain("r");
+    expect(cloud.rows.user_selections.deleted_target_presets).not.toContain("r");
+  });
+});
+
+describe("review regressions: folding a push", () => {
+  test("a save made while a push is on the network doesn't lose another device's change", async () => {
+    await syncedBaseline();
+    cloud.rows.user_settings = {
+      ...cloud.rows.user_settings,
+      stock_concentrate_specs: { x: { label: "X", bottleMl: 200, doseGramsPerL: 4, minerals: [] } },
+    };
+    storage.saveLotusDropperType("straight");
+    const restore = duringUpsert("user_settings", () => storage.saveBrewMethod("espresso"));
+    await pushAllToCloud();
+    restore();
+    await pullFromCloud();
+    await pushAllToCloud();
+    expect(Object.keys(cloud.rows.user_settings.stock_concentrate_specs || {})).toContain("x");
+    expect(cloud.rows.user_settings.brew_method).toBe("espresso");
+  });
+
+  test("a save from another tab while a push is on the network isn't overwritten by the push", async () => {
+    await syncedBaseline();
+    cloud.rows.user_settings = {
+      ...cloud.rows.user_settings,
+      stock_concentrate_specs: { x: { label: "X", bottleMl: 200, doseGramsPerL: 4, minerals: [] } },
+    };
+    storage.saveLotusDropperType("straight");
+    // Another tab's save: written straight to localStorage, with its write
+    // marker, not through this tab's storage module.
+    const restore = duringUpsert("user_settings", () => {
+      g.localStorage.setItem(KEYS.BREW_METHOD, "espresso");
+      g.localStorage.setItem(KEYS.LOCAL_WRITE_MARKER, "another-tab");
+    });
+    await pushAllToCloud();
+    restore();
+    expect(g.localStorage.getItem(KEYS.BREW_METHOD)).toBe("espresso");
+    storage.invalidateAllCaches();
+    await pushAllToCloud(); // the other tab's push
+    expect(cloud.rows.user_settings.brew_method).toBe("espresso");
+    expect(Object.keys(cloud.rows.user_settings.stock_concentrate_specs || {})).toContain("x");
+  });
+
+  test("a push whose account signs out mid-flight writes nothing back to the device", async () => {
+    await syncedBaseline();
+    cloud.rows.user_settings = {
+      ...cloud.rows.user_settings,
+      stock_concentrate_specs: { x: { label: "X", bottleMl: 200, doseGramsPerL: 4, minerals: [] } },
+    };
+    storage.saveLotusDropperType("straight");
+    const restore = duringUpsert("user_settings", () => {
+      g.window._cachedAuthUserId = null;
+      clearLocalUserContent();
+    });
+    await pushAllToCloud();
+    restore();
+    expect(g.localStorage.getItem(KEYS.STOCK_CONCENTRATE_SPECS)).toBeNull();
+    expect(g.localStorage.getItem(KEYS.LAST_PUSHED_SETTINGS)).toBeNull();
+    expect(g.localStorage.getItem(KEYS.LAST_PUSHED_TARGET_PROFILES)).toBeNull();
+  });
+});
+
+describe("review regressions: merge choices, order, drafts, stalls", () => {
+  test('"Use cloud data" neither keeps nor uploads local-only recipes', async () => {
+    cloud.profiles.target_profiles = [cloudTarget("cloud-recipe", "Cloud Recipe", 30)];
+    cloud.rows.user_settings = { user_id: USER, selected_minerals: ["gypsum"] };
+    storage.saveCustomTargetProfiles({ "local-only": profile("Local Only", 40) });
+    await replaceLocalWithCloud(USER);
+    expect(Object.keys(storage.loadCustomTargetProfiles())).toEqual(["cloud-recipe"]);
+    expect(storage.loadSelectedMinerals()).toEqual(["gypsum"]);
+    await pushAllToCloud();
+    expect(cloudSlugs()).toEqual(["cloud-recipe"]);
+  });
+
+  test("two devices holding the same tombstones in different orders stop pushing at each other", async () => {
+    await syncedBaseline();
+    let a = deviceImage();
+    let b = deviceImage();
+    useDevice(a);
+    storage.addDeletedTargetPreset("rao");
+    await pushAllToCloud();
+    a = deviceImage();
+    useDevice(b);
+    storage.addDeletedTargetPreset("sca");
+    await pushAllToCloud();
+    b = deviceImage();
+    const dirty: boolean[] = [];
+    for (let round = 0; round < 3; round++) {
+      for (const which of ["a", "b"] as const) {
+        useDevice(which === "a" ? a : b);
+        await pullFromCloud();
+        dirty.push(hasUnpushedChanges());
+        if (hasUnpushedChanges()) await pushAllToCloud();
+        if (which === "a") a = deviceImage();
+        else b = deviceImage();
+      }
+    }
+    // Settled after the first round: nobody is dirty in the later rounds.
+    expect(dirty.slice(2)).toEqual([false, false, false, false]);
+    expect(cloud.rows.user_selections.deleted_target_presets.slice().sort()).toEqual([
+      "rao",
+      "sca",
+    ]);
+  });
+
+  test("a 1.2 client's empty drafts blob doesn't delete this device's draft", async () => {
+    g.localStorage.setItem(KEYS.RECIPE_MINERAL_INPUTS, JSON.stringify({ "epsom-salt": "1.2" }));
+    await syncedBaseline();
+    cloud.rows.user_settings = { ...cloud.rows.user_settings, drafts: {}, theme: "dark" };
+    await pullFromCloud();
+    expect(g.localStorage.getItem(KEYS.RECIPE_MINERAL_INPUTS)).not.toBeNull();
+  });
+
+  test("logout's flush gives up on a push stuck on the network instead of hanging", async () => {
+    await syncedBaseline();
+    storage.saveLotusDropperType("straight");
+    const original = g.window.supabaseClient.from;
+    let release: (value: unknown) => void = () => {};
+    g.window.supabaseClient.from = (t: string) => {
+      const tbl = original(t);
+      tbl.select = () => ({
+        eq: () => ({
+          maybeSingle: () =>
+            new Promise((resolve) => {
+              release = resolve;
+            }),
+        }),
+      });
+      return tbl;
+    };
+    const outcome = flushPendingSync().then(
+      () => "resolved",
+      (e: Error) => "rejected: " + e.message,
+    );
+    await vi.advanceTimersByTimeAsync(12_000);
+    expect(await outcome).toMatch(/rejected: .*timed out/);
+    // The stalled request finally fails (as the client's request timeout makes
+    // it do), so the push queue drains for whatever runs next.
+    g.window.supabaseClient.from = original;
+    release({ data: null, error: { message: "Failed to fetch" } });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Randomized multi-device simulation. Three devices edit minerals, the rail,
+// source water and recipes (create, edit, delete, re-create) in random order.
+//
+// Sequential: each change is pushed and every other device then gets the
+// realtime event before anyone acts again, so every device must end up exactly
+// matching a model that applies the changes in order (no lost edits, no
+// resurrected or wrongly deleted recipes).
+//
+// Concurrent: devices act on stale state, push and pull in random order, and
+// some saves land while a push is on the network. After everyone syncs, all
+// devices must agree, none may hold unsynced changes, and anything added and
+// never removed by any device (a mineral, a rail entry, a recipe) must exist.
+// ---------------------------------------------------------------------------
+
+function seededRandom(seed: number) {
+  return function () {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+type Observed = {
+  minerals: string[];
+  rail: string[];
+  calcium: number;
+  recipes: Record<string, number>;
+};
+
+function observe(): Observed {
+  const recipes: Record<string, number> = {};
+  const profiles = storage.loadCustomTargetProfiles();
+  Object.keys(profiles)
+    .sort()
+    .forEach((slug) => {
+      recipes[slug] = Number(profiles[slug]!.calcium);
+    });
+  return {
+    minerals: storage.loadSelectedMinerals().slice().sort(),
+    rail: storage.loadAddedTargetPresets().slice().sort(),
+    calcium: Number(storage.loadSourceWater().calcium) || 0,
+    recipes,
+  };
+}
+
+type Mutation = {
+  kind: "mineral" | "rail" | "calcium" | "upsert" | "delete";
+  key: string;
+  value: number;
+};
+const POOL = {
+  mineral: ["gypsum", "magnesium-chloride", "potassium-bicarbonate", "epsom-salt"],
+  rail: ["rao", "sey", "aviary-filter"],
+  recipe: ["r1", "r2", "r3"],
+};
+
+function randomMutation(rand: () => number): Mutation {
+  const pick = <T>(xs: T[]) => xs[Math.floor(rand() * xs.length)]!;
+  const kind = pick(["mineral", "rail", "calcium", "upsert", "upsert", "delete"] as const);
+  const key =
+    kind === "mineral" ? pick(POOL.mineral) : kind === "rail" ? pick(POOL.rail) : pick(POOL.recipe);
+  return { kind, key, value: 1 + Math.floor(rand() * 90) };
+}
+
+// Apply on the device currently loaded; returns what it did for the model and
+// the invariants ("add" / "remove" of key in its collection, or "set").
+function applyMutation(m: Mutation): "add" | "remove" | "set" | "noop" {
+  if (m.kind === "mineral") {
+    const cur = storage.loadSelectedMinerals();
+    const has = cur.includes(m.key);
+    storage.saveSelectedMinerals(has ? cur.filter((x) => x !== m.key) : [...cur, m.key]);
+    return has ? "remove" : "add";
+  }
+  if (m.kind === "rail") {
+    const has = storage.loadAddedTargetPresets().includes(m.key);
+    if (has) storage.removeAddedTargetPreset(m.key);
+    else storage.addAddedTargetPreset(m.key);
+    return has ? "remove" : "add";
+  }
+  if (m.kind === "calcium") {
+    storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: m.value });
+    return "set";
+  }
+  if (m.kind === "upsert") {
+    storage.saveCustomTargetProfiles({
+      ...storage.loadCustomTargetProfiles(),
+      [m.key]: profile(m.key, m.value),
+    });
+    return "add";
+  }
+  if (!storage.loadCustomTargetProfiles()[m.key]) return "noop";
+  storage.deleteCustomTargetProfile(m.key);
+  return "remove";
+}
+
+function applyToModel(model: Observed, m: Mutation, effect: string) {
+  if (effect === "noop") return;
+  if (m.kind === "mineral" || m.kind === "rail") {
+    const list = m.kind === "mineral" ? model.minerals : model.rail;
+    const next = effect === "add" ? [...list, m.key] : list.filter((x) => x !== m.key);
+    if (m.kind === "mineral") model.minerals = next.sort();
+    else model.rail = next.sort();
+  } else if (m.kind === "calcium") {
+    model.calcium = m.value;
+  } else if (m.kind === "upsert") {
+    model.recipes = { ...model.recipes, [m.key]: m.value };
+  } else {
+    const next = { ...model.recipes };
+    delete next[m.key];
+    model.recipes = next;
+  }
+  model.recipes = Object.fromEntries(Object.entries(model.recipes).sort());
+}
+
+async function freshAccount() {
+  vi.clearAllTimers();
+  g.localStorage.clear();
+  g.sessionStorage.clear();
+  storage.invalidateAllCaches();
+  cloud = new FakeCloud();
+  g.window.supabaseClient = cloud.client();
+  await syncedBaseline();
+}
+
+describe("randomized multi-device simulation", () => {
+  test("sequential changes leave every device matching the changes applied in order", async () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const rand = seededRandom(seed);
+      await freshAccount();
+      const devices = [deviceImage(), deviceImage(), deviceImage()];
+      useDevice(devices[0]!);
+      const model = observe();
+      for (let step = 0; step < 25; step++) {
+        const d = Math.floor(rand() * 3);
+        useDevice(devices[d]!);
+        const m = randomMutation(rand);
+        applyToModel(model, m, applyMutation(m));
+        await pushAllToCloud();
+        devices[d] = deviceImage();
+        for (let e = 0; e < 3; e++) {
+          if (e === d) continue;
+          useDevice(devices[e]!);
+          await realtimeEvent();
+          devices[e] = deviceImage();
+        }
+        for (let e = 0; e < 3; e++) {
+          useDevice(devices[e]!);
+          const where = `seed ${seed} step ${step} (${m.kind} ${m.key}) device ${e}`;
+          expect(observe(), where).toEqual(model);
+          expect(hasUnpushedChanges(), where).toBe(false);
+        }
+      }
+    }
+  }, 60_000);
+
+  test("concurrent changes converge without losing anything never removed", async () => {
+    for (let seed = 1; seed <= 60; seed++) {
+      const rand = seededRandom(1000 + seed);
+      await freshAccount();
+      const devices = [deviceImage(), deviceImage(), deviceImage()];
+      const added = new Set<string>();
+      const removed = new Set<string>();
+      const track = (m: Mutation, effect: string) => {
+        if (m.kind === "calcium" || effect === "noop") return;
+        const collection = m.kind === "upsert" || m.kind === "delete" ? "recipe" : m.kind;
+        (effect === "add" ? added : removed).add(collection + ":" + m.key);
+      };
+      for (let step = 0; step < 30; step++) {
+        const d = Math.floor(rand() * 3);
+        useDevice(devices[d]!);
+        const action = rand();
+        if (action < 0.5) {
+          const m = randomMutation(rand);
+          track(m, applyMutation(m));
+        } else if (action < 0.65) {
+          await pushAllToCloud();
+        } else if (action < 0.75) {
+          await pullFromCloud();
+        } else if (action < 0.9) {
+          await realtimeEvent();
+        } else {
+          // A save lands while this device's push is on the network.
+          const m = randomMutation(rand);
+          const restore = duringUpsert("user_settings", () => track(m, applyMutation(m)));
+          storage.saveLotusDropperType(rand() < 0.5 ? "straight" : "dropper");
+          await pushAllToCloud();
+          restore();
+        }
+        devices[d] = deviceImage();
+      }
+      for (let round = 0; round < 4; round++) {
+        for (let e = 0; e < 3; e++) {
+          useDevice(devices[e]!);
+          await realtimeEvent();
+          if (hasUnpushedChanges()) await pushAllToCloud();
+          devices[e] = deviceImage();
+        }
+      }
+      const states = devices.map((img) => {
+        useDevice(img);
+        return { obs: observe(), dirty: hasUnpushedChanges() };
+      });
+      const where = `seed ${1000 + seed}`;
+      expect(
+        states.map((s) => s.dirty),
+        where,
+      ).toEqual([false, false, false]);
+      expect(states[1]!.obs, where).toEqual(states[0]!.obs);
+      expect(states[2]!.obs, where).toEqual(states[0]!.obs);
+      const final = states[0]!.obs;
+      for (const k of added) {
+        if (removed.has(k)) continue;
+        const [kind, key] = k.split(":") as [string, string];
+        const present =
+          kind === "mineral"
+            ? final.minerals.includes(key)
+            : kind === "rail"
+              ? final.rail.includes(key)
+              : key in final.recipes;
+        expect(present, `${where}: ${k} was added and never removed`).toBe(true);
+      }
+    }
+  }, 60_000);
 });
