@@ -21,6 +21,7 @@ import { describe, test, expect, beforeEach } from "vitest";
 import {
   saveSelectedMinerals,
   saveSelectedConcentrates,
+  saveDiyConcentrateSpecs,
   getEffectiveCalciumSources,
 } from "../src/lib/storage";
 import { MINERAL_DB } from "../src/lib/constants";
@@ -39,6 +40,7 @@ function resetState() {
   // Same for the selected-concentrates cache, so a concentrate enabled in one
   // test can't leak into the next.
   saveSelectedConcentrates([]);
+  saveDiyConcentrateSpecs({});
 }
 
 beforeEach(resetState);
@@ -55,8 +57,18 @@ describe("getEffectiveCalciumSources: calcium-chloride form", () => {
   test("dihydrate powder + anhydrous DIY concentrate → the concentrate's anhydrous form", () => {
     // Previously the dihydrate always won, so the anhydrous concentrate the
     // user enabled was never dosed (its calculator row didn't render).
+    saveDiyConcentrateSpecs({
+      "calcium-chloride-anhydrous": { bottleMl: 100, gramsPerBottle: 20 },
+    });
     saveSelectedConcentrates(["diy:calcium-chloride-anhydrous"]);
     expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride-anhydrous"]);
+  });
+
+  test("an anhydrous concentrate not configured yet leaves the dihydrate powder in the slot", () => {
+    // Ticked before its bottle mL and grams are set, it can't dose anything;
+    // taking the slot then meant no calcium at all.
+    saveSelectedConcentrates(["diy:calcium-chloride-anhydrous"]);
+    expect(getEffectiveCalciumSources()).toEqual(["calcium-chloride"]);
   });
 
   test("both forms as powders (no concentrate) → dihydrate, as before", () => {
