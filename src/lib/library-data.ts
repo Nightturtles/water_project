@@ -369,6 +369,13 @@ function generateUniqueSlug(baseName: string): string {
     if (r && r.slug) existingKeys.add(r.slug);
   });
 
+  // And slugs this account deleted before: a device that hasn't synced since
+  // may still replay that delete, which would erase a copy saved under the
+  // same slug (see unusedProfileKey in storage.ts).
+  loadDeletedTargetPresets().forEach(function (k) {
+    existingKeys.add(k);
+  });
+
   if (!existingKeys.has(baseSlug)) return baseSlug;
 
   for (let i = 2; i < 100; i++) {

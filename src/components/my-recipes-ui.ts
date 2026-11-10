@@ -20,7 +20,13 @@
 // =============================================================================
 
 import { LIBRARY_TAGS, RESERVED_TARGET_KEYS } from "../lib/constants";
-import { loadCustomTargetProfiles, saveCustomTargetProfiles, slugify } from "../lib/storage";
+import {
+  loadCustomTargetProfiles,
+  loadDeletedTargetPresets,
+  saveCustomTargetProfiles,
+  slugify,
+  unusedProfileKey,
+} from "../lib/storage";
 
 function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -364,7 +370,7 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
     return;
   }
 
-  const newSlug =
+  let newSlug =
     typeof slugify === "function" ? slugify(name) : name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   if (!newSlug) {
     ctx.errorEl.textContent = "Enter a valid name.";
@@ -380,6 +386,17 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
       ctx.errorEl.textContent = "A recipe with this name already exists.";
       return;
     }
+    // Renaming moves the row to a new slug. If that slug was deleted before,
+    // a device that hasn't synced since may still replay the delete and erase
+    // this recipe, so take a fresh one (see unusedProfileKey in storage.ts).
+    const retired = new Set(loadDeletedTargetPresets());
+    newSlug = unusedProfileKey(newSlug, function (candidate) {
+      return (
+        retired.has(candidate) ||
+        !!profiles[candidate] ||
+        !!(reserved && typeof reserved.has === "function" && reserved.has(candidate))
+      );
+    });
   }
 
   // Multi-select validation. Both fields must have at least one option

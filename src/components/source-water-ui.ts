@@ -42,6 +42,7 @@ import {
   saveSourcePresetName,
   saveSourceWater,
   validateProfileName,
+  loadDeletedPresets,
 } from "../lib/storage";
 
 // storage.ts's SourceProfile is module-internal; recover the exact shape from
@@ -347,6 +348,7 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
       existingLabels: getExistingSourceProfileLabels(),
+      retiredKeys: loadDeletedPresets(),
     });
     if (validation.ok && validation.empty) {
       errEl.textContent = "";
@@ -448,6 +450,7 @@ function initSourceWaterSection(options?: InitSourceWaterOptions): SourceWaterSe
       builtinKeys: new Set(Object.keys(SOURCE_PRESETS)),
       existingKeys: new Set(Object.keys(loadCustomProfiles())),
       existingLabels: getExistingSourceProfileLabels(),
+      retiredKeys: loadDeletedPresets(),
     });
     if (!validation.ok) {
       if (validation.code === "reserved" || validation.code === "duplicate") {

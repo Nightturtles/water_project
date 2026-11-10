@@ -564,6 +564,15 @@ describe("generateUniqueSlug", () => {
     expect(uniqueSlug("Onyx")).toBe("onyx-2");
   });
 
+  test("a slug this account deleted before is never reused", () => {
+    // A device that hasn't synced since still holds that delete and replays
+    // it on its next push; a copy saved under the same slug would be erased.
+    localStorage.setItem("cw_deleted_target_presets", JSON.stringify(["my-recipe"]));
+    expect(uniqueSlug("My Recipe")).toBe("my-recipe-2");
+    localStorage.setItem("cw_deleted_target_presets", JSON.stringify(["my-recipe", "my-recipe-2"]));
+    expect(uniqueSlug("My Recipe")).toBe("my-recipe-3");
+  });
+
   test("multi-collision chain increments past the highest", () => {
     saveCustomTargetProfiles({
       "my-recipe": { label: "A", calcium: 0, magnesium: 0, alkalinity: 0 },
