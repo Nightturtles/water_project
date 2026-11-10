@@ -1607,7 +1607,7 @@ if (typeof window !== "undefined") {
 // a brief confirmation that the deletion went through, rather than a silent
 // unauthed redirect that looks like they got logged out by mistake.
 function showAccountDeletedFlashIfPending(): void {
-  let pending = false;
+  let pending: boolean;
   try {
     pending = sessionStorage.getItem("cw_account_deleted_flash") === "1";
     if (pending) sessionStorage.removeItem("cw_account_deleted_flash");

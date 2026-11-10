@@ -196,7 +196,7 @@ async function handleDeepLink(url: string): Promise<void> {
   const client = window.supabaseClient;
   if (!client) return;
 
-  let isRecovery = false;
+  let isRecovery: boolean;
   try {
     // supabase-js v2's setSession / exchangeCodeForSession do not always
     // throw on failure — without throwOnError set on the client they
