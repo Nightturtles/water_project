@@ -84,6 +84,38 @@ export function calculateIonPPMs(mineralGrams: MineralGrams): Record<IonName, nu
 }
 
 /**
+ * The dose a Calculator row actually tells the user to add, as opposed to the
+ * exact solved dose. Rows round for display (whole drops, 0.001 mL, 0.01 g),
+ * and at small volumes that rounding moves the water noticeably: 2.4 drops
+ * shown as "2" is a 17% smaller dose. The summary readout is computed from
+ * these values so it describes the water the displayed doses make.
+ *
+ * Grams below 0.01 print as "<0.01 g", which gives no figure to follow, so
+ * they pass through unrounded.
+ */
+export function displayedGrams(grams: number): number {
+  if (!Number.isFinite(grams) || grams <= 0) return 0;
+  if (grams < 0.01) return grams;
+  return Number(grams.toFixed(2));
+}
+
+/** Whole drops shown for a concentrate dose of `ml` with a `dropMl` dropper. */
+export function displayedDrops(ml: number, dropMl: number): number {
+  if (!Number.isFinite(ml) || ml <= 0) return 0;
+  return Number.isFinite(dropMl) && dropMl > 0 ? Math.round(ml / dropMl) : 0;
+}
+
+/**
+ * mL of concentrate a row shows: whole drops times the dropper size when the
+ * row is in drops, otherwise the mL figure at its 3 printed decimals.
+ */
+export function displayedConcentrateMl(ml: number, unit: "drops" | "ml", dropMl: number): number {
+  if (!Number.isFinite(ml) || ml <= 0) return 0;
+  if (unit === "drops") return displayedDrops(ml, dropMl) * dropMl || 0;
+  return Number(ml.toFixed(3));
+}
+
+/**
  * Compute GH / KH / TDS from an ion map (CaCO3-equivalent for GH and KH).
  */
 export function calculateMetrics(ions: IonMap): DerivedMetrics {
