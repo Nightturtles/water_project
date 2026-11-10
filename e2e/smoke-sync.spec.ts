@@ -386,6 +386,18 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     // pull), which was observed to make later steps more flaky, not less.
     await waitForSyncReady(pageB);
 
+    // A device at rest against the real backend must report nothing unsynced.
+    // Logout's flush goes by this check; a false "unsynced" here would ask
+    // "log out anyway?" about changes that had already synced.
+    await expect
+      .poll(() =>
+        pageB.evaluate(() => {
+          // @ts-expect-error - global from sync.js
+          return window.hasUnpushedChanges();
+        }),
+      )
+      .toBe(false);
+
     const loginLink = pageA.locator('a[href*="login.html"]');
     await expect(loginLink).toHaveCount(0);
   });
@@ -415,6 +427,16 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       return loadSourceWater().calcium;
     });
     expect(cal).toBe(43);
+    // The push above went through, so nothing is left unsynced and logout's
+    // flush has nothing to do.
+    const flushed = await pageA.evaluate(async () => {
+      // @ts-expect-error - globals from sync.js
+      const before = window.hasUnpushedChanges();
+      // @ts-expect-error - global from sync.js
+      await window.flushPendingSync();
+      return before;
+    });
+    expect(flushed).toBe(false);
   });
 
   test("Step 4: cross-device read — Device B's storage reflects Device A's write via Realtime", async () => {

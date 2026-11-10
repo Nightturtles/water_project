@@ -75,7 +75,7 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 
 ### 10. Survive A going away while B keeps changing
 - Context A: on `/index.html`, note the current target preset name as `aPresetBefore`.
-- Context A: close the page (`context.close()` or navigate to `about:blank` — this triggers the `pagehide` handler that calls `unsubscribeFromCloudChanges` + `flushPendingSync`).
+- Context A: close the page (`context.close()` or navigate to `about:blank` — this triggers the `pagehide` handler, which unsubscribes from Realtime and sends any debounced save that was still waiting).
 - Context B: on `/index.html`, edit a recipe (rename, change calcium, click save).
 - Context A: re-open `/index.html` in a fresh page. Wait for the rail to render. The new label/value from B should be present immediately after `initSync` runs (push-first-then-pull-then-subscribe). No "Saved!" indicator needed — just assert the label.
 - This catches the case where the channel teardown leaks (next subscribe rejects "channel already exists") or `initSync` skips re-subscribing.
