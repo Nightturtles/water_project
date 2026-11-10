@@ -798,7 +798,6 @@ export function deriveStockFormulaFromTarget(
   let producedNa = 0;
   let producedK = 0;
   let producedSO4 = 0;
-  let _producedCl = 0;
 
   // --- 1. Bicarbonate split ---
   if (tHCO3 > 0) {
@@ -879,8 +878,6 @@ export function deriveStockFormulaFromTarget(
       minerals.push({ mineralId: mgPick, grams: gMg });
       if (mgPick === "epsom-salt") {
         producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
-      } else {
-        _producedCl += sideIonProduced("magnesium-chloride", "magnesium", tMg, "chloride");
       }
     }
   }
@@ -918,7 +915,6 @@ export function deriveStockFormulaFromTarget(
     const gCa = gramsForIon(caId, "calcium", tCa);
     if (gCa > 0) {
       minerals.push({ mineralId: caId, grams: gCa });
-      _producedCl += sideIonProduced(caId, "calcium", tCa, "chloride");
     }
   }
 
@@ -929,14 +925,12 @@ export function deriveStockFormulaFromTarget(
     const gKCl = gramsForIon("potassium-chloride", "potassium", residK);
     if (gKCl > 0) {
       minerals.push({ mineralId: "potassium-chloride", grams: gKCl });
-      _producedCl += sideIonProduced("potassium-chloride", "potassium", residK, "chloride");
     }
   }
   if (residNa > 0) {
     const gNaCl = gramsForIon("sodium-chloride", "sodium", residNa);
     if (gNaCl > 0) {
       minerals.push({ mineralId: "sodium-chloride", grams: gNaCl });
-      _producedCl += sideIonProduced("sodium-chloride", "sodium", residNa, "chloride");
     }
   }
 

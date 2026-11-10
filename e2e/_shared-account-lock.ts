@@ -56,6 +56,7 @@ export async function acquireSharedAccount(timeoutMs = 180_000): Promise<() => v
         throw new Error(
           `acquireSharedAccount: timed out after ${timeoutMs}ms waiting for ${LOCK_FILE} ` +
             `(a prior run may have crashed holding it; it is cleared at the start of each run)`,
+          { cause: err },
         );
       }
       await sleep(POLL_MS);
