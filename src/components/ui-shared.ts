@@ -169,6 +169,10 @@ export interface ShowConfirmOptions {
   // Override button labels. Defaults: yesLabel="Yes", noLabel="No".
   yesLabel?: string;
   noLabel?: string;
+  // Focus the No button instead of Yes when the dialog opens, so a stray
+  // Enter or Space takes the safe choice. For confirms whose Yes discards
+  // something and that can appear without the user expecting them.
+  focusNo?: boolean;
 }
 
 function ensureConfirmOverlay(): HTMLElement {
@@ -265,6 +269,8 @@ export function showConfirm(
   lockBodyScroll("confirm");
   if (input) {
     input.focus();
+  } else if (options?.focusNo) {
+    noBtn.focus();
   } else {
     yesBtn.focus();
   }
@@ -889,21 +895,46 @@ export function injectNav(): void {
 //   2. sign out (Supabase clears the session, fires SIGNED_OUT)
 //   3. wipe local user content (Categories A/B/C; D preserved)
 //   4. navigate to a clean page
-// If the pending push fails, abort logout. Continuing would call signOut()
-// and clearLocalUserContent() and silently drop the unsynced edit (e.g. a
-// save made within SYNC_DEBOUNCE_MS of clicking Log out). Better to leave the
-// user signed in so they can retry than to lose their data.
+// If the flush can't confirm that everything reached the cloud (offline, the
+// push failed or timed out, the first-login merge never finished), ask before
+// continuing: signOut() and clearLocalUserContent() would drop the unsynced
+// changes. "Stay signed in" keeps them to retry; "Log out anyway" discards
+// them knowingly. Before, a failed flush left the Log out button doing
+// nothing, with no message.
 // Shared verbatim by the desktop top nav (_updateNavAuth) and the native
 // bottom sheet (injectBottomNav) so this sequence lives in exactly one place.
+let logoutInFlight = false;
+
 async function performLogout(): Promise<void> {
-  if (typeof window.flushPendingSync === "function") {
-    try {
-      await window.flushPendingSync();
-    } catch (err) {
-      console.warn("[auth] flushPendingSync failed; aborting logout:", err);
-      return;
+  // The flush can take several seconds on a bad connection; a second tap
+  // must not start a second logout behind the first.
+  if (logoutInFlight) return;
+  logoutInFlight = true;
+  try {
+    if (typeof window.flushPendingSync === "function") {
+      try {
+        await window.flushPendingSync();
+      } catch (err) {
+        console.warn("[auth] flushPendingSync failed:", err);
+        showConfirm(
+          "Some of your recent changes haven't synced to your account yet. Logging out now will remove them from this device. Log out anyway?",
+          function () {
+            void finishLogout();
+          },
+          // This can appear up to 12 s after the tap (a flush that timed
+          // out), so the safe button takes the focus.
+          { yesLabel: "Log out anyway", noLabel: "Stay signed in", focusNo: true },
+        );
+        return;
+      }
     }
+    await finishLogout();
+  } finally {
+    logoutInFlight = false;
   }
+}
+
+async function finishLogout(): Promise<void> {
   // If signOut() throws (network blip, transient Supabase error), the auth
   // token survives — wiping local state and redirecting in that case would
   // leave the next page load authenticated, which defeats the purpose of

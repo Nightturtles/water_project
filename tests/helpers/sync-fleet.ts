@@ -195,18 +195,14 @@ export async function pageLoad(d: Device): Promise<void> {
   keep(d);
 }
 
-// A Realtime event reaching the device: push first if it has something
-// pending, then pull. v1.2 pushes only when its debounce timer is pending. A
-// current module that exports hasUnpushedChanges also pushes when that is true
-// (the push-first rule that comes with merge-based sync).
+// A Realtime event reaching the device: push first if a debounced save is
+// pending, then pull. This mirrors scheduleRealtimePull, which is not exported
+// and is the same in both versions today. A change to that push-first rule in
+// src/lib/sync.ts has to be mirrored here, per version, in the same PR.
 export async function realtime(d: Device): Promise<void> {
   use(d);
   const mod = syncModule(d);
-  const hasUnpushed =
-    d.version === "current" && typeof mod.hasUnpushedChanges === "function"
-      ? !!mod.hasUnpushedChanges()
-      : false;
-  if (d.pending || hasUnpushed) {
+  if (d.pending) {
     await mod.pushAllToCloud().catch(() => {});
     d.pending = false;
   }
@@ -228,20 +224,31 @@ export async function settle(devs: Device[], maxRounds = 10): Promise<number> {
   return noisy;
 }
 
-// True when the device still holds single-row changes it would push. Uses the
-// module's own check when it has one, else the last-pushed snapshot compare
-// both versions push by.
+// True when the device still holds changes it would push: a settings or
+// selections row, or a recipe that isn't tombstoned, that differs from its
+// last-pushed snapshot. Computed here the same way for every version (both
+// export the builders), so one version's own bookkeeping can't make it look
+// cleaner or dirtier than the other.
 export function dirty(d: Device): boolean {
   use(d);
   const mod = syncModule(d);
-  if (d.version === "current" && typeof mod.hasUnpushedChanges === "function") {
-    return !!mod.hasUnpushedChanges();
-  }
-  return (
+  if (
     mod.snapshotForCompare(mod.buildSettingsPayload(USER, "")) !==
       g.localStorage.getItem("cw_last_pushed_settings") ||
     mod.snapshotForCompare(mod.buildSelectionsPayload(USER, "")) !==
       g.localStorage.getItem("cw_last_pushed_selections")
+  ) {
+    return true;
+  }
+  const profiles: Record<string, any> = storage.loadCustomTargetProfiles();
+  const tombstones: string[] = storage.loadDeletedTargetPresets();
+  const snapshots: Record<string, string> = JSON.parse(
+    g.localStorage.getItem("cw_last_pushed_target_profiles") || "{}",
+  );
+  return Object.keys(profiles).some(
+    (slug) =>
+      !tombstones.includes(slug) &&
+      snapshots[slug] !== mod.stableStringify(mod.buildTargetRow(USER, slug, profiles[slug])),
   );
 }
 

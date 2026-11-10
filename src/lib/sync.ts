@@ -211,11 +211,23 @@ export function syncNow(): Promise<void> {
     });
 }
 
-// --- Get currently logged-in user ID, or null ---
+// --- Get currently logged-in user ID ---
+// lookupUserId tells "signed out" (resolves null) apart from "couldn't find
+// out" (throws: offline, a network blip, a server error). Only logout's flush
+// needs the difference; everything else goes through getLoggedInUserId, which
+// treats both as null, as it always has.
+async function lookupUserId(): Promise<string | null> {
+  const result = await window.supabaseClient.auth.getUser();
+  const user = result && result.data && result.data.user;
+  if (user) return user.id;
+  const error = result && result.error;
+  if (!error || (error as { name?: string }).name === "AuthSessionMissingError") return null;
+  throw error;
+}
+
 async function getLoggedInUserId(): Promise<string | null> {
   try {
-    const result = await window.supabaseClient.auth.getUser();
-    return result.data && result.data.user ? result.data.user.id : null;
+    return await lookupUserId();
   } catch (_) {
     return null;
   }
@@ -329,11 +341,27 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // mergeUserId binds the merge's push to the user the merge started for: if
 // the session switched accounts meanwhile, reject rather than push this
 // device's (by then cleared) local state over another account's cloud row.
+//
+// mustSync (logout's flush): the caller is about to wipe this device, so a
+// push that didn't happen must not look like one that did. Every early return
+// below (no user, a failed lookup, the merge gate) throws instead.
 export async function pushAllToCloud(options?: {
   allowBeforeMerge?: boolean;
   mergeUserId?: string;
+  mustSync?: boolean;
 }): Promise<void> {
-  const userId = await getLoggedInUserId();
+  const mustSync = !!(options && options.mustSync);
+  let userId: string | null;
+  if (mustSync) {
+    try {
+      userId = await lookupUserId();
+    } catch (err) {
+      throw new Error("[sync] not synced: could not reach the account", { cause: err });
+    }
+    if (!userId) throw new Error("[sync] not synced: no signed-in user");
+  } else {
+    userId = await getLoggedInUserId();
+  }
   if (!userId) {
     // The merge's own push (allowBeforeMerge) must not "succeed" without
     // pushing: handleFirstLoginMerge would then mark the device merged, and a
@@ -349,6 +377,9 @@ export async function pushAllToCloud(options?: {
     throw new Error("[sync] merge push aborted: the signed-in user changed");
   }
   if (!(options && options.allowBeforeMerge) && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
+    if (mustSync) {
+      throw new Error("[sync] not synced: this device hasn't finished merging with the account");
+    }
     return;
   }
 
@@ -1393,14 +1424,112 @@ async function initSync(): Promise<void> {
   }
 }
 
-// --- Flush pending sync when navigating away ---
-// Returns a promise that resolves when the inflight push settles, and
-// rejects if the push fails.  Logout awaits this before calling signOut()
-// so a debounced edit (made within SYNC_DEBOUNCE_MS of clicking Log out)
-// reaches the cloud before the session is cleared; if the push fails the
-// caller MUST abort logout to avoid wiping unsynced edits.  Background
-// callers (visibilitychange, pagehide) can ignore the rejection.
-export function flushPendingSync(): Promise<void> {
+// --- Does this device hold changes the cloud doesn't have? ---
+// A local check, no network: a settings or selections row or a custom profile
+// that differs from what this device last pushed or pulled (a save whose
+// debounced push hasn't run yet, or one whose push failed), or, before the
+// first-login merge has completed, any real local data at all (nothing can be
+// pushed until it does). False when signed out.
+//
+// It deliberately doesn't look at syncTimer: that still holds the id of a
+// timer that already fired (scheduleRealtimePull leans on that to retry a
+// failed push), so it would report "unsynced" for the rest of the page after
+// any save, and logging out offline would then ask about changes that had
+// long since synced.
+//
+// Tombstones aren't counted: a delete uploads its tombstone with the
+// selections row first, and every push by any device holding it re-sends the
+// row DELETE, so one that hasn't gone through yet is not lost by logging out.
+export function hasUnpushedChanges(): boolean {
+  const userId = window._cachedAuthUserId || safeGetItem(KEYS.SYNCED_USER_ID);
+  if (!userId) return false;
+  if (safeGetItem(KEYS.SYNCED_USER_ID) !== userId) return !isDefaultData();
+  if (
+    snapshotForCompare(buildSettingsPayload(userId, "")) !== safeGetItem(LAST_PUSHED_SETTINGS_KEY)
+  )
+    return true;
+  if (
+    snapshotForCompare(buildSelectionsPayload(userId, "")) !==
+    safeGetItem(LAST_PUSHED_SELECTIONS_KEY)
+  )
+    return true;
+  const profileDirty = function (
+    profiles: Record<string, unknown>,
+    tombstones: string[],
+    snapshotsKey: string,
+    build: (slug: string, p: any) => unknown,
+  ): boolean {
+    const snapshots: Record<string, string> = safeParse(safeGetItem(snapshotsKey), null) || {};
+    return Object.keys(profiles).some(function (slug) {
+      if (tombstones.indexOf(slug) !== -1) return false;
+      return snapshots[slug] !== stableStringify(build(slug, profiles[slug]));
+    });
+  };
+  return (
+    profileDirty(loadCustomProfiles(), loadDeletedPresets(), LAST_PUSHED_SOURCES_KEY, (slug, p) =>
+      buildSourceRow(userId, slug, p),
+    ) ||
+    profileDirty(
+      loadCustomTargetProfiles(),
+      loadDeletedTargetPresets(),
+      LAST_PUSHED_TARGETS_KEY,
+      (slug, p) => buildTargetRow(userId, slug, p),
+    )
+  );
+}
+
+// --- Flush before logout ---
+// Resolves once everything this device hasn't synced is in the cloud, and
+// rejects when that can't be confirmed: the push failed, the account couldn't
+// be reached, the device never finished its first-login merge, or it took
+// longer than FLUSH_TIMEOUT_MS. Logout (ui-shared performLogout) awaits this
+// before signing out and clearing local data, and asks the user before
+// discarding anything when it rejects.
+//
+// With nothing unsynced it resolves without touching the network, so logging
+// out offline still works. It used to push only when a debounced save was
+// pending: a save whose earlier push had failed, or one made while offline
+// (that push "succeeded" as a no-op), was wiped by logout without a word, and
+// a push stuck on a stalled connection held logout forever.
+const FLUSH_TIMEOUT_MS = 12000;
+const FLUSH_MAX_PUSHES = 3;
+
+export async function flushPendingSync(): Promise<void> {
+  if (!hasUnpushedChanges()) return;
+  // The push below sends whatever a pending debounced save would have. The
+  // timer id is kept: scheduleRealtimePull reads a set syncTimer as "push
+  // before pulling", which is what retries this push if it fails and the user
+  // stays signed in.
+  clearTimeout(syncTimer);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>(function (_, reject) {
+    timer = setTimeout(function () {
+      reject(new Error("[sync] not synced: timed out syncing pending changes"));
+    }, FLUSH_TIMEOUT_MS);
+  });
+  // The page stays editable while the push is on the network, and a save
+  // that lands after the push read its payload isn't in it. So check again
+  // afterwards and go round until nothing is left; if saves keep arriving,
+  // reject, and logout asks instead of wiping the latest one.
+  const pushUntilClean = async function (): Promise<void> {
+    for (let attempt = 0; attempt < FLUSH_MAX_PUSHES && hasUnpushedChanges(); attempt++) {
+      await pushAllToCloud({ mustSync: true });
+    }
+    if (hasUnpushedChanges()) {
+      throw new Error("[sync] not synced: changes were still being saved");
+    }
+  };
+  try {
+    await Promise.race([pushUntilClean(), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// The debounced save, sent now instead of when its timer fires. For the
+// page-leave handlers below, which can't wait or ask: they send what was about
+// to be sent anyway and nothing more.
+function flushDebouncedPush(): Promise<void> {
   if (syncTimer) {
     clearTimeout(syncTimer);
     syncTimer = undefined;
@@ -1456,9 +1585,9 @@ export function clearLocalUserContent(): void {
 }
 
 // Background callers swallow flush failures; only the logout path (in
-// ui-shared.js) treats a rejection as a signal to abort sign-out.
+// ui-shared.ts, through flushPendingSync) acts on a rejection.
 function flushPendingSyncQuiet(): void {
-  flushPendingSync().catch(function (err) {
+  flushDebouncedPush().catch(function (err) {
     reportError("sync.flush", err);
   });
 }
