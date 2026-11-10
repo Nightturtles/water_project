@@ -169,6 +169,10 @@ export interface ShowConfirmOptions {
   // Override button labels. Defaults: yesLabel="Yes", noLabel="No".
   yesLabel?: string;
   noLabel?: string;
+  // Focus the No button instead of Yes when the dialog opens, so a stray
+  // Enter or Space takes the safe choice. For confirms whose Yes discards
+  // something and that can appear without the user expecting them.
+  focusNo?: boolean;
 }
 
 function ensureConfirmOverlay(): HTMLElement {
@@ -265,6 +269,8 @@ export function showConfirm(
   lockBodyScroll("confirm");
   if (input) {
     input.focus();
+  } else if (options?.focusNo) {
+    noBtn.focus();
   } else {
     yesBtn.focus();
   }
@@ -915,7 +921,9 @@ async function performLogout(): Promise<void> {
           function () {
             void finishLogout();
           },
-          { yesLabel: "Log out anyway", noLabel: "Stay signed in" },
+          // This can appear up to 12 s after the tap (a flush that timed
+          // out), so the safe button takes the focus.
+          { yesLabel: "Log out anyway", noLabel: "Stay signed in", focusNo: true },
         );
         return;
       }

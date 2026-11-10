@@ -129,16 +129,20 @@ test.describe("log out with unsynced changes", () => {
     );
     await expect(page.locator("#confirm-yes")).toHaveText("Log out anyway");
     await expect(page.locator("#confirm-no")).toHaveText("Stay signed in");
+    // The safe button has the focus: the prompt can appear seconds after the
+    // tap, and a stray Enter must not discard the unsynced changes.
+    await expect(page.locator("#confirm-no")).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(overlay).toBeHidden();
+    expect(await captured(page)).toEqual({ flushCalls: 1, signOutCalls: 0, clearCalls: 0 });
+    await logoutButton(page).click();
+    await expect(overlay).toBeVisible();
 
     await page.locator("#confirm-no").click();
     await expect(overlay).toBeHidden();
     await expect(page).toHaveURL(/minerals\.html/);
     await expect(logoutButton(page)).toBeVisible();
-    expect(await captured(page)).toEqual({ flushCalls: 1, signOutCalls: 0, clearCalls: 0 });
-
-    // The button works again afterwards (no stuck in-flight state).
-    await logoutButton(page).click();
-    await expect(overlay).toBeVisible();
+    expect(await captured(page)).toEqual({ flushCalls: 2, signOutCalls: 0, clearCalls: 0 });
   });
 
   test("Log out anyway signs out, clears this device and returns to the calculator", async ({
