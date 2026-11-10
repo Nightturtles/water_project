@@ -427,3 +427,57 @@ describe("pinned mixed-version sequences end the same as with two v1.2 devices",
     });
   });
 });
+
+// ---------------------------------------------------------------------------
+// Reusing a deleted recipe's name. This one is v1.2's own bug, so it is pinned
+// to the right outcome instead of to the all-v1.2 result: a device that still
+// holds the old delete replays it on its next push, and that must not erase a
+// recipe saved under the same name since. The protection is in how the saving
+// device picks the key (storage.ts unusedProfileKey), so it holds whichever
+// sync version the stale device runs.
+// ---------------------------------------------------------------------------
+
+// Save a recipe the way the app's save buttons do: validate the name, then
+// store it under the key the validation returns.
+function saveByName(name: string, calcium: number): void {
+  const v = storage.validateTargetProfileName(name);
+  if (!v.ok) throw new Error("name rejected: " + v.code);
+  storage.saveCustomTargetProfiles({
+    ...storage.loadCustomTargetProfiles(),
+    [v.key]: recipe(v.name, calcium),
+  });
+}
+
+describe("a recipe saved under a deleted name survives a device that still holds the delete", () => {
+  for (const versions of [
+    ["current", "v1.2"],
+    ["v1.2", "current"],
+    ["current", "current"],
+  ] as Version[][]) {
+    test(versions.join(" + "), async () => {
+      newCloud();
+      const [a, b] = await makeDevices(versions);
+      act(a!, () => saveByName("Morning", 40));
+      await push(a!);
+      for (const d of [a!, b!]) await pageLoad(d);
+
+      // A deletes it. Both devices learn of the delete; B then goes idle,
+      // still holding the tombstone.
+      act(a!, () => storage.deleteCustomTargetProfile("morning"));
+      await push(a!);
+      await settle([a!, b!]);
+
+      // A saves a new recipe under the same name.
+      act(a!, () => saveByName("Morning", 77));
+      await push(a!);
+
+      // B opens a page: push first (replaying its deletes), then pull.
+      await pageLoad(b!);
+      await settle([a!, b!]);
+
+      expect(cloudRecipes()).toEqual(["morning-2=77"]);
+      expect(localRecipes(a!)).toEqual(["morning-2=77"]);
+      expect(localRecipes(b!)).toEqual(["morning-2=77"]);
+    });
+  }
+});

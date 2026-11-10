@@ -70,6 +70,9 @@ interface ValidateNameOptions {
   builtinKeys?: string[] | Set<string>;
   existingKeys?: string[] | Set<string>;
   existingLabels?: string[] | Set<string>;
+  // Keys that were deleted before (the tombstone list). A new profile never
+  // takes one of these; see unusedProfileKey.
+  retiredKeys?: string[] | Set<string>;
 }
 
 type ValidateNameResult =
@@ -273,6 +276,9 @@ export function saveCustomProfiles(profiles: Record<string, SourceProfile>): boo
   // happen at save time, not in sync, so we don't conflate "user re-saved"
   // with "stale local state from a missed pull" (the latter would otherwise
   // resurrect cross-device deletions).
+  // The save buttons no longer arrive here with a tombstoned slug: name
+  // validation hands a new profile a key that was never deleted (see
+  // unusedProfileKey). This stays for callers that still write an old key.
   liftTombstonesForNewlyAddedSlugs(
     profiles,
     customProfilesCache,
@@ -1509,6 +1515,28 @@ export function getTargetPresetsForBrewMethod(
   return filtered;
 }
 
+// --- A key for a new profile that nothing still holds a delete for ---
+// A profile's key comes from its name, so saving a new "Morning" after
+// deleting an old one used to reuse the key "morning". Deletes are replayed:
+// every device that holds the tombstone re-sends the row DELETE on each push,
+// and one that hasn't synced since the name was reused (an app left closed, a
+// tab asleep) still holds it. Its next push erased the new recipe from the
+// cloud, and then from every device.
+//
+// So a key that was ever deleted is never handed out again: the new profile
+// gets "morning-2" (then "-3", ...) and keeps the label the user typed. The
+// old tombstone stays where it is and can only ever match the old row. This
+// needs nothing from other devices, so it also protects against installed
+// apps that predate it.
+export function unusedProfileKey(key: string, isTaken: (candidate: string) => boolean): string {
+  if (!isTaken(key)) return key;
+  for (let i = 2; i < 1000; i++) {
+    const candidate = key + "-" + i;
+    if (!isTaken(candidate)) return candidate;
+  }
+  return key + "-" + Date.now();
+}
+
 // --- Profile name validation ---
 export function validateProfileName(
   rawName: string | null | undefined,
@@ -1551,7 +1579,17 @@ export function validateProfileName(
     return { ok: false, code: "duplicate", message: duplicateMessage };
   }
 
-  return { ok: true, key, name };
+  // The name is free. If its key was deleted before, use a fresh one instead
+  // (see unusedProfileKey); the label stays exactly as typed.
+  const retiredKeys = options.retiredKeys || [];
+  const retiredKeySet = retiredKeys instanceof Set ? retiredKeys : new Set(retiredKeys);
+  const freshKey = unusedProfileKey(key, function (candidate) {
+    return (
+      retiredKeySet.has(candidate) || existingKeySet.has(candidate) || builtinKeySet.has(candidate)
+    );
+  });
+
+  return { ok: true, key: freshKey, name };
 }
 
 export function validateTargetProfileName(
@@ -1563,6 +1601,7 @@ export function validateTargetProfileName(
     builtinKeys: RESERVED_TARGET_KEYS,
     existingKeys: new Set(Object.keys(loadCustomTargetProfiles())),
     existingLabels: getExistingTargetProfileLabels(),
+    retiredKeys: loadDeletedTargetPresets(),
   });
 }
 
