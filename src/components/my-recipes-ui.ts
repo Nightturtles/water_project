@@ -152,8 +152,102 @@ interface SaveContext {
   tags: string[];
   errorEl: HTMLElement;
   saveBtn: HTMLButtonElement;
+  // Marks a save as in flight: locks the modal against dismissal and disables
+  // the buttons until the write settles.
+  setSaving: (saving: boolean) => void;
   close: () => void;
   onSaved: (() => void) | null;
+}
+
+// --- Remote write ----------------------------------------------------
+
+// Upper bound on how long an owner write may stay pending before the UI gives
+// up and reports it. postgrest-js only retries GET/HEAD/OPTIONS, so the PATCH
+// itself is a single attempt; what can stretch it is the fetch hanging on a
+// dead connection (WKWebView in Airplane Mode can sit for a minute or more)
+// or auth-js refreshing an expired token first. Neither has a bound of its own.
+const OWNER_WRITE_TIMEOUT_MS = 15000;
+
+const UNREACHABLE_SAVE_MESSAGE =
+  "Could not reach the server, so your changes were not saved. Try again when you are back online.";
+const UNREACHABLE_UNPUBLISH_MESSAGE =
+  "Could not reach the server, so the recipe is still published. Try again when you are back online.";
+
+// "ok": the row was updated. "unreachable": the device is offline, the request
+// never got a response, or it outlived OWNER_WRITE_TIMEOUT_MS. "failed": the
+// server answered but did not apply the write (error, or zero rows matched).
+type OwnerWriteOutcome = "ok" | "unreachable" | "failed";
+
+// Runs an owner UPDATE on target_profiles and always settles, within
+// OWNER_WRITE_TIMEOUT_MS at the latest. Callers mirror into localStorage only
+// on "ok", so a write that never reached the server leaves no local trace.
+//
+// .select("id").maybeSingle() makes the affected-row count observable: a v2
+// UPDATE resolves with error:null even when zero rows matched (an RLS denial
+// or a stale/nonexistent id), so without the select we'd mirror a change
+// Supabase never accepted. The owner can still SELECT their own row after
+// the write (the "select own rows" RLS policy is independent of is_public),
+// so a genuine write returns the row and a no-op returns data:null.
+function runOwnerUpdate(
+  recipeId: string | number | undefined,
+  payload: Record<string, unknown>,
+  what: string,
+): Promise<OwnerWriteOutcome> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    console.warn("[my-recipes] " + what + " skipped: offline");
+    return Promise.resolve("unreachable");
+  }
+  return new Promise(function (resolve) {
+    let settled = false;
+    const controller = typeof AbortController === "function" ? new AbortController() : null;
+    function settle(outcome: OwnerWriteOutcome) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(outcome);
+    }
+    // On timeout, abort as well as report: the user is told the change was not
+    // saved, so the request must not be left to land later behind their back.
+    const timer = setTimeout(function () {
+      console.warn("[my-recipes] " + what + " timed out");
+      settle("unreachable");
+      if (controller) controller.abort();
+    }, OWNER_WRITE_TIMEOUT_MS);
+
+    try {
+      let query = window.supabaseClient
+        .from("target_profiles")
+        .update(payload)
+        .eq("id", recipeId)
+        .select("id");
+      if (controller) query = query.abortSignal(controller.signal);
+      // Promise.resolve adopts the Postgrest builder (a PromiseLike, not a full
+      // Promise) into a real Promise.
+      Promise.resolve(query.maybeSingle()).then(
+        function (result) {
+          if (settled) return;
+          if (result.error || !result.data) {
+            console.warn(
+              "[my-recipes] " + what + " failed:",
+              result.error || "no matching row (RLS or stale id)",
+            );
+            // postgrest-js reports a fetch that never got a response (network
+            // down, DNS, aborted) as status 0 rather than rejecting.
+            settle(result.error && result.status === 0 ? "unreachable" : "failed");
+            return;
+          }
+          settle("ok");
+        },
+        function (err: unknown) {
+          console.warn("[my-recipes] " + what + " threw:", err);
+          settle("unreachable");
+        },
+      );
+    } catch (err) {
+      console.warn("[my-recipes] " + what + " threw:", err);
+      settle("failed");
+    }
+  });
 }
 
 // --- Edit modal -------------------------------------------------------
@@ -161,7 +255,8 @@ interface SaveContext {
 // openEditRecipeModal(recipe, { onSaved })
 // Opens a centered modal pre-populated with the recipe's current fields.
 // Saving updates Supabase + localStorage; onSaved is called after a
-// successful save (before the modal closes). Returns a close() handle.
+// successful save (before the modal closes). Returns a close() handle, which
+// is a no-op while a save is in flight.
 function openEditRecipeModal(recipe: LibraryRecipeRow, options?: EditRecipeOptions): () => void {
   options = options || {};
   const onSaved = typeof options.onSaved === "function" ? options.onSaved : null;
@@ -328,15 +423,35 @@ function openEditRecipeModal(recipe: LibraryRecipeRow, options?: EditRecipeOptio
     }
   }
 
+  // While a save is in flight the modal can't be dismissed (overlay tap,
+  // Escape, Cancel): closing it then would drop the typed values with no word
+  // on whether the write landed. The wait is bounded by OWNER_WRITE_TIMEOUT_MS,
+  // after which save() either closes the modal or shows why it didn't save.
+  let saving = false;
+
+  function setSaving(next: boolean) {
+    saving = next;
+    saveBtn.disabled = next;
+    cancelBtn.disabled = next;
+    saveBtn.textContent = next ? "Saving…" : "Save";
+    if (next) dialog.setAttribute("aria-busy", "true");
+    else dialog.removeAttribute("aria-busy");
+  }
+
+  function dismiss() {
+    if (saving) return;
+    close();
+  }
+
   function keyHandler(e: KeyboardEvent) {
-    if (e.key === "Escape") close();
+    if (e.key === "Escape") dismiss();
   }
 
   function overlayClickHandler(e: MouseEvent) {
-    if (e.target === overlay) close();
+    if (e.target === overlay) dismiss();
   }
 
-  cancelBtn.addEventListener("click", close);
+  cancelBtn.addEventListener("click", dismiss);
   saveBtn.addEventListener("click", function () {
     save(recipe, {
       name: nameInput.value,
@@ -347,6 +462,7 @@ function openEditRecipeModal(recipe: LibraryRecipeRow, options?: EditRecipeOptio
       tags: activeTags,
       errorEl: errorEl,
       saveBtn: saveBtn,
+      setSaving: setSaving,
       close: close,
       onSaved: onSaved,
     });
@@ -360,7 +476,7 @@ function openEditRecipeModal(recipe: LibraryRecipeRow, options?: EditRecipeOptio
   nameInput.focus();
   nameInput.select();
 
-  return close;
+  return dismiss;
 }
 
 function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
@@ -413,8 +529,6 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
   }
 
   ctx.errorEl.textContent = "";
-  ctx.saveBtn.disabled = true;
-  ctx.saveBtn.textContent = "Saving…";
 
   // Ion inputs are type="number" min="0" but users can still paste a
   // negative value through the DOM. Clamp on the way out so a malformed
@@ -489,45 +603,28 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
     return;
   }
 
-  // Promise.resolve adopts the Postgrest builder (a PromiseLike, not a full
-  // Promise) into a real Promise so the original .then(...).catch(...) chain —
-  // and its semantics, where the catch also catches a throw from the success
-  // handler — is preserved verbatim.
-  //
-  // .select("id").maybeSingle() makes the affected-row count observable: a v2
-  // UPDATE resolves with error:null even when zero rows matched (an RLS denial
-  // or a stale/nonexistent id), so without the select we'd mirror a change
-  // Supabase never accepted. The owner can still SELECT their own row after
-  // this write (the "select own rows" RLS policy is independent of is_public),
-  // so a genuine save returns the row and a no-op returns data:null.
-  Promise.resolve(
-    window.supabaseClient
-      .from("target_profiles")
-      .update(supabasePayload)
-      .eq("id", recipe.id)
-      .select("id")
-      .maybeSingle(),
-  )
-    .then(function (result) {
-      if (result.error || !result.data) {
-        console.warn(
-          "[my-recipes] edit update failed:",
-          result.error || "no matching row (RLS or stale id)",
-        );
-        ctx.errorEl.textContent = "Failed to save changes. Please try again.";
-        ctx.saveBtn.disabled = false;
-        ctx.saveBtn.textContent = "Save";
+  ctx.setSaving(true);
+  runOwnerUpdate(recipe.id, supabasePayload, "edit update")
+    .then(function (outcome) {
+      if (outcome !== "ok") {
+        // Nothing was mirrored locally; keep the modal and its typed values so
+        // the user can retry.
+        ctx.setSaving(false);
+        ctx.errorEl.textContent =
+          outcome === "unreachable"
+            ? UNREACHABLE_SAVE_MESSAGE
+            : "Failed to save changes. Please try again.";
         return;
       }
       // Remote write landed — now sync the local mirror.
       applyLocalMirror();
+      ctx.setSaving(false);
       finish();
     })
     .catch(function (err: unknown) {
-      console.warn("[my-recipes] edit update threw:", err);
+      console.warn("[my-recipes] edit save threw after the update:", err);
+      ctx.setSaving(false);
       ctx.errorEl.textContent = "Failed to save changes. Please try again.";
-      ctx.saveBtn.disabled = false;
-      ctx.saveBtn.textContent = "Save";
     });
 
   function finish() {
@@ -545,17 +642,20 @@ function save(recipe: LibraryRecipeRow, ctx: SaveContext) {
 interface ConfirmUnpublishOptions {
   onUnpublished?: () => void;
   confirm?: (message: string) => boolean;
+  alert?: (message: string) => void;
 }
 
 // confirmUnpublish(recipe, { onUnpublished })
 // Asks the user to confirm, then flips is_public=false in Supabase and
-// mirrors the change into localStorage. onUnpublished fires on success.
+// mirrors the change into localStorage. onUnpublished fires on success; a
+// write that fails or can't reach the server is reported with an alert.
 function confirmUnpublish(recipe: LibraryRecipeRow, options?: ConfirmUnpublishOptions): void {
   options = options || {};
   const onUnpublished = typeof options.onUnpublished === "function" ? options.onUnpublished : null;
 
   const confirmFn =
     typeof options.confirm === "function" ? options.confirm : window.confirm.bind(window);
+  const alertFn = typeof options.alert === "function" ? options.alert : window.alert.bind(window);
   const ok = confirmFn('Unpublish "' + (recipe.label || "") + '" from the Recipe Library?');
   if (!ok) return;
 
@@ -583,28 +683,13 @@ function confirmUnpublish(recipe: LibraryRecipeRow, options?: ConfirmUnpublishOp
     return;
   }
 
-  // Promise.resolve adopts the Postgrest builder (a PromiseLike) into a real
-  // Promise so the original .then(...).catch(...) chain is preserved verbatim.
-  //
-  // .select("id").maybeSingle() is required for the same reason as the edit
-  // path: a v2 UPDATE resolves error:null even when zero rows matched (RLS
-  // denial or stale id), so a bare error check would mirror is_public=false
-  // locally while the row stays public in Supabase. The owner's "select own
-  // rows" RLS policy still returns the row after it flips to is_public=false,
-  // so a real unpublish returns data and a no-op returns data:null.
-  Promise.resolve(
-    window.supabaseClient
-      .from("target_profiles")
-      .update({ is_public: false })
-      .eq("id", recipe.id)
-      .select("id")
-      .maybeSingle(),
-  )
-    .then(function (result) {
-      if (result.error || !result.data) {
-        console.warn(
-          "[my-recipes] unpublish failed:",
-          result.error || "no matching row (RLS or stale id)",
+  runOwnerUpdate(recipe.id, { is_public: false }, "unpublish")
+    .then(function (outcome) {
+      if (outcome !== "ok") {
+        alertFn(
+          outcome === "unreachable"
+            ? UNREACHABLE_UNPUBLISH_MESSAGE
+            : "Failed to unpublish the recipe. Please try again.",
         );
         return;
       }
@@ -612,7 +697,7 @@ function confirmUnpublish(recipe: LibraryRecipeRow, options?: ConfirmUnpublishOp
       finish();
     })
     .catch(function (err: unknown) {
-      console.warn("[my-recipes] unpublish threw:", err);
+      console.warn("[my-recipes] unpublish threw after the update:", err);
     });
 
   function finish() {

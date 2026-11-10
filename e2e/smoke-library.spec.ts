@@ -39,7 +39,10 @@ declare global {
 // give them .select("id").maybeSingle(). data is the affected row (success)
 // or null when zero rows matched (RLS denial / stale id); error is the
 // Postgrest error or null.
-type StubUpdateResult = { data: { id: string } | null; error: { message: string } | null };
+// status mirrors postgrest-js: 0 means the fetch never got a response.
+// "never" leaves the UPDATE pending forever (a hung connection).
+type StubUpdateResult =
+  { data: { id: string } | null; error: { message: string } | null; status?: number } | "never";
 
 // Opens library.html in a fresh context posing as the signed-in owner of a
 // single seeded recipe ("fake-owned"), with the target_profiles UPDATE
@@ -142,12 +145,21 @@ async function openLibraryAsOwner(
               // on the real builder so the page renders normally.
               builder.update = () => {
                 (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount++;
+                const settle = (): Promise<unknown> =>
+                  updateResult === "never" ? new Promise(() => {}) : Promise.resolve(updateResult);
                 const chain: Record<string, unknown> = {
                   eq: () => chain,
                   select: () => chain,
-                  maybeSingle: () => Promise.resolve(updateResult),
+                  abortSignal: (signal: AbortSignal) => {
+                    signal.addEventListener("abort", () => {
+                      (window as unknown as { __cwUpdateAborted: boolean }).__cwUpdateAborted =
+                        true;
+                    });
+                    return chain;
+                  },
+                  maybeSingle: settle,
                   then: (res: (v: unknown) => unknown, rej: (e: unknown) => unknown) =>
-                    Promise.resolve(updateResult).then(res, rej),
+                    settle().then(res, rej),
                 };
                 return chain;
               };
@@ -1033,6 +1045,163 @@ test.describe("library.html — Wave D recipe browser", () => {
         )
         .toBe(false);
 
+      await ctx.close();
+    });
+  });
+
+  // Unreachable server (offline / hung request) --------------------------
+  // The Library editor is cloud-first: nothing is mirrored locally until the
+  // UPDATE lands, so a write that can't reach Supabase has to say so in the
+  // modal. Before this guard an offline Save sat on "Saving…" indefinitely and
+  // an overlay tap closed the modal, dropping the edit without a word.
+
+  test.describe("owner write guard — a save that can't reach the server fails visibly", () => {
+    const UNREACHABLE = "Could not reach the server, so your changes were not saved";
+
+    async function openEditModal(page: Page): Promise<void> {
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ownedCard.locator(".rx-card-owner-btn").nth(0).click(); // Edit
+      await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+    }
+
+    async function readMirror(page: Page): Promise<Record<string, unknown>> {
+      return page.evaluate(() => {
+        const raw = localStorage.getItem("cw_custom_target_profiles");
+        return raw ? JSON.parse(raw) : {};
+      });
+    }
+
+    test("edit save offline: shows the error at once, keeps the typed values, sends nothing", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: { id: "fake-owned-id" }, error: null },
+      });
+      await openEditModal(page);
+
+      await ctx.setOffline(true);
+      await page.locator(".rx-edit-input").first().fill("Renamed Offline");
+      await page.locator(".rx-edit-save").click();
+
+      await expect(page.locator(".rx-edit-error")).toContainText(UNREACHABLE);
+      await expect(page.locator(".rx-edit-save")).toBeEnabled();
+      await expect(page.locator(".rx-edit-save")).toHaveText("Save");
+      await expect(page.locator(".rx-edit-input").first()).toHaveValue("Renamed Offline");
+      // No request was attempted and nothing was mirrored.
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { __cwUpdateCount: number }).__cwUpdateCount,
+        ),
+      ).toBe(0);
+      expect(await readMirror(page)).toEqual({});
+
+      // Back online, the same modal saves without retyping.
+      await ctx.setOffline(false);
+      await page.locator(".rx-edit-save").click();
+      await expect(page.locator(".rx-edit-overlay")).toHaveCount(0);
+      expect((await readMirror(page))["renamed-offline"]).toBeTruthy();
+
+      await ctx.close();
+    });
+
+    test("edit save that never settles: modal can't be dismissed, then times out with the error", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: "never",
+      });
+      await openEditModal(page);
+
+      // Fake timers from here on so the 15s write timeout can be skipped.
+      await page.clock.install();
+      await page.locator(".rx-edit-input").first().fill("Renamed Hung");
+      await page.locator(".rx-edit-save").click();
+
+      await expect(page.locator(".rx-edit-save")).toHaveText("Saving…");
+      await expect(page.locator(".rx-edit-save")).toBeDisabled();
+      await expect(page.locator(".rx-edit-cancel")).toBeDisabled();
+
+      // Overlay tap and Escape are ignored while the save is in flight.
+      await page.locator(".rx-edit-overlay").click({ position: { x: 5, y: 5 } });
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".rx-edit-overlay")).toBeVisible();
+      await expect(page.locator(".rx-edit-error")).toBeHidden();
+
+      await page.clock.fastForward(15000);
+
+      await expect(page.locator(".rx-edit-error")).toContainText(UNREACHABLE);
+      await expect(page.locator(".rx-edit-save")).toBeEnabled();
+      await expect(page.locator(".rx-edit-save")).toHaveText("Save");
+      await expect(page.locator(".rx-edit-input").first()).toHaveValue("Renamed Hung");
+      // The hung request was aborted so it can't land after the error.
+      expect(
+        await page.evaluate(
+          () => (window as unknown as { __cwUpdateAborted?: boolean }).__cwUpdateAborted,
+        ),
+      ).toBe(true);
+      expect(await readMirror(page)).toEqual({});
+
+      // Once it has settled the modal dismisses normally again.
+      await page.keyboard.press("Escape");
+      await expect(page.locator(".rx-edit-overlay")).toHaveCount(0);
+
+      await ctx.close();
+    });
+
+    test("edit save whose fetch fails (status 0): shows the unreachable error, no mirror", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: {
+          data: null,
+          error: { message: "TypeError: Failed to fetch" },
+          status: 0,
+        },
+      });
+      await openEditModal(page);
+
+      await page.locator(".rx-edit-ions input").first().fill("77");
+      await page.locator(".rx-edit-save").click();
+
+      await expect(page.locator(".rx-edit-error")).toContainText(UNREACHABLE);
+      await expect(page.locator(".rx-edit-save")).toBeEnabled();
+      expect(await readMirror(page)).toEqual({});
+
+      await ctx.close();
+    });
+
+    test("unpublish offline: alerts that the recipe is still published and keeps the card", async ({
+      browser,
+    }) => {
+      const { ctx, page } = await openLibraryAsOwner(browser, consoleErrors, {
+        updateResult: { data: { id: "fake-owned-id" }, error: null },
+        customProfiles: {
+          "fake-owned": { slug: "fake-owned", label: "Fake Owned", isPublic: true },
+        },
+      });
+
+      const dialogs: string[] = [];
+      page.on("dialog", (d) => {
+        dialogs.push(d.type() + ": " + d.message());
+        void d.accept();
+      });
+
+      const ownedCard = page.locator('.rx-recipe-card[data-slug="fake-owned"]');
+      await expect(ownedCard).toBeVisible();
+      await ctx.setOffline(true);
+      await ownedCard.locator(".rx-card-owner-btn").nth(1).click(); // Unpublish
+
+      await expect.poll(() => dialogs.length).toBe(2);
+      expect(dialogs[0]).toContain("confirm: Unpublish");
+      expect(dialogs[1]).toContain(
+        "alert: Could not reach the server, so the recipe is still published",
+      );
+      await expect(ownedCard).toBeVisible();
+      const mirror = (await readMirror(page)) as Record<string, { isPublic?: boolean }>;
+      expect(mirror["fake-owned"]?.isPublic).toBe(true);
+
+      await ctx.setOffline(false);
       await ctx.close();
     });
   });
