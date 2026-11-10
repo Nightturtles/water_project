@@ -1492,6 +1492,7 @@ export function hasUnpushedChanges(): boolean {
 // (that push "succeeded" as a no-op), was wiped by logout without a word, and
 // a push stuck on a stalled connection held logout forever.
 const FLUSH_TIMEOUT_MS = 12000;
+const FLUSH_MAX_PUSHES = 3;
 
 export async function flushPendingSync(): Promise<void> {
   if (!hasUnpushedChanges()) return;
@@ -1506,8 +1507,20 @@ export async function flushPendingSync(): Promise<void> {
       reject(new Error("[sync] not synced: timed out syncing pending changes"));
     }, FLUSH_TIMEOUT_MS);
   });
+  // The page stays editable while the push is on the network, and a save
+  // that lands after the push read its payload isn't in it. So check again
+  // afterwards and go round until nothing is left; if saves keep arriving,
+  // reject, and logout asks instead of wiping the latest one.
+  const pushUntilClean = async function (): Promise<void> {
+    for (let attempt = 0; attempt < FLUSH_MAX_PUSHES && hasUnpushedChanges(); attempt++) {
+      await pushAllToCloud({ mustSync: true });
+    }
+    if (hasUnpushedChanges()) {
+      throw new Error("[sync] not synced: changes were still being saved");
+    }
+  };
   try {
-    await Promise.race([pushAllToCloud({ mustSync: true }), timeout]);
+    await Promise.race([pushUntilClean(), timeout]);
   } finally {
     clearTimeout(timer);
   }

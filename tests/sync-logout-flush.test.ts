@@ -126,6 +126,59 @@ describe("unsynced changes are pushed before logout", () => {
   });
 });
 
+describe("a save that lands while the flush is pushing", () => {
+  // Run `during` in the middle of the next user_settings upsert, the way a
+  // user typing while the push is on the network would.
+  function duringNextSettingsUpsert(during: () => void): void {
+    const from = g.window.supabaseClient.from;
+    let done = false;
+    g.window.supabaseClient.from = (table: string) => {
+      const t = from(table);
+      if (table !== "user_settings" || done) return t;
+      const upsert = t.upsert;
+      t.upsert = async (payload: unknown) => {
+        if (!done) {
+          done = true;
+          during();
+        }
+        return upsert(payload);
+      };
+      return t;
+    };
+  }
+
+  test("is pushed too before the flush resolves", async () => {
+    await syncedDevice();
+    storage.saveBrewMethod("espresso");
+    duringNextSettingsUpsert(() => saveRecipe("late", 55));
+    await flushPendingSync();
+    expect(cloud.rows.user_settings.brew_method).toBe("espresso");
+    expect(cloudRecipeSlugs()).toEqual(["late"]);
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("rejects if saves keep arriving, so logout asks instead of wiping the last one", async () => {
+    await syncedDevice();
+    storage.saveBrewMethod("espresso");
+    const from = g.window.supabaseClient.from;
+    let n = 0;
+    g.window.supabaseClient.from = (table: string) => {
+      const t = from(table);
+      if (table !== "user_settings" && table !== "user_selections") return t;
+      const upsert = t.upsert;
+      t.upsert = async (payload: unknown) => {
+        // Every push finds a newer save than the one it is sending.
+        n += 1;
+        storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: n });
+        return upsert(payload);
+      };
+      return t;
+    };
+    await expect(flushPendingSync()).rejects.toThrow(/still being saved/);
+    expect(hasUnpushedChanges()).toBe(true);
+  });
+});
+
 describe("the flush rejects when it can't confirm the changes are in the cloud", () => {
   test("offline with an unsynced recipe", async () => {
     await syncedDevice();
