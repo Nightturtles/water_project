@@ -2,4 +2,4 @@
 <!-- Shown above the description on the listing page. Can be updated without -->
 <!-- a new app review, unlike the description itself. -->
 
-v1.2.2: Logging out now signs out only the device you're on and asks first if changes haven't synced. Recipes you delete and re-create stay put across your devices.
+v1.2.2: The readout now matches the drops and grams you actually add. Logging out signs out only this device and asks first if changes haven't synced.
