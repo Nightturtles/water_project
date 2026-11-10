@@ -70,6 +70,7 @@ async function stubAuthenticated(
       type Captured = {
         rpcCalls: string[];
         signOutCalled: boolean;
+        signOutScope: string | null;
         clearLocalCalled: boolean;
       };
       function readCaptured(): Captured {
@@ -79,7 +80,7 @@ async function stubAuthenticated(
         } catch {
           // fall through
         }
-        return { rpcCalls: [], signOutCalled: false, clearLocalCalled: false };
+        return { rpcCalls: [], signOutCalled: false, signOutScope: null, clearLocalCalled: false };
       }
       function writeCaptured(c: Captured) {
         try {
@@ -92,7 +93,7 @@ async function stubAuthenticated(
       function patchClient(client: {
         auth: {
           getSession?: () => unknown;
-          signOut?: () => unknown;
+          signOut?: (options?: { scope?: string }) => unknown;
           onAuthStateChange?: (cb: unknown) => unknown;
         };
         rpc?: (name: string) => unknown;
@@ -102,9 +103,10 @@ async function stubAuthenticated(
             data: { session: { user: { id: userId, email } } },
             error: null,
           });
-        client.auth.signOut = () => {
+        client.auth.signOut = (options) => {
           const c = readCaptured();
           c.signOutCalled = true;
+          c.signOutScope = (options && options.scope) || null;
           writeCaptured(c);
           return Promise.resolve({ error: null });
         };
@@ -262,6 +264,10 @@ test.describe("smoke-delete-account — UI flow + RPC wiring", () => {
     });
     expect(captured?.rpcCalls).toEqual(["delete_account"]);
     expect(captured?.signOutCalled).toBe(true);
+    // window.signOut must end only this device's session. auth-js defaults to
+    // "global", which signs every other device out (and their SIGNED_OUT
+    // handler wipes edits there that hadn't synced).
+    expect(captured?.signOutScope).toBe("local");
     expect(captured?.clearLocalCalled).toBe(true);
 
     // The deletion-flash flag was consumed by showAccountDeletedFlashIfPending
