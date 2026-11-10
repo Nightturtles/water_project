@@ -147,13 +147,22 @@ describe("a save that lands while the flush is pushing", () => {
     };
   }
 
-  test("is pushed too before the flush resolves", async () => {
+  test("is pushed by a second push before the flush resolves", async () => {
     await syncedDevice();
     storage.saveBrewMethod("espresso");
-    duringNextSettingsUpsert(() => saveRecipe("late", 55));
+    // The push builds its settings and selections payloads before either
+    // upsert goes out, so a source-water save made during the settings upsert
+    // is in neither: only the re-check and a second push can send it. (A
+    // recipe saved here would not test that; profiles are read later in the
+    // same push.)
+    const pushesBefore = cloud.log.filter((l) => l === "upsert user_selections").length;
+    duringNextSettingsUpsert(() =>
+      storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: 55 }),
+    );
     await flushPendingSync();
     expect(cloud.rows.user_settings.brew_method).toBe("espresso");
-    expect(cloudRecipeSlugs()).toEqual(["late"]);
+    expect(cloud.rows.user_selections.source_water.calcium).toBe(55);
+    expect(cloud.log.filter((l) => l === "upsert user_selections").length).toBe(pushesBefore + 1);
     expect(hasUnpushedChanges()).toBe(false);
   });
 
