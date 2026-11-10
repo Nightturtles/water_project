@@ -41,6 +41,10 @@ other module's top-level code can throw. (The old CDN Loader Script and its
 - `replaysSessionSampleRate: 0` — do not record sessions for everyone.
 - `replaysOnErrorSampleRate: 1.0` — record a replay whenever an error fires (Session Replay is enabled in code via `Sentry.replayIntegration()`).
 - `beforeSend` — drops `event.request.cookies` before send to avoid leaking Supabase auth cookies.
+- `dataCollection` — pinned to the restrictive baseline (no user info / IP address, no cookies, no HTTP request or response bodies). SDK v11 collects all of these when the option is left unset; the privacy page promises Sentry never receives credentials or recipe contents, so do not remove it without updating that page and the store privacy labels.
+- `attachStacktrace: false` — v11 defaults this to `true`, which would attach the same synthetic stack trace to every `captureMessage` sent through `reportError` (`src/lib/report.ts`) and regroup those issues by call site instead of by message.
+
+Span streaming (`traceLifecycle: "stream"`) is the v11 default and is left on: performance spans are sent in batches rather than as one transaction per page load.
 
 If a feature looks like a no-op in production, check the `integrations` array
 and the option values (e.g. `tracesSampleRate`, `replaysOnErrorSampleRate`) in

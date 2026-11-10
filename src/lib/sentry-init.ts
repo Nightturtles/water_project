@@ -40,6 +40,34 @@ if (!sentryDisabled()) {
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,
     integrations: [Sentry.browserTracingIntegration(), Sentry.replayIntegration()],
+    // SDK v11 replaced `sendDefaultPii` with `dataCollection`, and leaving it
+    // unset now collects cookies, user info (IP address) and HTTP request and
+    // response bodies. Our Supabase requests carry sign-in credentials and
+    // recipe contents, and privacy/index.html promises Sentry gets neither,
+    // so pin the restrictive baseline (the v10 default, per the v11 migration
+    // guide) explicitly. Do not remove this block without updating the
+    // privacy page and the store privacy labels.
+    dataCollection: {
+      userInfo: false,
+      cookies: false,
+      httpHeaders: {
+        request: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+        response: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+      },
+      httpBodies: [],
+      urlQueryParams: { deny: ["forwarded", "-ip", "remote-", "via", "-user"] },
+      genAI: { inputs: false, outputs: false },
+      mcp: { inputs: false, outputs: false },
+      databaseQueryData: false,
+      queues: false,
+      graphQL: { document: false, variables: false },
+    },
+    // v11 flipped this default to true, which attaches a synthetic stack trace
+    // to captureMessage events. reportError (src/lib/report.ts) funnels every
+    // non-Error failure through one captureMessage call, so those traces would
+    // all point at the same line and regroup existing issues by call site
+    // instead of by message. Keep the pre-v11 behavior.
+    attachStacktrace: false,
     ignoreErrors: [
       // Telegram / in-app WebView bridge noise — not our code.
       /Error invoking postEvent: Method not found/,
