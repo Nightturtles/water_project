@@ -10,6 +10,15 @@
 // current src/lib/sync.ts as another against one fake cloud, and requires
 // the mix to be no worse than two of these.
 //
+// Only sync.ts is frozen. This module still imports the current storage.ts,
+// storage-keys.ts, constants.ts and report.ts, so a "v1.2" device here runs
+// old sync logic on today's storage layer. The key names and the wipe /
+// transient lists it relies on are pinned by tests/storage-keys.test.ts, so a
+// rename or a moved key fails there. A change to what a storage.ts loader
+// returns is not pinned: it changes both versions' devices alike, which can
+// hide a difference the installed apps would show. Treat such a change as a
+// sync change and check it against a real old build.
+//
 // Replace it only when the oldest app version still in use ships a newer
 // sync.ts, and say so in the PR.
 /* eslint-disable */
