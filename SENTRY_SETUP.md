@@ -137,8 +137,10 @@ auto-reopen if the error recurs in a later release.
 ## PII considerations
 
 - Supabase auth cookies are scrubbed in `beforeSend`.
-- `sendDefaultPii` is left at its default (false) — we do not send IP addresses
-  or request headers beyond what Sentry's scrubbers allow.
+- `dataCollection` in `src/lib/sentry-init.ts` (the SDK v11 replacement for
+  `sendDefaultPii`) turns off automatic user info (so no IP addresses), cookie
+  collection and HTTP request/response body collection, and filters request
+  and response headers with a deny list.
 - User emails: we never tag user context (`Sentry.setUser`) with the
   authenticated email. If we later want per-user filtering, tag with the
   Supabase user UUID, not the email.
