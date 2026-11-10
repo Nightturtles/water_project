@@ -76,6 +76,8 @@ Every change that touches `src/lib/sync.ts`, `src/lib/storage.ts`, or row-level-
 2. Re-read the affected `supabase/migrations/` file end-to-end — do not trust diffs alone.
 3. Prefer one extra PR round over a production rollback.
 
+Installed apps keep running the sync code they shipped with, so every change to `src/lib/sync.ts` lives next to old clients on the same account. `tests/sync-mixed-version.test.ts` (part of `npm test`) runs the current module as one device beside `tests/fixtures/sync-v1.2.ts`, a frozen copy of the sync code in the 1.2 and 1.2.1 apps, and fails when the mix loses or brings back more than old devices alone. Never edit the fixture to make a test pass; replace it only when the oldest app still in use ships a newer sync. Only `sync.ts` is frozen: the old device still runs on the current `src/lib/storage.ts` and `src/lib/storage-keys.ts` (key names and categories are pinned by `tests/storage-keys.test.ts`), so a change to what a storage loader returns alters both versions alike and needs a check against a real old build.
+
 The test-account credentials for the spec live in `.env.test` at the project root (gitignored). `CAFELYTIC_TEST_EMAIL` and `CAFELYTIC_TEST_PASSWORD` are loaded by `e2e/smoke-sync.spec.ts` via a small parser at the top of the file (no `dotenv` dep). When credentials are missing, the describe block is `test.skip`-ed so contributors without them still get a green run.
 
 ### Migrations

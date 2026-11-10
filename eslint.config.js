@@ -112,7 +112,12 @@ module.exports = tseslint.config(
   // that import describe/test/expect from "vitest" explicitly). Test files
   // lean on `any` for loosely-shaped fixtures.
   {
-    files: ["vitest.config.js", "tests/setup.js", "tests/**/*.test.{js,ts}"],
+    files: [
+      "vitest.config.js",
+      "tests/setup.js",
+      "tests/**/*.test.{js,ts}",
+      "tests/helpers/**/*.ts",
+    ],
     languageOptions: {
       sourceType: "commonjs",
       globals: {
