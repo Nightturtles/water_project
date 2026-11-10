@@ -27,6 +27,9 @@ import type { IonMap } from "../lib/constants";
 import {
   calculateIonPPMs,
   calculateMetrics,
+  displayedConcentrateMl,
+  displayedDrops,
+  displayedGrams,
   calculateSo4ClRatio,
   toStableBicarbonateFromAlkalinity,
   allocateCaMgDoses,
@@ -1235,10 +1238,15 @@ function main(): void {
       // Stock row values: each concentrate's solved/snapped dose × volume. Also
       // accumulate the per-mineral g/L the concentrates deliver AT THAT dose.
       const stockTotalsByStockId: Record<string, number> = {};
+      for (const { id } of activeStockEntriesEarly) {
+        stockTotalsByStockId[id] = (concentrateGramsPerL[id] || 0) * volumeL;
+      }
+      // The readout below describes the water the DISPLAYED doses make (whole
+      // drops, rounded mL / grams), not the exact solve: see displayedGrams.
+      const shownStockMl = updateStockValues(stockTotalsByStockId);
       const combinedStockMineralGramsPerL: Record<string, number> = {};
       for (const { id, spec } of activeStockEntriesEarly) {
-        const gPerL = concentrateGramsPerL[id] || 0;
-        stockTotalsByStockId[id] = gPerL * volumeL;
+        const gPerL = (shownStockMl[id] || 0) / volumeL;
         const dosePerL = Number(spec.doseGramsPerL) || 0;
         if (dosePerL > 0 && gPerL > 0) {
           const perLAtPrescribed = computeStockMineralGramsPerL(spec);
@@ -1249,19 +1257,21 @@ function main(): void {
           }
         }
       }
-      updateStockValues(stockTotalsByStockId);
 
       // Gap-fill section. Fold supplement minerals into the final ion profile too.
       renderStockSupplements(plan, volumeL);
       if (plan) {
         for (const [mid, gPerL] of Object.entries(plan.supplementGramsPerL)) {
           if (gPerL > 0)
-            combinedStockMineralGramsPerL[mid] = (combinedStockMineralGramsPerL[mid] || 0) + gPerL;
+            combinedStockMineralGramsPerL[mid] =
+              (combinedStockMineralGramsPerL[mid] || 0) + displayedGrams(gPerL * volumeL) / volumeL;
         }
       }
 
       // Overshoot warnings: a negative residual means source + concentrate
-      // already exceed the target for that ion.
+      // already exceed the target for that ion. These stay on the exact solve
+      // on purpose: they explain a limit of the concentrate against the target,
+      // and must not appear or vanish because a dose rounded to a whole drop.
       const OVERSHOOT_TOL = 1; // mg/L
       const stockWarnings: string[] = [];
       if ((residualIons.calcium || 0) < -OVERSHOOT_TOL) {
@@ -1442,7 +1452,7 @@ function main(): void {
     conflictMineralIds.forEach((mineralId) => {
       displayMineralGrams[mineralId] = 0;
     });
-    updateResultValues(displayMineralGrams);
+    const shownMineralGrams = updateResultValues(displayMineralGrams);
 
     const concentrateValues: Record<string, number> = {};
     // Each salt's dose is delivered once. When two enabled concentrates map to
@@ -1478,13 +1488,23 @@ function main(): void {
           ". Only the first one is dosed; use just that one.",
       );
     });
-    updateConcentrateValues(concentrateValues);
+    const shownConcentrateMl = updateConcentrateValues(concentrateValues);
     if (warningsEl) warningsEl.textContent = warnings.join("\n");
 
-    // Compute resulting ions (mg/L)
-    const mineralGramsPerL: Record<string, number> = { ...caMgGramsPerL };
-    for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
-      if (gPerL > 0) mineralGramsPerL[id] = gPerL;
+    // Compute resulting ions (mg/L) from the doses the rows DISPLAY (whole
+    // drops, rounded mL / grams), not the exact solve, so the readout is the
+    // water the user actually mixes: the same drop count in more water reads
+    // more dilute. Range bands follow it too, since they judge that water.
+    const mineralGramsPerL: Record<string, number> = {};
+    for (const [id, grams] of Object.entries(shownMineralGrams)) {
+      if (grams > 0) mineralGramsPerL[id] = grams / volumeL;
+    }
+    for (const [cid, ml] of Object.entries(shownConcentrateMl)) {
+      const mineralId = getConcentrateMineralId(cid);
+      const gramsPerMl = getConcentrateGramsPerMl(cid);
+      if (!mineralId || !(ml > 0) || !(gramsPerMl > 0)) continue;
+      mineralGramsPerL[mineralId] =
+        (mineralGramsPerL[mineralId] || 0) + (ml * gramsPerMl) / volumeL;
     }
     const addedIons = calculateIonPPMs(mineralGramsPerL);
     const finalIons: Record<string, number> = {};
@@ -1709,14 +1729,18 @@ function main(): void {
     item: Element,
     concentrateId: string,
     ml: number,
-  ): { text: string; unit: string | null } {
+  ): { text: string; unit: string | null; shownMl: number } {
     const unitSelect = item.querySelector<HTMLSelectElement>("[data-lotus-unit-for]");
     const dropMl = getConcentrateDropMl(concentrateId);
     if (unitSelect && dropMl > 0) {
       const unit = normalizeLotusConcentrateUnit(unitSelect.value);
-      return { text: formatDropsOrMl(ml, unit, dropMl), unit };
+      return {
+        text: formatDropsOrMl(ml, unit, dropMl),
+        unit,
+        shownMl: displayedConcentrateMl(ml, unit, dropMl),
+      };
     }
-    return { text: formatMl(ml), unit: null };
+    return { text: formatMl(ml), unit: null, shownMl: displayedConcentrateMl(ml, "ml", 0) };
   }
 
   function formatDropsOrMl(ml: number, unit: string, dropMl: number): string {
@@ -1724,14 +1748,18 @@ function main(): void {
       if (!Number.isFinite(ml) || ml <= 0) return "0.000";
       return ml.toFixed(3);
     }
-    const drops = Number.isFinite(dropMl) && dropMl > 0 ? Math.round(ml / dropMl) : 0;
-    return String(drops);
+    return String(displayedDrops(ml, dropMl));
   }
 
-  function updateResultValues(valuesByMineral: Record<string, number>): void {
+  // Each row updater returns the amount its row now displays (keyed like its
+  // input, rows that are not on the page omitted) so calculate() can build the
+  // readout from the displayed doses.
+  function updateResultValues(valuesByMineral: Record<string, number>): Record<string, number> {
+    const shown: Record<string, number> = {};
     for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
       const item = resultsContainer.querySelector(`[data-mineral="${CSS.escape(mineralId)}"]`);
       if (item) {
+        shown[mineralId] = displayedGrams(grams);
         const valEl = item.querySelector(".result-value");
         if (valEl) valEl.textContent = formatGrams(grams);
         const nameEl = item.querySelector(".result-name");
@@ -1746,18 +1774,21 @@ function main(): void {
         }
       }
     }
+    return shown;
   }
 
   // Recipe Concentrate rows are keyed by data-stock (not data-concentrate), so
   // they get their own updater. Amounts are mL of concentrate (the dose math
   // treats 1 g of this dilute concentrate as 1 mL), shown in drops when the
   // concentrate has a dropper size.
-  function updateStockValues(valuesByStock: Record<string, number>): void {
+  function updateStockValues(valuesByStock: Record<string, number>): Record<string, number> {
+    const shown: Record<string, number> = {};
     for (const [stockId, ml] of Object.entries(valuesByStock)) {
       const item = resultsContainer.querySelector(`[data-stock="${CSS.escape(stockId)}"]`);
       if (!item) continue;
       const valEl = item.querySelector(".result-value");
       const display = concentrateDisplayValue(item, stockId, ml);
+      shown[stockId] = display.shownMl;
       if (valEl) valEl.textContent = display.text;
       if (ml > 0) {
         const nameEl = item.querySelector(".result-name");
@@ -1770,6 +1801,7 @@ function main(): void {
         item.removeAttribute("aria-label");
       }
     }
+    return shown;
   }
 
   // Compact "5g MgSO4·7H2O · 2g MgCl2·6H2O · ..." string for the calculator's
@@ -1783,7 +1815,10 @@ function main(): void {
   // helpers; classic-script load order makes it a global by the time this file
   // runs.
 
-  function updateConcentrateValues(valuesByConcentrate: Record<string, number>): void {
+  function updateConcentrateValues(
+    valuesByConcentrate: Record<string, number>,
+  ): Record<string, number> {
+    const shown: Record<string, number> = {};
     for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
       const item = resultsContainer.querySelector(
         `[data-concentrate="${CSS.escape(concentrateId)}"]`,
@@ -1791,6 +1826,7 @@ function main(): void {
       if (!item) continue;
       const valEl = item.querySelector(".result-value");
       const display = concentrateDisplayValue(item, concentrateId, ml);
+      shown[concentrateId] = display.shownMl;
       const displayValue = display.text;
       if (valEl) valEl.textContent = displayValue;
       if (ml > 0) {
@@ -1802,6 +1838,7 @@ function main(): void {
         item.removeAttribute("aria-label");
       }
     }
+    return shown;
   }
 
   // --- Initialize ---
