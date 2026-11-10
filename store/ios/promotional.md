@@ -2,4 +2,4 @@
 <!-- Shown above the description on the listing page. Can be updated without -->
 <!-- a new app review, unlike the description itself. -->
 
-v1.2.1: Recipe Concentrates made from SCA, Rao and Hendon Espresso now dose correctly, pages pick up more changes from your other devices, and sign-in links are safer.
+v1.2.2: Logging out now signs out only the device you're on and asks first if changes haven't synced. Recipes you delete and re-create stay put across your devices.
