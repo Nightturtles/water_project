@@ -9,7 +9,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(27);
+select plan(31);
 
 -- Two users and a starting set of rows, created as the superuser.
 insert into auth.users (id, email)
@@ -64,6 +64,11 @@ select throws_ok(
 select lives_ok(
   $$ update public.target_profiles set calcium = 42 where slug = 'a-private' $$,
   'oauth client updates a private recipe');
+-- lives_ok alone passes when RLS filters the UPDATE down to zero rows, so the
+-- allowed updates below are each followed by a check of the stored value.
+select is(
+  (select calcium::int from public.target_profiles where slug = 'a-private'),
+  42, 'the private recipe update was stored');
 select throws_ok(
   $$ update public.target_profiles set is_public = true where slug = 'a-private' $$,
   '42501', null, 'oauth client cannot publish a recipe');
@@ -85,6 +90,9 @@ select lives_ok(
 select lives_ok(
   $$ update public.source_profiles set calcium = 12 where slug = 'a-tap' $$,
   'oauth client updates a source water');
+select is(
+  (select calcium::int from public.source_profiles where slug = 'a-tap'),
+  12, 'the source water update was stored');
 delete from public.source_profiles where slug = 'a-tap';
 select is(
   (select count(*)::int from public.source_profiles where slug = 'a-tap'),
@@ -123,9 +131,15 @@ select ok(not public.is_oauth_client(), 'no client_id claim means a first-party 
 select lives_ok(
   $$ update public.target_profiles set is_public = true where slug = 'a-private' $$,
   'the app publishes a recipe');
+select is(
+  (select is_public from public.target_profiles where slug = 'a-private'),
+  true, 'the recipe is now public');
 select lives_ok(
   $$ update public.target_profiles set calcium = 7 where slug = 'a-public' $$,
   'the app edits a published recipe');
+select is(
+  (select calcium::int from public.target_profiles where slug = 'a-public'),
+  7, 'the published recipe edit was stored');
 select lives_ok(
   $$ insert into public.user_settings (user_id, theme) values ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'dark')
      on conflict (user_id) do update set theme = excluded.theme $$,
