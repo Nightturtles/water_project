@@ -6,11 +6,14 @@
 // own modules (src/lib/mcp-core.ts), so the server cannot drift from the app.
 
 import {
+  BRAND_CONCENTRATES,
+  buildDosingKit,
   CACO3_TO_HCO3,
   calculateSo4ClRatio,
   evaluateWaterProfileRanges,
   HCO3_TO_CACO3,
   ION_FIELDS,
+  MINERAL_DB,
   recipeMetricsSummary,
   RESERVED_TARGET_KEYS,
   SOURCE_PRESETS,
@@ -244,10 +247,20 @@ export function ionBalance(ions: Ions): {
 // Same order the app's evaluator sorts findings in.
 const SEVERITY_ORDER: Record<string, number> = { danger: 0, warn: 1, info: 2 };
 
+export interface RangeSources {
+  alkalinitySources: string[];
+  calciumSource: string | null;
+  magnesiumSource: string | null;
+}
+
 export function analyze(
   ions: Ions,
   brewMethod: string,
   alkalinity?: number | null,
+  // The salts the water was made with, when known (calculate_doses). Some
+  // bands depend on them: sodium is judged more leniently when baking soda
+  // supplies the alkalinity. A bare profile has none.
+  sources?: RangeSources,
 ): {
   gh: number;
   kh: number;
@@ -261,9 +274,9 @@ export function analyze(
   // minerals the browser has selected, which does not exist here.
   const options = {
     brewMethod,
-    alkalinitySources: [] as string[],
-    calciumSource: null,
-    magnesiumSource: null,
+    alkalinitySources: sources ? sources.alkalinitySources : [] as string[],
+    calciumSource: sources ? sources.calciumSource : null,
+    magnesiumSource: sources ? sources.magnesiumSource : null,
   };
   const ranges = evaluateWaterProfileRanges(ions, options);
   let findings: { severity: string; message: string }[] = ranges.findings;
@@ -289,6 +302,241 @@ export function analyze(
     so4_cl_ratio: ratio == null ? null : round2(ratio),
     ion_balance: ionBalance(ions),
     findings,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Doses
+// ---------------------------------------------------------------------------
+
+// The shapes src/lib/dosing.ts works with (the bundle carries no types).
+export interface DosingKit {
+  minerals: string[];
+  concentrates: {
+    id: string;
+    mineralId: string | null;
+    gramsPerMl: number;
+    dropMl: number;
+    unit: "ml" | "drops";
+  }[];
+  recipeConcentrates: {
+    id: string;
+    spec: { label?: string; doseGramsPerL?: number };
+    dropMl: number;
+    unit: "ml" | "drops";
+  }[];
+}
+
+export interface DosingResult {
+  status: "ok" | "no-volume" | "no-alkalinity-source";
+  mode: "minerals" | "recipe-concentrates";
+  enableSuggestions: { ion: string; mineralId: string }[];
+  shown: {
+    mineralGrams: Record<string, number>;
+    concentrateMl: Record<string, number>;
+    recipeConcentrateMl: Record<string, number>;
+    supplementGrams: Record<string, number>;
+  };
+  warnings: string[];
+  finalIons: Ions | null;
+  rangeSources: RangeSources;
+}
+
+export const VOLUME_MAX_LITERS = 1000;
+
+/** mg/L bicarbonate to mg/L alkalinity as CaCO3 (the app's constant). */
+export const HCO3_TO_CACO3_FACTOR: number = HCO3_TO_CACO3;
+
+/**
+ * The user's dosing kit from their synced settings row (null when they have
+ * never synced: the app's starter minerals, no concentrates). `minerals`
+ * replaces the whole kit with just those powders, for "what if I only had".
+ */
+export function kitFromSettings(
+  row: Record<string, unknown> | null,
+  minerals?: string[] | null,
+): DosingKit {
+  if (minerals) {
+    return buildDosingKit({
+      selectedMinerals: minerals,
+      selectedConcentrates: [],
+      diySpecs: {},
+      stockSpecs: {},
+      lotusDropperType: null,
+      concentrateUnits: {},
+    }) as DosingKit;
+  }
+  const obj = (v: unknown) => (v && typeof v === "object" && !Array.isArray(v) ? v : {});
+  return buildDosingKit({
+    selectedMinerals: row?.selected_minerals,
+    selectedConcentrates: row?.selected_concentrates,
+    diySpecs: obj(row?.diy_concentrate_specs),
+    stockSpecs: obj(row?.stock_concentrate_specs),
+    lotusDropperType: row?.lotus_dropper_type,
+    concentrateUnits: obj(row?.lotus_concentrate_units),
+  }) as DosingKit;
+}
+
+export interface DoseLine {
+  type: "mineral" | "mineral_concentrate" | "brand_concentrate" | "recipe_concentrate";
+  id: string;
+  name: string;
+  amount: number;
+  unit: "g" | "mL" | "drops";
+  /** For a dose given in drops: the mL those drops come to. */
+  ml?: number;
+  /** A powder topping up what the Recipe Concentrates leave short. */
+  supplement?: true;
+}
+
+function mineralName(id: string): string {
+  const mineral = (MINERAL_DB as Record<string, { name: string } | undefined>)[id];
+  return mineral ? mineral.name : id;
+}
+
+function concentrateLine(
+  type: DoseLine["type"],
+  id: string,
+  name: string,
+  ml: number,
+  row: { dropMl: number; unit: "ml" | "drops" },
+): DoseLine {
+  if (row.dropMl > 0 && row.unit === "drops") {
+    return {
+      type,
+      id,
+      name,
+      amount: Math.round(ml / row.dropMl),
+      unit: "drops",
+      ml: Math.round(ml * 1000) / 1000,
+    };
+  }
+  return { type, id, name, amount: ml, unit: "mL" };
+}
+
+/**
+ * The doses as the Calculator's rows show them, one line per row with a
+ * nonzero amount: grams to 0.01, concentrates in whole drops or mL to 0.001.
+ */
+export function doseLines(result: DosingResult, kit: DosingKit): DoseLine[] {
+  const lines: DoseLine[] = [];
+  // Rows print grams to 0.01. A smaller dose prints as "<0.01 g" in the app;
+  // here it keeps two significant figures, so a real dose is never reported
+  // as 0 (the finished water is computed with it).
+  const grams = (g: number) => (g < 0.01 ? Number(g.toPrecision(2)) : Math.round(g * 100) / 100);
+  if (result.mode === "recipe-concentrates") {
+    for (const rc of kit.recipeConcentrates) {
+      const ml = result.shown.recipeConcentrateMl[rc.id] || 0;
+      if (ml > 0) {
+        lines.push(concentrateLine("recipe_concentrate", rc.id, rc.spec.label || rc.id, ml, rc));
+      }
+    }
+    for (const [id, g] of Object.entries(result.shown.supplementGrams)) {
+      if (g > 0) {
+        lines.push({
+          type: "mineral",
+          id,
+          name: mineralName(id),
+          amount: grams(g),
+          unit: "g",
+          supplement: true,
+        });
+      }
+    }
+    return lines;
+  }
+  for (const [id, g] of Object.entries(result.shown.mineralGrams)) {
+    if (g > 0) lines.push({ type: "mineral", id, name: mineralName(id), amount: grams(g), unit: "g" });
+  }
+  for (const c of kit.concentrates) {
+    const ml = result.shown.concentrateMl[c.id] || 0;
+    if (!(ml > 0)) continue;
+    const brand = (BRAND_CONCENTRATES as Record<string, { name: string } | undefined>)[c.id];
+    lines.push(
+      brand
+        ? concentrateLine("brand_concentrate", c.id, brand.name, ml, c)
+        : concentrateLine(
+          "mineral_concentrate",
+          c.id,
+          mineralName(c.mineralId || c.id) + " concentrate",
+          ml,
+          c,
+        ),
+    );
+  }
+  return lines;
+}
+
+export interface PickedSource {
+  id: string | null;
+  key: string;
+  name: string;
+  ions: Ions;
+  note: string | null;
+}
+
+/**
+ * The source water to dose from when the caller names none: the one the app's
+ * Calculator is using. The app syncs the values in its Starting Water fields
+ * (user_selections.source_water) next to the selected profile's key, and those
+ * are what it doses from, including edits not saved to the profile, a
+ * hand-typed "custom" water, and a new profile whose own row has not synced
+ * yet. A new account with no selection starts on distilled.
+ */
+export function pickDefaultSource(
+  waters: ReturnType<typeof mergeSourceWaters>,
+  sourcePreset: string | null,
+  shownIons: unknown,
+): PickedSource {
+  const saved = sourcePreset ? waters.find((w) => w.key === sourcePreset) : undefined;
+  if (shownIons && typeof shownIons === "object" && !Array.isArray(shownIons)) {
+    const raw = shownIons as Record<string, unknown>;
+    const ions = {} as Ions;
+    for (const ion of IONS) {
+      const v = Number(raw[ion]);
+      ions[ion] = Number.isFinite(v) && v > 0 ? v : 0;
+    }
+    if (saved) {
+      const edited = IONS.some((ion) => Math.abs(ions[ion] - saved.ions[ion]) > 1e-9);
+      return {
+        id: saved.id,
+        key: saved.key,
+        name: saved.name,
+        ions,
+        note: edited
+          ? `"${saved.name}" has unsaved edits in the app. The edited values, which the app's calculator is using, were used here. Send source_water_id or source_water_key to use the saved profile.`
+          : null,
+      };
+    }
+    const key = sourcePreset || "custom";
+    return {
+      id: null,
+      key,
+      name: key === "custom" ? "Custom (values entered in the app)" : key,
+      ions,
+      note: key === "custom"
+        ? "The app is set to hand-entered source water values; those were used."
+        : `The source water selected in the app ("${key}") is not among the saved profiles yet, so the values the app is showing for it were used.`,
+    };
+  }
+  if (saved) return { id: saved.id, key: saved.key, name: saved.name, ions: saved.ions, note: null };
+  if (!sourcePreset) {
+    const distilled = waters.find((w) => w.key === "distilled");
+    if (distilled) {
+      return { id: null, key: distilled.key, name: distilled.name, ions: distilled.ions, note: null };
+    }
+  }
+  throw new ToolError(
+    "The source water selected in the app could not be read. Send source_water_id or source_water_key (see list_source_waters).",
+  );
+}
+
+/** What the kit holds, for the tool's reply. */
+export function kitSummary(kit: DosingKit) {
+  return {
+    minerals: kit.minerals,
+    concentrates: kit.concentrates.map((c) => c.id),
+    recipe_concentrates: kit.recipeConcentrates.map((rc) => rc.id),
   };
 }
 

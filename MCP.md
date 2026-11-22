@@ -6,12 +6,12 @@ Endpoint once deployed: `https://srlwgayrxzamxlodpsrq.supabase.co/functions/v1/m
 
 ## Status
 
-Phase 1 (this code): reads, analysis, and private recipe / source-water writes. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now.
+Phases 1 and 1b (this code): reads, analysis, dose calculation, and private recipe / source-water writes. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now.
 
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Read recipes, source waters, minerals, concentrates; `analyze_water`; create / update private recipes and saved source waters | Built |
-| 1b | `calculate_doses`: needs the dosing math moved out of the Calculator page controller into a shared module first, so the server and the app cannot disagree | Not started |
+| 1b | `calculate_doses`: the Calculator page's dose math, moved into a shared module (`src/lib/dosing.ts`) that the page and the server both call | Built |
 | 2 | Create / update concentrates, through a database function that merges one concentrate into `user_settings` atomically | Not started |
 | 3 | Maybe: change the active selection (recipe, source water, minerals) | Undecided |
 
@@ -46,10 +46,13 @@ Enforced twice: in the tool code, and in the database by `supabase/migrations/20
 | `list_source_waters` | No | Built-in and saved |
 | `list_minerals`, `list_concentrates` | No | |
 | `analyze_water` | No | Metrics, the app's range findings, and a charge-balance check |
+| `calculate_doses` | No | What to add to a source water to make a recipe: the Calculator page's own math, with the minerals and concentrates the user enabled in the app (or a `minerals` list). Amounts are what the app's rows show (grams to 0.01, whole drops or mL). With no source water named it uses the values the app's Starting Water fields hold (`user_selections.source_water`), which is what the Calculator doses from, unsaved edits included; a named source water is the saved profile |
 | `create_recipe`, `update_recipe` | Yes | Private only. Names follow the app's rules; a deleted name's key is never reused |
 | `create_source_water`, `update_source_water` | Yes | |
 
 Chemistry and naming rules are not re-implemented: `src/lib/mcp-core.ts` re-exports the app's own functions, and `npm run mcp:build` bundles them into `supabase/functions/mcp/app-core.gen.js` (committed; `npm test` fails when it is stale). Only re-export functions that take every input as an argument: one that falls back to browser storage would silently use defaults on the server.
+
+Doses work the same way. `computeDoses` (`src/lib/dosing.ts`) is the one copy of the dose math: the Calculator page gathers its inputs and renders the result, and `calculate_doses` calls it with a kit built from the user's synced `user_settings` row (`buildDosingKit`). The rules for which salts a kit can dose from, and each concentrate's strength and dropper size, live in `src/lib/mineral-sources.ts`; `storage.ts` applies them to the browser's saved selection. `tests/dosing.test.ts` pins the doses for the canonical recipes in a committed table and checks that a kit built from settings matches the one the page builds.
 
 ## How writes coexist with app sync
 

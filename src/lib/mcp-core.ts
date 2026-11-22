@@ -30,3 +30,6 @@ export {
   evaluateWaterProfileRanges,
 } from "./metrics";
 export { slugify, validateProfileName } from "./storage";
+// The Calculator page's dose math and kit rules. Both take the user's settings
+// as arguments (the page passes this browser's, the server the synced row).
+export { computeDoses, buildDosingKit } from "./dosing";

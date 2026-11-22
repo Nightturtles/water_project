@@ -3,7 +3,8 @@
 // the service role.
 //
 // Phase 1 scope: read recipes, source waters, minerals and concentrates;
-// analyse a water; create and adjust PRIVATE recipes and saved source waters.
+// analyse a water; work out doses (the Calculator page's own math); create
+// and adjust PRIVATE recipes and saved source waters.
 // There is no tool that publishes, deletes, or changes a published recipe,
 // and supabase/migrations/20261122200921_restrict_oauth_client_access.sql
 // refuses those at the database for any AI-app login, tool or no tool.
@@ -12,6 +13,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   BRAND_CONCENTRATES,
+  computeDoses,
   MINERAL_DB,
   RESERVED_TARGET_KEYS,
   slugify,
@@ -27,10 +29,16 @@ import {
   cleanDescription,
   cleanName,
   DESCRIPTION_MAX,
+  doseLines,
+  type DosingResult,
+  HCO3_TO_CACO3_FACTOR,
   isBuiltinSourceKey,
+  kitFromSettings,
+  kitSummary,
   likeLiteral,
   mergeSourceWaters,
   NAME_MAX,
+  pickDefaultSource,
   pickProfileKey,
   pickVerifiedProfileKey,
   recipeDetail,
@@ -42,6 +50,7 @@ import {
   sourceWaterView,
   type TargetRow,
   ToolError,
+  VOLUME_MAX_LITERS,
 } from "./logic.ts";
 
 // The user-scoped client from withSupabase({ auth: "user" }). Typed loosely:
@@ -67,6 +76,7 @@ const INSTRUCTIONS = [
   "Recipes saved here are always private. Publishing a recipe to the public Recipe Library, and deleting anything, can only be done by the user in the Cafelytic app.",
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
+  "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates they enabled in the app. Do not work doses out yourself.",
 ].join(" ");
 
 function ok(payload: unknown) {
@@ -129,12 +139,16 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     const row = check(
       await supabase
         .from("user_selections")
-        .select("source_preset, target_preset, deleted_source_presets, deleted_target_presets")
+        .select(
+          "source_preset, source_water, target_preset, deleted_source_presets, deleted_target_presets",
+        )
         .eq("user_id", userId)
         .maybeSingle(),
     ) as Record<string, unknown> | null;
     return {
       sourcePreset: typeof row?.source_preset === "string" ? row.source_preset : null,
+      // The ion values the app's Starting Water fields hold right now.
+      sourceWater: row?.source_water ?? null,
       targetPreset: typeof row?.target_preset === "string" ? row.target_preset : null,
       deletedSources: asStringArray(row?.deleted_source_presets),
       deletedTargets: asStringArray(row?.deleted_target_presets),
@@ -376,6 +390,169 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           alkalinity: Math.round(alkalinity * 100) / 100,
           ...analyze(ionValues, brew_method, alkalinity),
         });
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Doses
+  // -------------------------------------------------------------------------
+
+  const MINERAL_IDS = Object.keys(MINERAL_DB) as [string, ...string[]];
+
+  server.registerTool(
+    "calculate_doses",
+    {
+      title: "Calculate doses",
+      description:
+        "How much of each mineral or concentrate to add to a source water to make a recipe, for a given volume. This is the Cafelytic calculator's own math and gives the same amounts the app shows. The target is a saved or library recipe (recipe_id) or a set of ions. The source water defaults to the one active in the app. Doses use the minerals and concentrates the user has enabled in the app, unless `minerals` lists the powders to use instead. Returns each dose (grams, mL or drops), any warnings, and the finished water with its range findings. Saves nothing.",
+      inputSchema: z.object({
+        recipe_id: uuid.optional().describe(
+          "Recipe to make, from list_recipes. Send this or target ions, not both.",
+        ),
+        ...ionShape,
+        brew_method: brewMethod.optional().describe(
+          "Brew method the finished water is judged for. Defaults to the recipe's, or filter.",
+        ),
+        source_water_id: uuid.optional().describe("A saved source water, from list_source_waters."),
+        source_water_key: z.string().min(1).max(60).optional().describe(
+          "A built-in source water by key from list_source_waters, such as distilled.",
+        ),
+        volume_liters: z.number().positive().max(VOLUME_MAX_LITERS).default(1).describe(
+          "Liters of water to make. 1 US gallon is 3.785 liters.",
+        ),
+        minerals: z.array(z.enum(MINERAL_IDS)).min(1).max(MINERAL_IDS.length).optional().describe(
+          "Mineral ids (from list_minerals) to dose with, as powders, INSTEAD of the user's enabled minerals and concentrates. Leave out to use what they enabled in the app.",
+        ),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ recipe_id, brew_method, source_water_id, source_water_key, volume_liters, minerals, ...ions }) =>
+      run(async () => {
+        const sentIons = Object.values(ions).some((v) => v !== undefined);
+        if (recipe_id && sentIons) {
+          throw new ToolError("Send recipe_id or target ions, not both.");
+        }
+        if (!recipe_id && !sentIons) {
+          throw new ToolError("Say what to make: send recipe_id, or the target ions.");
+        }
+        if (source_water_id && source_water_key) {
+          throw new ToolError("Send source_water_id or source_water_key, not both.");
+        }
+
+        const [recipeResult, sourceRows, selections, settingsResult] = await Promise.all([
+          recipe_id
+            ? supabase.from("target_profiles").select(TARGET_COLUMNS).eq("id", recipe_id)
+              .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          supabase.from("source_profiles").select(SOURCE_COLUMNS).eq("user_id", userId),
+          loadSelections(),
+          minerals ? Promise.resolve({ data: null, error: null }) : supabase.from("user_settings")
+            .select(
+              "selected_minerals, selected_concentrates, stock_concentrate_specs, diy_concentrate_specs, lotus_dropper_type, lotus_concentrate_units",
+            )
+            .eq("user_id", userId).maybeSingle(),
+        ]);
+
+        // Target.
+        const recipe = check(recipeResult) as TargetRow | null;
+        if (recipe_id && !recipe) {
+          throw new ToolError("No recipe with that id is visible to this account.");
+        }
+        let target: Record<string, number>;
+        let brew: "filter" | "espresso";
+        if (recipe) {
+          const recipeIons = rowIons(recipe);
+          target = {
+            ...recipeIons,
+            // A recipe stored without an alkalinity shows the whole-number KH
+            // of its bicarbonate in the app's Alkalinity field.
+            alkalinity: recipe.alkalinity == null
+              ? Math.round(recipeIons.bicarbonate * HCO3_TO_CACO3_FACTOR)
+              : Number(recipe.alkalinity),
+          };
+          brew = brew_method ?? (recipe.brew_method === "espresso" ? "espresso" : "filter");
+        } else {
+          target = resolveIons(ions);
+          brew = brew_method ?? "filter";
+        }
+
+        // Source water.
+        const waters = mergeSourceWaters(
+          check(sourceRows) as SourceRow[],
+          selections.deletedSources,
+          selections.sourcePreset,
+        );
+        // A named source is the saved profile. With none named, it is the
+        // water the app's calculator is using (see pickDefaultSource).
+        const named = source_water_id
+          ? waters.find((w) => w.id === source_water_id)
+          : source_water_key
+          ? waters.find((w) => w.key === source_water_key)
+          : undefined;
+        if ((source_water_id || source_water_key) && !named) {
+          throw new ToolError(
+            "No source water with that id or key is available to this account. Use list_source_waters.",
+          );
+        }
+        const source = named
+          ? { id: named.id, key: named.key, name: named.name, ions: named.ions, note: null }
+          : pickDefaultSource(waters, selections.sourcePreset, selections.sourceWater);
+
+        // Kit and doses.
+        const kit = kitFromSettings(
+          check(settingsResult) as Record<string, unknown> | null,
+          minerals ?? null,
+        );
+        const result = computeDoses({
+          sourceWater: source.ions,
+          target,
+          volumeL: volume_liters,
+          kit,
+          recipeSlug: recipe ? recipe.slug : null,
+        }) as DosingResult;
+        if (result.status === "no-alkalinity-source") {
+          throw new ToolError(
+            minerals
+              ? "Those minerals include no alkalinity source. Add baking-soda or potassium-bicarbonate."
+              : "The minerals enabled in the app include no alkalinity source, and the calculator needs one. The user can enable Baking Soda or Potassium Bicarbonate in the app's Settings, or pass `minerals` including baking-soda or potassium-bicarbonate.",
+          );
+        }
+        if (result.status !== "ok" || !result.finalIons) {
+          throw new ToolError("The volume must be more than zero.");
+        }
+
+        const { alkalinity: targetAlkalinity, ...targetIons } = target;
+        return {
+          target: {
+            recipe_id: recipe ? recipe.id : null,
+            name: recipe ? recipe.label : null,
+            brew_method: brew,
+            alkalinity: Math.round(Number(targetAlkalinity) * 100) / 100,
+            ions: buildSourceValues(targetIons as ReturnType<typeof rowIons>),
+          },
+          source_water: { id: source.id, key: source.key, name: source.name, ions: source.ions },
+          source_water_note: source.note,
+          volume_liters,
+          kit: {
+            from: minerals ? "the minerals argument" : "the user's app settings",
+            ...kitSummary(kit),
+          },
+          mode: result.mode,
+          doses: doseLines(result, kit),
+          missing_minerals: result.enableSuggestions.map((s) => ({
+            for: s.ion === "bicarbonate" ? "alkalinity" : s.ion,
+            enable_mineral_id: s.mineralId,
+          })),
+          warnings: result.warnings,
+          result: {
+            note:
+              "The water these doses make. Doses are rounded the way the app shows them (grams to 0.01, whole drops), so it can differ slightly from the target.",
+            ions: buildSourceValues(result.finalIons),
+            ...(({ ion_balance: _balance, ...rest }) => rest)(
+              analyze(result.finalIons, brew, null, result.rangeSources),
+            ),
+          },
+        };
       }),
   );
 
