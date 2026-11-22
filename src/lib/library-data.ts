@@ -511,8 +511,11 @@ const FEATURED_PICKS: Record<string, string> = {
 };
 
 // Trays rendered in this order. Featured isn't a tray — it's pulled from
-// FEATURED_PICKS and rendered above the trays. Unknown category values fall
-// through to 'classic' per partitionByCategory.
+// FEATURED_PICKS and rendered above the trays. Every tray but 'community' is
+// curated and holds canonical rows only (user_id IS NULL); canonical rows with
+// an unknown category fall through to 'classic'. 'community' is not a value of
+// the DB tray column: partitionByCategory routes every user-published row
+// there by ownership, whatever its tray says.
 const LIBRARY_TRAYS = [
   {
     key: "original",
@@ -538,7 +541,12 @@ const LIBRARY_TRAYS = [
   {
     key: "classic",
     title: "Classic Formulas",
-    subtitle: "Canonical references every coffee nerd knows",
+    subtitle: "Canonical references every coffee nerd should know",
+  },
+  {
+    key: "community",
+    title: "Community Recipes",
+    subtitle: "Recipes published by Cafelytic users",
   },
 ];
 
@@ -616,7 +624,8 @@ function applyFilters(
 }
 
 // Group filtered recipes by their category key, in the order LIBRARY_TRAYS
-// declares them. Unknown categories fall through to "classic".
+// declares them. Canonical rows with an unknown category fall through to
+// "classic"; user-published rows always go to "community".
 function partitionByCategory(
   recipes: LibraryRecipeRow[] | null | undefined,
 ): Record<string, LibraryRecipeRow[]> {
@@ -626,17 +635,21 @@ function partitionByCategory(
     roaster: [],
     brand: [],
     classic: [],
+    community: [],
   };
   if (!Array.isArray(recipes)) return out;
   recipes.forEach(function (r) {
     let cat = r && r.category ? r.category : "classic";
-    if (!Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
-    // The curated trays (Cafelytic Originals, Roaster, Brand, Intro) are for
-    // canonical rows. User-published rows are always created with the column
-    // default 'classic'; RLS can't stop a user from writing another tray value
-    // on their own row, so ignore it rather than let anyone publish into
-    // "House recipes from the Cafelytic team".
-    if (r && r.userId != null) cat = "classic";
+    // 'community' is assigned by ownership below, never read from the row.
+    if (cat === "community" || !Object.prototype.hasOwnProperty.call(out, cat)) cat = "classic";
+    // The curated trays (Cafelytic Originals, Roaster, Brand, Intro, Classic)
+    // are for canonical rows. The publish paths never write the tray column,
+    // so every user-published row carries its default 'classic', which used to
+    // put all of them in Classic Formulas. RLS also can't stop a user from
+    // writing another tray value on their own row, so ignore the column for
+    // owned rows rather than let anyone publish into "House recipes from the
+    // Cafelytic team".
+    if (r && r.userId != null) cat = "community";
     out[cat]!.push(r);
   });
   // Intro to Water is a learn-by-doing series — order by slug so
