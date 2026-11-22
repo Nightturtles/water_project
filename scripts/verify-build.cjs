@@ -1,4 +1,4 @@
-// Sanity-check `dist/` after `vite build`. Asserts the ten HTML entry
+// Sanity-check `dist/` after `vite build`. Asserts the eleven HTML entry
 // points, the root-level classic-script .js sources, the brand SVGs, the
 // CNAME, and exactly one hashed style*.css are present. Logs PASS / FAIL
 // plus sorted lists of missing and unexpected paths.
@@ -22,6 +22,8 @@ const htmlEntries = [
   // Nested entry — served at cafelytic.com/privacy via the directory-form
   // path. Vite emits dist/privacy/index.html alongside the root entries.
   "privacy/index.html",
+  // OAuth consent page for AI apps (MCP server); served at /oauth/consent.
+  "oauth/consent.html",
 ];
 
 // Globs we never want shipped: build/tooling/test files. Mirrors the

@@ -1,0 +1,583 @@
+// The MCP tools. Every query runs through the caller's own Supabase client, so
+// row-level security decides what is visible and writable; nothing here uses
+// the service role.
+//
+// Phase 1 scope: read recipes, source waters, minerals and concentrates;
+// analyse a water; create and adjust PRIVATE recipes and saved source waters.
+// There is no tool that publishes, deletes, or changes a published recipe,
+// and supabase/migrations/20261122200921_restrict_oauth_client_access.sql
+// refuses those at the database for any AI-app login, tool or no tool.
+
+import { McpServer } from "@modelcontextprotocol/server";
+import { z } from "zod";
+import {
+  BRAND_CONCENTRATES,
+  MINERAL_DB,
+  RESERVED_TARGET_KEYS,
+  SOURCE_PRESETS,
+} from "./app-core.gen.js";
+import {
+  analyze,
+  asStringArray,
+  buildRecipeInsert,
+  buildRecipeUpdate,
+  buildSourceValues,
+  cleanDescription,
+  cleanName,
+  DESCRIPTION_MAX,
+  isBuiltinSourceKey,
+  mergeSourceWaters,
+  NAME_MAX,
+  pickProfileKey,
+  recipeDetail,
+  recipeReadOnlyReason,
+  recipeSummary,
+  resolveIons,
+  rowIons,
+  type SourceRow,
+  sourceWaterView,
+  type TargetRow,
+  ToolError,
+} from "./logic.ts";
+
+// The user-scoped client from withSupabase({ auth: "user" }). Typed loosely:
+// generated database types would be one more file to keep in step with the
+// migrations, and the row shapes this file relies on are declared in logic.ts.
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
+const TARGET_COLUMNS =
+  "id, user_id, slug, label, brew_method, calcium, magnesium, alkalinity, potassium, sodium, sulfate, chloride, bicarbonate, description, is_public, creator_display_name, creator_user_id, tags, roast, tray, stock_formula, created_at, updated_at";
+const SOURCE_COLUMNS =
+  "id, user_id, slug, label, calcium, magnesium, potassium, sodium, sulfate, chloride, bicarbonate, updated_at";
+
+// Community recipes returned by list_recipes at most. The canonical library is
+// always returned whole.
+const COMMUNITY_LIMIT = 100;
+
+const INSTRUCTIONS = [
+  "Cafelytic is a coffee water calculator. These tools read and save the signed-in user's own data.",
+  "All ion values are mg/L (ppm) in the finished water. Alkalinity, GH and KH are mg/L as CaCO3.",
+  "A recipe is a target water profile. A source water is the water the user starts from.",
+  "Recipes saved here are always private. Publishing a recipe to the public Recipe Library, and deleting anything, can only be done by the user in the Cafelytic app.",
+  "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
+  "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
+].join(" ");
+
+function ok(payload: unknown) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(payload) }],
+    structuredContent: payload as Record<string, unknown>,
+  };
+}
+
+function fail(message: string) {
+  return { isError: true, content: [{ type: "text" as const, text: message }] };
+}
+
+/** Run a tool body, turning expected failures into tool errors the model can read. */
+async function run(body: () => Promise<unknown>) {
+  try {
+    return ok(await body());
+  } catch (err) {
+    if (err instanceof ToolError) return fail(err.message);
+    console.error("mcp tool failed", err);
+    return fail("Cafelytic could not complete that request. Try again in a moment.");
+  }
+}
+
+/** Throw on a Supabase error; a permission error means a database rule said no. */
+function check<T>(result: { data: T; error: { code?: string; message: string } | null }): T {
+  if (result.error) {
+    if (result.error.code === "42501") {
+      throw new ToolError("Cafelytic does not allow that change from an AI app.");
+    }
+    throw new Error(result.error.message);
+  }
+  return result.data;
+}
+
+const ionShape = {
+  calcium: z.number().optional().describe("Calcium, mg/L"),
+  magnesium: z.number().optional().describe("Magnesium, mg/L"),
+  potassium: z.number().optional().describe("Potassium, mg/L"),
+  sodium: z.number().optional().describe("Sodium, mg/L"),
+  sulfate: z.number().optional().describe("Sulfate, mg/L"),
+  chloride: z.number().optional().describe("Chloride, mg/L"),
+  bicarbonate: z.number().optional().describe(
+    "Bicarbonate, mg/L. Send this or alkalinity, not both.",
+  ),
+  alkalinity: z.number().optional().describe(
+    "Alkalinity (KH) as mg/L CaCO3. Send this or bicarbonate, not both.",
+  ),
+};
+const brewMethod = z.enum(["filter", "espresso"]);
+const uuid = z.string().uuid();
+
+export function buildServer(supabase: Db, userId: string): McpServer {
+  const server = new McpServer(
+    { name: "cafelytic", title: "Cafelytic", version: "0.1.0" },
+    { instructions: INSTRUCTIONS },
+  );
+
+  async function loadSelections() {
+    const row = check(
+      await supabase
+        .from("user_selections")
+        .select("source_preset, target_preset, deleted_source_presets, deleted_target_presets")
+        .eq("user_id", userId)
+        .maybeSingle(),
+    ) as Record<string, unknown> | null;
+    return {
+      sourcePreset: typeof row?.source_preset === "string" ? row.source_preset : null,
+      targetPreset: typeof row?.target_preset === "string" ? row.target_preset : null,
+      deletedSources: asStringArray(row?.deleted_source_presets),
+      deletedTargets: asStringArray(row?.deleted_target_presets),
+    };
+  }
+
+  async function loadMyRecipes(): Promise<TargetRow[]> {
+    return check(
+      await supabase
+        .from("target_profiles")
+        .select(TARGET_COLUMNS)
+        .eq("user_id", userId)
+        .order("updated_at", { ascending: false }),
+    ) as TargetRow[];
+  }
+
+  // -------------------------------------------------------------------------
+  // Recipes: read
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "list_recipes",
+    {
+      title: "List recipes",
+      description:
+        "List water recipes (target profiles): the user's own saved recipes, the official Cafelytic Recipe Library, and community recipes. Each entry has its id, name, GH / KH / TDS and ions. Use get_recipe for the description and range findings.",
+      inputSchema: z.object({
+        scope: z.enum(["mine", "library", "all"]).default("all").describe(
+          "mine: the user's saved recipes. library: official and community recipes. all: both.",
+        ),
+        brew_method: brewMethod.optional().describe("Only recipes for this brew method."),
+        search: z.string().max(60).optional().describe("Only recipes whose name contains this."),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ scope, brew_method, search }) =>
+      run(async () => {
+        const selections = await loadSelections();
+        const rows: TargetRow[] = [];
+        if (scope !== "library") {
+          const hidden = new Set(selections.deletedTargets);
+          rows.push(...(await loadMyRecipes()).filter((r) => !hidden.has(r.slug)));
+        }
+        if (scope !== "mine") {
+          const [canonical, community] = await Promise.all([
+            supabase.from("target_profiles").select(TARGET_COLUMNS).eq("is_public", true)
+              .is("user_id", null).order("label"),
+            supabase.from("target_profiles").select(TARGET_COLUMNS).eq("is_public", true)
+              .not("user_id", "is", null).neq("user_id", userId)
+              .order("created_at", { ascending: false }).range(0, COMMUNITY_LIMIT - 1),
+          ]);
+          rows.push(...(check(canonical) as TargetRow[]), ...(check(community) as TargetRow[]));
+        }
+        const needle = (search || "").trim().toLowerCase();
+        const recipes = rows
+          .filter((r) => !brew_method || r.brew_method === brew_method || r.brew_method === "all")
+          .filter((r) => !needle || (r.label || "").toLowerCase().includes(needle))
+          .map((r) => recipeSummary(r, userId, selections.targetPreset));
+        return { count: recipes.length, recipes };
+      }),
+  );
+
+  server.registerTool(
+    "get_recipe",
+    {
+      title: "Get recipe",
+      description:
+        "Full detail for one recipe by id (from list_recipes): ions, GH / KH / TDS, sulfate to chloride ratio, description, the app's range findings, and whether it can be changed with update_recipe.",
+      inputSchema: z.object({ id: uuid.describe("Recipe id from list_recipes.") }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ id }) =>
+      run(async () => {
+        const row = check(
+          await supabase.from("target_profiles").select(TARGET_COLUMNS).eq("id", id).maybeSingle(),
+        ) as TargetRow | null;
+        if (!row) throw new ToolError("No recipe with that id is visible to this account.");
+        const selections = await loadSelections();
+        return recipeDetail(row, userId, selections.targetPreset);
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Source waters, minerals, concentrates: read
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "list_source_waters",
+    {
+      title: "List source waters",
+      description:
+        "List the starting waters available to the user: built-in ones (distilled, tap presets, bottled waters) and the ones they saved, each with ions and GH / KH / TDS. active_in_app marks the one currently selected in the app.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    () =>
+      run(async () => {
+        const [rows, selections] = await Promise.all([
+          supabase.from("source_profiles").select(SOURCE_COLUMNS).eq("user_id", userId).order(
+            "label",
+          ),
+          loadSelections(),
+        ]);
+        const waters = mergeSourceWaters(
+          check(rows) as SourceRow[],
+          selections.deletedSources,
+          selections.sourcePreset,
+        );
+        return { count: waters.length, source_waters: waters };
+      }),
+  );
+
+  server.registerTool(
+    "list_minerals",
+    {
+      title: "List minerals",
+      description:
+        "The mineral salts Cafelytic can dose (id, name, formula, and the mg/L of each ion that 1 g per liter adds), with selected: true on the ones the user has enabled in the app.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    () =>
+      run(async () => {
+        const row = check(
+          await supabase.from("user_settings").select("selected_minerals").eq("user_id", userId)
+            .maybeSingle(),
+        ) as { selected_minerals?: unknown } | null;
+        const selected = new Set(asStringArray(row?.selected_minerals));
+        const minerals = Object.entries(MINERAL_DB).map(([id, m]) => {
+          const mineral = m as {
+            name: string;
+            formula: string;
+            description: string;
+            ions: Record<string, number>;
+          };
+          const perGram: Record<string, number> = {};
+          for (const [ion, fraction] of Object.entries(mineral.ions)) {
+            perGram[ion] = Math.round(fraction * 1000 * 10) / 10;
+          }
+          return {
+            id,
+            name: mineral.name,
+            formula: mineral.formula,
+            description: mineral.description,
+            mg_per_l_added_by_1_g_per_l: perGram,
+            selected: row ? selected.has(id) : null,
+          };
+        });
+        return { minerals };
+      }),
+  );
+
+  server.registerTool(
+    "list_concentrates",
+    {
+      title: "List concentrates",
+      description:
+        "The user's concentrates: Recipe Concentrates (a multi-mineral bottle dosed in mL per liter), Mineral Concentrates (one mineral dissolved in a bottle), and the ready-made brand concentrates Cafelytic knows. Read-only for now.",
+      inputSchema: z.object({}),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    () =>
+      run(async () => {
+        const row = check(
+          await supabase.from("user_settings")
+            .select("stock_concentrate_specs, diy_concentrate_specs, selected_concentrates")
+            .eq("user_id", userId).maybeSingle(),
+        ) as Record<string, unknown> | null;
+        const selected = new Set(asStringArray(row?.selected_concentrates));
+        const stock = (row?.stock_concentrate_specs && typeof row.stock_concentrate_specs === "object")
+          ? row.stock_concentrate_specs as Record<string, Record<string, unknown>>
+          : {};
+        const diy = (row?.diy_concentrate_specs && typeof row.diy_concentrate_specs === "object")
+          ? row.diy_concentrate_specs as Record<string, Record<string, unknown>>
+          : {};
+        return {
+          recipe_concentrates: Object.entries(stock).map(([key, spec]) => ({
+            id: "stock:" + key,
+            name: spec.label || key,
+            bottle_ml: spec.bottleMl ?? null,
+            dose_ml_per_liter: spec.doseGramsPerL ?? null,
+            drop_ml: spec.dropMl ?? null,
+            minerals: Array.isArray(spec.minerals) ? spec.minerals : [],
+            made_from: spec.createdFrom ?? null,
+            selected: selected.has("stock:" + key),
+          })),
+          mineral_concentrates: Object.entries(diy).map(([mineralId, spec]) => ({
+            id: "diy:" + mineralId,
+            mineral_id: mineralId,
+            bottle_ml: spec.bottleMl ?? null,
+            grams_per_bottle: spec.gramsPerBottle ?? null,
+            drop_ml: spec.dropMl ?? null,
+            selected: selected.has("diy:" + mineralId),
+          })),
+          brand_concentrates: Object.entries(BRAND_CONCENTRATES).map(([id, b]) => {
+            const brand = b as { name: string; mineralId: string; gramsPerMl: number };
+            return {
+              id,
+              name: brand.name,
+              mineral_id: brand.mineralId,
+              grams_per_ml: brand.gramsPerMl,
+              selected: selected.has(id),
+            };
+          }),
+        };
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Analysis
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "analyze_water",
+    {
+      title: "Analyze water",
+      description:
+        "Compute GH, KH, TDS and the sulfate to chloride ratio for a set of ions, check them against Cafelytic's recommended ranges for the brew method, and check that the ions are charge-balanced (a profile that is not cannot be mixed exactly from salts). Saves nothing. Use it to check a recipe before create_recipe.",
+      inputSchema: z.object({ ...ionShape, brew_method: brewMethod.default("filter") }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ brew_method, ...ions }) =>
+      run(() => {
+        const resolved = resolveIons(ions);
+        const { alkalinity, ...ionValues } = resolved;
+        return Promise.resolve({
+          ions: buildSourceValues(ionValues),
+          alkalinity: Math.round(alkalinity * 100) / 100,
+          ...analyze(ionValues, brew_method, alkalinity),
+        });
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Recipes: write (private only)
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "create_recipe",
+    {
+      title: "Create recipe",
+      description:
+        `Save a new PRIVATE recipe to the user's Cafelytic account. It appears in their app on the next sync. Ions are mg/L and are stored as whole numbers; ions left out are 0. The name must be new (max ${NAME_MAX} characters). The recipe cannot be published from here: the user publishes in the app if they want to.`,
+      inputSchema: z.object({
+        name: z.string().min(1).max(NAME_MAX),
+        brew_method: brewMethod,
+        description: z.string().max(DESCRIPTION_MAX).optional(),
+        ...ionShape,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ name, brew_method, description, ...ions }) =>
+      run(async () => {
+        const label = cleanName(name);
+        const text = cleanDescription(description);
+        const resolved = resolveIons(ions);
+        const [mine, publicRows, selections] = await Promise.all([
+          loadMyRecipes(),
+          supabase.from("target_profiles").select("slug, label, user_id").eq("is_public", true),
+          loadSelections(),
+        ]);
+        const library = check(publicRows) as { slug: string; label: string; user_id: string | null }[];
+        const slug = pickProfileKey(label, {
+          kind: "recipe",
+          reservedKeys: RESERVED_TARGET_KEYS,
+          existingKeys: mine.map((r) => r.slug),
+          existingLabels: [...mine.map((r) => r.label), ...library.map((r) => r.label)],
+          retiredKeys: [...selections.deletedTargets, ...library.map((r) => r.slug)],
+        });
+        const row = buildRecipeInsert(
+          userId,
+          slug,
+          label,
+          brew_method,
+          resolved,
+          text,
+          new Date().toISOString(),
+        );
+        const saved = check(
+          await supabase.from("target_profiles").insert(row).select(TARGET_COLUMNS).single(),
+        ) as TargetRow;
+        return { saved: true, recipe: recipeDetail(saved, userId, selections.targetPreset) };
+      }),
+  );
+
+  server.registerTool(
+    "update_recipe",
+    {
+      title: "Update recipe",
+      description:
+        "Change the ions, brew method or description of one of the user's own PRIVATE recipes, by id. Only the fields sent are changed. Published recipes, library recipes, and saved copies of other people's recipes are refused: save a new recipe with create_recipe instead.",
+      inputSchema: z.object({
+        id: uuid.describe("Recipe id from list_recipes."),
+        brew_method: brewMethod.optional(),
+        description: z.string().max(DESCRIPTION_MAX).optional(),
+        ...ionShape,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    ({ id, brew_method, description, ...ions }) =>
+      run(async () => {
+        const row = check(
+          await supabase.from("target_profiles").select(TARGET_COLUMNS).eq("id", id).maybeSingle(),
+        ) as TargetRow | null;
+        if (!row) throw new ToolError("No recipe with that id is visible to this account.");
+        const blocked = recipeReadOnlyReason(row, userId);
+        if (blocked) throw new ToolError(`"${row.label}" cannot be changed here. ${blocked}`);
+        const selections = await loadSelections();
+        if (selections.deletedTargets.includes(row.slug)) {
+          throw new ToolError(`"${row.label}" was deleted in the app.`);
+        }
+        const current = rowIons(row);
+        const currentAlk = row.alkalinity == null
+          ? recipeSummary(row, userId).kh
+          : Number(row.alkalinity);
+        const resolved = resolveIons(ions, { ...current, alkalinity: currentAlk });
+        const nextBrew = brew_method ?? (row.brew_method === "espresso" ? "espresso" : "filter");
+        const text = description === undefined ? (row.description || "") : cleanDescription(description);
+        const saved = check(
+          await supabase.from("target_profiles")
+            .update(buildRecipeUpdate(resolved, nextBrew, text, new Date().toISOString()))
+            .eq("id", id).eq("user_id", userId).eq("is_public", false)
+            .select(TARGET_COLUMNS).maybeSingle(),
+        ) as TargetRow | null;
+        if (!saved) throw new ToolError(`"${row.label}" could not be changed. It may have just been published or removed.`);
+        return { saved: true, recipe: recipeDetail(saved, userId, selections.targetPreset) };
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Source waters: write
+  // -------------------------------------------------------------------------
+
+  server.registerTool(
+    "create_source_water",
+    {
+      title: "Create source water",
+      description:
+        `Save a new source water (the water the user starts from, such as their tap water) to their Cafelytic account. Ions are mg/L; ions left out are 0. The name must be new (max ${NAME_MAX} characters).`,
+      inputSchema: z.object({ name: z.string().min(1).max(NAME_MAX), ...ionShape }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ name, ...ions }) =>
+      run(async () => {
+        const label = cleanName(name);
+        const { alkalinity: _alkalinity, ...ionValues } = resolveIons(ions);
+        const [rows, selections] = await Promise.all([
+          supabase.from("source_profiles").select(SOURCE_COLUMNS).eq("user_id", userId),
+          loadSelections(),
+        ]);
+        const mine = check(rows) as SourceRow[];
+        const slug = pickProfileKey(label, {
+          kind: "source water",
+          reservedKeys: Object.keys(SOURCE_PRESETS),
+          existingKeys: mine.map((r) => r.slug),
+          existingLabels: [
+            ...mine.map((r) => r.label),
+            ...Object.values(SOURCE_PRESETS).map((p) => (p as { label: string }).label),
+          ],
+          retiredKeys: selections.deletedSources,
+        });
+        const saved = check(
+          await supabase.from("source_profiles").insert({
+            user_id: userId,
+            slug,
+            label,
+            ...buildSourceValues(ionValues),
+            updated_at: new Date().toISOString(),
+          }).select(SOURCE_COLUMNS).single(),
+        ) as SourceRow;
+        return {
+          saved: true,
+          source_water: sourceWaterView(
+            { id: saved.id, slug: saved.slug, label: saved.label, builtin: false, ...rowIons(saved) },
+            selections.sourcePreset,
+          ),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "update_source_water",
+    {
+      title: "Update source water",
+      description:
+        "Change the ions of one of the user's saved source waters, by id (from list_source_waters). Only the ions sent are changed. Built-in source waters cannot be changed here.",
+      inputSchema: z.object({ id: uuid.describe("Source water id from list_source_waters."), ...ionShape }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    ({ id, ...ions }) =>
+      run(async () => {
+        const row = check(
+          await supabase.from("source_profiles").select(SOURCE_COLUMNS).eq("id", id).eq(
+            "user_id",
+            userId,
+          ).maybeSingle(),
+        ) as SourceRow | null;
+        if (!row) throw new ToolError("No saved source water with that id belongs to this account.");
+        if (isBuiltinSourceKey(row.slug)) {
+          throw new ToolError(
+            `"${row.label}" is a built-in source water. Edit it in the Cafelytic app, or save a new one with create_source_water.`,
+          );
+        }
+        const selections = await loadSelections();
+        if (selections.deletedSources.includes(row.slug)) {
+          throw new ToolError(`"${row.label}" was deleted in the app.`);
+        }
+        // The base's alkalinity is unused for a source water (only bicarbonate
+        // is stored); an untouched bicarbonate keeps its stored value exactly.
+        const { alkalinity: _alkalinity, ...ionValues } = resolveIons(ions, {
+          ...rowIons(row),
+          alkalinity: 0,
+        });
+        const saved = check(
+          await supabase.from("source_profiles")
+            .update({ ...buildSourceValues(ionValues), updated_at: new Date().toISOString() })
+            .eq("id", id).eq("user_id", userId).select(SOURCE_COLUMNS).maybeSingle(),
+        ) as SourceRow | null;
+        if (!saved) throw new ToolError(`"${row.label}" could not be changed. It may have been removed.`);
+        return {
+          saved: true,
+          source_water: sourceWaterView(
+            { id: saved.id, slug: saved.slug, label: saved.label, builtin: false, ...rowIons(saved) },
+            selections.sourcePreset,
+          ),
+        };
+      }),
+  );
+
+  return server;
+}

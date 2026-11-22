@@ -129,6 +129,16 @@
       clearMessages();
     }
 
+    // Where a successful sign-in lands. Normally the calculator; the OAuth
+    // consent page (oauth/consent.html) can ask to be returned to instead
+    // (src/lib/post-login-redirect.ts validates and clears the request).
+    function afterSignInUrl() {
+      const next = typeof window.takePostLoginRedirect === 'function'
+        ? window.takePostLoginRedirect()
+        : null;
+      return next || 'index.html';
+    }
+
     function clearMessages() {
       errorEl.textContent = '';
       successEl.style.display = 'none';
@@ -165,7 +175,7 @@
         if (mode === 'signin') {
           const { error } = await window.signInWithEmail(email, password);
           if (error) { showError(error.message); return; }
-          window.location.href = 'index.html';
+          window.location.href = afterSignInUrl();
         } else if (mode === 'signup') {
           const { error } = await window.signUpWithEmail(email, password);
           if (error) { showError(error.message); return; }
@@ -218,7 +228,7 @@
 
     // Redirect if already logged in
     window.supabaseClient.auth.getSession().then(({ data }) => {
-      if (data.session) window.location.href = 'index.html';
+      if (data.session) window.location.href = afterSignInUrl();
     });
     });
   </script>

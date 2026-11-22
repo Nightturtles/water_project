@@ -178,6 +178,9 @@ declare global {
     // "save-recipe", "save-profile", "save-stock", "publish", "bookmark").
     openLoginModal?: (opts?: { reason?: string }) => void;
     closeLoginModal?: () => void;
+    // Set by src/lib/post-login-redirect.ts; read by login.html's inline script
+    // to return to the OAuth consent page after sign-in.
+    takePostLoginRedirect?: () => string | null;
     // Stock concentrate editor modal, exposed from src/components/stock-editor.ts.
     // Opened from the mineral selector ("+ Create Concentrate" / edit pencil) and
     // from library recipe cards (import an authored stock formula, or derive one
