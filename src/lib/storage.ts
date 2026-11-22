@@ -7,13 +7,27 @@
 import { KEYS, VOLUME_PREFIX } from "./storage-keys";
 import { reportError } from "./report";
 import {
+  alkalinitySources,
+  availableMineralIds,
+  calciumSources,
+  concentrateDropMl,
+  concentrateGramsPerMl,
+  concentrateMineralId,
+  diyGramsPerMl,
+  DROP_ML_DECIMALS,
+  lotusDropMl,
+  magnesiumSources,
+  normalizeDropMl,
+  singleCalciumSource,
+  singleMagnesiumSource,
+} from "./mineral-sources";
+import type { MineralKit } from "./mineral-sources";
+import {
   TARGET_PRESETS,
   BUILTIN_TARGET_KEYS,
   BUILTIN_TARGET_LABELS,
   RESERVED_TARGET_KEYS,
   SOURCE_PRESETS,
-  LOTUS_DROPPER_ML,
-  BRAND_CONCENTRATES,
   THEME_KEY,
 } from "./constants";
 
@@ -620,11 +634,7 @@ export function loadLotusDropperType(): "straight" | "round" {
 }
 
 export function getLotusDropMl(): number {
-  const selectedType = loadLotusDropperType();
-  const selectedMl = LOTUS_DROPPER_ML && Number(LOTUS_DROPPER_ML[selectedType]);
-  if (Number.isFinite(selectedMl) && selectedMl > 0) return selectedMl;
-  const fallbackMl = LOTUS_DROPPER_ML && Number(LOTUS_DROPPER_ML.round);
-  return Number.isFinite(fallbackMl) && fallbackMl > 0 ? fallbackMl : 0.0716;
+  return lotusDropMl(loadLotusDropperType());
 }
 
 export function normalizeLotusConcentrateUnit(unit: string | null | undefined): "ml" | "drops" {
@@ -750,6 +760,8 @@ export function getSourceWaterByPreset(presetName: string) {
 // everything else (incl. potassium bicarbonate) is opt-in under "More
 // minerals". Shared with sync.isDefaultData so the loader default and the
 // "untouched data" check never drift apart.
+// buildDosingKit (dosing.ts) applies the same starter kit on the MCP server
+// as STARTER_MINERALS; tests/dosing.test.ts keeps the two lists equal.
 export const DEFAULT_SELECTED_MINERALS = ["calcium-chloride", "epsom-salt", "baking-soda"];
 
 let selectedMineralsCache: string[] | null = null;
@@ -1062,40 +1074,17 @@ export function importLibraryStockToPantry(
  * DIY: mineral id; brand: mapped mineralId; else null.
  */
 export function getConcentrateMineralId(concentrateId: unknown): string | null {
-  if (typeof concentrateId !== "string") return null;
-  if (concentrateId.startsWith("diy:")) return parseDiyConcentrateId(concentrateId);
-  const brand = typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId];
-  return brand ? brand.mineralId : null;
+  return concentrateMineralId(concentrateId);
 }
 
 export function getDiyConcentrateGramsPerMl(mineralId: string | null | undefined): number {
   if (!mineralId) return 0;
-  const specs = loadDiyConcentrateSpecs();
-  const spec = specs && specs[mineralId] ? specs[mineralId] : null;
-  const bottleMl = spec ? Number(spec.bottleMl) : 0;
-  const gramsPerBottle = spec ? Number(spec.gramsPerBottle) : 0;
-  if (!Number.isFinite(bottleMl) || !Number.isFinite(gramsPerBottle)) return 0;
-  if (bottleMl <= 0 || gramsPerBottle <= 0) return 0;
-  return gramsPerBottle / bottleMl;
+  return diyGramsPerMl(loadDiyConcentrateSpecs()[mineralId]);
 }
 
-// Dropper sizes are entered to the 1,000th of a mL (e.g. 0.045).
-export const DROP_ML_DECIMALS = 3;
-
-/**
- * Normalize a user-entered mL-per-drop value: a positive finite number
- * rounded to DROP_ML_DECIMALS, or null when blank / zero / invalid (null
- * means "no dropper set", so the concentrate stays mL-only). Values that
- * round to 0 are treated as unset.
- */
-export function normalizeDropMl(value: unknown): number | null {
-  if (value === null || value === undefined || value === "") return null;
-  const n = typeof value === "number" ? value : parseFloat(String(value));
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const factor = Math.pow(10, DROP_ML_DECIMALS);
-  const rounded = Math.round(n * factor) / factor;
-  return rounded > 0 ? rounded : null;
-}
+// The dropper-size rules live in mineral-sources.ts (shared with the MCP
+// server); re-exported here for the pages that reach them through storage.
+export { DROP_ML_DECIMALS, normalizeDropMl };
 
 /**
  * mL per drop for a concentrate, or 0 when it isn't dosed in drops.
@@ -1104,19 +1093,11 @@ export function normalizeDropMl(value: unknown): number | null {
  * spec, if any.
  */
 export function getConcentrateDropMl(concentrateId: unknown): number {
-  if (typeof concentrateId !== "string") return 0;
-  if (concentrateId.startsWith("brand:lotus:")) return getLotusDropMl();
-  if (concentrateId.startsWith("diy:")) {
-    const mineralId = parseDiyConcentrateId(concentrateId);
-    if (!mineralId) return 0;
-    const spec = loadDiyConcentrateSpecs()[mineralId];
-    return (spec && normalizeDropMl(spec.dropMl)) || 0;
-  }
-  if (concentrateId.startsWith("stock:")) {
-    const spec = getStockSpec(concentrateId);
-    return (spec && normalizeDropMl(spec.dropMl)) || 0;
-  }
-  return 0;
+  return concentrateDropMl(concentrateId, {
+    lotusDropperType: loadLotusDropperType(),
+    diySpecs: loadDiyConcentrateSpecs(),
+    stockSpecs: loadStockConcentrateSpecs(),
+  });
 }
 
 /**
@@ -1124,103 +1105,56 @@ export function getConcentrateDropMl(concentrateId: unknown): number {
  * specs) and brand (from BRAND_CONCENTRATES).
  */
 export function getConcentrateGramsPerMl(concentrateId: unknown): number {
-  if (typeof concentrateId !== "string") return 0;
-  if (concentrateId.startsWith("diy:")) {
-    const mineralId = parseDiyConcentrateId(concentrateId);
-    return mineralId ? getDiyConcentrateGramsPerMl(mineralId) : 0;
-  }
-  const brand = typeof BRAND_CONCENTRATES !== "undefined" && BRAND_CONCENTRATES[concentrateId];
-  if (brand && Number.isFinite(brand.gramsPerMl)) return brand.gramsPerMl;
-  return 0;
+  return concentrateGramsPerMl(concentrateId, loadDiyConcentrateSpecs());
 }
 
-export function getAvailableMineralIds(): string[] {
-  const out = new Set(loadSelectedMinerals());
-  const concentrates = loadSelectedConcentrates();
-  for (const cid of concentrates) {
+/**
+ * The user's dosing kit as saved in this browser: selected powders, selected
+ * single-mineral concentrates, and selected Recipe Concentrates whose spec
+ * still exists. The rules for what a kit can dose from live in
+ * mineral-sources.ts (shared with the MCP server); the getters below apply
+ * them to this kit.
+ */
+export function loadMineralKit(): MineralKit {
+  const concentrates: MineralKit["concentrates"] = [];
+  const recipeConcentrates: MineralKit["recipeConcentrates"] = [];
+  for (const cid of loadSelectedConcentrates()) {
+    if (typeof cid !== "string") continue;
     const mineralId = getConcentrateMineralId(cid);
     if (mineralId) {
-      out.add(mineralId);
+      concentrates.push({ id: cid, mineralId, gramsPerMl: getConcentrateGramsPerMl(cid) });
       continue;
     }
     // Stock concentrates are multi-mineral, so getConcentrateMineralId returns
     // null. Enumerate every mineral inside the stock so downstream pickers
     // (calcium-source, alkalinity-source) see them all.
-    if (typeof cid === "string" && cid.startsWith("stock:")) {
+    if (cid.startsWith("stock:")) {
       const spec = getStockSpec(cid);
-      for (const mid of getStockMineralIds(spec)) out.add(mid);
+      if (spec) recipeConcentrates.push({ id: cid, mineralIds: getStockMineralIds(spec) });
     }
   }
-  return Array.from(out);
+  return { minerals: loadSelectedMinerals(), concentrates, recipeConcentrates };
+}
+
+export function getAvailableMineralIds(): string[] {
+  return availableMineralIds(loadMineralKit());
 }
 
 // --- Mineral source preferences ---
 
 /** Returns an array of enabled alkalinity source mineral ids (baking-soda and/or potassium-bicarbonate). */
 export function getEffectiveAlkalinitySources(): string[] {
-  const selected = getAvailableMineralIds();
-  const hasBakingSoda = selected.includes("baking-soda");
-  const hasPotBicarb = selected.includes("potassium-bicarbonate");
-  if (!hasBakingSoda && !hasPotBicarb) return [];
-  if (hasBakingSoda && hasPotBicarb) return ["baking-soda", "potassium-bicarbonate"];
-  if (hasBakingSoda) return ["baking-soda"];
-  return ["potassium-bicarbonate"];
-}
-
-/**
- * The two calcium-chloride forms (dihydrate `calcium-chloride` and anhydrous
- * `calcium-chloride-anhydrous`) are chemically interchangeable: same Ca:Cl
- * ratio, differing only in grams per dose. The derivation logic treats them as
- * a single calcium-source slot, so collapse them to one representative here.
- * When both are enabled the dihydrate wins, unless the anhydrous form comes
- * from a configured single-mineral concentrate and the dihydrate doesn't.
- */
-function getEffectiveCalciumChlorideForm(selected: string[]): string | null {
-  if (selected.includes("calcium-chloride") && selected.includes("calcium-chloride-anhydrous")) {
-    // Both forms available. A form backed by an enabled single-mineral
-    // concentrate (DIY / brand) wins over a powder of the other form, matching
-    // the calculator's "concentrate beats powder" conflict rule. Without this,
-    // an anhydrous CaCl2 concentrate next to the default dihydrate starter kit
-    // was never dosed at all (its row didn't render). Only a configured
-    // concentrate counts: one ticked before its bottle mL and grams are set
-    // can't dose anything, and letting it take the slot dropped the powder's
-    // calcium entirely.
-    const concentrateForms = new Set(
-      loadSelectedConcentrates()
-        .filter((cid) => getConcentrateGramsPerMl(cid) > 0)
-        .map(getConcentrateMineralId)
-        .filter((id): id is string => !!id),
-    );
-    if (
-      concentrateForms.has("calcium-chloride-anhydrous") &&
-      !concentrateForms.has("calcium-chloride")
-    ) {
-      return "calcium-chloride-anhydrous";
-    }
-    return "calcium-chloride";
-  }
-  if (selected.includes("calcium-chloride")) return "calcium-chloride";
-  if (selected.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
-  return null;
+  return alkalinitySources(loadMineralKit());
 }
 
 /** Returns an array of enabled calcium source mineral ids (a calcium-chloride form and/or gypsum). */
 export function getEffectiveCalciumSources(): string[] {
-  const selected = getAvailableMineralIds();
-  const out: string[] = [];
-  const cacl2 = getEffectiveCalciumChlorideForm(selected);
-  if (cacl2) out.push(cacl2);
-  if (selected.includes("gypsum")) out.push("gypsum");
-  return out;
+  return calciumSources(loadMineralKit());
 }
 
 /** Returns an array of enabled magnesium source mineral ids (epsom-salt and/or magnesium-chloride). */
 export function getEffectiveMagnesiumSources(): string[] {
-  const selected = getAvailableMineralIds();
-  const out: string[] = [];
-  if (selected.includes("epsom-salt")) out.push("epsom-salt");
-  if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
-  return out;
+  return magnesiumSources(loadMineralKit());
 }
 
 // --- Effective mineral sources ---
@@ -1234,19 +1168,12 @@ export function getEffectiveAlkalinitySource(): string | null {
 
 /** Returns a single calcium source when only one is enabled; when a calcium-chloride form and gypsum are both enabled returns the calcium-chloride form (tie-breaker); when none, null. */
 export function getEffectiveCalciumSource(): string | null {
-  const sources = getEffectiveCalciumSources();
-  if (sources.length === 0) return null;
-  if (sources.length === 1) return sources[0] ?? null;
-  // Two sources means one calcium-chloride form + gypsum; prefer the CaCl2 form.
-  return sources.find((s) => s !== "gypsum") ?? sources[0] ?? null;
+  return singleCalciumSource(getEffectiveCalciumSources());
 }
 
 /** Returns a single magnesium source when only one is enabled; when both enabled returns "epsom-salt" (tie-breaker); when none, null. */
 export function getEffectiveMagnesiumSource(): string | null {
-  const sources = getEffectiveMagnesiumSources();
-  if (sources.length === 0) return null;
-  if (sources.length === 1) return sources[0] ?? null;
-  return "epsom-salt";
+  return singleMagnesiumSource(getEffectiveMagnesiumSources());
 }
 
 // --- Target presets aggregation + cache ---

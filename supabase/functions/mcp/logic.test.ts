@@ -9,7 +9,11 @@ import {
   buildSourceValues,
   cleanDescription,
   cleanName,
+  doseLines,
+  type DosingKit,
+  type DosingResult,
   ionBalance,
+  kitFromSettings,
   type Ions,
   likeLiteral,
   mergeSourceWaters,
@@ -22,6 +26,7 @@ import {
   type TargetRow,
   ToolError,
 } from "./logic.ts";
+import { computeDoses } from "./app-core.gen.js";
 
 const ME = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const OTHER = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
@@ -390,4 +395,139 @@ Deno.test("mergeSourceWaters: built-ins, removed built-ins, overrides and saved 
   assert.equal(byKey.get("my-tap")?.kind, "saved");
   assert.equal(byKey.get("my-tap")?.editable, true);
   assert.equal(byKey.get("my-tap")?.active_in_app, true);
+});
+
+// ---------------------------------------------------------------------------
+// Doses (calculate_doses)
+// ---------------------------------------------------------------------------
+
+const TARGET = { ...ZERO, calcium: 20, magnesium: 10, sulfate: 22, chloride: 20, bicarbonate: 49, alkalinity: 40 };
+
+function doses(kit: DosingKit, volumeL = 1, sourceWater: Ions = ZERO): DosingResult {
+  return computeDoses({ sourceWater, target: TARGET, volumeL, kit, recipeSlug: null }) as DosingResult;
+}
+
+Deno.test("kitFromSettings: no settings row means the app's starter minerals", () => {
+  const kit = kitFromSettings(null);
+  assert.deepEqual(kit.minerals, ["calcium-chloride", "epsom-salt", "baking-soda"]);
+  assert.deepEqual(kit.concentrates, []);
+  assert.deepEqual(kit.recipeConcentrates, []);
+});
+
+Deno.test("kitFromSettings: reads the synced row the way the app reads its storage", () => {
+  const kit = kitFromSettings({
+    selected_minerals: ["baking-soda"],
+    selected_concentrates: ["diy:epsom-salt", "brand:lotus:calcium", "stock:house", "stock:gone", 7],
+    diy_concentrate_specs: { "epsom-salt": { bottleMl: 59, gramsPerBottle: 13.5, dropMl: 0.072 } },
+    stock_concentrate_specs: {
+      house: {
+        label: "House",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [{ mineralId: "calcium-chloride", grams: 1 }],
+      },
+    },
+    lotus_dropper_type: "straight",
+    lotus_concentrate_units: { "brand:lotus:calcium": "ml" },
+  });
+  assert.deepEqual(kit.minerals, ["baking-soda"]);
+  assert.deepEqual(kit.concentrates.map((c) => [c.id, c.mineralId, c.dropMl, c.unit]), [
+    ["diy:epsom-salt", "epsom-salt", 0.072, "drops"],
+    ["brand:lotus:calcium", "calcium-chloride", 0.0386, "ml"],
+  ]);
+  assert.ok(Math.abs(kit.concentrates[0].gramsPerMl - 13.5 / 59) < 1e-12);
+  // A selected Recipe Concentrate whose spec is gone is dropped, as in the app.
+  assert.deepEqual(kit.recipeConcentrates.map((rc) => [rc.id, rc.dropMl, rc.unit]), [
+    ["stock:house", 0, "ml"],
+  ]);
+});
+
+Deno.test("kitFromSettings: a minerals list replaces the whole kit with those powders", () => {
+  const kit = kitFromSettings(
+    { selected_minerals: ["baking-soda"], selected_concentrates: ["brand:lotus:calcium"] },
+    ["gypsum", "epsom-salt", "potassium-bicarbonate"],
+  );
+  assert.deepEqual(kit.minerals, ["gypsum", "epsom-salt", "potassium-bicarbonate"]);
+  assert.deepEqual(kit.concentrates, []);
+});
+
+Deno.test("doseLines: powders in grams as the app's rows show them, zero rows left out", () => {
+  const kit = kitFromSettings(null, [
+    "calcium-chloride",
+    "gypsum",
+    "epsom-salt",
+    "baking-soda",
+  ]);
+  const result = doses(kit, 2);
+  assert.equal(result.status, "ok");
+  const lines = doseLines(result, kit);
+  assert.deepEqual(lines.map((l) => l.unit), lines.map(() => "g"));
+  for (const line of lines) {
+    assert.equal(line.amount, result.shown.mineralGrams[line.id]);
+    assert.equal(line.amount, Number(line.amount.toFixed(2)), "two decimals, like the row");
+    assert.ok(line.amount > 0);
+  }
+  assert.equal(lines.find((l) => l.id === "baking-soda")?.name, "Baking Soda");
+});
+
+Deno.test("doseLines: a concentrate with a dropper is given in whole drops, with the mL", () => {
+  const kit = kitFromSettings({
+    selected_minerals: ["baking-soda"],
+    selected_concentrates: ["brand:lotus:calcium", "diy:epsom-salt"],
+    diy_concentrate_specs: { "epsom-salt": { bottleMl: 100, gramsPerBottle: 20 } },
+    lotus_dropper_type: "round",
+  });
+  const lines = doseLines(doses(kit), kit);
+  const calcium = lines.find((l) => l.id === "brand:lotus:calcium");
+  assert.equal(calcium?.type, "brand_concentrate");
+  assert.equal(calcium?.unit, "drops");
+  assert.equal(Number.isInteger(calcium?.amount), true);
+  assert.ok(Math.abs((calcium?.ml ?? 0) - (calcium?.amount ?? 0) * 0.0716) < 0.001);
+  // No dropper size saved: mL only.
+  const epsom = lines.find((l) => l.id === "diy:epsom-salt");
+  assert.equal(epsom?.type, "mineral_concentrate");
+  assert.equal(epsom?.unit, "mL");
+  assert.equal(epsom?.name, "Epsom Salt concentrate");
+  assert.equal(epsom?.ml, undefined);
+});
+
+Deno.test("doseLines: Recipe Concentrate mode lists the concentrate and its top-up powders", () => {
+  const kit = kitFromSettings({
+    selected_minerals: ["baking-soda"],
+    selected_concentrates: ["stock:house"],
+    stock_concentrate_specs: {
+      house: {
+        label: "House",
+        bottleMl: 200,
+        doseGramsPerL: 4,
+        minerals: [
+          { mineralId: "epsom-salt", grams: 5 },
+          { mineralId: "calcium-chloride", grams: 3.7 },
+        ],
+      },
+    },
+  });
+  const result = doses(kit);
+  assert.equal(result.mode, "recipe-concentrates");
+  const lines = doseLines(result, kit);
+  assert.equal(lines[0].type, "recipe_concentrate");
+  assert.equal(lines[0].name, "House");
+  assert.equal(lines[0].unit, "mL");
+  const topUp = lines.find((l) => l.id === "baking-soda");
+  assert.equal(topUp?.supplement, true, "alkalinity the concentrate lacks comes from the powder");
+});
+
+Deno.test("analyze: findings follow the salts the water was made with", () => {
+  // Sodium 35 mg/L in filter water: a warning on a bare profile, acceptable
+  // when baking soda supplies the alkalinity (the app's own band).
+  const water = { ...ZERO, calcium: 20, magnesium: 10, sodium: 35, sulfate: 40, chloride: 35, bicarbonate: 49 };
+  const sodium = (r: ReturnType<typeof analyze>) =>
+    JSON.stringify(r.findings.filter((f) => /sodium/i.test(f.message)));
+  const bare = analyze(water, "filter");
+  const withBakingSoda = analyze(water, "filter", null, {
+    alkalinitySources: ["baking-soda"],
+    calciumSource: "calcium-chloride",
+    magnesiumSource: "epsom-salt",
+  });
+  assert.notEqual(sodium(bare), sodium(withBakingSoda));
 });

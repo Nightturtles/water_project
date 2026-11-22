@@ -83,7 +83,7 @@ function recipes(): Recipe[] {
 }
 
 // What the calculator hands the solver: the recipe with bicarbonate derived
-// from its alkalinity (script.ts computeStockDosingPlan).
+// from its alkalinity (computeDoses in src/lib/dosing.ts).
 function solverTarget(r: Recipe): Record<string, unknown> {
   return {
     ...r,

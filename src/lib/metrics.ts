@@ -341,9 +341,13 @@ export function allocateCaMgDoses(
   targetProfile: Partial<TargetProfile> | Partial<Record<IonName, number>> | null | undefined,
   deltaCa: number,
   deltaMg: number,
+  // The salts to dose from. Left out, they are read from this browser's saved
+  // selection; computeDoses (dosing.ts) always passes them, so the same call
+  // works on the server, where there is no browser selection to read.
+  sources?: { calcium: string[]; magnesium: string[] },
 ): CaMgAllocation {
-  const caSources = getEffectiveCalciumSources();
-  const mgSources = getEffectiveMagnesiumSources();
+  const caSources = sources ? sources.calcium : getEffectiveCalciumSources();
+  const mgSources = sources ? sources.magnesium : getEffectiveMagnesiumSources();
   const caCl2Form = caSources.find((s) => s !== "gypsum") ?? null;
   const hasGypsum = caSources.includes("gypsum");
   const hasEpsom = mgSources.includes("epsom-salt");

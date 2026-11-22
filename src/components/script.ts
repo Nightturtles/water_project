@@ -19,25 +19,16 @@ import {
   NON_EDITABLE_TARGET_KEYS,
   LIBRARY_TAGS,
   ION_FIELDS,
-  HCO3_TO_CACO3,
-  ALK_TO_BAKING_SODA,
-  ALK_TO_POTASSIUM_BICARB,
 } from "../lib/constants";
-import type { IonMap } from "../lib/constants";
 import {
-  calculateIonPPMs,
   calculateMetrics,
-  displayedConcentrateMl,
   displayedDrops,
-  displayedGrams,
   calculateSo4ClRatio,
-  toStableBicarbonateFromAlkalinity,
-  allocateCaMgDoses,
   evaluateWaterProfileRanges,
-  splitAlkalinityDelta,
-  solveCalculatorDosing,
   buildStoredTargetProfile,
 } from "../lib/metrics";
+import { computeDoses } from "../lib/dosing";
+import type { DosingKit, DosingResult, DosingTarget } from "../lib/dosing";
 import { buildSlimRecipeCard } from "./recipe-card";
 import {
   bindEnterToClick,
@@ -46,20 +37,16 @@ import {
   findFallbackPreset,
   maybeOfferSharePrompt,
   onStorageKeysChanged,
-  readNonNegative,
   renderRangeGuidance,
   setDeltaText,
   showConfirm,
 } from "./ui-shared";
 import {
   clearTargetDraftIons,
-  computeStockMineralGramsPerL,
   deleteCustomTargetProfile,
   getActiveStockSpecs,
   getEffectiveAlkalinitySources,
-  getEffectiveCalciumSource,
   getEffectiveCalciumSources,
-  getEffectiveMagnesiumSource,
   getEffectiveMagnesiumSources,
   loadBrewMethod,
   getAllPresets,
@@ -731,7 +718,7 @@ function main(): void {
     };
   }
 
-  function getCurrentTargetProfileForCalculations(): Record<string, number> {
+  function getCurrentTargetProfileForCalculations(): DosingTarget {
     const ions = readCurrentTargetIons();
     return {
       calcium: ions.calcium!,
@@ -979,103 +966,43 @@ function main(): void {
     calculate();
   });
 
-  interface StockDosingPlan {
-    entries: ReturnType<typeof getActiveStockSpecs>;
-    solve: { concentrateGramsPerL: Record<string, number>; residualIons: Record<string, number> };
-    supplementGramsPerL: Record<string, number>;
-    enableSuggestions: Array<{ ion: string; mineralId: string }>;
-  }
+  type StockSupplements = Pick<DosingResult, "supplementGramsPerL" | "enableSuggestions">;
 
-  // Calculator dosing plan for the active Recipe Concentrates. Stage 1 solves
-  // each concentrate's best-fit dose against the target (snapped to prescribed
-  // when it matches); Stage 2 sizes individual-mineral supplements for the
-  // leftover residual and flags ions that need a mineral the user hasn't enabled
-  // individually. Returns null when no concentrate is active.
-  function computeStockDosingPlan(sourceWater: IonMap): StockDosingPlan | null {
+  // The user's dosing kit, as the result rows currently present it. A
+  // concentrate is shown in drops only when its row has the drops/mL select
+  // (built when the concentrate has a dropper size); otherwise it is in mL.
+  function gatherDosingKit(): DosingKit {
+    const displayOf = (concentrateId: string): { dropMl: number; unit: "ml" | "drops" } => {
+      const dropMl = getConcentrateDropMl(concentrateId);
+      const unitSelect = resultsContainer.querySelector<HTMLSelectElement>(
+        `[data-lotus-unit-for="${CSS.escape(concentrateId)}"]`,
+      );
+      if (unitSelect && dropMl > 0) {
+        return { dropMl, unit: normalizeLotusConcentrateUnit(unitSelect.value) };
+      }
+      return { dropMl: 0, unit: "ml" };
+    };
     const selectedConcentrates = loadValidSelectedConcentrates();
-    const entries = getActiveStockSpecs(selectedConcentrates);
-    if (entries.length === 0) return null;
-
-    const targetProfile = getCurrentTargetProfileForCalculations();
-    const targetAlkAsCaCO3 = readNonNegative(targetAlk);
-    // The solver matches on bicarbonate (ION_FIELDS), but the user edits the
-    // Alkalinity input and the hidden bicarbonate field isn't synced from it.
-    // Derive a consistent bicarbonate so a hand-typed custom Alkalinity isn't
-    // read as zero.
-    const solverTarget = Object.assign({}, targetProfile, {
-      bicarbonate: toStableBicarbonateFromAlkalinity(targetAlkAsCaCO3, targetProfile.bicarbonate),
-    });
-
-    // Stage 1: best-fit concentrate doses (snapped). No mineral variables — the
-    // concentrate is the primary, minerals only top up the residual in Stage 2.
-    const solve = solveCalculatorDosing(sourceWater, solverTarget, entries, [], {
-      recipeSlug: currentProfile,
-    });
-
-    // Stage 2: residual after the concentrate contribution, gap-filled with
-    // individually-enabled minerals.
-    const SUPP_THRESHOLD = 1; // mg/L; ignore sub-1 residual noise
-    const residualCa = Math.max(0, solve.residualIons.calcium || 0);
-    const residualMg = Math.max(0, solve.residualIons.magnesium || 0);
-    const residualAlkAsCaCO3 = Math.max(0, (solve.residualIons.bicarbonate || 0) * HCO3_TO_CACO3);
-
-    // "Enabled" must mean individually selected — getEffective*Sources() also
-    // reports minerals that live INSIDE an active concentrate.
-    const selectedMinerals = loadSelectedMinerals();
-    /** g/L per supplement mineral */
-    const supplementGramsPerL: Record<string, number> = {};
-    const enableSuggestions: Array<{ ion: string; mineralId: string }> = [];
-
-    if (residualCa > SUPP_THRESHOLD) {
-      const caId = ["calcium-chloride", "calcium-chloride-anhydrous", "gypsum"].find((id) =>
-        selectedMinerals.includes(id),
-      );
-      if (caId) {
-        const frac = MINERAL_DB[caId]?.ions?.calcium || 0;
-        if (frac > 0) supplementGramsPerL[caId] = residualCa / frac / 1000;
-      } else {
-        enableSuggestions.push({ ion: "calcium", mineralId: "calcium-chloride" });
-      }
-    }
-
-    if (residualMg > SUPP_THRESHOLD) {
-      const mgId = ["epsom-salt", "magnesium-chloride"].find((id) => selectedMinerals.includes(id));
-      if (mgId) {
-        const frac = MINERAL_DB[mgId]?.ions?.magnesium || 0;
-        if (frac > 0) supplementGramsPerL[mgId] = residualMg / frac / 1000;
-      } else {
-        enableSuggestions.push({ ion: "magnesium", mineralId: "epsom-salt" });
-      }
-    }
-
-    if (residualAlkAsCaCO3 > SUPP_THRESHOLD) {
-      const enabledAlk = ["baking-soda", "potassium-bicarbonate"].filter((id) =>
-        selectedMinerals.includes(id),
-      );
-      if (enabledAlk.length > 0) {
-        const alloc = splitAlkalinityDelta(
-          enabledAlk,
-          residualAlkAsCaCO3,
-          sourceWater,
-          solverTarget,
-        );
-        if ((alloc["baking-soda"] || 0) > 0) {
-          supplementGramsPerL["baking-soda"] = (alloc["baking-soda"]! * ALK_TO_BAKING_SODA) / 1000;
-        }
-        if ((alloc["potassium-bicarbonate"] || 0) > 0) {
-          supplementGramsPerL["potassium-bicarbonate"] =
-            (alloc["potassium-bicarbonate"]! * ALK_TO_POTASSIUM_BICARB) / 1000;
-        }
-      } else {
-        enableSuggestions.push({ ion: "bicarbonate", mineralId: "baking-soda" });
-      }
-    }
-
-    return { entries, solve, supplementGramsPerL, enableSuggestions };
+    return {
+      minerals: loadSelectedMinerals(),
+      concentrates: selectedConcentrates
+        .filter((cid) => !cid.startsWith("stock:"))
+        .map((cid) => ({
+          id: cid,
+          mineralId: getConcentrateMineralId(cid),
+          gramsPerMl: getConcentrateGramsPerMl(cid),
+          ...displayOf(cid),
+        })),
+      recipeConcentrates: getActiveStockSpecs(selectedConcentrates).map((entry) => ({
+        id: entry.id,
+        spec: entry.spec,
+        ...displayOf(entry.id),
+      })),
+    };
   }
 
   // Populate the #stock-supplements container with the gap-fill section.
-  function renderStockSupplements(plan: StockDosingPlan | null, volumeL: number): void {
+  function renderStockSupplements(plan: StockSupplements | null, volumeL: number): void {
     const container = document.getElementById("stock-supplements");
     if (!container) return;
     container.innerHTML = "";
@@ -1160,6 +1087,8 @@ function main(): void {
   }
 
   // --- Core calculation ---
+  // The dose math lives in src/lib/dosing.ts (computeDoses), shared with the
+  // MCP server. This function gathers the page's inputs, calls it, and renders.
   function calculate(): void {
     const warningsEl = document.getElementById("result-warnings");
 
@@ -1169,378 +1098,64 @@ function main(): void {
       volumeL *= GALLONS_TO_LITERS;
     }
 
-    const selectedConcentratesEarly = loadValidSelectedConcentrates();
-    const activeStockEntriesEarly = getActiveStockSpecs(selectedConcentratesEarly);
+    // Read source water from shared module
+    const sourceWater = sourceSection.getSourceWater();
+    const doses = computeDoses({
+      sourceWater,
+      target: getCurrentTargetProfileForCalculations(),
+      volumeL,
+      kit: gatherDosingKit(),
+      recipeSlug: currentProfile,
+    });
 
-    // Guard against divide-by-zero / nonsense volume
-    if (!volumeL || volumeL <= 0) {
-      const alkSources = getEffectiveAlkalinitySources();
-      const mgSourceIds = getEffectiveMagnesiumSources();
-      const caSourceIds = getEffectiveCalciumSources();
+    if (doses.status === "no-volume") {
       if (warningsEl) warningsEl.textContent = "";
       lastCalculatedIons = null;
-      const zeroValues: Record<string, number> = {};
-      alkSources.forEach((id) => {
-        zeroValues[id] = 0;
-      });
-      mgSourceIds.forEach((id) => {
-        zeroValues[id] = 0;
-      });
-      caSourceIds.forEach((id) => {
-        zeroValues[id] = 0;
-      });
-      updateResultValues(zeroValues);
-      if (activeStockEntriesEarly.length > 0) {
-        const zeroStockValues: Record<string, number> = {};
-        for (const { id } of activeStockEntriesEarly) zeroStockValues[id] = 0;
-        updateStockValues(zeroStockValues);
+      updateResultValues(doses.mineralGrams);
+      if (doses.mode === "recipe-concentrates") {
+        updateStockValues(doses.recipeConcentrateMl);
         renderStockSupplements(null, 0);
       }
       updateSummaryMetrics({});
       return;
     }
 
-    const alkalinitySources = getEffectiveAlkalinitySources();
-    if (alkalinitySources.length === 0) {
+    if (doses.status === "no-alkalinity-source") {
       if (warningsEl) warningsEl.textContent = "";
       lastCalculatedIons = null;
       updateSummaryMetrics({});
       return;
     }
 
-    // Read source water from shared module
-    const sourceWater = sourceSection.getSourceWater();
-
-    // Convert source bicarbonate to alkalinity as CaCO3
-    const sourceAlkAsCaCO3 = (sourceWater.bicarbonate || 0) * HCO3_TO_CACO3;
-
-    // Targets (UI)
-    const targetCaMgL = readNonNegative(targetCa);
-    const targetMgMgL = readNonNegative(targetMg);
-    const targetAlkAsCaCO3 = readNonNegative(targetAlk);
-
-    // Mineral deltas (target - source), floored at 0
-    const rawDeltaCa = targetCaMgL - (sourceWater.calcium || 0);
-    const rawDeltaMg = targetMgMgL - (sourceWater.magnesium || 0);
-    const rawDeltaAlk = targetAlkAsCaCO3 - sourceAlkAsCaCO3;
-
-    // Active Recipe Concentrates: bypass the per-mineral picker entirely. Each
-    // concentrate dispenses a fixed-ratio mix at its prescribed dose; we
-    // forward-compute the summed ion contribution and let the user compare to
-    // target visually.
-    if (activeStockEntriesEarly.length > 0) {
-      // Stage 1 + 2: solve each concentrate's best-fit dose against the target,
-      // then size individual-mineral supplements for the residual.
-      const plan = computeStockDosingPlan(sourceWater);
-      const concentrateGramsPerL = plan ? plan.solve.concentrateGramsPerL : {};
-      const residualIons: Record<string, number> = plan ? plan.solve.residualIons : {};
-
-      // Stock row values: each concentrate's solved/snapped dose × volume. Also
-      // accumulate the per-mineral g/L the concentrates deliver AT THAT dose.
-      const stockTotalsByStockId: Record<string, number> = {};
-      for (const { id } of activeStockEntriesEarly) {
-        stockTotalsByStockId[id] = (concentrateGramsPerL[id] || 0) * volumeL;
-      }
-      // The readout below describes the water the DISPLAYED doses make (whole
-      // drops, rounded mL / grams), not the exact solve: see displayedGrams.
-      const shownStockMl = updateStockValues(stockTotalsByStockId);
-      const combinedStockMineralGramsPerL: Record<string, number> = {};
-      for (const { id, spec } of activeStockEntriesEarly) {
-        const gPerL = (shownStockMl[id] || 0) / volumeL;
-        const dosePerL = Number(spec.doseGramsPerL) || 0;
-        if (dosePerL > 0 && gPerL > 0) {
-          const perLAtPrescribed = computeStockMineralGramsPerL(spec);
-          const scale = gPerL / dosePerL;
-          for (const mid of Object.keys(perLAtPrescribed)) {
-            combinedStockMineralGramsPerL[mid] =
-              (combinedStockMineralGramsPerL[mid] || 0) + perLAtPrescribed[mid]! * scale;
-          }
-        }
-      }
-
-      // Gap-fill section. Fold supplement minerals into the final ion profile too.
-      renderStockSupplements(plan, volumeL);
-      if (plan) {
-        for (const [mid, gPerL] of Object.entries(plan.supplementGramsPerL)) {
-          if (gPerL > 0)
-            combinedStockMineralGramsPerL[mid] =
-              (combinedStockMineralGramsPerL[mid] || 0) + displayedGrams(gPerL * volumeL) / volumeL;
-        }
-      }
-
-      // Overshoot warnings: a negative residual means source + concentrate
-      // already exceed the target for that ion. These stay on the exact solve
-      // on purpose: they explain a limit of the concentrate against the target,
-      // and must not appear or vanish because a dose rounded to a whole drop.
-      const OVERSHOOT_TOL = 1; // mg/L
-      const stockWarnings: string[] = [];
-      if ((residualIons.calcium || 0) < -OVERSHOOT_TOL) {
-        const achieved = Math.round(targetCaMgL - (residualIons.calcium || 0));
-        stockWarnings.push(
-          `Source water + Recipe Concentrate already exceed the target for Calcium (${achieved} vs ${targetCaMgL} mg/L).`,
-        );
-      }
-      if ((residualIons.magnesium || 0) < -OVERSHOOT_TOL) {
-        const achieved = Math.round(targetMgMgL - (residualIons.magnesium || 0));
-        stockWarnings.push(
-          `Source water + Recipe Concentrate already exceed the target for Magnesium (${achieved} vs ${targetMgMgL} mg/L).`,
-        );
-      }
-      const alkResidAsCaCO3 = (residualIons.bicarbonate || 0) * HCO3_TO_CACO3;
-      if (alkResidAsCaCO3 < -OVERSHOOT_TOL) {
-        const achieved = Math.round(targetAlkAsCaCO3 - alkResidAsCaCO3);
-        stockWarnings.push(
-          `Source water + Recipe Concentrate already exceed the target for Alkalinity (${achieved} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`,
-        );
-      }
-      if (warningsEl) warningsEl.textContent = stockWarnings.join("\n");
-
-      const stockAddedIons = calculateIonPPMs(combinedStockMineralGramsPerL);
-      const stockFinalIons: Record<string, number> = {};
-      ION_FIELDS.forEach((ion) => {
-        stockFinalIons[ion] = (sourceWater[ion] || 0) + (stockAddedIons[ion] || 0);
-      });
-      lastCalculatedIons = stockFinalIons;
-
-      const stockMetrics = calculateMetrics(stockFinalIons);
-      const stockBaselineMetrics = calculateMetrics(sourceWater || {});
-      const stockFinalSO4 = stockFinalIons.sulfate || 0;
-      const stockFinalCl = stockFinalIons.chloride || 0;
-      const stockSo4ToCl = stockFinalCl > 0 ? stockFinalSO4 / stockFinalCl : null;
-      const stockBaselineRatio = calculateSo4ClRatio(sourceWater || {});
-      updateSummaryMetrics({
-        gh: stockMetrics.gh,
-        kh: stockMetrics.kh,
-        tds: stockMetrics.tds,
-        ions: stockFinalIons,
-        baselineIons: sourceWater || {},
-        baselineMetrics: stockBaselineMetrics,
-        so4ToCl: stockSo4ToCl,
-        baselineRatio: stockBaselineRatio,
-        advancedMode: isAdvancedMineralDisplayMode(),
-        alkalinitySources: getEffectiveAlkalinitySources(),
-        calciumSource: getEffectiveCalciumSource(),
-        magnesiumSource: getEffectiveMagnesiumSource(),
-        brewMethod: activeBrewMethod,
-      });
-      return;
+    if (doses.mode === "recipe-concentrates") {
+      updateStockValues(doses.recipeConcentrateMl);
+      renderStockSupplements(doses, volumeL);
+    } else {
+      updateResultValues(doses.mineralGrams);
+      updateConcentrateValues(doses.concentrateMl);
     }
+    if (warningsEl) warningsEl.textContent = doses.warnings.join("\n");
 
-    const deltaCa = Math.max(0, rawDeltaCa);
-    const deltaMg = Math.max(0, rawDeltaMg);
-    const deltaAlkAsCaCO3 = Math.max(0, rawDeltaAlk);
-
-    const targetProfile = getCurrentTargetProfileForCalculations();
-    // May split a slot's delta across both of its enabled salts (e.g. epsom +
-    // MgCl2) to match the target's SO4/Cl; caSource/mgSource carry the
-    // dominant salt for warnings and range bands.
-    const allocation = allocateCaMgDoses(sourceWater, targetProfile, deltaCa, deltaMg);
-    const caSource = allocation.caSource;
-    const mgSource = allocation.mgSource;
-
-    // Warn when source exceeds target or when we need a source but none is enabled
-    const hasMgSource = getEffectiveMagnesiumSources().length > 0;
-    const hasCaSource = getEffectiveCalciumSources().length > 0;
-    const warnings: string[] = [];
-    const selectedMinerals = loadSelectedMinerals();
-    const selectedConcentrates = selectedConcentratesEarly;
-    const conflictMineralIds = new Set<string>();
-    // The two calcium-chloride forms fill one calcium slot, so a dihydrate
-    // powder plus an anhydrous concentrate (or vice versa) is the same
-    // "both versions" conflict; the concentrate's form wins
-    // (getEffectiveCalciumSources).
-    const CACL2_FORMS = ["calcium-chloride", "calcium-chloride-anhydrous"];
-    selectedConcentrates.forEach((cid) => {
-      const mineralId = getConcentrateMineralId(cid);
-      if (!mineralId) return;
-      const sameSlot = CACL2_FORMS.includes(mineralId)
-        ? CACL2_FORMS.some((form) => selectedMinerals.includes(form))
-        : selectedMinerals.includes(mineralId);
-      if (sameSlot) conflictMineralIds.add(mineralId);
-    });
-    if (conflictMineralIds.size > 0) {
-      warnings.push(
-        "You’ve selected both the normal and concentrate version of a mineral. We will default to using the concentrate.",
-      );
-    }
-    if (rawDeltaCa < 0)
-      warnings.push(
-        `Your source water already exceeds the target for Calcium (${sourceWater.calcium || 0} vs ${targetCaMgL} mg/L).`,
-      );
-    if (rawDeltaMg < 0)
-      warnings.push(
-        `Your source water already exceeds the target for Magnesium (${sourceWater.magnesium || 0} vs ${targetMgMgL} mg/L).`,
-      );
-    if (rawDeltaAlk < 0)
-      warnings.push(
-        `Your source water already exceeds the target for Alkalinity (${Math.round(sourceAlkAsCaCO3)} vs ${targetAlkAsCaCO3} mg/L as CaCO₃).`,
-      );
-    if (!hasMgSource && deltaMg > 0)
-      warnings.push("You need an enabled magnesium source (Epsom Salt or Magnesium Chloride).");
-    if (!hasCaSource && deltaCa > 0)
-      warnings.push("You need an enabled calcium source (Calcium Chloride or Gypsum).");
-
-    // Salt doses (g/L) from the allocator; a blended slot yields two entries.
-    const caMgGramsPerL = allocation.gramsPerL;
-
-    // Alkalinity: one source or split between baking soda and potassium bicarbonate
-    const alkAllocation = splitAlkalinityDelta(
-      alkalinitySources,
-      deltaAlkAsCaCO3,
-      sourceWater,
-      targetProfile,
-    );
-    const bufferGramsPerL: Record<string, number> = {};
-    if (alkAllocation["baking-soda"] != null && alkAllocation["baking-soda"] > 0) {
-      bufferGramsPerL["baking-soda"] = (alkAllocation["baking-soda"] * ALK_TO_BAKING_SODA) / 1000;
-    }
-    if (
-      alkAllocation["potassium-bicarbonate"] != null &&
-      alkAllocation["potassium-bicarbonate"] > 0
-    ) {
-      bufferGramsPerL["potassium-bicarbonate"] =
-        (alkAllocation["potassium-bicarbonate"] * ALK_TO_POTASSIUM_BICARB) / 1000;
-    }
-
-    // Warn when both alkalinity sources are enabled but the split is entirely one-sided
-    if (alkalinitySources.length === 2 && deltaAlkAsCaCO3 > 0) {
-      const usedSources = Object.keys(alkAllocation).filter(function (k) {
-        return alkAllocation[k]! > 0;
-      });
-      if (usedSources.length === 1) {
-        const usedName = usedSources[0] === "baking-soda" ? "Baking Soda" : "Potassium Bicarbonate";
-        // Say why the split is one-sided: the unused buffer's ion is either
-        // already met by the source water, absent from the target, or neither
-        // ion is targeted at all.
-        const targetNa = Number(targetProfile && targetProfile.sodium) || 0;
-        const targetK = Number(targetProfile && targetProfile.potassium) || 0;
-        const usedSodium = usedSources[0] === "baking-soda";
-        const unusedIon = usedSodium ? "potassium" : "sodium";
-        const unusedTarget = usedSodium ? targetK : targetNa;
-        const usedTarget = usedSodium ? targetNa : targetK;
-        const reason =
-          unusedTarget > 0
-            ? "your source water already meets the " + unusedIon + " target"
-            : usedTarget > 0
-              ? "the target profile only calls for " + (usedSodium ? "sodium" : "potassium")
-              : "the target profile has no Na/K targets to guide the split";
-        warnings.push(
-          "Both alkalinity sources are enabled, but " + reason + ": using only " + usedName + ".",
-        );
-      }
-    }
-
-    // Total grams for the full volume; show 0 for undosed Ca/Mg sources so UI indicates which were used
-    const bufferTotals: Record<string, number> = {};
-    for (const [id, gPerL] of Object.entries(bufferGramsPerL)) {
-      bufferTotals[id] = gPerL * volumeL;
-    }
-    const resultValues: Record<string, number> = { ...bufferTotals };
-    for (const [id, gPerL] of Object.entries(caMgGramsPerL)) {
-      resultValues[id] = gPerL * volumeL;
-    }
-    const mgSourceIds = getEffectiveMagnesiumSources();
-    const caSourceIds = getEffectiveCalciumSources();
-    mgSourceIds.forEach((id) => {
-      if (resultValues[id] == null) resultValues[id] = 0;
-    });
-    caSourceIds.forEach((id) => {
-      if (resultValues[id] == null) resultValues[id] = 0;
-    });
-
-    const displayMineralGrams: Record<string, number> = { ...resultValues };
-    conflictMineralIds.forEach((mineralId) => {
-      displayMineralGrams[mineralId] = 0;
-    });
-    const shownMineralGrams = updateResultValues(displayMineralGrams);
-
-    const concentrateValues: Record<string, number> = {};
-    // Each salt's dose is delivered once. When two enabled concentrates map to
-    // the same salt (e.g. Lotus Calcium + a DIY calcium-chloride concentrate),
-    // the first usable one carries the whole dose and the rest show 0; giving
-    // every one of them the full dose doubled the salt for anyone following
-    // the rows (the ion summary below only ever counted it once).
-    const dosedByConcentrate: Record<string, string> = {};
-    const sharedSaltNames = new Set<string>();
-    selectedConcentrates.forEach((cid) => {
-      const mineralId = getConcentrateMineralId(cid);
-      if (!mineralId) return;
-      const grams = resultValues[mineralId] != null ? Number(resultValues[mineralId]) : 0;
-      const gramsPerMl = getConcentrateGramsPerMl(cid);
-      if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
-        concentrateValues[cid] = 0;
-        if (grams > 0 && !dosedByConcentrate[mineralId])
-          warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
-        return;
-      }
-      if (dosedByConcentrate[mineralId]) {
-        concentrateValues[cid] = 0;
-        if (grams > 0) sharedSaltNames.add(MINERAL_DB[mineralId]?.name || mineralId);
-        return;
-      }
-      dosedByConcentrate[mineralId] = cid;
-      concentrateValues[cid] = Math.max(0, grams / gramsPerMl);
-    });
-    sharedSaltNames.forEach((name) => {
-      warnings.push(
-        "More than one enabled concentrate supplies " +
-          name +
-          ". Only the first one is dosed; use just that one.",
-      );
-    });
-    const shownConcentrateMl = updateConcentrateValues(concentrateValues);
-    if (warningsEl) warningsEl.textContent = warnings.join("\n");
-
-    // Compute resulting ions (mg/L) from the doses the rows DISPLAY (whole
-    // drops, rounded mL / grams), not the exact solve, so the readout is the
-    // water the user actually mixes: the same drop count in more water reads
-    // more dilute. Range bands follow it too, since they judge that water.
-    const mineralGramsPerL: Record<string, number> = {};
-    for (const [id, grams] of Object.entries(shownMineralGrams)) {
-      if (grams > 0) mineralGramsPerL[id] = grams / volumeL;
-    }
-    for (const [cid, ml] of Object.entries(shownConcentrateMl)) {
-      const mineralId = getConcentrateMineralId(cid);
-      const gramsPerMl = getConcentrateGramsPerMl(cid);
-      if (!mineralId || !(ml > 0) || !(gramsPerMl > 0)) continue;
-      mineralGramsPerL[mineralId] =
-        (mineralGramsPerL[mineralId] || 0) + (ml * gramsPerMl) / volumeL;
-    }
-    const addedIons = calculateIonPPMs(mineralGramsPerL);
-    const finalIons: Record<string, number> = {};
-    ION_FIELDS.forEach((ion) => {
-      finalIons[ion] = (sourceWater[ion] || 0) + (addedIons[ion] || 0);
-    });
+    // The readout describes the water the DISPLAYED doses make (whole drops,
+    // rounded mL / grams), not the exact solve; range bands follow it too.
+    const finalIons: Record<string, number> = doses.finalIons || {};
     lastCalculatedIons = finalIons;
+    const metrics = calculateMetrics(finalIons);
     const finalSO4 = finalIons.sulfate || 0;
     const finalCl = finalIons.chloride || 0;
-
-    // GH / KH / TDS
-    const metrics = calculateMetrics(finalIons);
-    const GH_asCaCO3 = metrics.gh;
-    const KH_asCaCO3 = metrics.kh;
-    const TDS_ion_sum = metrics.tds;
-    const advancedMode = isAdvancedMineralDisplayMode();
-    const baselineMetrics = calculateMetrics(sourceWater || {});
-
-    // Sulfate:Chloride ratio
-    const so4ToCl = finalCl > 0 ? finalSO4 / finalCl : null;
-    const baselineRatio = calculateSo4ClRatio(sourceWater || {});
-
-    const alkalinitySourcesForRange = getEffectiveAlkalinitySources();
     updateSummaryMetrics({
-      gh: GH_asCaCO3,
-      kh: KH_asCaCO3,
-      tds: TDS_ion_sum,
+      gh: metrics.gh,
+      kh: metrics.kh,
+      tds: metrics.tds,
       ions: finalIons,
       baselineIons: sourceWater || {},
-      baselineMetrics,
-      so4ToCl,
-      baselineRatio,
-      advancedMode,
-      alkalinitySources: alkalinitySourcesForRange,
-      calciumSource: caSource,
-      magnesiumSource: mgSource,
+      baselineMetrics: calculateMetrics(sourceWater || {}),
+      so4ToCl: finalCl > 0 ? finalSO4 / finalCl : null,
+      baselineRatio: calculateSo4ClRatio(sourceWater || {}),
+      advancedMode: isAdvancedMineralDisplayMode(),
+      alkalinitySources: doses.rangeSources.alkalinitySources,
+      calciumSource: doses.rangeSources.calciumSource,
+      magnesiumSource: doses.rangeSources.magnesiumSource,
       brewMethod: activeBrewMethod,
     });
   }
@@ -1729,18 +1344,14 @@ function main(): void {
     item: Element,
     concentrateId: string,
     ml: number,
-  ): { text: string; unit: string | null; shownMl: number } {
+  ): { text: string; unit: string | null } {
     const unitSelect = item.querySelector<HTMLSelectElement>("[data-lotus-unit-for]");
     const dropMl = getConcentrateDropMl(concentrateId);
     if (unitSelect && dropMl > 0) {
       const unit = normalizeLotusConcentrateUnit(unitSelect.value);
-      return {
-        text: formatDropsOrMl(ml, unit, dropMl),
-        unit,
-        shownMl: displayedConcentrateMl(ml, unit, dropMl),
-      };
+      return { text: formatDropsOrMl(ml, unit, dropMl), unit };
     }
-    return { text: formatMl(ml), unit: null, shownMl: displayedConcentrateMl(ml, "ml", 0) };
+    return { text: formatMl(ml), unit: null };
   }
 
   function formatDropsOrMl(ml: number, unit: string, dropMl: number): string {
@@ -1751,15 +1362,12 @@ function main(): void {
     return String(displayedDrops(ml, dropMl));
   }
 
-  // Each row updater returns the amount its row now displays (keyed like its
-  // input, rows that are not on the page omitted) so calculate() can build the
-  // readout from the displayed doses.
-  function updateResultValues(valuesByMineral: Record<string, number>): Record<string, number> {
-    const shown: Record<string, number> = {};
+  // Row updaters only write text. What each row displays (and so the readout)
+  // is worked out by computeDoses, with the same rounding helpers.
+  function updateResultValues(valuesByMineral: Record<string, number>): void {
     for (const [mineralId, grams] of Object.entries(valuesByMineral)) {
       const item = resultsContainer.querySelector(`[data-mineral="${CSS.escape(mineralId)}"]`);
       if (item) {
-        shown[mineralId] = displayedGrams(grams);
         const valEl = item.querySelector(".result-value");
         if (valEl) valEl.textContent = formatGrams(grams);
         const nameEl = item.querySelector(".result-name");
@@ -1774,21 +1382,18 @@ function main(): void {
         }
       }
     }
-    return shown;
   }
 
   // Recipe Concentrate rows are keyed by data-stock (not data-concentrate), so
   // they get their own updater. Amounts are mL of concentrate (the dose math
   // treats 1 g of this dilute concentrate as 1 mL), shown in drops when the
   // concentrate has a dropper size.
-  function updateStockValues(valuesByStock: Record<string, number>): Record<string, number> {
-    const shown: Record<string, number> = {};
+  function updateStockValues(valuesByStock: Record<string, number>): void {
     for (const [stockId, ml] of Object.entries(valuesByStock)) {
       const item = resultsContainer.querySelector(`[data-stock="${CSS.escape(stockId)}"]`);
       if (!item) continue;
       const valEl = item.querySelector(".result-value");
       const display = concentrateDisplayValue(item, stockId, ml);
-      shown[stockId] = display.shownMl;
       if (valEl) valEl.textContent = display.text;
       if (ml > 0) {
         const nameEl = item.querySelector(".result-name");
@@ -1801,7 +1406,6 @@ function main(): void {
         item.removeAttribute("aria-label");
       }
     }
-    return shown;
   }
 
   // Compact "5g MgSO4·7H2O · 2g MgCl2·6H2O · ..." string for the calculator's
@@ -1815,10 +1419,7 @@ function main(): void {
   // helpers; classic-script load order makes it a global by the time this file
   // runs.
 
-  function updateConcentrateValues(
-    valuesByConcentrate: Record<string, number>,
-  ): Record<string, number> {
-    const shown: Record<string, number> = {};
+  function updateConcentrateValues(valuesByConcentrate: Record<string, number>): void {
     for (const [concentrateId, ml] of Object.entries(valuesByConcentrate)) {
       const item = resultsContainer.querySelector(
         `[data-concentrate="${CSS.escape(concentrateId)}"]`,
@@ -1826,7 +1427,6 @@ function main(): void {
       if (!item) continue;
       const valEl = item.querySelector(".result-value");
       const display = concentrateDisplayValue(item, concentrateId, ml);
-      shown[concentrateId] = display.shownMl;
       const displayValue = display.text;
       if (valEl) valEl.textContent = displayValue;
       if (ml > 0) {
@@ -1838,7 +1438,6 @@ function main(): void {
         item.removeAttribute("aria-label");
       }
     }
-    return shown;
   }
 
   // --- Initialize ---
