@@ -346,24 +346,25 @@ export const SOURCE_PRESETS: Record<string, { label: string; [key: string]: unkn
 // Slugs, ion values, labels, AND brew methods here MUST stay byte-identical to
 // the corresponding Supabase rows (migrations 002/006/007/010 seed/refresh them;
 // 20260606060755 recategorizes eaf-rpavlis to espresso and renames the "and"
-// recipes to "&") so the shim and the loaded library don't disagree. If you
+// recipes to "&"; 20261122191254 moves cafelytic-filter to the 2.0 values and
+// keeps the old ones as the non-starter cafelytic-filter-sulfate-free) so the
+// shim and the loaded library don't disagree. If you
 // change a value or the key order here, update the migration too.
 export const TARGET_PRESETS: Record<string, TargetProfile> = {
   "cafelytic-filter": {
     label: "Cafelytic Filter",
     brewMethod: "filter",
     calcium: 4,
-    magnesium: 10,
+    magnesium: 11,
     alkalinity: 11,
-    potassium: 8.65,
+    potassium: 9,
     sodium: 0,
-    sulfate: 0,
-    chloride: 34.05,
-    bicarbonate: 13.18,
+    sulfate: 16,
+    chloride: 26,
+    bicarbonate: 13,
     description:
-      "Cafelytic in-house light-roast filter recipe. Direct dosing per 1.85L: " +
-      "0.024g CaCl₂·2H₂O + 0.148g MgCl₂·6H₂O + 0.040g KHCO₃. " +
-      "Mg-dominant, Cl-heavy, sodium-free, sulfate-free.",
+      "Cafelytic in-house light-roast filter recipe. " +
+      "Mg-dominant with a chloride and sulfate blend, sodium-free, K-buffered.",
   },
   sca: {
     label: "SCA Standard",
