@@ -40,6 +40,8 @@ import "./sentry-init";
 import "./analytics-init";
 import "./html";
 import "./supabase-client";
+// Publishes window.takePostLoginRedirect for login.html's inline script.
+import "./post-login-redirect";
 import "./capacitor-bootstrap";
 import * as storage from "./storage";
 import * as sync from "./sync";

@@ -122,6 +122,11 @@ jobs:
         working-directory: supabase/functions
       - run: deno check submit-support/index.ts
         working-directory: supabase/functions
+      # The MCP server resolves its npm imports through its own import map
+      # (mcp/deno.json), so it is checked with that config. Its pure helpers
+      # (mcp/logic.test.ts) run in the `deno test` step below.
+      - run: deno check --config mcp/deno.json mcp/index.ts
+        working-directory: supabase/functions
       # --no-check: the handler is type-checked by the `deno check` step above;
       # the test file imports `node:assert`, whose type-check pulls @types/node,
       # which isn't present in this node_modules-free job. Tests still run

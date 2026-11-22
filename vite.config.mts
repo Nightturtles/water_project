@@ -42,6 +42,11 @@ const htmlEntries = [
   // Play needs to be clean and stable, since it ends up on the store
   // listings indefinitely.
   "privacy/index.html",
+  // OAuth consent page for AI apps connecting through the MCP server. A flat
+  // file (not oauth/consent/index.html) so GitHub Pages serves it at
+  // cafelytic.com/oauth/consent with no trailing-slash redirect: Supabase
+  // Auth sends users to exactly Site URL + /oauth/consent?authorization_id=...
+  "oauth/consent.html",
 ] as const;
 
 export default defineConfig({

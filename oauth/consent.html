@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <!-- @partial:head-top -->
+  <title>Connect an app - Cafelytic</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/svg+xml" href="../favicon.svg">
+  <link rel="stylesheet" href="../style.css">
+  <script src="../theme-init.js"></script>
+</head>
+<!-- OAuth consent page. Supabase Auth sends a user here (Site URL +
+     /oauth/consent?authorization_id=...) when an AI app asks to connect to
+     their account through the MCP server (supabase/functions/mcp). Served at
+     cafelytic.com/oauth/consent: GitHub Pages serves consent.html at the
+     extensionless path. Controller: src/components/oauth-consent.ts. -->
+<body class="login-page consent-page">
+  <header>
+    <h1><span class="brand-cafe">cafe</span><span class="brand-lytic">lytic</span> Coffee Water Calculator</h1>
+  </header>
+
+  <main>
+    <div class="login-card consent-card">
+      <div id="consent-loading">
+        <p class="consent-muted">Loading...</p>
+      </div>
+
+      <div id="consent-request" hidden>
+        <h2 class="consent-heading">Connect <span id="consent-app-name"></span> to Cafelytic?</h2>
+        <p class="consent-muted">Signed in as <strong id="consent-account"></strong></p>
+
+        <p class="consent-list-title">This app will be able to:</p>
+        <ul class="consent-list consent-list-can">
+          <li>See your recipes, source waters, minerals and concentrates</li>
+          <li>Save new private recipes and source waters</li>
+          <li>Change your private recipes and saved source waters</li>
+        </ul>
+
+        <p class="consent-list-title">It will not be able to:</p>
+        <ul class="consent-list consent-list-cannot">
+          <li>Publish anything to the Recipe Library</li>
+          <li>Change a recipe you have published</li>
+          <li>Delete anything, or delete your account</li>
+        </ul>
+
+        <p class="consent-redirect">After you choose, you will be sent to <strong id="consent-redirect-host"></strong>. Only continue if that is the app you are connecting.</p>
+
+        <div class="login-error" id="consent-error" role="alert" aria-live="polite"></div>
+        <button type="button" class="login-submit-btn" id="consent-allow">Allow</button>
+        <button type="button" class="consent-deny-btn" id="consent-deny">Cancel</button>
+        <p class="consent-muted consent-footnote">You can disconnect an app at any time from <a href="consent">Connected apps</a>.</p>
+      </div>
+
+      <div id="consent-apps" hidden>
+        <h2 class="consent-heading">Connected apps</h2>
+        <p class="consent-muted">AI apps you have allowed to use your Cafelytic account.</p>
+        <p class="consent-muted" id="consent-apps-empty" hidden>No apps are connected.</p>
+        <ul class="consent-apps-list" id="consent-apps-list"></ul>
+        <div class="login-error" id="consent-apps-error" role="alert" aria-live="polite"></div>
+        <a class="consent-back-link" href="../index.html">Back to Cafelytic</a>
+      </div>
+
+      <div id="consent-message" hidden>
+        <h2 class="consent-heading" id="consent-message-title"></h2>
+        <p class="consent-muted" id="consent-message-body"></p>
+        <p><a class="consent-back-link" id="consent-signin-link" href="../login.html" hidden>Sign in</a></p>
+        <a class="consent-back-link" href="../index.html">Back to Cafelytic</a>
+      </div>
+    </div>
+  </main>
+
+  <script type="module" src="/src/components/oauth-consent.ts"></script>
+</body>
+</html>

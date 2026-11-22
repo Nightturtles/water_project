@@ -5438,3 +5438,119 @@ div.more-sheet__row {
     animation: none;
   }
 }
+
+/* ========================
+   OAuth consent page (oauth/consent.html)
+   ======================== */
+.consent-card {
+  max-width: 440px;
+}
+
+.consent-heading {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin: 0 0 0.5rem;
+  overflow-wrap: anywhere;
+}
+
+.consent-muted {
+  font-size: 0.875rem;
+  color: var(--gray-500);
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.consent-list-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  margin: 0 0 0.375rem;
+}
+
+.consent-list {
+  margin: 0 0 1rem;
+  padding-left: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--gray-900);
+  line-height: 1.5;
+}
+
+.consent-redirect {
+  font-size: 0.85rem;
+  color: var(--gray-900);
+  background: var(--blue-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 0.625rem 0.75rem;
+  margin: 0 0 1rem;
+  overflow-wrap: anywhere;
+}
+
+.consent-deny-btn,
+.consent-disconnect-btn {
+  padding: 0.625rem 1rem;
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--gray-900);
+  font-size: 0.95rem;
+  font-weight: 500;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.consent-deny-btn {
+  width: 100%;
+  margin-bottom: 1rem;
+}
+
+.consent-deny-btn:disabled,
+.consent-disconnect-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.consent-footnote {
+  margin-bottom: 0;
+}
+
+.consent-apps-list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+}
+
+.consent-app-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.625rem 0;
+  border-top: 1px solid var(--gray-200);
+}
+
+.consent-app-row-name {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--gray-900);
+  overflow-wrap: anywhere;
+}
+
+.consent-app-row-since {
+  display: block;
+  font-size: 0.8rem;
+  color: var(--gray-500);
+}
+
+.consent-disconnect-btn {
+  flex-shrink: 0;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.85rem;
+}
+
+.consent-back-link {
+  font-size: 0.875rem;
+  color: var(--blue-600);
+}

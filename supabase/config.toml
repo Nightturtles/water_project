@@ -151,7 +151,9 @@ max_indexes = 5
 enabled = true
 # The base URL of your website. Used as an allow-list for redirects and for constructing URLs used
 # in emails.
-site_url = "http://127.0.0.1:3000"
+# Local value: the Vite dev server (.claude/launch.json `dev`, port 8080), so the
+# OAuth consent page at /oauth/consent resolves when testing the MCP sign-in.
+site_url = "http://localhost:8080"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 # coffeelogger:// is the Coffee Logger app's "Connect Cafelytic" OAuth flow (read-only
 # recipe integration) — keep it in the hosted project's redirect allowlist too.
@@ -356,12 +358,15 @@ enabled = false
 
 # OAuth server configuration
 [auth.oauth_server]
-# Enable OAuth server functionality
-enabled = false
+# Enable OAuth server functionality. On for the local stack so the MCP server
+# (supabase/functions/mcp) can be exercised end to end; the hosted project's
+# setting lives in the dashboard (Authentication > OAuth Server).
+enabled = true
 # Path for OAuth consent flow UI
 authorization_url_path = "/oauth/consent"
-# Allow dynamic client registration
-allow_dynamic_registration = false
+# Allow dynamic client registration (how claude.ai, ChatGPT and most MCP
+# clients register themselves).
+allow_dynamic_registration = true
 
 [edge_runtime]
 enabled = true
@@ -382,6 +387,13 @@ deno_version = 2
 # a JWT; it does its own input validation + honeypot in lieu of auth. (Other
 # functions such as estimate-water keep the default verify_jwt = true.)
 [functions.submit-support]
+verify_jwt = false
+
+# MCP server for AI apps. The gateway check is off because an MCP client's
+# first request is unauthenticated on purpose: the function must answer it with
+# 401 + the OAuth discovery pointer. The function verifies the user JWT itself
+# (withSupabase({ auth: "user" })), so no tool runs without a valid login.
+[functions.mcp]
 verify_jwt = false
 
 [analytics]
