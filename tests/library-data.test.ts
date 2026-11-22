@@ -20,6 +20,7 @@ const {
   partitionByCategory,
   pickFeaturedFromFiltered,
   generateUniqueSlug: uniqueSlug,
+  LIBRARY_TRAYS,
 } = library;
 
 // Cache key used by library-data.getPublicRecipesSync. Tests that need the
@@ -381,6 +382,7 @@ describe("partitionByCategory", () => {
       roaster: [],
       brand: [],
       classic: [],
+      community: [],
     });
   });
 
@@ -390,10 +392,14 @@ describe("partitionByCategory", () => {
     expect(result.original).toEqual([]);
   });
 
-  test("unknown category falls through to 'classic'", () => {
-    const result = partitionByCategory([{ slug: "x", category: "mystery", label: "X" }]);
-    expect(result.classic).toHaveLength(1);
-    expect(result.classic![0]!.slug).toBe("x");
+  test("canonical row with an unknown or missing category falls through to 'classic'", () => {
+    const result = partitionByCategory([
+      { slug: "x", category: "mystery", label: "X", userId: null },
+      { slug: "y", label: "Y" },
+      { slug: "z", category: "community", label: "Z", userId: null },
+    ]);
+    expect(result.classic!.map((r) => r.slug)).toEqual(["x", "y", "z"]);
+    expect(result.community).toEqual([]);
   });
 
   test("intro-water bucket is sorted by slug ascending", () => {
@@ -474,13 +480,51 @@ describe("pickFeaturedFromFiltered", () => {
 });
 
 describe("partitionByCategory: curated trays are canonical-only", () => {
-  test("a user-published row claiming tray 'original' lands in classic", () => {
+  test("a user-published row claiming tray 'original' lands in community", () => {
     const result = partitionByCategory([
       { slug: "x", label: "Spoof", category: "original", userId: "someone" },
       { slug: "cafelytic-filter", label: "Cafelytic Filter", category: "original", userId: null },
     ]);
     expect(result.original!.map((r) => r.slug)).toEqual(["cafelytic-filter"]);
-    expect(result.classic!.map((r) => r.slug)).toEqual(["x"]);
+    expect(result.community!.map((r) => r.slug)).toEqual(["x"]);
+    expect(result.classic).toEqual([]);
+  });
+
+  test("user-published rows go to community whatever their category says", () => {
+    // Published rows carry the tray column default 'classic'; older cache
+    // snapshots may have no category at all.
+    const result = partitionByCategory([
+      { slug: "a", label: "A", category: "classic", userId: "u1" },
+      { slug: "b", label: "B", userId: "u2" },
+      { slug: "c", label: "C", category: "mystery", userId: "u1" },
+      { slug: "sca", label: "SCA", category: "classic", userId: null },
+    ]);
+    expect(result.community!.map((r) => r.slug)).toEqual(["a", "b", "c"]);
+    expect(result.classic!.map((r) => r.slug)).toEqual(["sca"]);
+  });
+});
+
+describe("LIBRARY_TRAYS", () => {
+  test("Community Recipes is the last section, after the curated ones", () => {
+    expect(LIBRARY_TRAYS.map((t) => t.key)).toEqual([
+      "original",
+      "intro-water",
+      "roaster",
+      "brand",
+      "classic",
+      "community",
+    ]);
+    expect(LIBRARY_TRAYS[5]).toMatchObject({ title: "Community Recipes" });
+  });
+
+  test("Classic Formulas subtitle", () => {
+    const classic = LIBRARY_TRAYS.find((t) => t.key === "classic");
+    expect(classic!.subtitle).toBe("Canonical references every coffee nerd should know");
+  });
+
+  test("every tray has a partitionByCategory bucket", () => {
+    const buckets = partitionByCategory([]);
+    for (const t of LIBRARY_TRAYS) expect(buckets[t.key]).toEqual([]);
   });
 });
 

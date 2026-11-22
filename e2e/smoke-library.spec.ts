@@ -307,7 +307,12 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(page.locator('.rx-carousel-section[data-tray="original"]')).toBeVisible();
     await expect(page.locator('.rx-carousel-section[data-tray="intro-water"]')).toBeVisible();
     await expect(page.locator('.rx-carousel-section[data-tray="roaster"]')).toBeVisible();
-    await expect(page.locator('.rx-carousel-section[data-tray="classic"]')).toBeVisible();
+    const classic = page.locator('.rx-carousel-section[data-tray="classic"]');
+    await expect(classic).toBeVisible();
+    await expect(classic.locator(".rx-carousel-title")).toHaveText("Classic Formulas");
+    await expect(classic.locator(".rx-carousel-subtitle")).toHaveText(
+      "Canonical references every coffee nerd should know",
+    );
 
     // Each visible tray has at least one card.
     const carousels = page.locator(".rx-carousel-section .rx-carousel");
@@ -768,6 +773,14 @@ test.describe("library.html — Wave D recipe browser", () => {
     await expect(ownedCard.locator(".rx-card-owner-btn")).toHaveCount(2);
     await expect(ownedCard.locator(".rx-card-owner-btn").nth(0)).toContainText("Edit");
     await expect(ownedCard.locator(".rx-card-owner-btn").nth(1)).toContainText("Unpublish");
+
+    // A user-published row renders under Community Recipes even though its
+    // tray/category value is the column default 'classic'. It is the only
+    // row in this seeded catalog, so Classic Formulas must not render at all.
+    const community = page.locator('.rx-carousel-section[data-tray="community"]');
+    await expect(community.locator(".rx-carousel-title")).toHaveText("Community Recipes");
+    await expect(community.locator('.rx-recipe-card[data-slug="fake-owned"]')).toBeVisible();
+    await expect(page.locator('.rx-carousel-section[data-tray="classic"]')).toHaveCount(0);
 
     // Clicking Edit opens the modal (wired through handlers.onEditRecipe).
     await ownedCard.locator(".rx-card-owner-btn").nth(0).click();
@@ -1367,5 +1380,77 @@ test.describe("library.html — Wave D recipe browser", () => {
       );
       expect(matched).toEqual(["Onyx Signature"]);
     });
+  });
+});
+
+// The Add From Library modal shares LIBRARY_TRAYS + partitionByCategory with
+// the library page, so user-published rows must land in its Community Recipes
+// section too, and Classic Formulas must hold canonical rows only.
+test.describe("Add From Library modal: Community Recipes section", () => {
+  test("user-published rows are listed under Community Recipes, not Classic Formulas", async ({
+    page,
+  }) => {
+    await page.addInitScript(() => {
+      const base = {
+        brew_method: "filter",
+        calcium: 20,
+        magnesium: 10,
+        alkalinity: 30,
+        potassium: 0,
+        sodium: 0,
+        sulfate: 0,
+        chloride: 0,
+        bicarbonate: 37,
+        description: "Seeded for the picker sections e2e.",
+        tags: [],
+        roast: ["all"],
+        created_at: "2026-01-01T00:00:00.000Z",
+      };
+      const fake = [
+        // Published rows carry the tray column default 'classic'.
+        Object.assign({}, base, {
+          id: "fake-user-row",
+          user_id: "some-other-user",
+          slug: "fake-user-recipe",
+          label: "Fake User Recipe",
+          creator_display_name: "Another Author",
+          category: "classic",
+        }),
+        Object.assign({}, base, {
+          id: "fake-canonical-row",
+          user_id: null,
+          slug: "fake-canonical",
+          label: "Fake Canonical Formula",
+          creator_display_name: "Cafelytic",
+          category: "classic",
+        }),
+      ];
+      sessionStorage.setItem("cw_library_public_recipes_v5", JSON.stringify(fake));
+    });
+
+    await page.goto("/index.html");
+    await page.waitForFunction(() => typeof window.showLibraryPicker === "function");
+    await page.evaluate(() => window.showLibraryPicker!({ brewMethod: "filter" }));
+
+    const section = (key: string) =>
+      page.locator(".library-picker-section").filter({
+        has: page.locator(`.library-picker-section-summary[data-section-key="${key}"]`),
+      });
+
+    await expect(section("community").locator(".card-collapsible-title")).toContainText(
+      "Community Recipes (1)",
+    );
+    await expect(section("community")).toContainText("Fake User Recipe");
+    await expect(section("classic").locator(".card-collapsible-title")).toContainText(
+      "Classic Formulas (1)",
+    );
+    await expect(section("classic")).toContainText("Fake Canonical Formula");
+    await expect(section("classic")).not.toContainText("Fake User Recipe");
+
+    // Community Recipes comes after every curated section.
+    const keys = await page
+      .locator(".library-picker-section-summary")
+      .evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.sectionKey));
+    expect(keys).toEqual(["classic", "community"]);
   });
 });
