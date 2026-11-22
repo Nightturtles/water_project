@@ -32,6 +32,7 @@ import {
   mergeSourceWaters,
   NAME_MAX,
   pickProfileKey,
+  pickVerifiedProfileKey,
   recipeDetail,
   recipeReadOnlyReason,
   recipeSummary,
@@ -406,11 +407,11 @@ export function buildServer(supabase: Db, userId: string): McpServer {
         const label = cleanName(name);
         const text = cleanDescription(description);
         const resolved = resolveIons(ions);
-        // Ask for exactly the public rows that could collide (same name, or a
-        // key starting with this name's key, which covers every "-2", "-3"
-        // candidate) instead of reading the whole public library: that read
-        // is capped by the API's row limit, and a collision past the cap
-        // would go unseen.
+        // Ask for the public rows that could collide (same name, or a key
+        // starting with this name's key, which covers the "-2", "-3"
+        // candidates) instead of reading the whole public library. The prefix
+        // read is still subject to the API's row cap, so it is only a head
+        // start: the key finally picked is checked on its own below.
         const baseKey = slugify(label);
         const [mine, sameLabel, sameKey, selections] = await Promise.all([
           loadMyRecipes(),
@@ -422,12 +423,18 @@ export function buildServer(supabase: Db, userId: string): McpServer {
         ]);
         const publicLabels = (check(sameLabel) as { label: string }[]).map((r) => r.label);
         const publicKeys = (check(sameKey) as { slug: string }[]).map((r) => r.slug);
-        const slug = pickProfileKey(label, {
+        const slug = await pickVerifiedProfileKey(label, {
           kind: "recipe",
           reservedKeys: RESERVED_TARGET_KEYS,
           existingKeys: mine.map((r) => r.slug),
           existingLabels: [...mine.map((r) => r.label), ...publicLabels],
           retiredKeys: [...selections.deletedTargets, ...publicKeys],
+        }, async (key) => {
+          const hit = check(
+            await supabase.from("target_profiles").select("slug").eq("is_public", true)
+              .eq("slug", key).limit(1),
+          ) as unknown[];
+          return hit.length > 0;
         });
         const row = buildRecipeInsert(
           userId,

@@ -132,12 +132,11 @@ function checkIon(name: string, value: number, max: number): void {
 }
 
 /**
- * Resolve the bicarbonate / alkalinity pair. Either may be given. Both given
- * must describe the same water (within 2 mg/L as CaCO3); alkalinity is then
- * the one kept and bicarbonate is derived from it, so the pair that comes out
- * is always exactly consistent. Alkalinity wins because the app reads a
- * recipe's KH from it. Without this, a pair inside the tolerance could report
- * one KH in the headline and classify another against the ranges.
+ * Resolve the bicarbonate / alkalinity pair. Either may be given, and the
+ * other is derived. Both given must describe the same water (within 2 mg/L as
+ * CaCO3) and are then both kept as sent: bicarbonate is the measured ion (it
+ * feeds TDS, charge balance, and what a source water stores), alkalinity is
+ * the KH (what `analyze` reports and judges against the ranges).
  */
 export function resolveAlkalinity(
   input: IonInput,
@@ -157,8 +156,7 @@ export function resolveAlkalinity(
           `that bicarbonate is ${Math.round(implied)} mg/L as CaCO3. Send only one of them.`,
       );
     }
-    const a = Number(input.alkalinity);
-    return { bicarbonate: a * CACO3_TO_HCO3, alkalinity: a };
+    return { bicarbonate: Number(input.bicarbonate), alkalinity: Number(input.alkalinity) };
   }
   if (hasBicarb) {
     const b = Number(input.bicarbonate);
@@ -243,6 +241,9 @@ export function ionBalance(ions: Ions): {
   };
 }
 
+// Same order the app's evaluator sorts findings in.
+const SEVERITY_ORDER: Record<string, number> = { danger: 0, warn: 1, info: 2 };
+
 export function analyze(
   ions: Ions,
   brewMethod: string,
@@ -258,12 +259,28 @@ export function analyze(
   const summary = recipeMetricsSummary({ ...ions, alkalinity: alkalinity ?? null });
   // Sources are passed explicitly (none): the app's fallback reads which
   // minerals the browser has selected, which does not exist here.
-  const ranges = evaluateWaterProfileRanges(ions, {
+  const options = {
     brewMethod,
-    alkalinitySources: [],
+    alkalinitySources: [] as string[],
     calciumSource: null,
     magnesiumSource: null,
-  });
+  };
+  const ranges = evaluateWaterProfileRanges(ions, options);
+  let findings: { severity: string; message: string }[] = ranges.findings;
+  // The app's evaluator takes KH from bicarbonate. When an alkalinity is also
+  // known and the two differ slightly, the headline KH (from alkalinity) and
+  // the KH finding would be judged on different numbers. So the KH finding
+  // alone is re-evaluated on the alkalinity; every other finding (TDS
+  // included) stays on the real ions.
+  if (alkalinity != null && Math.abs(alkalinity - ions.bicarbonate * HCO3_TO_CACO3) > 1e-6) {
+    const onAlkalinity = evaluateWaterProfileRanges(
+      { ...ions, bicarbonate: alkalinity * CACO3_TO_HCO3 },
+      options,
+    );
+    const isKh = (f: { message: string }) => f.message.startsWith("KH ");
+    findings = [...findings.filter((f) => !isKh(f)), ...onAlkalinity.findings.filter(isKh)]
+      .sort((a, b) => (SEVERITY_ORDER[a.severity] ?? 9) - (SEVERITY_ORDER[b.severity] ?? 9));
+  }
   const ratio = calculateSo4ClRatio(ions);
   return {
     gh: summary.gh,
@@ -271,7 +288,7 @@ export function analyze(
     tds: summary.tds,
     so4_cl_ratio: ratio == null ? null : round2(ratio),
     ion_balance: ionBalance(ions),
-    findings: ranges.findings,
+    findings,
   };
 }
 
@@ -462,6 +479,26 @@ const OBJECT_PROTOTYPE_KEYS = Object.getOwnPropertyNames(Object.prototype).map((
 /** LIKE / ILIKE pattern that matches `text` literally. */
 export function likeLiteral(text: string): string {
   return text.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
+/**
+ * pickProfileKey, plus a direct check of the key it picks. `isKeyTaken` asks
+ * the database about ONE key, which no row cap can hide; the sets passed in
+ * `opts` are a head start read in bulk and may be incomplete. A key found
+ * taken is added to the retired set and the pick is repeated.
+ */
+export async function pickVerifiedProfileKey(
+  name: string,
+  opts: Parameters<typeof pickProfileKey>[1],
+  isKeyTaken: (key: string) => Promise<boolean>,
+): Promise<string> {
+  const retired = new Set(opts.retiredKeys);
+  for (let attempt = 0; attempt < 50; attempt++) {
+    const key = pickProfileKey(name, { ...opts, retiredKeys: retired });
+    if (!(await isKeyTaken(key))) return key;
+    retired.add(key);
+  }
+  throw new ToolError(`Too many recipes are already named like "${name}". Choose a different name.`);
 }
 
 export function pickProfileKey(

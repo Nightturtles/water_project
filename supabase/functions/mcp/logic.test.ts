@@ -14,6 +14,7 @@ import {
   likeLiteral,
   mergeSourceWaters,
   pickProfileKey,
+  pickVerifiedProfileKey,
   recipeReadOnlyReason,
   recipeSummary,
   resolveIons,
@@ -91,16 +92,26 @@ Deno.test("resolveIons: bicarbonate and alkalinity must agree when both are sent
   assert.equal(ok.alkalinity, 40);
 });
 
-Deno.test("resolveIons: a pair inside the tolerance comes out exactly consistent", () => {
-  // Alkalinity is kept and bicarbonate derived from it, so the headline KH and
-  // the KH the ranges are judged on cannot differ.
+Deno.test("a pair inside the tolerance: bicarbonate is kept, KH is judged on alkalinity", () => {
   const ions = resolveIons({ bicarbonate: 158, alkalinity: 131.5 });
+  assert.equal(ions.bicarbonate, 158, "the supplied bicarbonate is not replaced");
   assert.equal(ions.alkalinity, 131.5);
-  assert.ok(Math.abs(ions.bicarbonate * (50.045 / 61.017) - 131.5) < 1e-9);
   const { alkalinity, ...rest } = ions;
   const a = analyze(rest, "filter", alkalinity);
+  // Headline KH and the KH finding agree (158 mg/L alone is KH 129.6, which
+  // sits under the 130 line and would raise a milder finding or none).
   assert.equal(a.kh, 132);
-  assert.ok(a.findings.some((f) => /KH/.test(f.message)), "KH above 130 is flagged");
+  const onBicarbonate = analyze(rest, "filter");
+  const kh = (r: typeof a) => JSON.stringify(r.findings.filter((f) => f.message.startsWith("KH ")));
+  assert.notEqual(kh(a), kh(onBicarbonate), "the KH finding follows the alkalinity");
+  assert.match(kh(a), /131\.5/);
+  // Everything else is computed from the real ions.
+  assert.equal(a.tds, 158);
+  assert.deepEqual(a.ion_balance, onBicarbonate.ion_balance);
+  assert.deepEqual(
+    a.findings.filter((f) => !f.message.startsWith("KH ")),
+    onBicarbonate.findings.filter((f) => !f.message.startsWith("KH ")),
+  );
 });
 
 Deno.test("stored recipes round-trip through the input check", () => {
@@ -247,6 +258,38 @@ Deno.test("pickProfileKey: a deleted or library key is never reused", () => {
   // any device that still holds the deletion record.
   assert.equal(pickProfileKey("Old Recipe", KEY_OPTS), "old-recipe-2");
   assert.equal(pickProfileKey("Community Slug", KEY_OPTS), "community-slug-2");
+});
+
+Deno.test("pickVerifiedProfileKey: finds a free key past what the bulk read returned", async () => {
+  // 1,003 public keys share the prefix (bright, bright-2 ... bright-1003), but
+  // the bulk read is capped at 1,000 rows and missed three of them, the base
+  // key included.
+  const taken = new Set(["bright"]);
+  for (let i = 2; i <= 1003; i++) taken.add("bright-" + i);
+  const missed = new Set(["bright", "bright-2", "bright-7"]);
+  const seen = [...taken].filter((k) => !missed.has(k));
+  assert.equal(seen.length, 1000);
+  let lookups = 0;
+  const key = await pickVerifiedProfileKey(
+    "Bright",
+    { ...KEY_OPTS, retiredKeys: seen },
+    (k) => {
+      lookups++;
+      return Promise.resolve(taken.has(k));
+    },
+  );
+  // Past "-999" the app's helper switches to a timestamp suffix; what matters
+  // is that the key is free and starts from the name.
+  assert.equal(taken.has(key), false, "the chosen key is not a public key");
+  assert.match(key, /^bright-\d+$/);
+  assert.equal(lookups, 4, "one direct check per candidate: three taken, one free");
+});
+
+Deno.test("pickVerifiedProfileKey: gives up with a clear message instead of looping", async () => {
+  await assert.rejects(
+    () => pickVerifiedProfileKey("Bright", KEY_OPTS, () => Promise.resolve(true)),
+    /Choose a different name/,
+  );
 });
 
 Deno.test("pickProfileKey: object property names are never issued as keys", () => {
