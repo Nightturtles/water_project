@@ -4,11 +4,14 @@ import { strict as assert } from "node:assert";
 import {
   analyze,
   buildRecipeInsert,
+  buildRecipePatch,
+  buildSourcePatch,
   buildSourceValues,
   cleanDescription,
   cleanName,
   ionBalance,
   type Ions,
+  likeLiteral,
   mergeSourceWaters,
   pickProfileKey,
   recipeReadOnlyReason,
@@ -86,6 +89,70 @@ Deno.test("resolveIons: bicarbonate and alkalinity must agree when both are sent
   assert.throws(() => resolveIons({ bicarbonate: 10, alkalinity: 40 }), /disagree/);
   const ok = resolveIons({ bicarbonate: 48.8, alkalinity: 40 });
   assert.equal(ok.alkalinity, 40);
+});
+
+Deno.test("resolveIons: a pair inside the tolerance comes out exactly consistent", () => {
+  // Alkalinity is kept and bicarbonate derived from it, so the headline KH and
+  // the KH the ranges are judged on cannot differ.
+  const ions = resolveIons({ bicarbonate: 158, alkalinity: 131.5 });
+  assert.equal(ions.alkalinity, 131.5);
+  assert.ok(Math.abs(ions.bicarbonate * (50.045 / 61.017) - 131.5) < 1e-9);
+  const { alkalinity, ...rest } = ions;
+  const a = analyze(rest, "filter", alkalinity);
+  assert.equal(a.kh, 132);
+  assert.ok(a.findings.some((f) => /KH/.test(f.message)), "KH above 130 is flagged");
+});
+
+Deno.test("stored recipes round-trip through the input check", () => {
+  // 10.49 / 10.5 used to store as 10 and 11, a pair this server then refused.
+  const ions = resolveIons({ bicarbonate: 10.49, alkalinity: 10.5 });
+  const row = buildRecipeInsert(ME, "k", "K", "filter", ions, "", "2026-01-01T00:00:00Z");
+  assert.doesNotThrow(() =>
+    resolveIons({ bicarbonate: row.bicarbonate, alkalinity: row.alkalinity })
+  );
+  // Every whole-number alkalinity stores a pair that passes.
+  for (let alk = 0; alk <= 400; alk++) {
+    const r = buildRecipeInsert(ME, "k", "K", "filter", resolveIons({ alkalinity: alk }), "", "t");
+    resolveIons({ bicarbonate: r.bicarbonate, alkalinity: r.alkalinity });
+  }
+});
+
+Deno.test("buildRecipePatch: writes only the fields that were sent", () => {
+  const base = { ...ZERO, calcium: 20, magnesium: 10, bicarbonate: 49, alkalinity: 40 };
+  const descOnly = buildRecipePatch({ description: "New" }, resolveIons({}, base), "t");
+  assert.deepEqual(descOnly, { description: "New", updated_at: "t" });
+
+  const mgOnly = buildRecipePatch({ magnesium: 14.4 }, resolveIons({ magnesium: 14.4 }, base), "t");
+  assert.deepEqual(mgOnly, { magnesium: 14, updated_at: "t" });
+
+  const sent = { alkalinity: 50, brew_method: "espresso" as const };
+  const alk = buildRecipePatch(sent, resolveIons(sent, base), "t");
+  assert.deepEqual(alk, {
+    alkalinity: 50,
+    bicarbonate: 61,
+    brew_method: "espresso",
+    updated_at: "t",
+  });
+
+  assert.throws(() => buildRecipePatch({}, resolveIons({}, base), "t"), /Nothing to change/);
+});
+
+Deno.test("buildSourcePatch: writes only the ions that were sent", () => {
+  const base = { ...ZERO, calcium: 20, magnesium: 8, bicarbonate: 90, alkalinity: 0 };
+  const { alkalinity: _a, ...mg } = resolveIons({ magnesium: 9.127 }, base);
+  assert.deepEqual(buildSourcePatch({ magnesium: 9.127 }, mg, "t"), {
+    magnesium: 9.13,
+    updated_at: "t",
+  });
+
+  const { alkalinity: _b, ...alk } = resolveIons({ alkalinity: 50 }, base);
+  assert.deepEqual(buildSourcePatch({ alkalinity: 50 }, alk, "t"), {
+    bicarbonate: 60.96,
+    updated_at: "t",
+  });
+
+  const { alkalinity: _c, ...none } = resolveIons({}, base);
+  assert.throws(() => buildSourcePatch({}, none, "t"), /Nothing to change/);
 });
 
 Deno.test("resolveIons: an update keeps the fields that were not sent", () => {
@@ -180,6 +247,19 @@ Deno.test("pickProfileKey: a deleted or library key is never reused", () => {
   // any device that still holds the deletion record.
   assert.equal(pickProfileKey("Old Recipe", KEY_OPTS), "old-recipe-2");
   assert.equal(pickProfileKey("Community Slug", KEY_OPTS), "community-slug-2");
+});
+
+Deno.test("pickProfileKey: object property names are never issued as keys", () => {
+  // The app's plain-object lookups read these as built-ins and drop the row.
+  assert.equal(pickProfileKey("Constructor", KEY_OPTS), "constructor-2");
+  assert.equal(pickProfileKey("toString", KEY_OPTS), "tostring-2");
+  assert.equal(pickProfileKey("valueOf", KEY_OPTS), "valueof-2");
+});
+
+Deno.test("likeLiteral: wildcards in a name match only themselves", () => {
+  assert.equal(likeLiteral("50% off_now"), "50\\% off\\_now");
+  assert.equal(likeLiteral("a\\b"), "a\\\\b");
+  assert.equal(likeLiteral("Bright Cup"), "Bright Cup");
 });
 
 Deno.test("cleanName / cleanDescription: limits match the app's inputs", () => {

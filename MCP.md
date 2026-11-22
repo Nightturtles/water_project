@@ -55,7 +55,8 @@ Chemistry and naming rules are not re-implemented: `src/lib/mcp-core.ts` re-expo
 
 - **New recipes and source waters are safe.** Each is its own row; no device deletes a row it does not know, and every device adopts it on its next pull.
 - **A key that was deleted is never reused.** Every device holding the deletion record would delete the new row on its next sync, so `create_*` picks a fresh key (`name-2`) and keeps the typed name.
-- **An update can lose to a stale device.** Sync is last-write-wins per row with no timestamp check: a device with an unsynced edit to the same recipe overwrites the server's value.
+- **An update can lose to a stale device.** This applies to `update_recipe` and `update_source_water` alike. Sync is last-write-wins per row with no timestamp check, and a device pushes its pending edits before it pulls: a device with an unsynced edit to the same recipe or source water writes its whole cached row back, overwriting the value the tool just saved (including fields that device never touched). The update tools themselves write only the fields they were sent, so they do not do this to the app. Fixing it properly belongs in the sync layer (per-field merge or an `updated_at` check) and is not part of this work.
+- **Profile keys that are JavaScript object property names are never issued** (`constructor`, `toString`, ...). The app keeps profiles in plain objects, so a profile under such a key reads as a built-in and is dropped from the picker. The server gives it `constructor-2` instead.
 - **`user_settings` and `user_selections` are off limits.** Each is one row per user that devices upsert whole, so any outside write races them. That is why concentrates wait for phase 2.
 
 ## One-time setup (hosted project)

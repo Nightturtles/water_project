@@ -23,6 +23,15 @@ test.describe("oauth/consent - AI app connection page", () => {
     );
     await expect(page.locator("#consent-signin-link")).toBeVisible();
     await expect(page.locator("#consent-request")).toBeHidden();
+
+    // Nothing is remembered until the visitor actually chooses to sign in;
+    // then sign-in leads back to Connected apps.
+    expect(await page.evaluate(() => sessionStorage.getItem("cw_post_login_redirect"))).toBeNull();
+    await page.locator("#consent-signin-link").click();
+    await page.waitForURL(/\/login\.html$/);
+    expect(await page.evaluate(() => sessionStorage.getItem("cw_post_login_redirect"))).toBe(
+      "oauth/consent",
+    );
   });
 
   test("signed out with a request: goes to sign in and remembers the way back", async ({

@@ -4,6 +4,7 @@
 
 import { test, expect, beforeEach } from "vitest";
 import {
+  CONNECTED_APPS_PATH,
   consentReturnPath,
   rememberPostLoginRedirect,
   takePostLoginRedirect,
@@ -33,13 +34,20 @@ test("nothing but the consent page can be stored", () => {
     "//evil.example/",
     "/oauth/consent?authorization_id=abc",
     "index.html",
-    "oauth/consent",
+    "oauth/consent/",
+    "oauth/consent?",
+    "oauth/consent?next=//evil.example",
     "oauth/consent?authorization_id=abc&x=1",
     "javascript:alert(1)",
   ]) {
     expect(rememberPostLoginRedirect(path)).toBe(false);
   }
   expect(takePostLoginRedirect()).toBeNull();
+});
+
+test("the Connected apps list (no request) is an allowed destination", () => {
+  expect(rememberPostLoginRedirect(CONNECTED_APPS_PATH)).toBe(true);
+  expect(takePostLoginRedirect()).toBe("oauth/consent");
 });
 
 test("a value planted in storage directly is not honored", () => {

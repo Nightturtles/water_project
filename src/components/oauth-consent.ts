@@ -15,7 +15,11 @@
 
 import "../lib/sentry-init";
 import { supabaseClient } from "../lib/supabase-client";
-import { consentReturnPath, rememberPostLoginRedirect } from "../lib/post-login-redirect";
+import {
+  CONNECTED_APPS_PATH,
+  consentReturnPath,
+  rememberPostLoginRedirect,
+} from "../lib/post-login-redirect";
 
 type View = "loading" | "request" | "apps" | "message";
 
@@ -177,7 +181,13 @@ async function init(): Promise<void> {
       return;
     }
     showMessage("Sign in to see your connected apps", "");
-    el("consent-signin-link").hidden = false;
+    const signIn = el("consent-signin-link");
+    signIn.hidden = false;
+    // Come back here after signing in. Recorded on the click, not on page
+    // load, so merely visiting this page does not redirect a later sign-in.
+    signIn.addEventListener("click", () => {
+      rememberPostLoginRedirect(CONNECTED_APPS_PATH);
+    });
     return;
   }
 

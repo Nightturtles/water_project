@@ -9,6 +9,7 @@
 import { test, expect, beforeEach } from "vitest";
 import { isMcpCoreFresh } from "../scripts/build-mcp-core.mjs";
 import * as core from "../src/lib/mcp-core";
+import { saveSelectedMinerals } from "../src/lib/storage";
 
 beforeEach(() => {
   localStorage.clear();
@@ -20,11 +21,14 @@ test("app-core.gen.js is up to date (run `npm run mcp:build` if this fails)", as
 });
 
 test("range findings do not depend on the browser's mineral selection", () => {
+  // Sodium 35 mg/L sits between the two sodium bands for filter water: a
+  // warning by default, acceptable when baking soda is the alkalinity source.
+  // So this water tells the two cases apart.
   const ions = {
     calcium: 20,
     magnesium: 10,
     potassium: 0,
-    sodium: 120,
+    sodium: 35,
     sulfate: 40,
     chloride: 35,
     bicarbonate: 49,
@@ -35,12 +39,24 @@ test("range findings do not depend on the browser's mineral selection", () => {
     calciumSource: null,
     magnesiumSource: null,
   };
-  const before = core.evaluateWaterProfileRanges(ions, explicit);
-  // Change what the "browser" has selected; with every source passed
-  // explicitly the result must not move.
-  localStorage.setItem("cw_selected_minerals", JSON.stringify(["baking-soda", "gypsum"]));
-  const after = core.evaluateWaterProfileRanges(ions, explicit);
-  expect(after).toEqual(before);
+  const sodiumFinding = (result: { findings: { severity: string; message: string }[] }) =>
+    JSON.stringify(result.findings.filter((f) => /sodium/i.test(f.message)));
+
+  // saveSelectedMinerals (not a raw localStorage write) so storage.ts's cache
+  // is invalidated and a function that reads the selection really sees it.
+  saveSelectedMinerals(["calcium-chloride", "epsom-salt", "potassium-bicarbonate"]);
+  const explicitBefore = core.evaluateWaterProfileRanges(ions, explicit);
+  const implicitBefore = core.evaluateWaterProfileRanges(ions, { brewMethod: "filter" });
+
+  saveSelectedMinerals(["calcium-chloride", "epsom-salt", "baking-soda"]);
+  const explicitAfter = core.evaluateWaterProfileRanges(ions, explicit);
+  const implicitAfter = core.evaluateWaterProfileRanges(ions, { brewMethod: "filter" });
+
+  // Control: without explicit sources the selection DOES change the sodium
+  // finding. If this stops holding, the assertion below proves nothing.
+  expect(sodiumFinding(implicitAfter)).not.toBe(sodiumFinding(implicitBefore));
+  // The way the server calls it: every source explicit, selection irrelevant.
+  expect(explicitAfter).toEqual(explicitBefore);
 });
 
 test("validateProfileName never reuses a retired key", () => {

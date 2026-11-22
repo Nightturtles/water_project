@@ -14,18 +14,21 @@ import {
   BRAND_CONCENTRATES,
   MINERAL_DB,
   RESERVED_TARGET_KEYS,
+  slugify,
   SOURCE_PRESETS,
 } from "./app-core.gen.js";
 import {
   analyze,
   asStringArray,
   buildRecipeInsert,
-  buildRecipeUpdate,
+  buildRecipePatch,
+  buildSourcePatch,
   buildSourceValues,
   cleanDescription,
   cleanName,
   DESCRIPTION_MAX,
   isBuiltinSourceKey,
+  likeLiteral,
   mergeSourceWaters,
   NAME_MAX,
   pickProfileKey,
@@ -51,7 +54,8 @@ const TARGET_COLUMNS =
 const SOURCE_COLUMNS =
   "id, user_id, slug, label, calcium, magnesium, potassium, sodium, sulfate, chloride, bicarbonate, updated_at";
 
-// Community recipes returned by list_recipes at most. The canonical library is
+// Community recipes returned by list_recipes at most, AFTER the brew-method
+// and name filters have been applied in the query. The canonical library is
 // always returned whole.
 const COMMUNITY_LIMIT = 100;
 
@@ -173,17 +177,28 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           const hidden = new Set(selections.deletedTargets);
           rows.push(...(await loadMyRecipes()).filter((r) => !hidden.has(r.slug)));
         }
+        const needle = (search || "").trim().toLowerCase();
         if (scope !== "mine") {
-          const [canonical, community] = await Promise.all([
+          // The community query is capped, so it filters in the database: a
+          // match must not be lost because 100 newer non-matches came first.
+          let community = supabase.from("target_profiles").select(TARGET_COLUMNS)
+            .eq("is_public", true).not("user_id", "is", null);
+          // In "all" the caller's own rows (published ones included) already
+          // came from loadMyRecipes. In "library" they have not, and the
+          // caller's published recipes belong in the library view.
+          if (scope === "all") community = community.neq("user_id", userId);
+          if (brew_method) community = community.in("brew_method", [brew_method, "all"]);
+          if (needle) community = community.ilike("label", `%${likeLiteral(needle)}%`);
+          const [canonical, communityRows] = await Promise.all([
             supabase.from("target_profiles").select(TARGET_COLUMNS).eq("is_public", true)
               .is("user_id", null).order("label"),
-            supabase.from("target_profiles").select(TARGET_COLUMNS).eq("is_public", true)
-              .not("user_id", "is", null).neq("user_id", userId)
-              .order("created_at", { ascending: false }).range(0, COMMUNITY_LIMIT - 1),
+            community.order("created_at", { ascending: false }).range(0, COMMUNITY_LIMIT - 1),
           ]);
-          rows.push(...(check(canonical) as TargetRow[]), ...(check(community) as TargetRow[]));
+          rows.push(
+            ...(check(canonical) as TargetRow[]),
+            ...(check(communityRows) as TargetRow[]),
+          );
         }
-        const needle = (search || "").trim().toLowerCase();
         const recipes = rows
           .filter((r) => !brew_method || r.brew_method === brew_method || r.brew_method === "all")
           .filter((r) => !needle || (r.label || "").toLowerCase().includes(needle))
@@ -391,18 +406,28 @@ export function buildServer(supabase: Db, userId: string): McpServer {
         const label = cleanName(name);
         const text = cleanDescription(description);
         const resolved = resolveIons(ions);
-        const [mine, publicRows, selections] = await Promise.all([
+        // Ask for exactly the public rows that could collide (same name, or a
+        // key starting with this name's key, which covers every "-2", "-3"
+        // candidate) instead of reading the whole public library: that read
+        // is capped by the API's row limit, and a collision past the cap
+        // would go unseen.
+        const baseKey = slugify(label);
+        const [mine, sameLabel, sameKey, selections] = await Promise.all([
           loadMyRecipes(),
-          supabase.from("target_profiles").select("slug, label, user_id").eq("is_public", true),
+          supabase.from("target_profiles").select("label").eq("is_public", true)
+            .ilike("label", likeLiteral(label)).limit(1),
+          supabase.from("target_profiles").select("slug").eq("is_public", true)
+            .like("slug", `${likeLiteral(baseKey)}%`),
           loadSelections(),
         ]);
-        const library = check(publicRows) as { slug: string; label: string; user_id: string | null }[];
+        const publicLabels = (check(sameLabel) as { label: string }[]).map((r) => r.label);
+        const publicKeys = (check(sameKey) as { slug: string }[]).map((r) => r.slug);
         const slug = pickProfileKey(label, {
           kind: "recipe",
           reservedKeys: RESERVED_TARGET_KEYS,
           existingKeys: mine.map((r) => r.slug),
-          existingLabels: [...mine.map((r) => r.label), ...library.map((r) => r.label)],
-          retiredKeys: [...selections.deletedTargets, ...library.map((r) => r.slug)],
+          existingLabels: [...mine.map((r) => r.label), ...publicLabels],
+          retiredKeys: [...selections.deletedTargets, ...publicKeys],
         });
         const row = buildRecipeInsert(
           userId,
@@ -456,11 +481,14 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           ? recipeSummary(row, userId).kh
           : Number(row.alkalinity);
         const resolved = resolveIons(ions, { ...current, alkalinity: currentAlk });
-        const nextBrew = brew_method ?? (row.brew_method === "espresso" ? "espresso" : "filter");
-        const text = description === undefined ? (row.description || "") : cleanDescription(description);
+        const patch = buildRecipePatch(
+          { ...ions, brew_method, description },
+          resolved,
+          new Date().toISOString(),
+        );
         const saved = check(
           await supabase.from("target_profiles")
-            .update(buildRecipeUpdate(resolved, nextBrew, text, new Date().toISOString()))
+            .update(patch)
             .eq("id", id).eq("user_id", userId).eq("is_public", false)
             .select(TARGET_COLUMNS).maybeSingle(),
         ) as TargetRow | null;
@@ -565,7 +593,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
         });
         const saved = check(
           await supabase.from("source_profiles")
-            .update({ ...buildSourceValues(ionValues), updated_at: new Date().toISOString() })
+            .update(buildSourcePatch(ions, ionValues, new Date().toISOString()))
             .eq("id", id).eq("user_id", userId).select(SOURCE_COLUMNS).maybeSingle(),
         ) as SourceRow | null;
         if (!saved) throw new ToolError(`"${row.label}" could not be changed. It may have been removed.`);

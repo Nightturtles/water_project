@@ -133,8 +133,11 @@ function checkIon(name: string, value: number, max: number): void {
 
 /**
  * Resolve the bicarbonate / alkalinity pair. Either may be given. Both given
- * must describe the same water (within 2 mg/L as CaCO3), because the app
- * stores both columns and reads KH from alkalinity.
+ * must describe the same water (within 2 mg/L as CaCO3); alkalinity is then
+ * the one kept and bicarbonate is derived from it, so the pair that comes out
+ * is always exactly consistent. Alkalinity wins because the app reads a
+ * recipe's KH from it. Without this, a pair inside the tolerance could report
+ * one KH in the headline and classify another against the ranges.
  */
 export function resolveAlkalinity(
   input: IonInput,
@@ -154,7 +157,8 @@ export function resolveAlkalinity(
           `that bicarbonate is ${Math.round(implied)} mg/L as CaCO3. Send only one of them.`,
       );
     }
-    return { bicarbonate: Number(input.bicarbonate), alkalinity: Number(input.alkalinity) };
+    const a = Number(input.alkalinity);
+    return { bicarbonate: a * CACO3_TO_HCO3, alkalinity: a };
   }
   if (hasBicarb) {
     const b = Number(input.bicarbonate);
@@ -445,6 +449,21 @@ export function cleanDescription(raw: string | undefined | null): string {
  * deleted key matters most: every device still holding the old deletion
  * record would delete the new row on its next sync.
  */
+// Keys that are property names on every JavaScript object ("constructor",
+// "toString", ...). The app keeps profiles in plain objects and checks
+// built-ins with a bare lookup, so a profile stored under one of these reads
+// as a built-in and is dropped from the picker. Installed apps cannot be
+// fixed after the fact, so the server never hands these keys out: the profile
+// gets "constructor-2" and keeps its typed name.
+const OBJECT_PROTOTYPE_KEYS = Object.getOwnPropertyNames(Object.prototype).map((k) =>
+  k.toLowerCase()
+);
+
+/** LIKE / ILIKE pattern that matches `text` literally. */
+export function likeLiteral(text: string): string {
+  return text.replace(/[\\%_]/g, (c) => "\\" + c);
+}
+
 export function pickProfileKey(
   name: string,
   opts: {
@@ -459,7 +478,7 @@ export function pickProfileKey(
     builtinKeys: new Set(opts.reservedKeys),
     existingKeys: new Set(opts.existingKeys),
     existingLabels: new Set([...opts.existingLabels].map((l) => l.trim().toLowerCase())),
-    retiredKeys: new Set(opts.retiredKeys),
+    retiredKeys: new Set([...opts.retiredKeys, ...OBJECT_PROTOTYPE_KEYS]),
     emptyMessage: "A name is required.",
     invalidMessage: "The name needs at least one letter or number.",
     reservedMessage: `"${name}" is a reserved name. Choose a different name.`,
@@ -481,6 +500,20 @@ export function pickProfileKey(
  * row is indistinguishable from one the app saved: whole-number ions (as
  * buildStoredTargetProfile rounds them), private, attributed to the caller.
  */
+/**
+ * The whole-number pair to store. Alkalinity is rounded first and bicarbonate
+ * is derived from the ROUNDED value: rounding the two independently can leave
+ * a stored pair that this server's own input check would then refuse (10.49
+ * and 10.5 would store as 10 and 11).
+ */
+export function storedAlkalinityPair(alkalinity: number): {
+  alkalinity: number;
+  bicarbonate: number;
+} {
+  const a = Math.round(alkalinity);
+  return { alkalinity: a, bicarbonate: Math.round(a * CACO3_TO_HCO3) };
+}
+
 export function buildRecipeInsert(
   userId: string,
   slug: string,
@@ -497,12 +530,11 @@ export function buildRecipeInsert(
     brew_method: brewMethod,
     calcium: Math.round(ions.calcium),
     magnesium: Math.round(ions.magnesium),
-    alkalinity: Math.round(ions.alkalinity),
     potassium: Math.round(ions.potassium),
     sodium: Math.round(ions.sodium),
     sulfate: Math.round(ions.sulfate),
     chloride: Math.round(ions.chloride),
-    bicarbonate: Math.round(ions.bicarbonate),
+    ...storedAlkalinityPair(ions.alkalinity),
     description,
     is_public: false,
     creator_display_name: "",
@@ -513,25 +545,54 @@ export function buildRecipeInsert(
   };
 }
 
-export function buildRecipeUpdate(
-  ions: Ions & { alkalinity: number },
-  brewMethod: "filter" | "espresso",
-  description: string,
+const PLAIN_IONS = ["calcium", "magnesium", "potassium", "sodium", "sulfate", "chloride"] as const;
+
+/**
+ * The columns an update_recipe call changes: only what the caller sent. The
+ * tool reads the row first (to validate and to refuse read-only recipes), but
+ * writing that whole snapshot back would silently revert any field another
+ * device changed in between. Bicarbonate and alkalinity move together, and
+ * only when the caller sent one of them.
+ */
+export function buildRecipePatch(
+  sent: IonInput & { brew_method?: "filter" | "espresso"; description?: string },
+  resolved: Ions & { alkalinity: number },
   now: string,
-) {
-  return {
-    brew_method: brewMethod,
-    calcium: Math.round(ions.calcium),
-    magnesium: Math.round(ions.magnesium),
-    alkalinity: Math.round(ions.alkalinity),
-    potassium: Math.round(ions.potassium),
-    sodium: Math.round(ions.sodium),
-    sulfate: Math.round(ions.sulfate),
-    chloride: Math.round(ions.chloride),
-    bicarbonate: Math.round(ions.bicarbonate),
-    description,
-    updated_at: now,
-  };
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const ion of PLAIN_IONS) {
+    if (sent[ion] != null) patch[ion] = Math.round(resolved[ion]);
+  }
+  if (sent.bicarbonate != null || sent.alkalinity != null) {
+    Object.assign(patch, storedAlkalinityPair(resolved.alkalinity));
+  }
+  if (sent.brew_method !== undefined) patch.brew_method = sent.brew_method;
+  if (sent.description !== undefined) patch.description = cleanDescription(sent.description);
+  if (Object.keys(patch).length === 0) {
+    throw new ToolError("Nothing to change: send at least one field to update.");
+  }
+  patch.updated_at = now;
+  return patch;
+}
+
+/** The columns an update_source_water call changes: only the ions sent. */
+export function buildSourcePatch(
+  sent: IonInput,
+  resolved: Ions,
+  now: string,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = {};
+  for (const ion of PLAIN_IONS) {
+    if (sent[ion] != null) patch[ion] = round2(resolved[ion]);
+  }
+  if (sent.bicarbonate != null || sent.alkalinity != null) {
+    patch.bicarbonate = round2(resolved.bicarbonate);
+  }
+  if (Object.keys(patch).length === 0) {
+    throw new ToolError("Nothing to change: send at least one ion to update.");
+  }
+  patch.updated_at = now;
+  return patch;
 }
 
 export function buildSourceValues(ions: Ions) {

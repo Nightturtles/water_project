@@ -12,9 +12,13 @@
 //
 // Regenerate whenever src/lib/mcp-core.ts or anything it imports changes.
 //
-// Staleness is judged by a hash of the SOURCE modules that went into the
-// bundle (recorded in the file's header), not by comparing bundler output, so
-// a bundler upgrade that only reformats the output does not fail the check.
+// The file's header records two hashes, and the check verifies both:
+//   source-hash  of the SOURCE modules that went into the bundle. Staleness is
+//                judged by this, not by comparing bundler output, so a bundler
+//                upgrade that only reformats the output does not fail it.
+//   body-hash    of the generated code below the header. Catches the file
+//                being edited by hand, or a merge that changes the code while
+//                leaving the source-hash line alone.
 
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
@@ -26,15 +30,21 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const entry = path.join(root, "src/lib/mcp-core.ts");
 export const outFile = path.join(root, "supabase/functions/mcp/app-core.gen.js");
 
-const HASH_LINE = /^\/\/ source-hash: ([0-9a-f]{64})$/m;
+const SOURCE_HASH_LINE = /^\/\/ source-hash: ([0-9a-f]{64})$/m;
+const BODY_HASH_LINE = /^\/\/ body-hash: ([0-9a-f]{64})$/m;
+const BANNER_END = "// deno-fmt-ignore-file\n";
 
-function banner(hash) {
+function sha256(text) {
+  return createHash("sha256").update(text).digest("hex");
+}
+
+function banner(sourceHash, bodyHash) {
   return `// GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: ${hash}
+// source-hash: ${sourceHash}
+// body-hash: ${bodyHash}
 // deno-lint-ignore-file
-// deno-fmt-ignore-file
-`;
+${BANNER_END}`;
 }
 
 /** Bundle the entry. Returns the file text and the hash of its source modules. */
@@ -53,7 +63,7 @@ export async function buildMcpCore() {
       hash.update("\0");
     }
     const digest = hash.digest("hex");
-    return { code: banner(digest) + chunk.code, hash: digest };
+    return { code: banner(digest, sha256(chunk.code)) + chunk.code, hash: digest };
   } finally {
     await bundle.close();
   }
@@ -66,8 +76,16 @@ export async function isMcpCoreFresh() {
   } catch {
     return false;
   }
-  const recorded = HASH_LINE.exec(committed);
-  return !!recorded && recorded[1] === (await buildMcpCore()).hash;
+  // 1. The committed code is the code its own header describes.
+  const end = committed.indexOf(BANNER_END);
+  if (end === -1) return false;
+  const header = committed.slice(0, end + BANNER_END.length);
+  const body = committed.slice(end + BANNER_END.length);
+  const bodyHash = BODY_HASH_LINE.exec(header);
+  if (!bodyHash || bodyHash[1] !== sha256(body)) return false;
+  // 2. It was generated from the sources as they are now.
+  const sourceHash = SOURCE_HASH_LINE.exec(header);
+  return !!sourceHash && sourceHash[1] === (await buildMcpCore()).hash;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
