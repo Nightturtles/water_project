@@ -14,6 +14,7 @@ import {
   type DosingResult,
   ionBalance,
   kitFromSettings,
+  pickDefaultSource,
   type Ions,
   likeLiteral,
   mergeSourceWaters,
@@ -529,5 +530,59 @@ Deno.test("analyze: findings follow the salts the water was made with", () => {
     calciumSource: "calcium-chloride",
     magnesiumSource: "epsom-salt",
   });
-  assert.notEqual(sodium(bare), sodium(withBakingSoda));
+  assert.match(sodium(bare), /"severity":"warn"/, "a bare profile gets the sodium warning");
+  assert.equal(sodium(withBakingSoda), "[]", "with baking soda, 35 mg/L is inside the band");
+});
+
+Deno.test("doseLines: a dose under 0.01 g keeps a figure instead of rounding to 0", () => {
+  // 10 mL of water wants about 0.00004 g of calcium chloride for 1 mg/L.
+  const kit = kitFromSettings(null, ["calcium-chloride", "baking-soda"]);
+  const result = computeDoses({
+    sourceWater: ZERO,
+    target: { ...ZERO, calcium: 1, alkalinity: 0 },
+    volumeL: 0.01,
+    kit,
+    recipeSlug: null,
+  }) as DosingResult;
+  const line = doseLines(result, kit).find((l) => l.id === "calcium-chloride");
+  assert.ok(line && line.amount > 0, "the dose is reported");
+  assert.ok(Math.abs(line.amount - result.shown.mineralGrams["calcium-chloride"]) < 1e-6);
+});
+
+Deno.test("pickDefaultSource: the water the app's calculator is using", () => {
+  const rows: SourceRow[] = [
+    { id: "s1", user_id: ME, slug: "my-tap", label: "My Tap", ...ZERO, calcium: 30, bicarbonate: 90 },
+  ];
+  const waters = mergeSourceWaters(rows, [], "my-tap");
+  const shown = { ...ZERO, calcium: 30, bicarbonate: 90 };
+
+  // Selected profile, fields unchanged: the profile, no note.
+  const plain = pickDefaultSource(waters, "my-tap", shown);
+  assert.deepEqual([plain.id, plain.name, plain.ions.calcium, plain.note], ["s1", "My Tap", 30, null]);
+
+  // Unsaved edits in the app: the edited values, and the reply says so.
+  const edited = pickDefaultSource(waters, "my-tap", { ...shown, calcium: 44 });
+  assert.equal(edited.ions.calcium, 44);
+  assert.match(edited.note ?? "", /unsaved edits/);
+
+  // Hand-typed water that was never saved.
+  const custom = pickDefaultSource(waters, "custom", { ...ZERO, magnesium: 7 });
+  assert.deepEqual([custom.key, custom.ions.magnesium], ["custom", 7]);
+  assert.match(custom.note ?? "", /hand-entered/);
+
+  // A newly saved profile whose own row has not synced yet: its values, not distilled.
+  const pending = pickDefaultSource(waters, "new-well", { ...ZERO, calcium: 55 });
+  assert.equal(pending.ions.calcium, 55);
+  assert.match(pending.note ?? "", /not among the saved profiles yet/);
+
+  // A new account with no selection starts on distilled, as the app does.
+  const fresh = pickDefaultSource(waters, null, null);
+  assert.deepEqual([fresh.key, fresh.note], ["distilled", null]);
+
+  // Bad values are floored at 0, never passed through.
+  const odd = pickDefaultSource(waters, "custom", { calcium: -5, magnesium: "x", sodium: 3 });
+  assert.deepEqual([odd.ions.calcium, odd.ions.magnesium, odd.ions.sodium], [0, 0, 3]);
+
+  // A selection that cannot be resolved at all is an error, not distilled.
+  assert.throws(() => pickDefaultSource(waters, "gone", null), /could not be read/);
 });

@@ -420,7 +420,10 @@ function concentrateLine(
  */
 export function doseLines(result: DosingResult, kit: DosingKit): DoseLine[] {
   const lines: DoseLine[] = [];
-  const grams = (g: number) => Math.round(g * 10000) / 10000;
+  // Rows print grams to 0.01. A smaller dose prints as "<0.01 g" in the app;
+  // here it keeps two significant figures, so a real dose is never reported
+  // as 0 (the finished water is computed with it).
+  const grams = (g: number) => (g < 0.01 ? Number(g.toPrecision(2)) : Math.round(g * 100) / 100);
   if (result.mode === "recipe-concentrates") {
     for (const rc of kit.recipeConcentrates) {
       const ml = result.shown.recipeConcentrateMl[rc.id] || 0;
@@ -462,6 +465,70 @@ export function doseLines(result: DosingResult, kit: DosingKit): DoseLine[] {
     );
   }
   return lines;
+}
+
+export interface PickedSource {
+  id: string | null;
+  key: string;
+  name: string;
+  ions: Ions;
+  note: string | null;
+}
+
+/**
+ * The source water to dose from when the caller names none: the one the app's
+ * Calculator is using. The app syncs the values in its Starting Water fields
+ * (user_selections.source_water) next to the selected profile's key, and those
+ * are what it doses from, including edits not saved to the profile, a
+ * hand-typed "custom" water, and a new profile whose own row has not synced
+ * yet. A new account with no selection starts on distilled.
+ */
+export function pickDefaultSource(
+  waters: ReturnType<typeof mergeSourceWaters>,
+  sourcePreset: string | null,
+  shownIons: unknown,
+): PickedSource {
+  const saved = sourcePreset ? waters.find((w) => w.key === sourcePreset) : undefined;
+  if (shownIons && typeof shownIons === "object" && !Array.isArray(shownIons)) {
+    const raw = shownIons as Record<string, unknown>;
+    const ions = {} as Ions;
+    for (const ion of IONS) {
+      const v = Number(raw[ion]);
+      ions[ion] = Number.isFinite(v) && v > 0 ? v : 0;
+    }
+    if (saved) {
+      const edited = IONS.some((ion) => Math.abs(ions[ion] - saved.ions[ion]) > 1e-9);
+      return {
+        id: saved.id,
+        key: saved.key,
+        name: saved.name,
+        ions,
+        note: edited
+          ? `"${saved.name}" has unsaved edits in the app. The edited values, which the app's calculator is using, were used here. Send source_water_id or source_water_key to use the saved profile.`
+          : null,
+      };
+    }
+    const key = sourcePreset || "custom";
+    return {
+      id: null,
+      key,
+      name: key === "custom" ? "Custom (values entered in the app)" : key,
+      ions,
+      note: key === "custom"
+        ? "The app is set to hand-entered source water values; those were used."
+        : `The source water selected in the app ("${key}") is not among the saved profiles yet, so the values the app is showing for it were used.`,
+    };
+  }
+  if (saved) return { id: saved.id, key: saved.key, name: saved.name, ions: saved.ions, note: null };
+  if (!sourcePreset) {
+    const distilled = waters.find((w) => w.key === "distilled");
+    if (distilled) {
+      return { id: null, key: distilled.key, name: distilled.name, ions: distilled.ions, note: null };
+    }
+  }
+  throw new ToolError(
+    "The source water selected in the app could not be read. Send source_water_id or source_water_key (see list_source_waters).",
+  );
 }
 
 /** What the kit holds, for the tool's reply. */

@@ -46,7 +46,7 @@ Enforced twice: in the tool code, and in the database by `supabase/migrations/20
 | `list_source_waters` | No | Built-in and saved |
 | `list_minerals`, `list_concentrates` | No | |
 | `analyze_water` | No | Metrics, the app's range findings, and a charge-balance check |
-| `calculate_doses` | No | What to add to a source water to make a recipe: the Calculator page's own math, with the minerals and concentrates the user enabled in the app (or a `minerals` list). Amounts are what the app's rows show (grams to 0.01, whole drops or mL) |
+| `calculate_doses` | No | What to add to a source water to make a recipe: the Calculator page's own math, with the minerals and concentrates the user enabled in the app (or a `minerals` list). Amounts are what the app's rows show (grams to 0.01, whole drops or mL). With no source water named it uses the values the app's Starting Water fields hold (`user_selections.source_water`), which is what the Calculator doses from, unsaved edits included; a named source water is the saved profile |
 | `create_recipe`, `update_recipe` | Yes | Private only. Names follow the app's rules; a deleted name's key is never reused |
 | `create_source_water`, `update_source_water` | Yes | |
 

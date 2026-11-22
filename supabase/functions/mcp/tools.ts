@@ -38,6 +38,7 @@ import {
   likeLiteral,
   mergeSourceWaters,
   NAME_MAX,
+  pickDefaultSource,
   pickProfileKey,
   pickVerifiedProfileKey,
   recipeDetail,
@@ -138,12 +139,16 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     const row = check(
       await supabase
         .from("user_selections")
-        .select("source_preset, target_preset, deleted_source_presets, deleted_target_presets")
+        .select(
+          "source_preset, source_water, target_preset, deleted_source_presets, deleted_target_presets",
+        )
         .eq("user_id", userId)
         .maybeSingle(),
     ) as Record<string, unknown> | null;
     return {
       sourcePreset: typeof row?.source_preset === "string" ? row.source_preset : null,
+      // The ion values the app's Starting Water fields hold right now.
+      sourceWater: row?.source_water ?? null,
       targetPreset: typeof row?.target_preset === "string" ? row.target_preset : null,
       deletedSources: asStringArray(row?.deleted_source_presets),
       deletedTargets: asStringArray(row?.deleted_target_presets),
@@ -409,7 +414,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           "Brew method the finished water is judged for. Defaults to the recipe's, or filter.",
         ),
         source_water_id: uuid.optional().describe("A saved source water, from list_source_waters."),
-        source_water_key: z.string().max(60).optional().describe(
+        source_water_key: z.string().min(1).max(60).optional().describe(
           "A built-in source water by key from list_source_waters, such as distilled.",
         ),
         volume_liters: z.number().positive().max(VOLUME_MAX_LITERS).default(1).describe(
@@ -477,31 +482,21 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           selections.deletedSources,
           selections.sourcePreset,
         );
-        let source = source_water_id
+        // A named source is the saved profile. With none named, it is the
+        // water the app's calculator is using (see pickDefaultSource).
+        const named = source_water_id
           ? waters.find((w) => w.id === source_water_id)
           : source_water_key
           ? waters.find((w) => w.key === source_water_key)
-          : waters.find((w) => w.active_in_app);
-        let sourceNote: string | null = null;
-        if (!source) {
-          if (source_water_id || source_water_key) {
-            throw new ToolError(
-              "No source water with that id or key is available to this account. Use list_source_waters.",
-            );
-          }
-          // Nothing saved is active (for example hand-typed values that were
-          // never saved as a source water): those are not available here.
-          source = waters.find((w) => w.key === "distilled");
-          if (!source) {
-            throw new ToolError(
-              "The source water active in the app is not a saved one. Send source_water_id or source_water_key.",
-            );
-          }
-          // No selection at all is a new account, where the app starts on
-          // distilled: nothing to explain.
-          if (selections.sourcePreset) sourceNote =
-            "The source water active in the app is not a saved one, so distilled water was assumed. Send source_water_id or source_water_key to use another.";
+          : undefined;
+        if ((source_water_id || source_water_key) && !named) {
+          throw new ToolError(
+            "No source water with that id or key is available to this account. Use list_source_waters.",
+          );
         }
+        const source = named
+          ? { id: named.id, key: named.key, name: named.name, ions: named.ions, note: null }
+          : pickDefaultSource(waters, selections.sourcePreset, selections.sourceWater);
 
         // Kit and doses.
         const kit = kitFromSettings(
@@ -536,7 +531,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
             ions: buildSourceValues(targetIons as ReturnType<typeof rowIons>),
           },
           source_water: { id: source.id, key: source.key, name: source.name, ions: source.ions },
-          source_water_note: sourceNote,
+          source_water_note: source.note,
           volume_liters,
           kit: {
             from: minerals ? "the minerals argument" : "the user's app settings",
