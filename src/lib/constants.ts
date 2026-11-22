@@ -486,8 +486,9 @@ export const LIBRARY_TAGS: readonly string[] = [
 // TARGET_PRESETS fallback shim. They still need to be reserved so a user
 // can't create a custom profile that collides with the canonical library
 // row. `rao` lives here because the shim was trimmed to the 8-entry starter
-// set but Rao's recipe remains in the library.
-const LEGACY_RESERVED_TARGET_KEYS = ["rao"];
+// set but Rao's recipe remains in the library. `cafelytic-filter-sulfate-free`
+// is the previous Cafelytic Filter, kept as a non-starter library row.
+const LEGACY_RESERVED_TARGET_KEYS = ["rao", "cafelytic-filter-sulfate-free"];
 
 export const BUILTIN_TARGET_KEYS: readonly string[] = Object.keys(TARGET_PRESETS);
 export const RESERVED_TARGET_KEYS: Set<string> = new Set([
