@@ -21,7 +21,7 @@ import {
   consentReturnPath,
   rememberPostLoginRedirect,
 } from "../lib/post-login-redirect";
-import { abilitiesNotYetApproved } from "../lib/consent-abilities";
+import { abilitiesNotYetApproved, SHOWN_ABILITIES_VERSION } from "../lib/consent-abilities";
 
 type View = "loading" | "request" | "apps" | "message";
 
@@ -89,7 +89,14 @@ async function bestEffort(call: PromiseLike<unknown>): Promise<void> {
 
 async function recordApproval(clientId: string): Promise<void> {
   if (!clientId) return;
-  await bestEffort(supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId }));
+  // Refused when this page shows a different list from the database's current
+  // one; the app then counts as approved for the first version only.
+  await bestEffort(
+    supabaseClient.rpc("mcp_record_app_consent", {
+      p_client_id: clientId,
+      p_shown_version: SHOWN_ABILITIES_VERSION,
+    }),
+  );
 }
 
 async function forgetApproval(clientId: string): Promise<void> {
@@ -118,6 +125,10 @@ async function loadApprovals(): Promise<{ current: number; byClient: Map<string,
     if (!result) return null;
     const [version, rows] = result;
     if (version.error || rows.error || typeof version.data !== "number") return null;
+    // This build can only describe, and so only ask about, its own list. When
+    // the database's list differs (this page is older or newer than it), the
+    // button is not offered; the database would refuse the approval anyway.
+    if (version.data !== SHOWN_ABILITIES_VERSION) return null;
     const byClient = new Map<string, number>();
     for (const row of (rows.data || []) as { client_id: string; abilities_version: number }[]) {
       byClient.set(row.client_id, row.abilities_version);
@@ -257,18 +268,23 @@ async function loadConnectedApps(): Promise<void> {
       allowBtn.addEventListener("click", async () => {
         allowBtn.disabled = true;
         errorEl.textContent = "";
-        let failed: boolean;
+        let failure: string | null;
         try {
           const res = await supabaseClient.rpc("mcp_record_app_consent", {
             p_client_id: grant.client.id,
+            p_shown_version: SHOWN_ABILITIES_VERSION,
           });
-          failed = !!res.error;
+          failure = !res.error
+            ? null
+            : res.error.code === "MCA02"
+              ? "The list of abilities has changed. Reload this page and try again."
+              : "Could not allow the new abilities. Please try again.";
         } catch (_) {
-          failed = true;
+          failure = "Could not allow the new abilities. Please try again.";
         }
-        if (failed) {
+        if (failure) {
           allowBtn.disabled = false;
-          errorEl.textContent = "Could not allow the new abilities. Please try again.";
+          errorEl.textContent = failure;
           return;
         }
         void loadConnectedApps();

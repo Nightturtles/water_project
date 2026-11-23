@@ -2,7 +2,9 @@
 // approved before the consent page's list grew (src/lib/consent-abilities.ts, used by src/components/oauth-consent.ts).
 
 import { describe, expect, it } from "vitest";
-import { abilitiesNotYetApproved } from "../src/lib/consent-abilities";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { abilitiesNotYetApproved, SHOWN_ABILITIES_VERSION } from "../src/lib/consent-abilities";
 
 describe("abilitiesNotYetApproved", () => {
   it("is empty for an app approved at the current version", () => {
@@ -24,5 +26,19 @@ describe("abilitiesNotYetApproved", () => {
 
   it("is empty for an app approved at a later version than the page knows", () => {
     expect(abilitiesNotYetApproved(3, 2)).toEqual([]);
+  });
+});
+
+describe("SHOWN_ABILITIES_VERSION", () => {
+  it("matches the newest mcp_abilities_version() in the migrations", () => {
+    const dir = join(__dirname, "..", "supabase", "migrations");
+    const pattern = /function public\.mcp_abilities_version\(\)[\s\S]*?select (\d+);/;
+    const versions = readdirSync(dir)
+      .sort()
+      .map((file) => pattern.exec(readFileSync(join(dir, file), "utf8")))
+      .filter((match): match is RegExpExecArray => match !== null)
+      .map((match) => Number(match[1]));
+    expect(versions.length).toBeGreaterThan(0);
+    expect(SHOWN_ABILITIES_VERSION).toBe(versions[versions.length - 1]);
   });
 });

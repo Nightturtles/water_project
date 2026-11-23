@@ -218,6 +218,17 @@ select is(
   (select abilities_version from public.mcp_app_consent where client_id = 'test-client'), 2,
   'the user can read their own approval');
 select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client', 1) $$,
+  'MCA02', null, 'an approval from a page that showed an older list is refused');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client', 3) $$,
+  'MCA02', null, 'and one from a page that showed a list the database does not have yet');
+select is(
+  (select count(*)::integer from public.mcp_app_consent where client_id = 'stale-page-client'), 0,
+  'neither wrote an approval');
+select is(public.mcp_record_app_consent('test-client', 2), 2,
+  'an approval that names the current list is recorded');
+select throws_ok(
   $$ select public.mcp_record_app_consent('') $$,
   '22023', null, 'an empty client id is refused');
 select throws_ok(

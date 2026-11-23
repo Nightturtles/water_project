@@ -59,6 +59,52 @@ as $fn$
   select 2;
 $fn$;
 
+-- An approval is for the list the user was shown. The consent page now says
+-- which version of the list it displayed, and an approval is refused, with
+-- nothing written, when that is not the current version (SQLSTATE MCA02): a
+-- page loaded before the list grew cannot approve abilities it never showed.
+-- The page then asks the user to reload. A call without a version (a page
+-- from before this migration) records the current version, as it did.
+-- Replaces the one-argument function from
+-- 20261123064216_mcp_write_quota_and_app_consent.sql.
+drop function if exists public.mcp_record_app_consent(text);
+
+create or replace function public.mcp_record_app_consent(
+  p_client_id text,
+  p_shown_version integer default null
+)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $fn$
+declare
+  v_uid     uuid := auth.uid();
+  v_version integer := public.mcp_abilities_version();
+begin
+  if v_uid is null then
+    raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if public.is_oauth_client() then
+    raise exception 'a connected app cannot approve abilities' using errcode = '42501';
+  end if;
+  if p_client_id is null or char_length(p_client_id) < 1 or char_length(p_client_id) > 200 then
+    raise exception 'invalid client id' using errcode = '22023';
+  end if;
+  if p_shown_version is not null and p_shown_version <> v_version then
+    raise exception 'the list of abilities has changed: reload the page' using errcode = 'MCA02';
+  end if;
+  insert into public.mcp_app_consent as c (user_id, client_id, abilities_version, approved_at)
+  values (v_uid, p_client_id, v_version, now())
+  on conflict (user_id, client_id)
+  do update set abilities_version = excluded.abilities_version, approved_at = now();
+  return v_version;
+end;
+$fn$;
+
+revoke all on function public.mcp_record_app_consent(text, integer) from public, anon;
+grant execute on function public.mcp_record_app_consent(text, integer) to authenticated;
+
 -- ---------------------------------------------------------------------------
 -- Helper: is this jsonb value a number above zero?
 -- ---------------------------------------------------------------------------

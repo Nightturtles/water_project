@@ -1,6 +1,11 @@
 // Which abilities a connected AI app has not been approved for yet. Pure, so
 // it can be tested without the consent page (src/components/oauth-consent.ts).
 
+// The version of the ability list this build of the consent page shows
+// (oauth/consent.html). Sent with every approval so the database can refuse
+// one given from a page that showed a different list.
+export const SHOWN_ABILITIES_VERSION = 2;
+
 // What each version of the ability list added, in the words the consent page
 // uses (oauth/consent.html). Version 1 is the original list. Add an entry in
 // the same change that raises public.mcp_abilities_version().

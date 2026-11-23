@@ -1279,8 +1279,11 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           brew_method: string | null;
           brew_method_changed: boolean;
         }>("mcp_set_active_recipe", { p_recipe_id: recipe_id });
-        const drafts = obj(obj((check(draftsResult) as { drafts?: unknown } | null)?.drafts)
-          .target_draft_ions);
+        // Read for a note only: the change is already saved, so a failed read
+        // must not turn the reply into an error.
+        const drafts = draftsResult.error
+          ? {}
+          : obj(obj((draftsResult.data as { drafts?: unknown } | null)?.drafts).target_draft_ions);
         const notes = [
           saved.changed
             ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (the app had unsynced changes on another device), set it again."
