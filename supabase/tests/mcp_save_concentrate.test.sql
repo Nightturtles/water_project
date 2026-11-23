@@ -6,7 +6,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(34);
+select plan(37);
 
 insert into auth.users (id, email)
 values
@@ -109,12 +109,15 @@ select is(
 select throws_ok(
   $$ select public.mcp_save_concentrate('recipe', 'x', '{}', 'create') $$,
   '22023', null, 'unknown kind');
+-- Each of the next two is valid in every respect but the one named.
 select throws_ok(
-  $$ select public.mcp_save_concentrate('stock', 'x', '{}', 'delete') $$,
-  '22023', null, 'unknown mode: there is no delete');
+  $$ select public.mcp_save_concentrate('stock', 'mine',
+       '{"label":"Mine","bottleMl":300,"doseGramsPerL":3,"minerals":[{"mineralId":"gypsum","grams":0.5}]}', 'delete') $$,
+  '22023', 'mode must be create or update', 'unknown mode: there is no delete');
 select throws_ok(
-  $$ select public.mcp_save_concentrate('stock', 'Bad Key', '{}', 'create') $$,
-  '22023', null, 'a key must be a slug');
+  $$ select public.mcp_save_concentrate('stock', 'Bad Key',
+       '{"label":"X","bottleMl":250,"doseGramsPerL":5,"minerals":[{"mineralId":"epsom-salt","grams":1}]}', 'create') $$,
+  '22023', 'invalid concentrate key', 'a key must be a slug');
 select throws_ok(
   $$ select public.mcp_save_concentrate('stock', 'x', '[]', 'create') $$,
   '22023', null, 'a spec must be an object');
@@ -151,6 +154,19 @@ select throws_ok(
 select is(
   (select count(*)::int from jsonb_object_keys((select stock_concentrate_specs from public.user_settings))),
   2, 'none of the refused calls stored anything');
+
+-- An update that says what it read is refused when the stored spec has moved on.
+select throws_ok(
+  $$ select public.mcp_save_concentrate('diy', 'epsom-salt',
+       '{"bottleMl":60,"gramsPerBottle":20}', 'update', '{"bottleMl":59,"gramsPerBottle":13.5}') $$,
+  '40001', null, 'an update built from a stale read is refused');
+select is(
+  (select diy_concentrate_specs -> 'epsom-salt' from public.user_settings),
+  '{"bottleMl":60,"gramsPerBottle":14}'::jsonb, 'and the stored spec is unchanged');
+select lives_ok(
+  $$ select public.mcp_save_concentrate('diy', 'epsom-salt',
+       '{"bottleMl":60,"gramsPerBottle":20}', 'update', '{"gramsPerBottle":14.0,"bottleMl":60}') $$,
+  'an update built from the current spec goes through (key order and 14 vs 14.0 do not matter)');
 
 -- The count cap.
 select lives_ok(

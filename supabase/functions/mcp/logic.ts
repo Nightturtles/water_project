@@ -13,6 +13,7 @@ import {
   calculateSo4ClRatio,
   computeStockMineralGramsPerL,
   deriveStockFormulaFromTarget,
+  effectiveCalciumSource,
   evaluateWaterProfileRanges,
   HCO3_TO_CACO3,
   ION_FIELDS,
@@ -1029,16 +1030,20 @@ export interface DiyInput {
 
 /** The spec to store for a Mineral Concentrate; fields left out keep the stored values. */
 export function buildDiySpec(input: DiyInput, existing?: DiySpec | null): DiySpec {
-  const stored = (v: unknown) => (Number(v) > 0 ? Number(v) : undefined);
-  const bottle = input.bottle_ml ?? stored(existing?.bottleMl);
-  const grams = input.grams_per_bottle ?? stored(existing?.gramsPerBottle);
+  // A value that was sent is range-checked. One left out keeps what is stored
+  // as it is: the app's editor accepts any positive bottle size, and a partial
+  // update must not be refused over a field it does not touch.
+  const stored = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+  const bottle = input.bottle_ml !== undefined
+    ? inRange("bottle_ml", input.bottle_ml, BOTTLE_ML_MIN, BOTTLE_ML_MAX, "mL")
+    : stored(existing?.bottleMl);
+  const grams = input.grams_per_bottle !== undefined
+    ? inRange("grams_per_bottle", input.grams_per_bottle, 0.01, MINERAL_GRAMS_MAX, "g")
+    : stored(existing?.gramsPerBottle);
   if (bottle === undefined || grams === undefined) {
     throw new ToolError("bottle_ml and grams_per_bottle are both required for a new Mineral Concentrate.");
   }
-  const spec: DiySpec = {
-    bottleMl: inRange("bottle_ml", bottle, BOTTLE_ML_MIN, BOTTLE_ML_MAX, "mL"),
-    gramsPerBottle: inRange("grams_per_bottle", grams, 0.01, MINERAL_GRAMS_MAX, "g"),
-  };
+  const spec: DiySpec = { bottleMl: bottle, gramsPerBottle: grams };
   const dropMl = input.drop_ml === undefined ? existing?.dropMl : cleanDropMl(input.drop_ml);
   if (dropMl !== undefined && dropMl !== null && Number(dropMl) > 0) spec.dropMl = Number(dropMl);
   return spec;
@@ -1147,16 +1152,41 @@ export function diyView(mineralId: string, spec: DiySpec, selected?: boolean) {
 }
 
 /**
- * The calcium chloride form a derived formula should weigh: the form the user
- * has as a powder, dihydrate when both or neither (the rule in
- * deriveStockFormulaFromTarget, applied to the synced selection).
+ * The calcium chloride form a derived formula should weigh, by the rule in
+ * deriveStockFormulaFromTarget applied to the synced settings: the form the
+ * user has as a powder (dihydrate when both); with neither powder, the form
+ * their kit's calcium source is (an anhydrous concentrate, say); else dihydrate.
  */
-export function calciumChlorideFormFor(selectedMinerals: unknown): string {
-  const powders = Array.isArray(selectedMinerals) ? selectedMinerals : null;
-  if (powders && !powders.includes("calcium-chloride") && powders.includes("calcium-chloride-anhydrous")) {
-    return "calcium-chloride-anhydrous";
+export function calciumChlorideFormFor(settingsRow: Record<string, unknown> | null): string {
+  const kit = kitFromSettings(settingsRow);
+  if (kit.minerals.includes("calcium-chloride")) return "calcium-chloride";
+  if (kit.minerals.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
+  return effectiveCalciumSource(kit) === "calcium-chloride-anhydrous"
+    ? "calcium-chloride-anhydrous"
+    : "calcium-chloride";
+}
+
+/** Made minus wanted, per ion, for showing how close a derived formula lands. */
+export function ionDifferences(made: Ions, target: Ions): Ions {
+  const out = {} as Ions;
+  for (const ion of IONS) out[ion] = round2(num(made[ion]) - num(target[ion]));
+  return out;
+}
+
+/** Why create_recipe_concentrate would refuse this formula, or null when it would not. */
+export function formulaSaveProblem(
+  minerals: { mineralId: string; grams: number }[],
+): string | null {
+  const over = minerals.filter((m) => m.grams > MINERAL_GRAMS_MAX);
+  if (minerals.length > STOCK_MINERALS_MAX) {
+    return `It needs more than ${STOCK_MINERALS_MAX} minerals.`;
   }
-  return "calcium-chloride";
+  if (over.length > 0) {
+    return `It needs more than ${MINERAL_GRAMS_MAX} g of ${
+      over.map((m) => MINERALS[m.mineralId]?.name || m.mineralId).join(" and ")
+    } in the bottle.`;
+  }
+  return null;
 }
 
 /** The app's "make a concentrate from this recipe" formula. */
@@ -1189,6 +1219,10 @@ export function saveConcentrateError(error: { code?: string; message: string }):
         /no settings yet/.test(error.message)
           ? "This account has no synced settings yet. The user needs to open the Cafelytic app once while signed in, then try again."
           : "That concentrate no longer exists. It may have been removed in the app.",
+      );
+    case "40001":
+      return new ToolError(
+        "That concentrate was changed by something else at the same moment. Read it again with list_concentrates and retry.",
       );
     case "54000":
       return new ToolError(

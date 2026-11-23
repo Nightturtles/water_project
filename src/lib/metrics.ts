@@ -1011,7 +1011,7 @@ export function deriveStockFormulaFromTarget(
           concentrationGperL.toFixed(1) +
           " g/L) exceeds approximate solubility (" +
           cap +
-          " g/L); try a larger bottle or lower dose.",
+          " g/L); use a higher dose per liter, which makes the bottle weaker.",
       );
     }
   });

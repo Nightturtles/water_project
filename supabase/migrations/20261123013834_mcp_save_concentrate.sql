@@ -30,7 +30,12 @@ create or replace function public.mcp_save_concentrate(
   p_kind text,   -- 'stock' (Recipe Concentrate) or 'diy' (Mineral Concentrate)
   p_key  text,   -- stock: the concentrate's slug. diy: the mineral id.
   p_spec jsonb,
-  p_mode text    -- 'create': the key must be new. 'update': it must exist.
+  p_mode text,   -- 'create': the key must be new. 'update': it must exist.
+  -- update only: the spec the caller read and built p_spec from. When given,
+  -- the update is refused (40001) unless the stored spec still equals it, so
+  -- two callers changing different fields of one concentrate cannot silently
+  -- undo each other. The caller reads again and retries.
+  p_expected jsonb default null
 )
 returns jsonb
 language plpgsql
@@ -108,6 +113,9 @@ begin
   end if;
   if p_mode = 'update' and v_existing is null then
     raise exception 'no concentrate with that key' using errcode = 'P0002';
+  end if;
+  if p_mode = 'update' and p_expected is not null and v_existing is distinct from p_expected then
+    raise exception 'the concentrate changed since it was read' using errcode = '40001';
   end if;
   if p_mode = 'create'
      and (select count(*) from jsonb_object_keys(v_specs)) >= v_max then
@@ -235,5 +243,5 @@ begin
 end;
 $fn$;
 
-revoke all on function public.mcp_save_concentrate(text, text, jsonb, text) from public, anon;
-grant execute on function public.mcp_save_concentrate(text, text, jsonb, text) to authenticated;
+revoke all on function public.mcp_save_concentrate(text, text, jsonb, text, jsonb) from public, anon;
+grant execute on function public.mcp_save_concentrate(text, text, jsonb, text, jsonb) to authenticated;

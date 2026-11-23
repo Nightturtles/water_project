@@ -1,7 +1,7 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: dff9a8100c45e84653ff7d4bdf2b4a351063b59de371d4b24b63568c2bfee408
-// body-hash: a704063d096e60da4b245b5c66f6db22e5fce13b64ab85694075d3c7cae12487
+// source-hash: ac9f1d35a286c01f10ffeb0b26b0cb1c6503edd743f3d94e0de7c6d9d7bb958b
+// body-hash: e66aa1f65f5ca9fcef72ff7e12dfea15b9675719133500e62771ab04200ff459
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // src/lib/constants.ts
@@ -2460,7 +2460,7 @@ function deriveStockFormulaFromTarget(target, options) {
 		if (concentrationGperL > cap) {
 			const entry = MINERAL_DB[m.mineralId];
 			const name = entry && entry.name || m.mineralId;
-			notes.push(name + " in bottle (" + concentrationGperL.toFixed(1) + " g/L) exceeds approximate solubility (" + cap + " g/L); try a larger bottle or lower dose.");
+			notes.push(name + " in bottle (" + concentrationGperL.toFixed(1) + " g/L) exceeds approximate solubility (" + cap + " g/L); use a higher dose per liter, which makes the bottle weaker.");
 		}
 	});
 	return {
@@ -2839,6 +2839,10 @@ function toMineralKit(kit) {
 		}))
 	};
 }
+/** The single calcium source the kit doses from (storage's getEffectiveCalciumSource, for a kit). */
+function effectiveCalciumSource(kit) {
+	return singleCalciumSource(calciumSources(toMineralKit(kit)));
+}
 function finalIonsFrom(sourceWater, mineralGramsPerL) {
 	const added = calculateIonPPMs(mineralGramsPerL);
 	const out = {};
@@ -3139,4 +3143,4 @@ function buildDosingKit(settings) {
 	}
 	return kit;
 }
-export { BRAND_CONCENTRATES, CACO3_TO_HCO3, HCO3_TO_CACO3, ION_FIELDS, LIBRARY_TAGS, MINERAL_DB, MINERAL_SOLUBILITY_G_PER_L_25C_APPROX, RESERVED_LIBRARY_STOCK_SLUGS, RESERVED_TARGET_KEYS, SOURCE_PRESETS, TARGET_PRESETS, buildDosingKit, calculateIonPPMs, calculateMetrics, calculateSo4ClRatio, computeDoses, computeStockMineralGramsPerL, deriveStockFormulaFromTarget, evaluateWaterProfileRanges, recipeMetricsSummary, slugify, validateProfileName };
+export { BRAND_CONCENTRATES, CACO3_TO_HCO3, HCO3_TO_CACO3, ION_FIELDS, LIBRARY_TAGS, MINERAL_DB, MINERAL_SOLUBILITY_G_PER_L_25C_APPROX, RESERVED_LIBRARY_STOCK_SLUGS, RESERVED_TARGET_KEYS, SOURCE_PRESETS, TARGET_PRESETS, buildDosingKit, calculateIonPPMs, calculateMetrics, calculateSo4ClRatio, computeDoses, computeStockMineralGramsPerL, deriveStockFormulaFromTarget, effectiveCalciumSource, evaluateWaterProfileRanges, recipeMetricsSummary, slugify, validateProfileName };

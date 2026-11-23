@@ -18,6 +18,8 @@ import {
   calciumChlorideFormFor,
   deriveFormula,
   diyView,
+  formulaSaveProblem,
+  ionDifferences,
   kitFromSettings,
   pickDefaultSource,
   pickStockKey,
@@ -691,6 +693,16 @@ Deno.test("buildDiySpec: new needs both values; an update keeps what was not sen
     dropMl: 0.072,
   });
   assert.deepEqual(buildDiySpec({ drop_ml: null }, existing), { bottleMl: 59, gramsPerBottle: 13.5 });
+  // The app accepts any positive bottle size. A stored 4 mL bottle is kept by
+  // an update that does not touch it; only a bottle_ml that is sent is checked.
+  assert.deepEqual(buildDiySpec({ grams_per_bottle: 2 }, { bottleMl: 4, gramsPerBottle: 1 }), {
+    bottleMl: 4,
+    gramsPerBottle: 2,
+  });
+  assert.throws(
+    () => buildDiySpec({ bottle_ml: 4 }, { bottleMl: 4, gramsPerBottle: 1 }),
+    /bottle_ml must be between/,
+  );
 });
 
 Deno.test("pickStockKey: the app's key rule, and names must be new", () => {
@@ -754,16 +766,35 @@ Deno.test("deriveFormula: the app's formula for a recipe, weighed in the user's 
   });
   assert.ok(anhydrous.minerals.some((m) => m.mineralId === "calcium-chloride-anhydrous"));
 
-  assert.equal(
-    calciumChlorideFormFor(["calcium-chloride-anhydrous", "epsom-salt"]),
-    "calcium-chloride-anhydrous",
-  );
-  assert.equal(
-    calciumChlorideFormFor(["calcium-chloride", "calcium-chloride-anhydrous"]),
-    "calcium-chloride",
-  );
-  assert.equal(calciumChlorideFormFor(["epsom-salt"]), "calcium-chloride");
+  const form = (selected_minerals: string[], selected_concentrates: string[] = []) =>
+    calciumChlorideFormFor({
+      selected_minerals,
+      selected_concentrates,
+      diy_concentrate_specs: {
+        "calcium-chloride-anhydrous": { bottleMl: 100, gramsPerBottle: 10 },
+      },
+    });
+  assert.equal(form(["calcium-chloride-anhydrous", "epsom-salt"]), "calcium-chloride-anhydrous");
+  assert.equal(form(["calcium-chloride", "calcium-chloride-anhydrous"]), "calcium-chloride");
+  assert.equal(form(["epsom-salt"]), "calcium-chloride");
+  // Neither powder, but the kit doses calcium from an anhydrous concentrate:
+  // the app derives anhydrous weights then, and so does the server.
+  assert.equal(form(["epsom-salt"], ["diy:calcium-chloride-anhydrous"]), "calcium-chloride-anhydrous");
+  // A powder still wins over a concentrate of the other form.
+  assert.equal(form(["calcium-chloride"], ["diy:calcium-chloride-anhydrous"]), "calcium-chloride");
   assert.equal(calciumChlorideFormFor(null), "calcium-chloride");
+
+  // How far the formula lands from the recipe, per ion.
+  const diff = ionDifferences(made, target);
+  assert.ok(Math.abs(diff.calcium) < 1.5);
+  assert.equal(diff.potassium, 0);
+
+  // A formula past the save limits is reported, not recommended for saving.
+  assert.equal(formulaSaveProblem(dihydrate.minerals), null);
+  assert.match(
+    formulaSaveProblem([{ mineralId: "calcium-chloride", grams: 7336 }]) ?? "",
+    /more than 5000 g of Calcium Chloride/,
+  );
 });
 
 Deno.test("saveConcentrateError: database refusals become clear messages", () => {
@@ -776,6 +807,7 @@ Deno.test("saveConcentrateError: database refusals become clear messages", () =>
   );
   assert.match(msg("P0002", "no concentrate with that key"), /no longer exists/);
   assert.match(msg("54000"), /maximum number/);
+  assert.match(msg("40001"), /Read it again/);
   assert.ok(
     saveConcentrateError({ code: "22023", message: "bottleMl out of range" }) instanceof ToolError,
   );

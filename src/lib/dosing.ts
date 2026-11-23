@@ -156,6 +156,11 @@ function toMineralKit(kit: DosingKit): MineralKit {
   };
 }
 
+/** The single calcium source the kit doses from (storage's getEffectiveCalciumSource, for a kit). */
+export function effectiveCalciumSource(kit: DosingKit): string | null {
+  return singleCalciumSource(kitCalciumSources(toMineralKit(kit)));
+}
+
 function finalIonsFrom(
   sourceWater: IonMap,
   mineralGramsPerL: Record<string, number>,
