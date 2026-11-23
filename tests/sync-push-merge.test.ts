@@ -1515,6 +1515,187 @@ describe("a write the server committed without the device hearing back", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Four sequences from a second outside review of the branch (at e75dfc1),
+// ported from its probes. Each is a case where the device reported synced, or
+// would have, with the account holding something else.
+// ---------------------------------------------------------------------------
+
+describe("second review: sequences that left the account wrong", () => {
+  async function syncedDevice(): Promise<void> {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    cloud.log.length = 0;
+  }
+
+  // The next settings write lands, but the device is told the request failed.
+  function loseNextSettingsAnswer(): void {
+    const from = g.window.supabaseClient.from;
+    let done = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings") return t;
+      const update = t.update;
+      t.update = (payload: unknown) => {
+        const q = update(payload);
+        if (done) return q;
+        done = true;
+        const then = q.then;
+        q.then = (resolve: any, reject: any) =>
+          then(() => resolve({ data: null, error: { message: "Failed to fetch" } }), reject);
+        return q;
+      };
+      return t;
+    };
+  }
+
+  // The next settings write is sent and the device is told the connection
+  // was lost, but the server has not run it yet. Returns a function that
+  // lets the server run it now, with whatever condition it was sent with.
+  function strandNextSettingsWrite(): () => Promise<unknown> {
+    let runLate: () => Promise<unknown> = async () => undefined;
+    const from = g.window.supabaseClient.from;
+    let done = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings") return t;
+      const update = t.update;
+      t.update = (payload: unknown) => {
+        const q = update(payload);
+        if (done) return q;
+        done = true;
+        const then = q.then;
+        runLate = () => then((v: unknown) => v);
+        q.then = (resolve: any) =>
+          Promise.resolve({ data: null, error: { message: "network lost" } }).then(resolve);
+        return q;
+      };
+      return t;
+    };
+    return () => runLate();
+  }
+
+  test("a retry keeps a concentrate that the unanswered first push had carried through", async () => {
+    await syncedDevice();
+    ai.saveConcentrate();
+    loseNextSettingsAnswer();
+    edits.volume();
+    await expect(pushAllToCloud()).rejects.toThrow();
+    expect(settingsRow().stock_concentrate_specs.ai).toBeTruthy();
+    await pushAllToCloud();
+    expect(hasUnpushedChanges()).toBe(false);
+    expect(settingsRow().stock_concentrate_specs.ai).toBeTruthy();
+    expect(volumeLanded()).toBe(true);
+  });
+
+  test("a write still on its way cannot land after a retry has reported the device clean", async () => {
+    await syncedDevice();
+    const before = settingsRow().theme;
+    const letItLand = strandNextSettingsWrite();
+    storage.saveThemePreference("light");
+    await expect(pushAllToCloud()).rejects.toThrow();
+    expect(settingsRow().theme, "the first write has not run yet").toBe(before);
+
+    // The user puts the theme back. The row already holds it.
+    storage.saveThemePreference(before);
+    await pushAllToCloud();
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // The first write now reaches the server, with the condition it was sent
+    // with. It must find that condition no longer holds.
+    await letItLand();
+    expect(settingsRow().theme).toBe(before);
+  });
+
+  test("the same when the first write did commit and only its answer was lost", async () => {
+    await syncedDevice();
+    const before = settingsRow().theme;
+    loseNextSettingsAnswer();
+    storage.saveThemePreference("light");
+    await expect(pushAllToCloud()).rejects.toThrow();
+    expect(settingsRow().theme).toBe("light");
+    storage.saveThemePreference(before);
+    await pushAllToCloud();
+    expect(settingsRow().theme).toBe(before);
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("a recipe saved without its brew method is completed by the retry", async () => {
+    await syncedDevice();
+    // A connected app switched the account to espresso; this device, not
+    // having pulled, picks a filter-only recipe.
+    ai.setActiveRecipe("cafelytic-espresso", "espresso");
+    storage.saveTargetPresetName("lotus-light-bright");
+    cloud.onSingleRowWrite = (table) =>
+      table === "user_settings"
+        ? { error: { code: "40001", message: "serialization failure" } }
+        : undefined;
+    await expect(pushAllToCloud()).rejects.toThrow();
+    cloud.onSingleRowWrite = null;
+    expect(hasUnpushedChanges()).toBe(true);
+    await pushAllToCloud();
+    expect(hasUnpushedChanges()).toBe(false);
+    expect(selectionsRow().target_preset).toBe("lotus-light-bright");
+    expect(settingsRow().brew_method).toBe("filter");
+  });
+
+  test("changing only the brew method leaves another device's recipe removal alone", async () => {
+    await syncedDevice();
+    storage.saveTargetPresetName("sca");
+    await pushAllToCloud();
+    // Another device removes a recipe; this one has not pulled.
+    cloud.outsideWrite("user_selections", (row) => {
+      row.deleted_target_presets = ["lotus-light-bright"];
+      row.deleted_source_presets = ["tap"];
+    });
+    storage.saveBrewMethod("espresso");
+    await pushAllToCloud();
+    expect(settingsRow().brew_method).toBe("espresso");
+    expect(selectionsRow().target_preset).toBe("sca");
+    expect(selectionsRow().deleted_target_presets).toEqual(["lotus-light-bright"]);
+    expect(selectionsRow().deleted_source_presets).toEqual(["tap"]);
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("and when the recipe half does need writing, it is the only field written", async () => {
+    await syncedDevice();
+    storage.saveTargetPresetName("sca");
+    await pushAllToCloud();
+    // Another writer chose a recipe, removed one, picked a source water and
+    // added to the rail. This device then changes only its brew method.
+    cloud.outsideWrite("user_selections", (row) => {
+      row.target_preset = "rao";
+      row.deleted_target_presets = ["lotus-light-bright"];
+      row.source_preset = "volvic";
+      row.source_water = VOLVIC;
+      row.added_target_presets = [...(row.added_target_presets || []), "sey"];
+    });
+    storage.saveBrewMethod("espresso");
+    await pushAllToCloud();
+    // The device's recipe goes with its brew method...
+    expect(settingsRow().brew_method).toBe("espresso");
+    expect(selectionsRow().target_preset).toBe("sca");
+    // ...and nothing else in the row is this device's to touch.
+    expect(selectionsRow().deleted_target_presets).toEqual(["lotus-light-bright"]);
+    expect(selectionsRow().source_preset).toBe("volvic");
+    expect(selectionsRow().added_target_presets).toContain("sey");
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("an ordinary push of the selections row still sends the delete lists whole", async () => {
+    await syncedDevice();
+    cloud.outsideWrite("user_selections", (row) => {
+      row.deleted_target_presets = ["lotus-light-bright"];
+    });
+    // A real change in this row: as on every app version, its lists go out.
+    edits.rail();
+    await pushAllToCloud();
+    expect(selectionsRow().deleted_target_presets).toEqual([]);
+    expect(railLanded()).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Two tabs of one browser share local storage, and with it the base, but not
 // a page's queue.
 // ---------------------------------------------------------------------------

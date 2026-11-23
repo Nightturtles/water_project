@@ -496,7 +496,26 @@ export type OwnChanges = {
   keys: Record<string, string[]>;
   items: Record<string, unknown[]>;
 };
-type RowIntent = OwnChanges & { ids: string[] };
+// `sentIf` lists the row versions (updated_at, see rowVersion) that a write
+// from this entry's push was made conditional on. Such a write, if the device
+// never heard back, may still be on its way: it lands if and only if the row
+// is still at that version when it arrives.
+type RowIntent = OwnChanges & { ids: string[]; sentIf: string[] };
+
+// A row's version as its conditional writes name it. Every writer sets
+// updated_at, so it changes with every write.
+function rowVersion(row: Record<string, unknown>): string {
+  return row.updated_at === null || row.updated_at === undefined ? "" : String(row.updated_at);
+}
+
+// `stamp`, unless it is the same instant as the row's current updated_at, in
+// which case one millisecond after it.
+function laterThan(stamp: unknown, current: unknown): unknown {
+  const a = typeof stamp === "string" ? Date.parse(stamp) : NaN;
+  const b = typeof current === "string" ? Date.parse(current) : NaN;
+  if (isNaN(a) || isNaN(b) || a !== b) return stamp;
+  return new Date(b + 1).toISOString();
+}
 
 const ROW_INTENTS_MAX = 5;
 let rowIntentSeq = 0;
@@ -521,6 +540,11 @@ function readRowIntents(key: string): RowIntent[] {
       fields: Array.isArray(entry.fields) ? (entry.fields as string[]) : [],
       keys: isPlainObject(entry.keys) ? (entry.keys as Record<string, string[]>) : {},
       items: isPlainObject(entry.items) ? (entry.items as Record<string, unknown[]>) : {},
+      sentIf: Array.isArray(entry.sentIf)
+        ? (entry.sentIf.filter(function (v) {
+            return typeof v === "string";
+          }) as string[])
+        : [],
     });
   });
   return out;
@@ -566,12 +590,46 @@ function writeRowIntents(key: string, entries: RowIntent[]): void {
     const first = list[0] as RowIntent;
     const second = list[1] as RowIntent;
     const folded: RowIntent = Object.assign(
-      { ids: first.ids.concat(second.ids) },
+      { ids: first.ids.concat(second.ids), sentIf: first.sentIf.concat(second.sentIf) },
       combineOwnChanges([first, second]),
     );
     list = [folded].concat(list.slice(2));
   }
   safeSetItem(key, JSON.stringify(list));
+}
+
+// The fields the record names, whole fields and those whose keys or items it
+// names, with the rest of any group they belong to.
+function fieldsNamedBy(own: OwnChanges, groups: string[][]): string[] {
+  const names: string[] = [];
+  const add = function (field: string): void {
+    if (names.indexOf(field) === -1) names.push(field);
+  };
+  own.fields.forEach(add);
+  Object.keys(own.keys).forEach(add);
+  Object.keys(own.items).forEach(add);
+  groups.forEach(function (group) {
+    if (
+      group.some(function (field) {
+        return names.indexOf(field) !== -1;
+      })
+    )
+      group.forEach(add);
+  });
+  return names;
+}
+
+// Note, on the entry of the push with this id, the row version its write is
+// about to be made conditional on. Only the latest matters: an earlier write
+// of the same push was answered (the row had changed, nothing written).
+// With null: that write was answered and did not happen, so nothing of this
+// push is on its way.
+function noteSentIf(key: string, id: string, version: string | null): void {
+  const entries = readRowIntents(key);
+  entries.forEach(function (entry) {
+    if (entry.ids.indexOf(id) !== -1) entry.sentIf = version === null ? [] : [version];
+  });
+  writeRowIntents(key, entries);
 }
 
 // Retire the entries whose every id this push read. One synchronous
@@ -809,19 +867,29 @@ function parsePushBase(raw: string | null): Record<string, unknown> | null {
 // it reads again. Without a base or a row it upserts the whole payload, as
 // every push used to.
 //
-// `own` is passed through to mergeRowForPush. `onlyIfDifferent` is for a push
-// that has nothing new of its own to send and is here to check the row (an
-// earlier send in doubt, or the other row's half of the active choice
-// changed): it writes only if the row does not already hold the result. An
-// ordinary push always writes, so that its echo brings this device whatever
-// else the row holds.
+// The whole-row upsert is not conditional, so a late one cannot be fenced off
+// the way a conditional write can (see strayWriteCouldLand below).
 async function pushSingleRow(
   spec: SingleRowSpec,
   userId: string,
   local: Record<string, unknown>,
   base: Record<string, unknown> | null,
-  own: OwnChanges,
-  onlyIfDifferent: boolean,
+  push: {
+    // What this device has changed and not yet seen confirmed, this push's
+    // own changes included.
+    own: OwnChanges;
+    // The local payload equals the base: this push brings nothing new and is
+    // here only for what is on record. It then writes those fields alone.
+    nothingNew: boolean;
+    // Earlier pushes of this row left changes on record.
+    hadEarlier: boolean;
+    // Row versions that writes of earlier, unanswered pushes were made
+    // conditional on.
+    earlierSentIf: string[];
+    // Called with the row version just before each conditional write, and
+    // with null once the server has answered that it wrote nothing.
+    beforeWrite: (version: string | null) => void;
+  },
 ): Promise<{ error: unknown }> {
   const client = window.supabaseClient;
   const table = spec.table;
@@ -837,30 +905,70 @@ async function pushSingleRow(
       read && isPlainObject(read.data) ? read.data : null;
     if (!cloud) return wholeRow();
 
-    const merged = mergeRowForPush(spec.kinds, spec.groups, base, local, cloud, own);
+    let merged = mergeRowForPush(spec.kinds, spec.groups, base, local, cloud, push.own);
     if (spec.settle) spec.settle(merged, base, local);
-    // The row already holds everything this push would write (an earlier send
-    // that was in doubt did land, or the other writer chose what this device
-    // holds anyway).
+    // A push with nothing new of its own (it is here for a change still on
+    // record: an unanswered send, or this row's half of the active choice)
+    // writes the fields on record and no others. In particular it does not
+    // send this device's delete lists, which an ordinary push of this row
+    // sends whole: a row visited only for its half of a pair must not undo a
+    // deletion another device made.
+    if (push.nothingNew) {
+      const named = fieldsNamedBy(push.own, spec.groups);
+      const only: Record<string, unknown> = {};
+      named.forEach(function (field) {
+        if (Object.prototype.hasOwnProperty.call(merged, field)) only[field] = merged[field];
+      });
+      merged = only;
+    }
+    // An unanswered write of an earlier push may still be on its way, and it
+    // will land if the row is still at the version it was made conditional
+    // on. If it is, this push must write, even when it has nothing to change:
+    // any write moves the row on, after which that older write can no longer
+    // land. Without this, a push that found the row already right would
+    // report the device clean, and the older write would then arrive.
+    const strayWriteCouldLand = push.earlierSentIf.indexOf(rowVersion(cloud)) !== -1;
+    // Otherwise, if the row already holds everything this push would write
+    // (an unanswered send did land, or the other writer chose what this
+    // device holds anyway), a push that is only checking writes nothing. An
+    // ordinary push always writes, so that its echo brings this device
+    // whatever else the row holds.
     if (
-      onlyIfDifferent &&
+      !strayWriteCouldLand &&
+      (push.nothingNew || push.hadEarlier) &&
       Object.keys(merged).every(function (field) {
         return sameValue(merged[field], ownValue(cloud, field));
       })
     ) {
       return { error: null };
     }
-    const payload = Object.assign(merged, { updated_at: local.updated_at });
+    // The row's version must move with every write: it is what conditional
+    // writes are checked against. Two writes inside one millisecond would
+    // otherwise leave it where it was.
+    const payload = Object.assign(merged, {
+      updated_at: laterThan(local.updated_at, cloud.updated_at),
+    });
+    push.beforeWrite(rowVersion(cloud));
     let write = client.from(table).update(payload).eq("user_id", userId);
     write =
       cloud.updated_at === null || cloud.updated_at === undefined
         ? write.is("updated_at", null)
         : write.eq("updated_at", cloud.updated_at);
+    // If this never answers, or throws, the note stays: the write may land.
     const written = await write.select("user_id");
-    if (written && written.error) return { error: written.error };
+    if (written && written.error) {
+      // A PostgREST error carries a code; a request that got no answer does
+      // not. Only an answer settles that the write did not, and will not,
+      // happen.
+      const code = isPlainObject(written.error) ? written.error.code : undefined;
+      if (typeof code === "string" && code !== "") push.beforeWrite(null);
+      return { error: written.error };
+    }
     if (written && Array.isArray(written.data) && written.data.length > 0) {
       return { error: null };
     }
+    // Answered: the row had changed and nothing was written.
+    push.beforeWrite(null);
   }
   return {
     error: new Error("[sync] " + table + " kept changing while it was being saved"),
@@ -1044,31 +1152,36 @@ function pushRowInTurn(
 
     // Record what this push changes before anything goes out. Still in the
     // same step as the account check above: nothing has been awaited.
+    // Every push that gets this far has an entry, even one with nothing new:
+    // it may still send a write, and that write must be on record too.
     let unconfirmed = earlier;
+    const myId = newIntentId();
     if (base) {
-      const mine = ownChangesOf(spec.kinds, base, local);
-      if (
-        mine.fields.length > 0 ||
-        Object.keys(mine.keys).length > 0 ||
-        Object.keys(mine.items).length > 0
-      ) {
-        unconfirmed = earlier.concat([Object.assign({ ids: [newIntentId()] }, mine)]);
-        writeRowIntents(spec.pendingKey, unconfirmed);
-      }
+      unconfirmed = earlier.concat([
+        Object.assign({ ids: [myId], sentIf: [] }, ownChangesOf(spec.kinds, base, local)),
+      ]);
+      writeRowIntents(spec.pendingKey, unconfirmed);
     }
     const known = unconfirmed.reduce(function (ids: string[], entry) {
       return ids.concat(entry.ids);
     }, []);
     const refreshesAtStart = baseRefreshCount(spec.baseKey);
 
-    const result = await pushSingleRow(
-      spec,
-      userId,
-      local,
-      base,
-      combineOwnChanges(unconfirmed),
-      nothingNew || earlier.length > 0,
-    );
+    const result = await pushSingleRow(spec, userId, local, base, {
+      own: combineOwnChanges(unconfirmed),
+      nothingNew: nothingNew,
+      hadEarlier: earlier.length > 0,
+      earlierSentIf: earlier.reduce(function (versions: string[], entry) {
+        return versions.concat(entry.sentIf);
+      }, []),
+      beforeWrite: function (version) {
+        // The write is about to go out. If the device signed out meanwhile,
+        // local storage is no longer this account's to write to.
+        if (safeGetItem(KEYS.SYNCED_USER_ID) === userId) {
+          noteSentIf(spec.pendingKey, myId, version);
+        }
+      },
+    });
     if (result.error) return result;
     // The requests took time. If the device signed out or changed account
     // meanwhile, local storage was wiped and is not this push's to write.
@@ -1125,7 +1238,9 @@ function nameAsOwnChanges(pendingKey: string, fields: string[]): void {
     return;
   writeRowIntents(
     pendingKey,
-    entries.concat([{ ids: [newIntentId()], fields: fields.slice(), keys: {}, items: {} }]),
+    entries.concat([
+      { ids: [newIntentId()], sentIf: [], fields: fields.slice(), keys: {}, items: {} },
+    ]),
   );
 }
 
