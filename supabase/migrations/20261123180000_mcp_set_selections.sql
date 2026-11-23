@@ -436,11 +436,16 @@ grant execute on function public.mcp_set_active_recipe(uuid) to authenticated;
 -- Starting Water fields hold. They are always written together here.
 --
 -- A key that is one of the caller's saved source waters takes its values from
--- that row; p_ions is ignored. Any other key is one of the app's built-in
--- waters, whose values live in the app's code, not in the database, so the
--- caller sends them and they are checked and rebuilt field by field. The MCP
--- server only ever sends a real built-in's own values. Used directly, the
--- most this allows is what typing numbers into the Starting Water fields does.
+-- that row; p_ions is ignored. Any other key must be one of the app's
+-- built-in waters (c_builtin_keys, a copy of SOURCE_PRESETS in
+-- src/lib/constants.ts without 'custom'; tests/mcp-selection-ids.test.ts
+-- fails when the two differ). A key that is neither is refused: the app looks
+-- a key up in plain objects, so one it does not know, such as 'constructor',
+-- must never be stored. A built-in's values live in the app's code, not in
+-- the database, so the caller sends them and they are checked and rebuilt
+-- field by field. The MCP server only ever sends a real built-in's own
+-- values. Used directly, the most this allows is a built-in's name over what
+-- typing numbers into the Starting Water fields does.
 
 create or replace function public.mcp_set_active_source_water(
   p_key  text,
@@ -463,6 +468,9 @@ declare
   c_key_re   constant text := '^[a-z0-9][a-z0-9-]{0,59}\Z';
   c_ions     constant text[] := array[
     'calcium', 'magnesium', 'potassium', 'sodium', 'sulfate', 'chloride', 'bicarbonate'];
+  c_builtin_keys constant text[] := array[
+    'distilled', 'soft-tap', 'hard-tap', 'volvic', 'voss',
+    'crystal-geyser-olancha', 'crystal-geyser-shasta'];
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
@@ -503,6 +511,9 @@ begin
       'chloride', coalesce(r_row.chloride, 0),
       'bicarbonate', coalesce(r_row.bicarbonate, 0));
   else
+    if not (p_key = any (c_builtin_keys)) then
+      raise exception 'no saved source water with that key' using errcode = 'P0002';
+    end if;
     if p_ions is null or jsonb_typeof(p_ions) <> 'object' then
       raise exception 'no saved source water with that key' using errcode = 'P0002';
     end if;

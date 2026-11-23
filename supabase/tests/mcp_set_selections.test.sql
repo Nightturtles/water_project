@@ -7,7 +7,7 @@
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(62);
+select plan(65);
 
 insert into auth.users (id, email)
 values
@@ -249,21 +249,32 @@ select is(
   '{"calcium":40,"magnesium":8.5,"potassium":0,"sodium":0,"sulfate":0,"chloride":0,"bicarbonate":120}'::jsonb,
   'the key and the values were written together');
 select is(
-  public.mcp_set_active_source_water('evian',
+  public.mcp_set_active_source_water('voss',
     '{"calcium":80,"magnesium":26,"bicarbonate":360,"sodium":null,"extra":"x","tds":500}') -> 'source_water',
   '{"calcium":80,"magnesium":26,"potassium":0,"sodium":0,"sulfate":0,"chloride":0,"bicarbonate":360}'::jsonb,
   'a built-in water is stored as the seven ions, rebuilt from checked values');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian') $$,
+  $$ select public.mcp_set_active_source_water('evian', '{"calcium":80}') $$,
+  'P0002', 'no saved source water with that key',
+  'a key that is neither saved nor built in is refused, even with values');
+select throws_ok(
+  $$ select public.mcp_set_active_source_water('constructor', '{"calcium":80}') $$,
+  'P0002', 'no saved source water with that key',
+  'so is a key that names something on every object in the app');
+select is(
+  (select source_preset || '|' || (source_water ->> 'calcium') from public.user_selections),
+  'voss|80', 'and neither changed the active source water');
+select throws_ok(
+  $$ select public.mcp_set_active_source_water('voss') $$,
   'P0002', 'no saved source water with that key', 'a key with no saved row and no values is refused');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian', '{"calcium":"80"}') $$,
+  $$ select public.mcp_set_active_source_water('voss', '{"calcium":"80"}') $$,
   '22023', 'ion values must be numbers', 'a non-number ion is refused');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian', '{"calcium":-1}') $$,
+  $$ select public.mcp_set_active_source_water('voss', '{"calcium":-1}') $$,
   '22023', 'ion value out of range', 'a negative ion is refused');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian', '{"calcium":10001}') $$,
+  $$ select public.mcp_set_active_source_water('voss', '{"calcium":10001}') $$,
   '22023', 'ion value out of range', 'an absurd ion is refused');
 select throws_ok(
   $$ select public.mcp_set_active_source_water('custom', '{"calcium":1}') $$,
@@ -284,7 +295,7 @@ select is(
   (select source_preset || '|' || target_preset || '|' || deleted_source_presets::text
           || '|' || added_target_presets::text
      from public.user_selections),
-  'evian|lib-extra|["old-tap", "volvic"]|["lib-added", "lib-extra"]',
+  'voss|lib-extra|["old-tap", "volvic"]|["lib-added", "lib-extra"]',
   'nothing else in selections changed');
 
 -- The helper is internal.
@@ -311,7 +322,7 @@ select throws_ok(
   'P0002', 'no settings yet: open the Cafelytic app once while signed in',
   'no selections row is created for an account that never synced');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian', '{"calcium":80}') $$,
+  $$ select public.mcp_set_active_source_water('voss', '{"calcium":80}') $$,
   'P0002', 'no settings yet: open the Cafelytic app once while signed in',
   'no selections row is created by the source water function either');
 select is(
@@ -334,7 +345,7 @@ select throws_ok(
   $$ select public.mcp_set_active_recipe('30000000-0000-0000-0000-000000000002') $$,
   '42501', null, 'a signed-out caller cannot set the active recipe');
 select throws_ok(
-  $$ select public.mcp_set_active_source_water('evian', '{"calcium":80}') $$,
+  $$ select public.mcp_set_active_source_water('voss', '{"calcium":80}') $$,
   '42501', null, 'a signed-out caller cannot set the active source water');
 
 select * from finish();

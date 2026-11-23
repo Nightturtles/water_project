@@ -3,10 +3,13 @@
 // Those ids live in src/lib/constants.ts, so the function carries a copy. This
 // test fails when the copy and the app differ: adding a mineral or a brand
 // concentrate needs a new migration that re-creates the function.
+//
+// public.mcp_set_active_source_water pins the built-in source water keys the
+// same way (SOURCE_PRESETS without the hand-typed "custom").
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { BRAND_CONCENTRATES, MINERAL_DB } from "../src/lib/constants";
+import { BRAND_CONCENTRATES, MINERAL_DB, SOURCE_PRESETS } from "../src/lib/constants";
 
 const MIGRATIONS = join(__dirname, "..", "supabase", "migrations");
 
@@ -32,6 +35,16 @@ describe("mcp_set_enabled id lists", () => {
   it("knows exactly the app's brand concentrates", () => {
     expect(idsInNewestMigration("c_brand_ids").sort()).toEqual(
       Object.keys(BRAND_CONCENTRATES).sort(),
+    );
+  });
+});
+
+describe("mcp_set_active_source_water key list", () => {
+  it("knows exactly the app's built-in source waters", () => {
+    expect(idsInNewestMigration("c_builtin_keys").sort()).toEqual(
+      Object.keys(SOURCE_PRESETS)
+        .filter((key) => key !== "custom")
+        .sort(),
     );
   });
 });
