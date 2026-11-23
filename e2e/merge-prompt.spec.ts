@@ -74,8 +74,11 @@ test.describe("merge prompt: first sign-in on a device with its own data", () =>
   let browser: Browser;
   let release: (() => void) | undefined;
 
-  // A signed-in page that never ran a merge: sign in through supabase-js on
-  // login.html without submitting the form (no redirect, no push, no pull).
+  // A signed-in page for reading and resetting the account's rows. It signs in
+  // through supabase-js on login.html without submitting the form, so there
+  // is no redirect. The sign-in still starts this page's own first-login
+  // merge; the context is empty, so that merge only pulls. Wait for it to
+  // finish so it can't overlap the fixture work in fn.
   async function withAccount<T>(fn: (page: Page) => Promise<T>): Promise<T> {
     const ctx = await browser.newContext();
     const page = await ctx.newPage();
@@ -89,6 +92,9 @@ test.describe("merge prompt: first sign-in on a device with its own data", () =>
         },
         { email: EMAIL!, password: PASSWORD! },
       );
+      await page.waitForFunction((key) => !!localStorage.getItem(key), MERGED_KEY, {
+        timeout: 30_000,
+      });
       return await fn(page);
     } finally {
       await ctx.close();
