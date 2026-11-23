@@ -65,6 +65,7 @@ import {
   recipeSummary,
   resolveIons,
   rowIons,
+  quotaError,
   saveConcentrateError,
   type SourceRow,
   sourceWaterView,
@@ -101,6 +102,7 @@ const INSTRUCTIONS = [
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
   "A concentrate saved here is added to the user's Settings but is NOT switched on: the user enables it in the Cafelytic app. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
+  "Saves from connected AI apps are limited to 100 per user per day; if a save is refused for that reason, tell the user and do not retry it.",
   "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates they enabled in the app. Do not work doses out yourself.",
 ].join(" ");
 
@@ -135,6 +137,8 @@ function check<T>(result: { data: T; error: { code?: string; message: string } |
     if (result.error.code === "42501") {
       throw new ToolError("Cafelytic does not allow that change from an AI app.");
     }
+    const overLimit = quotaError(result.error);
+    if (overLimit) throw overLimit;
     throw new Error(result.error.message);
   }
   return result.data;

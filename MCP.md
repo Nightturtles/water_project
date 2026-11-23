@@ -17,12 +17,12 @@ Phases 1, 1b and 2 (this code): reads, analysis, dose calculation, private recip
 
 ### Before this is offered to the public
 
-- **Write quotas are not implemented.** Deferred on purpose while there is one user. Add a per-user daily cap and a per-account ceiling (same pattern as `estimate_water_quota`) first.
+- **Write quotas are in the database** (`supabase/migrations/20261123064216_mcp_write_quota_and_app_consent.sql`). A trigger on `target_profiles`, `source_profiles`, `user_settings` and `user_selections` counts every row a connected app's request writes: 100 per user per UTC day across all of that user's apps (SQLSTATE `MCQ01` when over), and a connected app cannot add a recipe to an account holding 500, or a source water to one holding 100 (`MCQ02`). The app itself is never counted or limited. A new function that writes one of those tables for a connected app is counted with no further work; its tool should pass the error through `quotaError` (`supabase/functions/mcp/logic.ts`). Reads are not limited.
 - Supabase's OAuth 2.1 server is still beta. Known gaps as of 2026-11: access tokens are not bound to this server (`aud` is always `authenticated`), and clients register through dynamic registration only.
 - The consent page lists what a connected app can do. It must be updated in the same change as any new write tool.
-- An app that was connected before a new capability shipped gets that capability without being asked again (a grant is not tied to the list the user saw). Fine with one user; decide before going public whether adding a capability should revoke existing grants.
-- Concentrate saves are capped per account by count only (50 Recipe Concentrates, 20 Mineral Concentrates, in `mcp_save_concentrate`); there is no rate limit.
-- The privacy policy does not mention connected AI apps yet.
+- **New abilities are asked for per app.** Supabase records that a user approved an app, not what the consent page listed. So the list is versioned (`public.mcp_abilities_version()`, 1 today) and the consent page records the version the user approved for each app (`public.mcp_app_consent`, written by `mcp_record_app_consent`, which refuses connected apps). To ship a new ability: raise the version in its migration, gate its database function with `public.mcp_app_allows(<that version>)`, add the line to `oauth/consent.html`, and give the Connected apps list a way to approve the new abilities for an app recorded at a lower version. That last control is NOT built yet, because no version 2 ability exists; it must ship with the first one. An app with no record counts as version 1.
+- Concentrates are also capped per account by count (50 Recipe Concentrates, 20 Mineral Concentrates, in `mcp_save_concentrate`).
+- The privacy policy has a "Connected AI apps" section (`privacy/index.html`). Keep it true when abilities change.
 
 ## What a connected app can and cannot do
 
@@ -40,7 +40,7 @@ Enforced twice: in the tool code, and in the database by `supabase/migrations/20
 | Write any other setting or the active selections | No (phase 3, undecided) | Yes |
 | Delete the account | No | Yes |
 
-`supabase/tests/oauth_client_restrictions.test.sql` and `supabase/tests/mcp_save_concentrate.test.sql` pin every row of that table (`supabase test db`).
+`supabase/tests/oauth_client_restrictions.test.sql` and `supabase/tests/mcp_save_concentrate.test.sql` pin every row of that table (`supabase test db`). `supabase/tests/mcp_write_quota_and_app_consent.test.sql` pins the daily limit, the account ceilings and the per-app approval record.
 
 ## Tools
 
