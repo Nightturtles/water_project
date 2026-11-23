@@ -1196,6 +1196,15 @@ function pushRowInTurn(
     // one and stays. If this device still holds something it does not cover,
     // the device stays unsynced and the next push sends that again, which is
     // harmless.
+    //
+    // Known limit: the check and the write below are two statements with
+    // nothing awaited between them, but local storage is not locked across
+    // tabs, so another tab's pull can in principle refresh the base in that
+    // instant and have it replaced. Nothing short of taking the row's
+    // cross-tab lock in pulls closes that, which would make every pull wait
+    // behind pushes; pulls are left as they are. If it happens, values that
+    // pull brought in look changed here and the next push sends them, as a
+    // whole-row push always did.
     if (
       safeGetItem(spec.baseKey) === baseSnapshot &&
       baseRefreshCount(spec.baseKey) === refreshesAtStart
