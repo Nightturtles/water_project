@@ -65,22 +65,34 @@ function goTo(url: string): void {
 // effort: an app with no record is treated as approved for the first version
 // of the list only, which is the safe reading, so a failure here must never
 // block connecting or disconnecting.
-async function recordApproval(clientId: string): Promise<void> {
-  if (!clientId) return;
+// The wait is bounded too: a request that never settles must not hold up the
+// redirect back to the app or the refresh of the list.
+const CONSENT_RECORD_TIMEOUT_MS = 4000;
+
+async function bestEffort(call: PromiseLike<unknown>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId });
+    await Promise.race([
+      Promise.resolve(call),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, CONSENT_RECORD_TIMEOUT_MS);
+      }),
+    ]);
   } catch (_) {
     // See above.
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
   }
+}
+
+async function recordApproval(clientId: string): Promise<void> {
+  if (!clientId) return;
+  await bestEffort(supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId }));
 }
 
 async function forgetApproval(clientId: string): Promise<void> {
   if (!clientId) return;
-  try {
-    await supabaseClient.rpc("mcp_forget_app_consent", { p_client_id: clientId });
-  } catch (_) {
-    // See above.
-  }
+  await bestEffort(supabaseClient.rpc("mcp_forget_app_consent", { p_client_id: clientId }));
 }
 
 async function loadRequest(authorizationId: string): Promise<void> {
