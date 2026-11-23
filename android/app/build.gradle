@@ -25,10 +25,9 @@ android {
         // When CAFELYTIC_RELEASE_KEYSTORE is unset (e.g. on CI building a
         // debug APK, or for contributors without the keystore), this block
         // configures nothing and `signingConfigs.release` resolves to an
-        // empty config. Gradle then signs `release` with the debug key,
-        // which is fine for local sanity checks and CI compile-checks but
-        // is rejected by Play Console — production uploads require the env
-        // vars to be set.
+        // empty config. Debug builds are unaffected (CI runs assembleDebug),
+        // but `bundleRelease` then fails at signReleaseBundle with a bare
+        // NullPointerException: release builds require the env vars.
         release {
             def keystorePath = System.getenv("CAFELYTIC_RELEASE_KEYSTORE") ?: ""
             if (keystorePath) {

@@ -49,15 +49,18 @@ const PREVIEW_URL = `http://localhost:${PREVIEW_PORT}`;
 //
 // iOS 6.7" is the modern required iPhone size; 6.5" remains as the fallback
 // for older review templates; iPad Pro 12.9" covers the required tablet set
-// for the Universal build. Pixel 6 covers Play's phone requirement (kept at
-// scale 1 / full pixel dims to preserve the already-shipped Android assets).
+// for the Universal build. The Android phone set is 1080x1920: Play allows
+// a long side up to 2.3x the short side, but 9:16 at 1080px or more is the
+// shape it asks for to recommend an app. It is captured at 360 points wide
+// (a common Android width) and scale 3, so the page lays out as a phone
+// rather than 1080 CSS px wide.
 const DEVICES = {
   ios: [
     { name: "iphone-15-pro-max-6.7", width: 430, height: 932, scale: 3 },
     { name: "iphone-14-plus-6.5", width: 428, height: 926, scale: 3 },
     { name: "ipad-pro-12.9", width: 1024, height: 1366, scale: 2 },
   ],
-  android: [{ name: "pixel-6", width: 1080, height: 2400, scale: 1 }],
+  android: [{ name: "phone-1080x1920", width: 360, height: 640, scale: 3 }],
 };
 
 // Five canonical scenes. Each entry: file prefix, URL path, the localStorage
