@@ -101,7 +101,7 @@ if (process.env.CI && (!EMAIL || !PASSWORD)) {
 // 90s test timeout still leaves ~30s for goto + evaluate round-trips.
 const REALTIME_POLL_TIMEOUT_MS = 60_000;
 
-test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2, 4, 7, 9)", () => {
+test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2, 4, 7, 9, 13)", () => {
   test.skip(
     !EMAIL || !PASSWORD,
     "CAFELYTIC_TEST_EMAIL/CAFELYTIC_TEST_PASSWORD missing in .env.test",
@@ -641,6 +641,123 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
         .catch(() => {
           /* swallow */
         });
+    }
+  });
+
+  test("Step 13: a save from a device that missed another writer's change keeps that change", async () => {
+    // The merged push (sync.ts pushSingleRow) against the real backend: the
+    // unit tests' fake cloud cannot show that the conditional write matches a
+    // row whose updated_at the database set itself (microseconds, from now()).
+    //
+    // The other writer is the database function a connected AI app saves a
+    // concentrate through. The app's own session may call it too.
+    const key = "e2e-outside-write";
+    await pageA.goto("/index.html");
+    await waitForSyncReady(pageA);
+
+    const conditionalWrites: string[] = [];
+    const onRequest = (req: { method(): string; url(): string }) => {
+      if (req.method() === "PATCH" && req.url().includes("/rest/v1/user_settings")) {
+        conditionalWrites.push(req.url());
+      }
+    };
+    pageA.on("request", onRequest);
+
+    const removeConcentrate = (k: string) =>
+      pageA.evaluate(async (k2) => {
+        // @ts-expect-error - global from sync.js
+        await window.pullFromCloud();
+        // @ts-expect-error - global from storage.js
+        const specs = loadStockConcentrateSpecs();
+        if (specs[k2]) {
+          delete specs[k2];
+          // @ts-expect-error - global from storage.js
+          saveStockConcentrateSpecs(specs);
+        }
+        // @ts-expect-error - global from sync.js
+        await window.pushAllToCloud();
+        // @ts-expect-error - global from supabase-client.js
+        const sess = await window.supabaseClient.auth.getSession();
+        // @ts-expect-error - global from supabase-client.js
+        const { data } = await window.supabaseClient
+          .from("user_settings")
+          .select("stock_concentrate_specs")
+          .eq("user_id", sess.data.session.user.id)
+          .maybeSingle();
+        return !!(data && (data.stock_concentrate_specs || {})[k2]);
+      }, k);
+
+    try {
+      // A failed earlier run may have left the concentrate behind.
+      expect(await removeConcentrate(key), "leftover concentrate removed").toBe(false);
+
+      const result = await pageA.evaluate(async (k) => {
+        // @ts-expect-error - global from supabase-client.js
+        const client = window.supabaseClient;
+        const sess = await client.auth.getSession();
+        const userId = sess.data.session.user.id;
+        // Take this device off Realtime so it cannot pull what comes next:
+        // it is in sync, then misses a write, like an app in the background.
+        await client.removeAllChannels();
+
+        const saved = await client.rpc("mcp_save_concentrate", {
+          p_kind: "stock",
+          p_key: k,
+          p_spec: {
+            label: "E2E outside write",
+            bottleMl: 100,
+            doseGramsPerL: 4,
+            minerals: [{ mineralId: "gypsum", grams: 1 }],
+          },
+          p_mode: "create",
+        });
+        if (saved.error) return { error: "mcp_save_concentrate: " + saved.error.message };
+
+        // @ts-expect-error - global from storage.js
+        const deviceSawIt = !!loadStockConcentrateSpecs()[k];
+        // An unrelated change to the same row, then this device's push.
+        const marker = String(100 + (Date.now() % 800));
+        // @ts-expect-error - global from storage.js
+        saveVolumePreference("calculator", marker, "ml");
+        // @ts-expect-error - global from sync.js
+        await window.pushAllToCloud();
+
+        const { data, error } = await client
+          .from("user_settings")
+          .select("stock_concentrate_specs, volume_preferences")
+          .eq("user_id", userId)
+          .maybeSingle();
+        if (error || !data) return { error: "read back: " + (error ? error.message : "no row") };
+        const volume = (data.volume_preferences || {}).calculator;
+        return {
+          error: null,
+          deviceSawIt,
+          kept: !!(data.stock_concentrate_specs || {})[k],
+          volumeLanded: !!volume && String(volume.value) === marker,
+          // @ts-expect-error - global from sync.js
+          unpushed: window.hasUnpushedChanges(),
+        };
+      }, key);
+
+      expect(result.error, String(result.error)).toBeFalsy();
+      expect(result.deviceSawIt, "the device must not have pulled the other writer's change").toBe(
+        false,
+      );
+      expect(result.kept, "the other writer's concentrate is still in the account").toBe(true);
+      expect(result.volumeLanded, "the device's own change reached the account").toBe(true);
+      expect(result.unpushed).toBe(false);
+      expect(
+        conditionalWrites.some((url) => url.includes("updated_at=eq.")),
+        "the push wrote on condition that the row was unchanged",
+      ).toBe(true);
+
+      // Deleting it on the device goes through the same merged push.
+      expect(await removeConcentrate(key), "concentrate deleted again").toBe(false);
+    } finally {
+      pageA.off("request", onRequest);
+      await removeConcentrate(key).catch(() => {
+        /* finally must never mask an in-flight assertion failure */
+      });
     }
   });
 });

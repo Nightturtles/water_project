@@ -92,9 +92,16 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: make a change (rename a recipe + save, or add-from-library) so a fresh Realtime event is emitted.
 - Context B: the change appears within a few seconds **without a reload** — confirming the channel resubscribed (capped exponential backoff, first retry ~1 s). Before this fix a `TIMED_OUT` was only logged and updates stopped arriving until a manual reload. (Note: a clean `unsubscribe()` emits `CLOSED`, which we deliberately do NOT reconnect on — only genuine failures resubscribe, so use the offline toggle here.)
 
+### 13. A save from a device that missed another writer's change keeps that change (merged push)
+- Context A: on `/index.html`, wait for sync to be ready, then take it off Realtime so it cannot pull what comes next: `await window.supabaseClient.removeAllChannels()`.
+- Make a change to the settings row from outside the app's sync, the way a connected AI app does: `await window.supabaseClient.rpc('mcp_save_concentrate', { p_kind: 'stock', p_key: 'e2e-outside-write', p_spec: { label: 'E2E outside write', bottleMl: 100, doseGramsPerL: 4, minerals: [{ mineralId: 'gypsum', grams: 1 }] }, p_mode: 'create' })`.
+- Context A: confirm it has not seen it (`loadStockConcentrateSpecs()['e2e-outside-write']` is undefined), change the Calculator's brew volume, and let the save go out (`await window.pushAllToCloud()`).
+- Query the row: `stock_concentrate_specs` still holds `e2e-outside-write` **and** `volume_preferences.calculator` holds the new volume. **If the concentrate is gone, the whole-row overwrite is back** (`pushSingleRow` in `src/lib/sync.ts`). The network log shows the save as a `PATCH .../user_settings?...&updated_at=eq.<timestamp>`.
+- Clean up on Context A: `await window.pullFromCloud()`, delete the concentrate in Settings (or `saveStockConcentrateSpecs` without the key), push, and confirm the row no longer holds it.
+
 ## Post-run cleanup
 
-Steps 7-12 create or mutate recipes the test user owns. The codified `smoke-sync.spec.ts` cleans up `smoke-*` slugs automatically via [`cleanupStaleJunk`](smoke-sync.spec.ts) (prefixes: `smoke-`, `smoke5-`, `smoke6-`), but **manual walks must clean up explicitly** — there's no automated sweep for ad-hoc names (`runbook-8-<tag>`, `mobiletest-*`, etc.).
+Step 13 leaves a concentrate on the test account until its last bullet is done. Steps 7-12 create or mutate recipes the test user owns. The codified `smoke-sync.spec.ts` cleans up `smoke-*` slugs automatically via [`cleanupStaleJunk`](smoke-sync.spec.ts) (prefixes: `smoke-`, `smoke5-`, `smoke6-`), but **manual walks must clean up explicitly** — there's no automated sweep for ad-hoc names (`runbook-8-<tag>`, `mobiletest-*`, etc.).
 
 Before signing out, on the test user:
 
@@ -115,7 +122,7 @@ Before signing out, on the test user:
 
 ## Exit criteria
 
-- All twelve steps pass.
+- All thirteen steps pass.
 - No "sync error" toasts in the save-status elements on either device.
 - No console errors on either context. Warnings about `[sync] realtime channel status: SUBSCRIBED` are fine. A `CHANNEL_ERROR` / `TIMED_OUT` warning is acceptable ONLY when intentionally induced in Step 12 (offline simulation) and the channel then recovers (updates resume without reload); an unexpected one outside Step 12, or one that never recovers, is a failure.
 - Sentry Feed shows no new issues tagged with the sync code paths (`src/lib/sync.ts`, `src/lib/storage.ts`).

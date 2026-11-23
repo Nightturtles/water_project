@@ -127,61 +127,48 @@ describe("unsynced changes are pushed before logout", () => {
 });
 
 describe("a save that lands while the flush is pushing", () => {
-  // Run `during` in the middle of the next user_settings upsert, the way a
+  // Run `during` in the middle of the next user_settings write, the way a
   // user typing while the push is on the network would.
-  function duringNextSettingsUpsert(during: () => void): void {
-    const from = g.window.supabaseClient.from;
+  function duringNextSettingsWrite(during: () => void): void {
     let done = false;
-    g.window.supabaseClient.from = (table: string) => {
-      const t = from(table);
-      if (table !== "user_settings" || done) return t;
-      const upsert = t.upsert;
-      t.upsert = async (payload: unknown) => {
-        if (!done) {
-          done = true;
-          during();
-        }
-        return upsert(payload);
-      };
-      return t;
+    cloud.onSingleRowWrite = (table) => {
+      if (table !== "user_settings" || done) return;
+      done = true;
+      during();
     };
   }
+
+  const selectionsWrites = () =>
+    cloud.log.filter((l) => l === "upsert user_selections" || l === "update user_selections")
+      .length;
 
   test("is pushed by a second push before the flush resolves", async () => {
     await syncedDevice();
     storage.saveBrewMethod("espresso");
     // The push builds its settings and selections payloads before either
-    // upsert goes out, so a source-water save made during the settings upsert
+    // write goes out, so a source-water save made during the settings write
     // is in neither: only the re-check and a second push can send it. (A
     // recipe saved here would not test that; profiles are read later in the
     // same push.)
-    const pushesBefore = cloud.log.filter((l) => l === "upsert user_selections").length;
-    duringNextSettingsUpsert(() =>
+    const pushesBefore = selectionsWrites();
+    duringNextSettingsWrite(() =>
       storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: 55 }),
     );
     await flushPendingSync();
     expect(cloud.rows.user_settings.brew_method).toBe("espresso");
     expect(cloud.rows.user_selections.source_water.calcium).toBe(55);
-    expect(cloud.log.filter((l) => l === "upsert user_selections").length).toBe(pushesBefore + 1);
+    expect(selectionsWrites()).toBe(pushesBefore + 1);
     expect(hasUnpushedChanges()).toBe(false);
   });
 
   test("rejects if saves keep arriving, so logout asks instead of wiping the last one", async () => {
     await syncedDevice();
     storage.saveBrewMethod("espresso");
-    const from = g.window.supabaseClient.from;
     let n = 0;
-    g.window.supabaseClient.from = (table: string) => {
-      const t = from(table);
-      if (table !== "user_settings" && table !== "user_selections") return t;
-      const upsert = t.upsert;
-      t.upsert = async (payload: unknown) => {
-        // Every push finds a newer save than the one it is sending.
-        n += 1;
-        storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: n });
-        return upsert(payload);
-      };
-      return t;
+    cloud.onSingleRowWrite = () => {
+      // Every push finds a newer save than the one it is sending.
+      n += 1;
+      storage.saveSourceWater({ ...storage.loadSourceWater(), calcium: n });
     };
     await expect(flushPendingSync()).rejects.toThrow(/still being saved/);
     expect(hasUnpushedChanges()).toBe(true);
@@ -208,12 +195,7 @@ describe("the flush rejects when it can't confirm the changes are in the cloud",
   test("the cloud refuses the write", async () => {
     await syncedDevice();
     storage.saveBrewMethod("espresso");
-    const from = g.window.supabaseClient.from;
-    g.window.supabaseClient.from = (table: string) => {
-      const t = from(table);
-      t.upsert = async () => ({ error: { message: "permission denied", code: "42501" } });
-      return t;
-    };
+    cloud.onSingleRowWrite = () => ({ error: { message: "permission denied", code: "42501" } });
     await expect(flushPendingSync()).rejects.toThrow();
     expect(hasUnpushedChanges()).toBe(true);
   });

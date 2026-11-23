@@ -108,10 +108,10 @@ const INSTRUCTIONS = [
   "Recipes saved here are always private. Publishing a recipe to the public Recipe Library, and deleting anything, can only be done by the user in the Cafelytic app.",
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
-  "A concentrate saved here is added to the user's Settings but is NOT switched on by saving it. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
+  "A concentrate saved here is added to the user's Settings but is NOT switched on by saving it. After saving one, tell the user to check that it appears in the app; a device still on the phone app at version 1.2.2 or older can overwrite it if it had not synced, and saving it again fixes that. Concentrates cannot be deleted from here.",
   "Saves and changes from connected AI apps are limited to 100 per user per day; if one is refused for that reason, tell the user and do not retry it.",
   "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates that are switched on. Do not work doses out yourself.",
-  "set_mineral_enabled, set_concentrate_enabled, set_active_recipe and set_active_source_water change what the user's Cafelytic app is set to on every device, so the doses the app shows change with them. Use them only when the user asked for that change or agreed to it; to try something out, pass a recipe, source water or minerals to calculate_doses instead, which changes nothing. After one of them, ask the user to check the app: a device that had unsynced changes can put the old selection back, and making the change again fixes that.",
+  "set_mineral_enabled, set_concentrate_enabled, set_active_recipe and set_active_source_water change what the user's Cafelytic app is set to on every device, so the doses the app shows change with them. Use them only when the user asked for that change or agreed to it; to try something out, pass a recipe, source water or minerals to calculate_doses instead, which changes nothing. After one of them, ask the user to check the app: a device still on the phone app at version 1.2.2 or older can put the old selection back if it had not synced, and making the change again fixes that.",
 ].join(" ");
 
 function ok(payload: unknown) {
@@ -896,7 +896,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
   }
 
   const SAVED_NOTE =
-    "Saved to the user's Cafelytic Settings. It is not switched on. If the user wants to dose with it, switch it on with set_concentrate_enabled (or they can in the app). Ask them to check it appears in the app; if it is missing (the app had unsynced changes on another device), save it again.";
+    "Saved to the user's Cafelytic Settings. It is not switched on. If the user wants to dose with it, switch it on with set_concentrate_enabled (or they can in the app). Ask them to check it appears in the app; if it is missing (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), save it again.";
   const CHANGED_ENABLED_NOTE =
     "Saved. This concentrate is switched on in the app: the calculator will use the new values once the app has synced. Ask the user to check the concentrate and the doses in the app.";
 
@@ -1163,7 +1163,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
   }
 
   const SWITCH_NOTE =
-    "calculate_doses uses this from now on, and the app's calculator does once the app has synced. Ask the user to check it in the app; if it has gone back (the app had unsynced changes on another device), make the change again.";
+    "calculate_doses uses this from now on, and the app's calculator does once the app has synced. Ask the user to check it in the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), make the change again.";
   const NO_CHANGE_NOTE = "It was already set that way, so nothing changed.";
   const switchAnnotations = {
     readOnlyHint: false,
@@ -1286,7 +1286,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           : obj(obj((draftsResult.data as { drafts?: unknown } | null)?.drafts).target_draft_ions);
         const notes = [
           saved.changed
-            ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (the app had unsynced changes on another device), set it again."
+            ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), set it again."
             : "It was already the active recipe.",
         ];
         if (saved.added_to_rail) {
@@ -1364,7 +1364,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           saved: true,
           changed: saved.changed,
           note:
-            "The app's Starting Water is now this water's saved values, and calculate_doses uses it by default. Ask the user to check the app; if it has gone back (the app had unsynced changes on another device), set it again.",
+            "The app's Starting Water is now this water's saved values, and calculate_doses uses it by default. Ask the user to check the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), set it again.",
           before: { key: before.key, name: before.name, ions: before.ions },
           source_water: {
             ...water,
