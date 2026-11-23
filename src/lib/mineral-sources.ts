@@ -136,9 +136,35 @@ export function availableMineralIds(kit: MineralKit): string[] {
   return Array.from(out);
 }
 
+/**
+ * The salts of one slot (alkalinity, calcium or magnesium) the kit can dose
+ * from. A single-mineral concentrate whose bottle isn't configured can't dose
+ * anything, so it only counts when the slot has nothing else: counted
+ * alongside a working source it drew part (or all) of the slot's dose onto a
+ * salt nobody could add, and that mineral was left out of the water. Alone,
+ * it keeps the slot so its row shows with the "set bottle mL" prompt.
+ */
+function slotMineralIds(kit: MineralKit, slot: string[]): string[] {
+  const usable = new Set(kit.minerals);
+  for (const c of kit.concentrates) {
+    if (c.mineralId && c.gramsPerMl > 0) usable.add(c.mineralId);
+  }
+  for (const rc of kit.recipeConcentrates) {
+    for (const mid of rc.mineralIds) usable.add(mid);
+  }
+  const fromUsable = slot.filter((id) => usable.has(id));
+  if (fromUsable.length > 0) return fromUsable;
+  const all = availableMineralIds(kit);
+  return slot.filter((id) => all.includes(id));
+}
+
+export const ALKALINITY_SLOT = ["baking-soda", "potassium-bicarbonate"];
+export const CALCIUM_SLOT = ["calcium-chloride", "calcium-chloride-anhydrous", "gypsum"];
+export const MAGNESIUM_SLOT = ["epsom-salt", "magnesium-chloride"];
+
 /** Enabled alkalinity sources (baking-soda and/or potassium-bicarbonate). */
 export function alkalinitySources(kit: MineralKit): string[] {
-  const selected = availableMineralIds(kit);
+  const selected = slotMineralIds(kit, ALKALINITY_SLOT);
   const hasBakingSoda = selected.includes("baking-soda");
   const hasPotBicarb = selected.includes("potassium-bicarbonate");
   if (!hasBakingSoda && !hasPotBicarb) return [];
@@ -186,7 +212,7 @@ function calciumChlorideForm(kit: MineralKit, selected: string[]): string | null
 
 /** Enabled calcium sources (a calcium-chloride form and/or gypsum). */
 export function calciumSources(kit: MineralKit): string[] {
-  const selected = availableMineralIds(kit);
+  const selected = slotMineralIds(kit, CALCIUM_SLOT);
   const out: string[] = [];
   const cacl2 = calciumChlorideForm(kit, selected);
   if (cacl2) out.push(cacl2);
@@ -196,7 +222,7 @@ export function calciumSources(kit: MineralKit): string[] {
 
 /** Enabled magnesium sources (epsom-salt and/or magnesium-chloride). */
 export function magnesiumSources(kit: MineralKit): string[] {
-  const selected = availableMineralIds(kit);
+  const selected = slotMineralIds(kit, MAGNESIUM_SLOT);
   const out: string[] = [];
   if (selected.includes("epsom-salt")) out.push("epsom-salt");
   if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
