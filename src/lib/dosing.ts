@@ -26,6 +26,9 @@ import {
   toStableBicarbonateFromAlkalinity,
 } from "./metrics";
 import {
+  ALKALINITY_SLOT,
+  CALCIUM_SLOT,
+  MAGNESIUM_SLOT,
   alkalinitySources as kitAlkalinitySources,
   calciumSources as kitCalciumSources,
   concentrateDropMl,
@@ -392,6 +395,9 @@ export function computeDoses(input: DosingInput): DosingResult {
   kit.concentrates.forEach((c) => {
     const mineralId = c.mineralId;
     if (!mineralId) return;
+    // A concentrate whose bottle isn't set up can't dose, so it must not take
+    // the dose away from the powder: that left the salt out of the water.
+    if (!(c.gramsPerMl > 0)) return;
     const sameSlot = CACL2_FORMS.includes(mineralId)
       ? CACL2_FORMS.some((form) => selectedMinerals.includes(form))
       : selectedMinerals.includes(mineralId);
@@ -514,7 +520,14 @@ export function computeDoses(input: DosingInput): DosingResult {
     const gramsPerMl = c.gramsPerMl;
     if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
       result.concentrateMl[c.id] = 0;
-      if (grams > 0 && !dosedByConcentrate[mineralId])
+      // Its slot is being dosed (by this salt or another source of the same
+      // slot: an unconfigured concentrate gives way to a working source) and
+      // no configured concentrate carries this salt: say how to use it.
+      const slot = [ALKALINITY_SLOT, CALCIUM_SLOT, MAGNESIUM_SLOT].find((s) =>
+        s.includes(mineralId),
+      );
+      const slotGrams = slot ? Math.max(...slot.map((id) => Number(resultValues[id]) || 0)) : grams;
+      if (slotGrams > 0 && !dosedByConcentrate[mineralId])
         warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
       return;
     }
