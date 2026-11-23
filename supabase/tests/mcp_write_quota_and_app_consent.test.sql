@@ -213,7 +213,7 @@ select is(public.mcp_app_allows(null), false, 'a missing version is refused');
 -- The user approves the app from the consent page (a first-party session).
 set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated"}';
 select is(public.mcp_app_allows(2), true, 'the app itself is never gated');
-select is(public.mcp_record_app_consent('test-client'), 2, 'the user''s approval is recorded at the current version');
+select is(public.mcp_record_app_consent('test-client', 2), 2, 'the user''s approval is recorded at the current version');
 select is(
   (select abilities_version from public.mcp_app_consent where client_id = 'test-client'), 2,
   'the user can read their own approval');
@@ -223,13 +223,19 @@ select throws_ok(
 select throws_ok(
   $$ select public.mcp_record_app_consent('stale-page-client', 3) $$,
   'MCA02', null, 'and one from a page that showed a list the database does not have yet');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client') $$,
+  'MCA02', null, 'an approval that does not say which list was shown is refused');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client', null) $$,
+  'MCA02', null, 'and so is one with a null version');
 select is(
   (select count(*)::integer from public.mcp_app_consent where client_id = 'stale-page-client'), 0,
-  'neither wrote an approval');
+  'none of them wrote an approval');
 select is(public.mcp_record_app_consent('test-client', 2), 2,
   'an approval that names the current list is recorded');
 select throws_ok(
-  $$ select public.mcp_record_app_consent('') $$,
+  $$ select public.mcp_record_app_consent('', 2) $$,
   '22023', null, 'an empty client id is refused');
 select throws_ok(
   $$ insert into public.mcp_app_consent (user_id, client_id, abilities_version)

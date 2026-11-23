@@ -30,6 +30,12 @@ describe("abilitiesNotYetApproved", () => {
 });
 
 describe("SHOWN_ABILITIES_VERSION", () => {
+  it("has wording for every version after the first", () => {
+    for (let version = 2; version <= SHOWN_ABILITIES_VERSION; version++) {
+      expect(abilitiesNotYetApproved(version - 1, version).length).toBeGreaterThan(0);
+    }
+  });
+
   it("matches the newest mcp_abilities_version() in the migrations", () => {
     const dir = join(__dirname, "..", "supabase", "migrations");
     const pattern = /function public\.mcp_abilities_version\(\)[\s\S]*?select (\d+);/;

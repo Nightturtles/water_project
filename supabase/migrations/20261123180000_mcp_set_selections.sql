@@ -64,7 +64,8 @@ $fn$;
 -- nothing written, when that is not the current version (SQLSTATE MCA02): a
 -- page loaded before the list grew cannot approve abilities it never showed.
 -- The page then asks the user to reload. A call without a version (a page
--- from before this migration) records the current version, as it did.
+-- loaded before this migration) is refused the same way: that app then has
+-- no record, which counts as version 1, the list every page has shown.
 -- Replaces the one-argument function from
 -- 20261123064216_mcp_write_quota_and_app_consent.sql.
 drop function if exists public.mcp_record_app_consent(text);
@@ -91,7 +92,7 @@ begin
   if p_client_id is null or char_length(p_client_id) < 1 or char_length(p_client_id) > 200 then
     raise exception 'invalid client id' using errcode = '22023';
   end if;
-  if p_shown_version is not null and p_shown_version <> v_version then
+  if p_shown_version is null or p_shown_version <> v_version then
     raise exception 'the list of abilities has changed: reload the page' using errcode = 'MCA02';
   end if;
   insert into public.mcp_app_consent as c (user_id, client_id, abilities_version, approved_at)
