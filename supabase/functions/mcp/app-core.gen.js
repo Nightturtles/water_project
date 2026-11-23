@@ -1,7 +1,7 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: 2cfdcb940ded615e49fc13089a748724af9b4e8a26e682951fe5d4157f5b04d1
-// body-hash: a92cbd3eecaeba72e2290b74d5c4ef800bfef9295dd4076bba8de553b78bf166
+// source-hash: dff9a8100c45e84653ff7d4bdf2b4a351063b59de371d4b24b63568c2bfee408
+// body-hash: a704063d096e60da4b245b5c66f6db22e5fce13b64ab85694075d3c7cae12487
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // src/lib/constants.ts
@@ -98,6 +98,31 @@ const MINERAL_DB_LITERAL = {
 	}
 };
 const MINERAL_DB = MINERAL_DB_LITERAL;
+const MINERAL_SOLUBILITY_G_PER_L_25C_APPROX = {
+	"calcium-chloride": 700,
+	"calcium-chloride-anhydrous": 745,
+	"epsom-salt": 700,
+	"baking-soda": 96,
+	"potassium-bicarbonate": 330,
+	"magnesium-chloride": 560,
+	gypsum: 2,
+	"potassium-chloride": 340,
+	"sodium-chloride": 360
+};
+const RESERVED_LIBRARY_STOCK_SLUGS = [
+	"rao-perger",
+	"dan-eils",
+	"matt-perger",
+	"rao-2013",
+	"melbourne-2013-wbc",
+	"world-of-coffee-budapest",
+	"bh-simplified-sca-optimal",
+	"bh-default",
+	"bh-simplified-rao-2008",
+	"bh-simplified-hendon",
+	"bh-hard",
+	"bh-hard-af"
+];
 const ION_FIELDS = [
 	"calcium",
 	"magnesium",
@@ -2256,6 +2281,196 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
 	return result;
 }
 /**
+* Derive a multi-mineral stock concentrate formula from a recipe's per-ion
+* target profile. Returns "a" valid solution, not "the" canonical one — the
+* inverse problem is underdetermined (Mg can come from epsom or MgCl2, HCO3
+* from baking-soda or KHCO3, etc.), so the user reviews and tweaks the
+* derived list before saving.
+*
+* Greedy heuristic order:
+*   1. HCO3 split between baking-soda (Na carrier) and KHCO3 (K carrier)
+*      proportional to target Na and K (mirrors splitAlkalinityDelta).
+*   2. Mg → epsom-salt or magnesium-chloride based on target SO4/Cl ratio.
+*   3. Ca → the selected calcium-chloride form (dihydrate by default; anhydrous
+*      when that is the form the user has). Gypsum would match SO4-heavy targets
+*      but its ~2 g/L solubility cap (MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+*      src/lib/constants.ts) is exceeded by even modest Ca
+*      targets at concentrate strengths.
+*   4. Residual K → potassium-chloride; residual Na → sodium-chloride.
+*/
+function deriveStockFormulaFromTarget(target, options) {
+	options = options || {};
+	let bottleMl = Number(options.bottleMl);
+	let doseGramsPerL = Number(options.doseGramsPerL);
+	if (!Number.isFinite(bottleMl) || bottleMl <= 0) bottleMl = 200;
+	if (!Number.isFinite(doseGramsPerL) || doseGramsPerL <= 0) doseGramsPerL = 4;
+	const notes = [];
+	let minerals = [];
+	function num(field) {
+		if (!target) return 0;
+		const v = Number(target[field]);
+		return Number.isFinite(v) && v > 0 ? v : 0;
+	}
+	const tCa = num("calcium");
+	const tMg = num("magnesium");
+	const tK = num("potassium");
+	const tNa = num("sodium");
+	const tSO4 = num("sulfate");
+	const tCl = num("chloride");
+	const tBicarb = num("bicarbonate");
+	const tAlk = num("alkalinity");
+	const tHCO3 = tAlk > 0 && Math.abs(Math.round(tBicarb * .8201812609600603) - Math.round(tAlk)) > 1 ? tAlk * CACO3_TO_HCO3 : tBicarb;
+	if (tCa + tMg + tK + tNa + tSO4 + tCl + tHCO3 === 0) {
+		notes.push("Distilled / RO target: no minerals to derive.");
+		return {
+			bottleMl,
+			doseGramsPerL,
+			minerals,
+			notes
+		};
+	}
+	function gramsForIon(mineralId, ionName, mgPerL) {
+		const entry = MINERAL_DB[mineralId];
+		if (!entry || !entry.ions) return 0;
+		const frac = entry.ions[ionName] || 0;
+		if (frac <= 0 || mgPerL <= 0) return 0;
+		return mgPerL * bottleMl / (1e3 * frac * doseGramsPerL);
+	}
+	/**
+	* mg/L of side-ion produced when the mineral is sized to deliver primaryMgPerL
+	* of the primary ion. = primaryMgPerL × (sideFrac / primaryFrac).
+	*/
+	function sideIonProduced(mineralId, primaryIon, primaryMgPerL, sideIon) {
+		const entry = MINERAL_DB[mineralId];
+		if (!entry || !entry.ions) return 0;
+		const ionsRec = entry.ions;
+		const primaryFrac = ionsRec[primaryIon] || 0;
+		const sideFrac = ionsRec[sideIon] || 0;
+		if (primaryFrac <= 0 || sideFrac <= 0 || primaryMgPerL <= 0) return 0;
+		return primaryMgPerL * (sideFrac / primaryFrac);
+	}
+	let producedNa = 0;
+	let producedK = 0;
+	let producedSO4 = 0;
+	if (tHCO3 > 0) {
+		let hcoNa = 0;
+		let hcoK = 0;
+		if (tNa > 0 && tK > 0) {
+			const bakingDb = MINERAL_DB["baking-soda"];
+			const khcoDb = MINERAL_DB["potassium-bicarbonate"];
+			const bakingNaFrac = bakingDb && bakingDb.ions && bakingDb.ions.sodium || 0;
+			const bakingHCO3Frac = bakingDb && bakingDb.ions && bakingDb.ions.bicarbonate || 0;
+			const khcoKFrac = khcoDb && khcoDb.ions && khcoDb.ions.potassium || 0;
+			const khcoHCO3Frac = khcoDb && khcoDb.ions && khcoDb.ions.bicarbonate || 0;
+			const directNaHCO3 = bakingNaFrac > 0 ? tNa * (bakingHCO3Frac / bakingNaFrac) : 0;
+			const directKHCO3 = khcoKFrac > 0 ? tK * (khcoHCO3Frac / khcoKFrac) : 0;
+			const directTotalHCO3 = directNaHCO3 + directKHCO3;
+			const tolerance = Math.max(1, tHCO3 * .1);
+			if (Math.abs(directTotalHCO3 - tHCO3) <= tolerance) {
+				hcoNa = directNaHCO3;
+				hcoK = directKHCO3;
+			} else {
+				const naEq = tNa / NA_ATOMIC_MASS;
+				const kEq = tK / K_ATOMIC_MASS;
+				hcoNa = tHCO3 * naEq / (naEq + kEq);
+				hcoK = tHCO3 * kEq / (naEq + kEq);
+			}
+		} else if (tNa > 0) hcoNa = tHCO3;
+		else hcoK = tHCO3;
+		if (hcoNa > 0) {
+			const gBaking = gramsForIon("baking-soda", "bicarbonate", hcoNa);
+			if (gBaking > 0) {
+				minerals.push({
+					mineralId: "baking-soda",
+					grams: gBaking
+				});
+				producedNa += sideIonProduced("baking-soda", "bicarbonate", hcoNa, "sodium");
+			}
+		}
+		if (hcoK > 0) {
+			const gKHCO3 = gramsForIon("potassium-bicarbonate", "bicarbonate", hcoK);
+			if (gKHCO3 > 0) {
+				minerals.push({
+					mineralId: "potassium-bicarbonate",
+					grams: gKHCO3
+				});
+				producedK += sideIonProduced("potassium-bicarbonate", "bicarbonate", hcoK, "potassium");
+			}
+		}
+	}
+	if (tMg > 0) {
+		let mgPick;
+		if (tCl === 0) mgPick = "epsom-salt";
+		else if (tSO4 === 0) mgPick = "magnesium-chloride";
+		else if (tSO4 / Math.max(tCl, 1) > 1) mgPick = "epsom-salt";
+		else mgPick = "magnesium-chloride";
+		const gMg = gramsForIon(mgPick, "magnesium", tMg);
+		if (gMg > 0) {
+			minerals.push({
+				mineralId: mgPick,
+				grams: gMg
+			});
+			if (mgPick === "epsom-salt") producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
+		}
+	}
+	if (tCa > 0) {
+		const requestedCaId = options.calciumChlorideId;
+		let caId;
+		if (requestedCaId === "calcium-chloride" || requestedCaId === "calcium-chloride-anhydrous") caId = requestedCaId;
+		else {
+			const powders = loadSelectedMinerals();
+			caId = (powders.includes("calcium-chloride") ? "calcium-chloride" : powders.includes("calcium-chloride-anhydrous") ? "calcium-chloride-anhydrous" : getEffectiveCalciumSource()) === "calcium-chloride-anhydrous" ? "calcium-chloride-anhydrous" : "calcium-chloride";
+		}
+		if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) notes.push("Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.");
+		const gCa = gramsForIon(caId, "calcium", tCa);
+		if (gCa > 0) minerals.push({
+			mineralId: caId,
+			grams: gCa
+		});
+	}
+	const residK = Math.max(0, tK - producedK);
+	const residNa = Math.max(0, tNa - producedNa);
+	if (residK > 0) {
+		const gKCl = gramsForIon("potassium-chloride", "potassium", residK);
+		if (gKCl > 0) minerals.push({
+			mineralId: "potassium-chloride",
+			grams: gKCl
+		});
+	}
+	if (residNa > 0) {
+		const gNaCl = gramsForIon("sodium-chloride", "sodium", residNa);
+		if (gNaCl > 0) minerals.push({
+			mineralId: "sodium-chloride",
+			grams: gNaCl
+		});
+	}
+	if (tSO4 - producedSO4 > 1) notes.push("Target sulfate of " + Math.round(tSO4) + " mg/L exceeds what the chosen Mg source supplies (~" + Math.round(producedSO4) + " mg/L). Gypsum could close the gap but isn't soluble at concentrate strengths.");
+	minerals = minerals.map(function(m) {
+		return {
+			mineralId: m.mineralId,
+			grams: Math.round(m.grams * 10) / 10
+		};
+	}).filter(function(m) {
+		return m.grams > 0;
+	});
+	minerals.forEach(function(m) {
+		const cap = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX[m.mineralId];
+		if (!cap) return;
+		const concentrationGperL = m.grams / (bottleMl / 1e3);
+		if (concentrationGperL > cap) {
+			const entry = MINERAL_DB[m.mineralId];
+			const name = entry && entry.name || m.mineralId;
+			notes.push(name + " in bottle (" + concentrationGperL.toFixed(1) + " g/L) exceeds approximate solubility (" + cap + " g/L); try a larger bottle or lower dose.");
+		}
+	});
+	return {
+		bottleMl,
+		doseGramsPerL,
+		minerals,
+		notes
+	};
+}
+/**
 * Transpose an m×n matrix to n×m.
 */
 function _matTranspose(A) {
@@ -2924,4 +3139,4 @@ function buildDosingKit(settings) {
 	}
 	return kit;
 }
-export { BRAND_CONCENTRATES, CACO3_TO_HCO3, HCO3_TO_CACO3, ION_FIELDS, LIBRARY_TAGS, MINERAL_DB, RESERVED_TARGET_KEYS, SOURCE_PRESETS, TARGET_PRESETS, buildDosingKit, calculateMetrics, calculateSo4ClRatio, computeDoses, evaluateWaterProfileRanges, recipeMetricsSummary, slugify, validateProfileName };
+export { BRAND_CONCENTRATES, CACO3_TO_HCO3, HCO3_TO_CACO3, ION_FIELDS, LIBRARY_TAGS, MINERAL_DB, MINERAL_SOLUBILITY_G_PER_L_25C_APPROX, RESERVED_LIBRARY_STOCK_SLUGS, RESERVED_TARGET_KEYS, SOURCE_PRESETS, TARGET_PRESETS, buildDosingKit, calculateIonPPMs, calculateMetrics, calculateSo4ClRatio, computeDoses, computeStockMineralGramsPerL, deriveStockFormulaFromTarget, evaluateWaterProfileRanges, recipeMetricsSummary, slugify, validateProfileName };

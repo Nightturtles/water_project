@@ -59,6 +59,37 @@ test("range findings do not depend on the browser's mineral selection", () => {
   expect(explicitAfter).toEqual(explicitBefore);
 });
 
+test("a derived concentrate formula does not depend on the browser's selection when the calcium chloride form is passed", () => {
+  const target = {
+    calcium: 20,
+    magnesium: 10,
+    alkalinity: 40,
+    sodium: 18,
+    sulfate: 40,
+    chloride: 35,
+  };
+  const caSalt = (r: { minerals: { mineralId: string }[] }) =>
+    r.minerals.map((m) => m.mineralId).filter((id) => id.startsWith("calcium-chloride"));
+
+  // The way the server calls it: the form is explicit, the selection irrelevant.
+  saveSelectedMinerals(["calcium-chloride", "epsom-salt", "baking-soda"]);
+  const explicitBefore = core.deriveStockFormulaFromTarget(target, {
+    calciumChlorideId: "calcium-chloride",
+  });
+  const implicitBefore = core.deriveStockFormulaFromTarget(target);
+  saveSelectedMinerals(["calcium-chloride-anhydrous", "epsom-salt", "baking-soda"]);
+  const explicitAfter = core.deriveStockFormulaFromTarget(target, {
+    calciumChlorideId: "calcium-chloride",
+  });
+  const implicitAfter = core.deriveStockFormulaFromTarget(target);
+
+  expect(explicitAfter).toEqual(explicitBefore);
+  expect(caSalt(explicitAfter)).toEqual(["calcium-chloride"]);
+  // Control: without the argument the selection does decide the form.
+  expect(caSalt(implicitBefore)).toEqual(["calcium-chloride"]);
+  expect(caSalt(implicitAfter)).toEqual(["calcium-chloride-anhydrous"]);
+});
+
 test("validateProfileName never reuses a retired key", () => {
   const result = core.validateProfileName("Morning", {
     builtinKeys: new Set(["sca"]),
