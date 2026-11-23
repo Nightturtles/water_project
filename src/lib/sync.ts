@@ -1,4 +1,4 @@
-import { THEME_KEY } from "./constants";
+import { THEME_KEY, MINERAL_DB } from "./constants";
 import {
   safeGetItem,
   safeSetItem,
@@ -33,6 +33,8 @@ import {
   TRANSIENT_KEYS_PREFIX,
 } from "./storage-keys";
 import { reportError } from "./report";
+import { showMergeDialog, summarizeMerge } from "./merge-dialog";
+import type { MergeItem, MergeSummary } from "./merge-dialog";
 
 // ============================================
 // Sync — Cloud sync layer (localStorage-first)
@@ -647,6 +649,42 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
   safeSetItem(LAST_PUSHED_TARGETS_KEY, JSON.stringify(lastTargetSnapshots));
 }
 
+// A cloud source_profiles row as the local profile entry pullFromCloud stores.
+function sourceRowToProfile(row: any) {
+  return {
+    label: row.label,
+    calcium: row.calcium,
+    magnesium: row.magnesium,
+    potassium: row.potassium,
+    sodium: row.sodium,
+    sulfate: row.sulfate,
+    chloride: row.chloride,
+    bicarbonate: row.bicarbonate,
+  };
+}
+
+// A cloud target_profiles row as the local profile entry pullFromCloud stores.
+function targetRowToProfile(row: any): TargetProfile {
+  return {
+    label: row.label,
+    brewMethod: row.brew_method,
+    calcium: row.calcium,
+    magnesium: row.magnesium,
+    alkalinity: row.alkalinity,
+    potassium: row.potassium,
+    sodium: row.sodium,
+    sulfate: row.sulfate,
+    chloride: row.chloride,
+    bicarbonate: row.bicarbonate,
+    description: row.description,
+    isPublic: !!row.is_public,
+    creatorDisplayName: row.creator_display_name || "",
+    creatorUserId: row.creator_user_id || null,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
+  };
+}
+
 // --- Pull all cloud data into localStorage and invalidate caches ---
 //
 // Resolves true when applied (or signed out), false when skipped for a
@@ -817,16 +855,7 @@ export async function pullFromCloud(options?: {
     const newSourceSnapshots: Record<string, string> = {};
     sourceRows.forEach(function (row: any) {
       if (tombstonedSources.indexOf(row.slug) !== -1) return;
-      const profile = {
-        label: row.label,
-        calcium: row.calcium,
-        magnesium: row.magnesium,
-        potassium: row.potassium,
-        sodium: row.sodium,
-        sulfate: row.sulfate,
-        chloride: row.chloride,
-        bicarbonate: row.bicarbonate,
-      };
+      const profile = sourceRowToProfile(row);
       srcProfiles[row.slug] = profile;
       // Refresh lastPushed snapshot for dirty-tracking — we just learned
       // what cloud has, so a follow-up push of the same data is a no-op
@@ -849,24 +878,7 @@ export async function pullFromCloud(options?: {
     const newTargetSnapshots: Record<string, string> = {};
     targetRows.forEach(function (row: any) {
       if (tombstonedTargets.indexOf(row.slug) !== -1) return;
-      const profile: TargetProfile = {
-        label: row.label,
-        brewMethod: row.brew_method,
-        calcium: row.calcium,
-        magnesium: row.magnesium,
-        alkalinity: row.alkalinity,
-        potassium: row.potassium,
-        sodium: row.sodium,
-        sulfate: row.sulfate,
-        chloride: row.chloride,
-        bicarbonate: row.bicarbonate,
-        description: row.description,
-        isPublic: !!row.is_public,
-        creatorDisplayName: row.creator_display_name || "",
-        creatorUserId: row.creator_user_id || null,
-        tags: Array.isArray(row.tags) ? row.tags : [],
-        roast: Array.isArray(row.roast) && row.roast.length > 0 ? row.roast : ["all"],
-      };
+      const profile = targetRowToProfile(row);
       tgtProfiles[row.slug] = profile;
       newTargetSnapshots[row.slug] = stableStringify(
         buildTargetRow(sessionUserId, row.slug, profile),
@@ -1006,48 +1018,104 @@ async function hasCloudData(userId: string): Promise<boolean> {
   );
 }
 
-// --- Show merge conflict dialog, returns promise resolving to 'local' or 'cloud' ---
-function showMergeDialog(): Promise<"local" | "cloud"> {
-  return new Promise(function (resolve) {
-    const overlay = document.createElement("div");
-    overlay.className = "confirm-overlay";
-    overlay.style.display = "flex";
+// --- What the merge dialog shows: how this device and the account differ ---
+function profileItems(
+  profiles: Record<string, any>,
+  build: (slug: string, p: any) => unknown,
+): MergeItem[] {
+  return Object.keys(profiles).map(function (slug) {
+    const p = profiles[slug] || {};
+    return { key: slug, name: p.label || slug, fingerprint: stableStringify(build(slug, p)) };
+  });
+}
 
-    const dialog = document.createElement("div");
-    dialog.className = "confirm-dialog";
-
-    const msg = document.createElement("p");
-    msg.id = "confirm-message";
-    msg.textContent =
-      "You have local data on this device and saved data in the cloud. Which would you like to keep?";
-
-    const actions = document.createElement("div");
-    actions.className = "confirm-actions";
-
-    const localBtn = document.createElement("button");
-    localBtn.className = "preset-btn";
-    localBtn.textContent = "Keep local data";
-
-    const cloudBtn = document.createElement("button");
-    cloudBtn.className = "preset-btn";
-    cloudBtn.textContent = "Use cloud data";
-
-    actions.appendChild(localBtn);
-    actions.appendChild(cloudBtn);
-    dialog.appendChild(msg);
-    dialog.appendChild(actions);
-    overlay.appendChild(dialog);
-    document.body.appendChild(overlay);
-
-    localBtn.addEventListener("click", function () {
-      overlay.remove();
-      resolve("local");
-    });
-    cloudBtn.addEventListener("click", function () {
-      overlay.remove();
-      resolve("cloud");
+function concentrateItems(diy: unknown, stock: unknown): MergeItem[] {
+  const items: MergeItem[] = [];
+  const asDict = function (v: unknown): Record<string, any> {
+    return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, any>) : {};
+  };
+  const diySpecs = asDict(diy);
+  Object.keys(diySpecs).forEach(function (id) {
+    const mineral = MINERAL_DB[id.replace(/^diy:/, "")];
+    items.push({
+      key: "diy:" + id,
+      name: mineral ? mineral.name : id,
+      fingerprint: stableStringify(diySpecs[id]),
     });
   });
+  const stockSpecs = asDict(stock);
+  Object.keys(stockSpecs).forEach(function (slug) {
+    const spec = stockSpecs[slug] || {};
+    items.push({
+      key: "stock:" + slug,
+      name: spec.label || slug,
+      fingerprint: stableStringify(spec),
+    });
+  });
+  return items;
+}
+
+// Read the account's recipes, starting waters and concentrates and diff them
+// against this device, so the merge dialog can name what each choice adds,
+// replaces or removes. Read-only. Resolves null when the account can't be
+// read: the dialog then explains the choices in general terms rather than
+// blocking the merge on a nicety.
+async function buildMergeSummary(userId: string): Promise<MergeSummary | null> {
+  try {
+    const results = await Promise.all([
+      window.supabaseClient
+        .from("user_settings")
+        .select("diy_concentrate_specs, stock_concentrate_specs")
+        .eq("user_id", userId)
+        .maybeSingle(),
+      window.supabaseClient.from("source_profiles").select("*").eq("user_id", userId),
+      window.supabaseClient.from("target_profiles").select("*").eq("user_id", userId),
+    ]);
+    const errored = results.find(function (r) {
+      return !!(r && r.error);
+    });
+    if (errored && errored.error) throw errored.error;
+
+    const settings = results[0].data;
+    const cloudSources: Record<string, any> = {};
+    (results[1].data || []).forEach(function (row: any) {
+      cloudSources[row.slug] = sourceRowToProfile(row);
+    });
+    const cloudTargets: Record<string, any> = {};
+    (results[2].data || []).forEach(function (row: any) {
+      cloudTargets[row.slug] = targetRowToProfile(row);
+    });
+    const buildSource = function (slug: string, p: any) {
+      return buildSourceRow(userId, slug, p);
+    };
+    const buildTarget = function (slug: string, p: any) {
+      return buildTargetRow(userId, slug, p);
+    };
+    const localDiy = loadDiyConcentrateSpecs();
+    const localStock = loadStockConcentrateSpecs();
+    return summarizeMerge(
+      {
+        recipes: profileItems(loadCustomTargetProfiles(), buildTarget),
+        waters: profileItems(loadCustomProfiles(), buildSource),
+        concentrates: concentrateItems(localDiy, localStock),
+        deletedRecipeKeys: loadDeletedTargetPresets(),
+        deletedWaterKeys: loadDeletedPresets(),
+      },
+      {
+        recipes: profileItems(cloudTargets, buildTarget),
+        waters: profileItems(cloudSources, buildSource),
+        // pullFromCloud leaves a local spec dict alone when the account has no
+        // value for it, so a missing one is "same as this device", not "empty".
+        concentrates: concentrateItems(
+          (settings && settings.diy_concentrate_specs) || localDiy,
+          (settings && settings.stock_concentrate_specs) || localStock,
+        ),
+      },
+    );
+  } catch (err) {
+    reportError("sync.merge-summary", err);
+    return null;
+  }
 }
 
 // Union two concentrate-spec dicts: every cloud entry survives, and local
@@ -1075,7 +1143,7 @@ export function unionConcentrateIds(local: unknown, cloud: unknown): string[] {
   return out;
 }
 
-// Before a "Keep local data" push, pull the cloud's concentrate specs and
+// Before a "Keep both" merge push (the dialog's "local" choice), pull the cloud's concentrate specs and
 // selected-concentrate list and union them into local storage. Throws on a
 // fetch error so the merge aborts (and retries on the next load) instead of
 // pushing a row that would drop the cloud's concentrates.
@@ -1153,14 +1221,24 @@ export async function handleFirstLoginMerge(): Promise<void> {
         await pullFromCloud({ mergeUserId: userId });
       } else {
         // Both local and cloud have non-default data: ask the user
-        const choice = await showMergeDialog();
+        const choice = await showMergeDialog(await buildMergeSummary(userId));
         if (choice === "local") {
-          // "Keep local" overwrites the cloud user_settings row, but the
+          // "Keep both" overwrites the cloud user_settings row, but the
           // concentrate specs in it are named artifacts (Category B), not
           // preferences: fold the cloud's into local first so choosing
           // "local" can't erase concentrates saved on another device.
           await foldCloudConcentratesIntoLocal(userId);
           await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
+          // The push leaves the account's own recipes and starting waters in
+          // place; pull so they show up here now, as the dialog said they
+          // would, instead of on the next page load. Best-effort: the local
+          // data is already safe in the account, and every later load pushes
+          // then pulls anyway.
+          try {
+            await pullFromCloud({ mergeUserId: userId });
+          } catch (err) {
+            reportError("sync.merge-keep-both-pull", err);
+          }
         } else {
           await pullFromCloud({ mergeUserId: userId });
         }

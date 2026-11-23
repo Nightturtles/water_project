@@ -164,7 +164,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
       page.waitForFunction(() => !!localStorage.getItem("cw_synced_user_id"), null, {
         timeout: 20_000,
       });
-    const useCloud = page.getByRole("button", { name: "Use cloud data" });
+    const useCloud = page.getByRole("button", { name: "Use account only" });
     const merged = markedMerged();
     const asked = useCloud.waitFor({ state: "visible", timeout: 20_000 }).then(
       () => true,

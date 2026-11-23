@@ -1963,6 +1963,65 @@ select:focus {
   justify-content: center;
 }
 
+/* First-sign-in merge prompt (src/lib/merge-dialog.ts): a wider, left-aligned
+   confirm dialog with one card per choice saying what that choice changes. */
+.confirm-dialog.merge-dialog {
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.merge-dialog-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.1rem;
+}
+
+.confirm-dialog.merge-dialog p {
+  text-align: left;
+}
+
+.confirm-dialog.merge-dialog .merge-dialog-intro {
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: var(--gray-600);
+}
+
+.merge-option {
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem 1rem;
+}
+
+.merge-option + .merge-option {
+  margin-top: 0.75rem;
+}
+
+.merge-option-title {
+  margin: 0 0 0.2rem;
+  font-size: 1rem;
+}
+
+.confirm-dialog.merge-dialog .merge-option-tagline {
+  margin-bottom: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.merge-option-list {
+  margin: 0 0 0.85rem;
+  padding-left: 1.1rem;
+  font-size: 0.85rem;
+  color: var(--gray-600);
+}
+
+.merge-option-list li + li {
+  margin-top: 0.3rem;
+}
+
+.merge-option-btn {
+  width: 100%;
+}
+
 /* Type-to-confirm input inside the confirm dialog (Delete Account flow).
    Inserted dynamically between the message and the action buttons by
    showConfirm() when options.requireText is set. */
