@@ -896,6 +896,42 @@ describe("a second push of a row while the first is still out waits its turn", (
     expect(hasUnpushedChanges()).toBe(false);
   });
 
+  test("a pull that runs while a push is out keeps the base it recorded", async () => {
+    await syncedDevice();
+    // Another device chose a light theme; this one, not having pulled, holds
+    // dark and an unpushed volume.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "light";
+    });
+    edits.volume();
+    const release = holdFirstWriteResponse("user_settings");
+    const first = pushAllToCloud();
+    await flush();
+    expect(settingsRow().theme, "the merged write kept the other device's theme").toBe("light");
+
+    // A page-load pull is not in the push queue. It reads the row the push
+    // just wrote, applies it, and records the base from that.
+    await pullFromCloud();
+    expect(storage.loadThemePreference()).toBe("light");
+    const baseFromPull = g.localStorage.getItem("cw_last_pushed_settings");
+
+    // The push's answer arrives. Its snapshot was built before the pull and
+    // still says dark: it must not replace the pull's base.
+    release();
+    await first;
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBe(baseFromPull);
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // So a later save does not send "light" over another device's newer choice.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "system";
+    });
+    storage.saveVolumePreference("recipe", 250, "liters");
+    await pushAllToCloud();
+    expect(settingsRow().theme).toBe("system");
+    expect(JSON.stringify(settingsRow().volume_preferences)).toContain("250");
+  });
+
   test("a push that waited does not go out if the device signed out meanwhile", async () => {
     await syncedDevice();
     const release = holdFirstWriteResponse("user_settings");
@@ -1441,11 +1477,11 @@ describe("two tabs", () => {
     expect(wroteBeforeRelease, "tab B did not wait").toBe(2);
     expect(settingsRow().brew_method).toBe("filter");
     expect(settingsRow().theme).toBe("dark");
-    // Tab A answered last and recorded its older snapshot, so the device
-    // knows it differs; one more push settles it without changing the row.
-    await tabB.sync.pushAllToCloud();
-    expect(settingsRow().brew_method).toBe("filter");
-    expect(settingsRow().theme).toBe("dark");
+    // Tab A answered last. Tab B had recorded the base meanwhile, so tab A's
+    // older snapshot does not replace it and nothing is left to push.
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBe(
+      tabB.sync.snapshotForCompare(tabB.sync.buildSettingsPayload(USER, "")),
+    );
     expect(tabB.sync.hasUnpushedChanges()).toBe(false);
   });
 

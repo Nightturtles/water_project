@@ -1014,7 +1014,15 @@ function pushRowInTurn(
       nothingNew || unconfirmed,
     );
     if (!result.error) {
-      safeSetItem(spec.baseKey, snapshot);
+      // Record the snapshot as the base only if the base is still the one
+      // this push started from. A pull is not in this queue: one that ran
+      // while the write was out has refreshed the base from what it applied,
+      // and this push's snapshot, built before that, would put back the older
+      // view (so would a push from another tab, where the browser has no
+      // cross-tab lock). Their base is the newer one and stays. If this
+      // device still holds something it does not cover, the device stays
+      // unsynced and the next push sends that again, which is harmless.
+      if (safeGetItem(spec.baseKey) === baseSnapshot) safeSetItem(spec.baseKey, snapshot);
       writePendingSends(spec.pendingKey, []);
     }
     return result;
