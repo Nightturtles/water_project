@@ -18,7 +18,8 @@ import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mergeRowForPush,
   baseAfterUnsyncedPull,
-  baseAllowingForUnconfirmedSends,
+  ownChangesOf,
+  combineOwnChanges,
   settleMergedSettings,
   settleMergedSelections,
   snapshotForCompare,
@@ -1165,67 +1166,136 @@ describe("known trade-off next to a stale 1.2 device", () => {
 });
 
 // ---------------------------------------------------------------------------
-// A send the server never confirmed. The write may have landed; the device
-// was not told. Until a later push has read the row, the base cannot be
-// trusted for whatever that send changed.
+// A change the server never confirmed. The write may have landed; the device
+// was not told. Until a push of that row succeeds, what the device changed
+// (which fields, map keys and list items, not their values) stays on record
+// and counts as changed here whatever the base says.
 // ---------------------------------------------------------------------------
 
-describe("baseAllowingForUnconfirmedSends", () => {
-  const allow = (
-    base: Record<string, unknown>,
-    sends: Array<Record<string, unknown>>,
-    cloudRow: Record<string, unknown>,
-  ) => baseAllowingForUnconfirmedSends(SETTINGS_PUSH_KINDS, base, sends, cloudRow);
+describe("ownChangesOf", () => {
+  const changes = (base: Record<string, unknown>, local: Record<string, unknown>) =>
+    ownChangesOf(SETTINGS_PUSH_KINDS, base, local);
 
-  test("with nothing unconfirmed the base is untouched", () => {
-    const base = { brew_method: "filter" };
-    expect(allow(base, [], { brew_method: "espresso" })).toBe(base);
-  });
-
-  test("a field the row holds exactly as sent counts as this device's own", () => {
+  test("names changed fields, and inside maps and lists the keys and items", () => {
     expect(
-      allow(
-        { brew_method: "filter", theme: "dark" },
-        [{ brew_method: "espresso", theme: "dark" }],
-        { brew_method: "espresso", theme: "dark" },
+      changes(
+        {
+          brew_method: "filter",
+          theme: "dark",
+          stock_concentrate_specs: { a: { v: 1 }, gone: { v: 1 }, same: { v: 1 } },
+          selected_minerals: ["a", "b"],
+        },
+        {
+          brew_method: "espresso",
+          theme: "dark",
+          stock_concentrate_specs: { a: { v: 2 }, same: { v: 1 }, added: { v: 9 } },
+          selected_minerals: ["a", "c"],
+        },
       ),
-    ).toEqual({ brew_method: "espresso", theme: "dark" });
+    ).toEqual({
+      fields: ["brew_method"],
+      keys: { stock_concentrate_specs: ["a", "added", "gone"] },
+      items: { selected_minerals: ["c", "b"] },
+    });
   });
 
-  test("a field the row holds differently keeps its base: the send did not land, or another writer came after", () => {
+  test("names nothing it is only carrying, has no base for, or always sends whole", () => {
     expect(
-      allow({ brew_method: "filter" }, [{ brew_method: "espresso" }], { brew_method: "filter" }),
+      ownChangesOf(
+        SELECTIONS_PUSH_KINDS,
+        { target_preset: "sca", deleted_target_presets: [] },
+        // No base for added_target_presets; the delete lists are sent whole.
+        { target_preset: "sca", deleted_target_presets: ["x"], added_target_presets: ["rao"] },
+      ),
+    ).toEqual({ fields: [], keys: {}, items: {} });
+  });
+
+  test("a list in another order is named whole", () => {
+    expect(changes({ selected_minerals: ["a", "b"] }, { selected_minerals: ["b", "a"] })).toEqual({
+      fields: ["selected_minerals"],
+      keys: {},
+      items: {},
+    });
+  });
+
+  test("extra fields can be named regardless", () => {
+    expect(
+      ownChangesOf(SETTINGS_PUSH_KINDS, { brew_method: "filter" }, { brew_method: "filter" }, [
+        "brew_method",
+      ]),
+    ).toEqual({ fields: ["brew_method"], keys: {}, items: {} });
+  });
+
+  test("combineOwnChanges unions entries", () => {
+    expect(
+      combineOwnChanges([
+        { fields: ["a"], keys: { m: ["k1"] }, items: { l: ["x"] } },
+        { fields: ["a", "b"], keys: { m: ["k2"], n: ["k"] }, items: { l: ["x", "y"] } },
+      ]),
+    ).toEqual({
+      fields: ["a", "b"],
+      keys: { m: ["k1", "k2"], n: ["k"] },
+      items: { l: ["x", "y"] },
+    });
+  });
+});
+
+describe("mergeRowForPush with changes on record", () => {
+  const settings = (
+    base: Record<string, unknown>,
+    local: Record<string, unknown>,
+    cloudRow: Record<string, unknown>,
+    own: { fields?: string[]; keys?: Record<string, string[]>; items?: Record<string, unknown[]> },
+  ) =>
+    mergeRowForPush(SETTINGS_PUSH_KINDS, [], base, local, cloudRow, {
+      fields: own.fields || [],
+      keys: own.keys || {},
+      items: own.items || {},
+    });
+
+  test("a field put back to its base value still goes out as the device holds it", () => {
+    expect(
+      settings(
+        { brew_method: "filter" },
+        { brew_method: "filter" },
+        { brew_method: "espresso" },
+        { fields: ["brew_method"] },
+      ),
     ).toEqual({ brew_method: "filter" });
   });
 
-  test("any of several unconfirmed sends can be the one that landed", () => {
-    expect(
-      allow({ brew_method: "filter" }, [{ brew_method: "espresso" }, { brew_method: "filter" }], {
-        brew_method: "espresso",
-      }),
-    ).toEqual({ brew_method: "espresso" });
-  });
-
-  test("a map another writer also changed is settled key by key", () => {
-    const out = allow(
-      { stock_concentrate_specs: { a: { v: 1 } } },
-      // Sent: a edited, mine added.
-      [{ stock_concentrate_specs: { a: { v: 2 }, mine: { v: 9 } } }],
-      // The row: that send landed, then another writer added theirs.
-      { stock_concentrate_specs: { a: { v: 2 }, mine: { v: 9 }, theirs: { v: 8 } } },
+  test("a map key on record is the device's, present or deleted; other keys merge as usual", () => {
+    const out = settings(
+      { stock_concentrate_specs: {} },
+      // "mine" was added in a send that got no answer, then deleted again.
+      { stock_concentrate_specs: {} },
+      // The row: that send landed, and another writer saved "ai".
+      { stock_concentrate_specs: { mine: { v: 9 }, ai: { v: 1 } } },
+      { keys: { stock_concentrate_specs: ["mine"] } },
     );
-    expect(out.stock_concentrate_specs).toEqual({ a: { v: 2 }, mine: { v: 9 } });
+    expect(out.stock_concentrate_specs).toEqual({ ai: { v: 1 } });
   });
 
-  test("a list another writer also changed is settled item by item", () => {
-    const out = allow(
-      { selected_minerals: ["a", "b"] },
-      // Sent: b removed, mine added.
-      [{ selected_minerals: ["a", "mine"] }],
-      // The row: that send landed, then another writer added theirs.
+  test("a list item on record is the device's, in or out; other items merge as usual", () => {
+    const out = settings(
+      { selected_minerals: ["a"] },
+      // "mine" was switched on in a send that got no answer, then off again.
+      { selected_minerals: ["a"] },
       { selected_minerals: ["a", "mine", "theirs"] },
+      { items: { selected_minerals: ["mine"] } },
     );
-    expect(out.selected_minerals).toEqual(["a", "mine"]);
+    expect(out.selected_minerals).toEqual(["a", "theirs"]);
+  });
+
+  test("with nothing on record it is the plain merge", () => {
+    expect(
+      settings(
+        { brew_method: "filter" },
+        { brew_method: "filter" },
+        { brew_method: "espresso" },
+        {},
+      ),
+    ).toEqual({ brew_method: "espresso" });
   });
 });
 
@@ -1353,15 +1423,85 @@ describe("a write the server committed without the device hearing back", () => {
     expect(hasUnpushedChanges()).toBe(false);
   });
 
-  test("a refusal from the server leaves nothing in doubt", async () => {
+  test("a refusal keeps the change on record until a push of that row succeeds", async () => {
     await syncedDevice();
     cloud.onSingleRowWrite = () => ({ error: { message: "permission denied", code: "42501" } });
     storage.saveBrewMethod("espresso");
     await pushAllToCloud().catch(() => {});
     cloud.onSingleRowWrite = null;
-    expect(g.localStorage.getItem("cw_pending_push_settings")).toBeNull();
     storage.saveBrewMethod("filter");
+    // Back to the base value, but the device has not seen a push succeed.
+    expect(hasUnpushedChanges()).toBe(true);
+    const before = settingsWrites();
+    await pushAllToCloud();
+    // The row holds filter already: nothing to write, and nothing left over.
+    expect(settingsWrites()).toBe(before);
+    expect(g.localStorage.getItem("cw_pending_push_settings")).toBeNull();
     expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  // The record names what the device changed, not what the push carried.
+  // (Recording the whole payload once turned a carried-over concentrate into
+  // a local deletion on the retry.)
+  test("a concentrate another writer saved, carried in the lost write, survives the retry", async () => {
+    await syncedDevice();
+    ai.saveConcentrate();
+    loseNextAnswer("user_settings", true);
+    edits.volume();
+    await pushAllToCloud().catch(() => {});
+    expect(settingsRow().stock_concentrate_specs.ai, "carried through by the merge").toBeTruthy();
+    // Still not pulled: this device does not hold the concentrate itself.
+    expect(storage.loadStockConcentrateSpecs().ai).toBeUndefined();
+
+    storage.saveVolumePreference("recipe", 250, "liters");
+    await pushAllToCloud();
+    expect(settingsRow().stock_concentrate_specs.ai).toBeTruthy();
+    expect(volumeLanded()).toBe(true);
+    expect(JSON.stringify(settingsRow().volume_preferences)).toContain("250");
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("a switch another writer made, carried in the lost write, survives the retry too", async () => {
+    await syncedDevice();
+    ai.setEnabled("selected_minerals", "gypsum", true);
+    ai.setActiveSourceWater("volvic", VOLVIC);
+    loseNextAnswer("user_settings", true);
+    edits.volume();
+    edits.rail();
+    await pushAllToCloud().catch(() => {});
+    storage.saveVolumePreference("recipe", 250, "liters");
+    await pushAllToCloud();
+    expect(settingsRow().selected_minerals).toContain("gypsum");
+    expect(selectionsRow().source_preset).toBe("volvic");
+    expect(railLanded()).toBe(true);
+  });
+
+  test("signing out while the push is reading the row leaves nothing behind in local storage", async () => {
+    await syncedDevice();
+    edits.volume();
+    // Sign-out wipes local storage while the row read is on the network.
+    const from = g.window.supabaseClient.from;
+    let wiped = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings" || wiped) return t;
+      const select = t.select;
+      t.select = (...args: unknown[]) => {
+        const q = select(...args);
+        if (wiped) return q;
+        wiped = true;
+        const maybeSingle = q.maybeSingle;
+        q.maybeSingle = async () => {
+          g.localStorage.clear();
+          return maybeSingle();
+        };
+        return q;
+      };
+      return t;
+    };
+    await pushAllToCloud().catch(() => {});
+    expect(g.localStorage.getItem("cw_pending_push_settings")).toBeNull();
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBeNull();
   });
 
   test("an ordinary push leaves no record behind", async () => {
@@ -1497,6 +1637,178 @@ describe("two tabs", () => {
     expect(volumeLanded()).toBe(true);
     expect(hasUnpushedChanges()).toBe(false);
   });
+
+  test("without the lock, a tab that finishes does not clear another tab's unconfirmed change", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    const tabB = await openSecondTab();
+    // Tab A's write lands with its answer held; tab B's lands and its answer
+    // is lost for good.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const from = g.window.supabaseClient.from;
+    let writes = 0;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings") return t;
+      const update = t.update;
+      t.update = (payload: unknown) => {
+        const q = update(payload);
+        writes += 1;
+        const then = q.then;
+        if (writes === 1) {
+          q.then = (resolve: any, reject: any) =>
+            then((v: unknown) => gate.then(() => resolve(v)), reject);
+        } else if (writes === 2) {
+          q.then = (resolve: any, reject: any) =>
+            then(() => resolve({ data: null, error: { message: "Failed to fetch" } }), reject);
+        }
+        return q;
+      };
+      return t;
+    };
+
+    storage.saveThemePreference("dark");
+    const first = pushAllToCloud();
+    await flush();
+    expect(settingsRow().theme).toBe("dark");
+
+    tabB.storage.saveThemePreference("light");
+    await tabB.sync.pushAllToCloud().catch(() => {});
+    expect(settingsRow().theme).toBe("light");
+
+    // The user goes back to dark before tab A hears back.
+    tabB.storage.saveThemePreference("dark");
+    release();
+    await first;
+    // Local storage equals what tab A recorded, but the account holds light:
+    // tab B's change is still on record, so the device is not clean.
+    expect(tabB.sync.hasUnpushedChanges()).toBe(true);
+    await tabB.sync.pushAllToCloud();
+    expect(settingsRow().theme).toBe("dark");
+    expect(tabB.sync.hasUnpushedChanges()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The two rows of one choice, when only one of them saved.
+// ---------------------------------------------------------------------------
+
+describe("the active choice when only one of its two rows saved", () => {
+  test("the unsaved half stays on record and goes out with the next push, once", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    // Another writer activated an espresso recipe; this device, not having
+    // pulled, chooses another filter recipe. Its brew method has not changed,
+    // yet must be sent along.
+    ai.setActiveRecipe("cafelytic-espresso", "espresso");
+    storage.saveTargetPresetName("rao");
+    // The settings write is refused outright; the selections write saves.
+    cloud.onSingleRowWrite = (table) =>
+      table === "user_settings"
+        ? { error: { message: "canceling statement due to statement timeout", code: "57014" } }
+        : undefined;
+    await pushAllToCloud().catch(() => {});
+    cloud.onSingleRowWrite = null;
+    expect(selectionsRow().target_preset).toBe("rao");
+    expect(settingsRow().brew_method).toBe("espresso");
+    expect(hasUnpushedChanges(), "the brew method half is still owed").toBe(true);
+
+    await pushAllToCloud();
+    expect(settingsRow().brew_method).toBe("filter");
+    expect(selectionsRow().target_preset).toBe("rao");
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // Both halves are in: nothing is sent again.
+    cloud.log.length = 0;
+    await pushAllToCloud();
+    expect(cloud.log).toEqual([]);
+  });
+
+  test("the same when the row that failed is the recipe's", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    ai.setActiveRecipe("rao");
+    // The device switches to espresso; its recipe row is refused.
+    storage.saveBrewMethod("espresso");
+    storage.saveTargetPresetName("cafelytic-espresso");
+    cloud.onSingleRowWrite = (table) =>
+      table === "user_selections" ? { error: { message: "refused", code: "57014" } } : undefined;
+    await pushAllToCloud().catch(() => {});
+    cloud.onSingleRowWrite = null;
+    expect(settingsRow().brew_method).toBe("espresso");
+    expect(selectionsRow().target_preset).toBe("rao");
+    expect(hasUnpushedChanges()).toBe(true);
+    await pushAllToCloud();
+    expect(selectionsRow().target_preset).toBe("cafelytic-espresso");
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// A pull that completes before the push it overlaps has written. The pull
+// records a base whose text is the same as before, so only the count of
+// refreshes tells the push that its own snapshot is the older view.
+// ---------------------------------------------------------------------------
+
+describe("a pull that completes before an overlapping push writes", () => {
+  test("the push does not put its snapshot over the pull's base", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    expect(settingsRow().theme).toBe("system");
+    // Hold the push's read of the row.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const from = g.window.supabaseClient.from;
+    let held = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings") return t;
+      const select = t.select;
+      t.select = (...args: unknown[]) => {
+        const q = select(...args);
+        if (held) return q;
+        held = true;
+        const maybeSingle = q.maybeSingle;
+        q.maybeSingle = async () => {
+          await gate;
+          return maybeSingle();
+        };
+        return q;
+      };
+      return t;
+    };
+
+    storage.saveThemePreference("light");
+    const first = pushAllToCloud();
+    await flush();
+
+    // A page-load pull reads the row (still "system"), applies it over the
+    // local edit and records the base, all before the push has written.
+    await pullFromCloud();
+    expect(storage.loadThemePreference()).toBe("system");
+    const baseFromPull = g.localStorage.getItem("cw_last_pushed_settings");
+
+    release();
+    await first;
+    // The push sent what the user chose.
+    expect(settingsRow().theme).toBe("light");
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBe(baseFromPull);
+
+    // Another device then chooses dark. This device holds "system" from the
+    // pull; a later save must not send that over it.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "dark";
+    });
+    edits.volume();
+    await pushAllToCloud();
+    expect(settingsRow().theme).toBe("dark");
+    expect(volumeLanded()).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1626,7 +1938,7 @@ describe("a concentrate and its switch", () => {
   });
 });
 
-describe("an active recipe or source water this device has removed", () => {
+describe("an active source water this device has deleted", () => {
   const pick = (
     base: Record<string, unknown>,
     local: Record<string, unknown>,
@@ -1652,19 +1964,18 @@ describe("an active recipe or source water this device has removed", () => {
     ...over,
   });
 
-  test("a recipe deleted here that another writer made active: the device's recipe stands", () => {
-    const out = pick(
-      row({}),
-      row({ deleted_target_presets: ["mine"] }),
-      row({ target_preset: "mine" }),
-    );
-    expect(out.target_preset).toBe("sca");
-  });
-
-  test("a recipe taken off the rail here that another writer made active: the device's recipe stands", () => {
-    const out = pick(row({}), row({ added_target_presets: [] }), row({ target_preset: "rao" }));
-    expect(out.target_preset).toBe("sca");
-    expect(out.added_target_presets).toEqual([]);
+  // Left to the app on purpose: taking the device's recipe here would leave
+  // it under the other writer's brew method, which lives in the other row.
+  // The other writer's pair stays whole; the app, not finding that recipe,
+  // picks another and saves the choice, which goes out as the device's pair.
+  test("a recipe removed here that another writer made active keeps the other writer's choice", () => {
+    expect(
+      pick(row({}), row({ deleted_target_presets: ["mine"] }), row({ target_preset: "mine" }))
+        .target_preset,
+    ).toBe("mine");
+    const offRail = pick(row({}), row({ added_target_presets: [] }), row({ target_preset: "rao" }));
+    expect(offRail.target_preset).toBe("rao");
+    expect(offRail.added_target_presets).toEqual([]);
   });
 
   test("a source water deleted here that another writer made active: the device's water stands, key and values", () => {

@@ -483,8 +483,10 @@ async function expectMixesNoWorse(
       const outcome = await run(allCurrent, script);
       addTo(current, outcome);
       // What the all-current fleet still loses, by kind of thing: these are
-      // the conflicts the merge settles on purpose, and worth reading.
-      outcome.lost.concat(outcome.missing, outcome.broughtBack).forEach((thing) => {
+      // the conflicts the merge settles on purpose, and worth reading. Each
+      // thing once per run: one that was added, never removed and is gone is
+      // in both `lost` and `missing`.
+      new Set(outcome.lost.concat(outcome.missing, outcome.broughtBack)).forEach((thing) => {
         const kind = thing.slice(0, thing.indexOf(":"));
         currentByKind[kind] = (currentByKind[kind] || 0) + 1;
       });
