@@ -23,6 +23,7 @@ import {
   kitFromSettings,
   pickDefaultSource,
   pickStockKey,
+  quotaError,
   saveConcentrateError,
   solubilityWarnings,
   stockKeyFromId,
@@ -795,6 +796,26 @@ Deno.test("deriveFormula: the app's formula for a recipe, weighed in the user's 
     formulaSaveProblem([{ mineralId: "calcium-chloride", grams: 7336 }]) ?? "",
     /more than 5000 g of Calcium Chloride/,
   );
+});
+
+Deno.test("quotaError: the database's limits for connected apps become clear messages", () => {
+  const daily = quotaError({ code: "MCQ01", message: "daily save limit for connected apps reached" });
+  assert.ok(daily instanceof ToolError);
+  assert.match(daily!.message, /limit of 100 saves/);
+  assert.match(daily!.message, /nothing was saved/);
+  assert.match(
+    quotaError({ code: "MCQ02", message: "recipe limit for connected apps reached" })!.message,
+    /500 recipes/,
+  );
+  assert.match(
+    quotaError({ code: "MCQ02", message: "source water limit for connected apps reached" })!
+      .message,
+    /100 saved source waters/,
+  );
+  assert.equal(quotaError({ code: "42501", message: "x" }), null);
+  assert.equal(quotaError({ message: "x" }), null);
+  // A concentrate save past the limit says the same thing.
+  assert.match(saveConcentrateError({ code: "MCQ01", message: "x" }).message, /limit of 100 saves/);
 });
 
 Deno.test("saveConcentrateError: database refusals become clear messages", () => {

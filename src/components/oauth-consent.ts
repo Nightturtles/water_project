@@ -59,6 +59,30 @@ function goTo(url: string): void {
   window.location.assign(url);
 }
 
+// The database keeps which version of this page's ability list the user
+// approved for each app (mcp_app_consent), so an ability added later is not
+// handed to an app the user approved before it existed. Both calls are best
+// effort: an app with no record is treated as approved for the first version
+// of the list only, which is the safe reading, so a failure here must never
+// block connecting or disconnecting.
+async function recordApproval(clientId: string): Promise<void> {
+  if (!clientId) return;
+  try {
+    await supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId });
+  } catch (_) {
+    // See above.
+  }
+}
+
+async function forgetApproval(clientId: string): Promise<void> {
+  if (!clientId) return;
+  try {
+    await supabaseClient.rpc("mcp_forget_app_consent", { p_client_id: clientId });
+  } catch (_) {
+    // See above.
+  }
+}
+
 async function loadRequest(authorizationId: string): Promise<void> {
   const { data, error } = await supabaseClient.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error || !data) {
@@ -86,6 +110,7 @@ async function loadRequest(authorizationId: string): Promise<void> {
   const allowBtn = el<HTMLButtonElement>("consent-allow");
   const denyBtn = el<HTMLButtonElement>("consent-deny");
   const errorEl = el("consent-error");
+  const clientId = (data.client && data.client.id) || "";
 
   async function decide(approve: boolean): Promise<void> {
     allowBtn.disabled = true;
@@ -103,6 +128,7 @@ async function loadRequest(authorizationId: string): Promise<void> {
         showMessage(EXPIRED_TITLE, EXPIRED_BODY);
         return;
       }
+      if (approve) await recordApproval(clientId);
       goTo(result.data.redirect_url);
     } catch (_) {
       errorEl.textContent = "Something went wrong. Please try again.";
@@ -157,6 +183,7 @@ async function loadConnectedApps(): Promise<void> {
         errorEl.textContent = "Could not disconnect that app. Please try again.";
         return;
       }
+      await forgetApproval(grant.client.id);
       void loadConnectedApps();
     });
     row.appendChild(info);
