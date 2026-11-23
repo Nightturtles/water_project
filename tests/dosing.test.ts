@@ -299,6 +299,128 @@ test("buildDosingKit agrees with the storage getters the Calculator page uses", 
   });
 });
 
+// A Mineral Concentrate ticked before its bottle mL and grams are set (the
+// Settings page allows it) can't dose anything. It used to take its salt's
+// dose away from a working source anyway, leaving that mineral out of the
+// water with only a "set bottle mL" warning.
+const UNSET = (mineralId: string) => ({
+  id: "diy:" + mineralId,
+  mineralId,
+  gramsPerMl: 0,
+  dropMl: 0,
+  unit: "ml" as const,
+});
+const SET_BOTTLE = /Set bottle mL and grams per bottle/;
+const BOTH_VERSIONS = /both the normal and concentrate version/;
+
+test("an unconfigured concentrate does not take the dose from the same salt's powder", () => {
+  const baseline = computeDoses({
+    sourceWater: DISTILLED,
+    target: TARGET,
+    volumeL: 1,
+    kit: powders(STARTER_MINERALS),
+  });
+  const r = computeDoses({
+    sourceWater: DISTILLED,
+    target: TARGET,
+    volumeL: 1,
+    kit: { ...powders(STARTER_MINERALS), concentrates: [UNSET("epsom-salt")] },
+  });
+  expect(r.shown.mineralGrams).toEqual(baseline.shown.mineralGrams);
+  expect(r.finalIons).toEqual(baseline.finalIons);
+  expect(r.shown.concentrateMl["diy:epsom-salt"]).toBe(0);
+  expect(r.warnings.some((w) => SET_BOTTLE.test(w))).toBe(true);
+  expect(r.warnings.some((w) => BOTH_VERSIONS.test(w))).toBe(false);
+});
+
+test("an unconfigured calcium chloride concentrate leaves the other form's powder dosing", () => {
+  for (const [powder, concentrate] of [
+    ["calcium-chloride-anhydrous", "calcium-chloride"],
+    ["calcium-chloride", "calcium-chloride-anhydrous"],
+  ] as const) {
+    const minerals = [powder, "epsom-salt", "baking-soda"];
+    const baseline = computeDoses({
+      sourceWater: DISTILLED,
+      target: TARGET,
+      volumeL: 1,
+      kit: powders(minerals),
+    });
+    const r = computeDoses({
+      sourceWater: DISTILLED,
+      target: TARGET,
+      volumeL: 1,
+      kit: { ...powders(minerals), concentrates: [UNSET(concentrate)] },
+    });
+    expect(r.sources.calcium).toEqual([powder]);
+    expect(r.shown.mineralGrams[powder]).toBeGreaterThan(0);
+    expect(r.shown.mineralGrams).toEqual(baseline.shown.mineralGrams);
+    expect(r.finalIons).toEqual(baseline.finalIons);
+    expect(r.warnings.some((w) => SET_BOTTLE.test(w))).toBe(true);
+    expect(r.warnings.some((w) => BOTH_VERSIONS.test(w))).toBe(false);
+  }
+});
+
+test("an unconfigured concentrate does not draw a slot's dose away from another salt", () => {
+  // Each pair: the working powder, and an unconfigured concentrate of the
+  // slot's OTHER salt, which the split would otherwise send part of the dose to.
+  const target: DosingTarget = { ...TARGET, sodium: 10, potassium: 10, sulfate: 40, chloride: 5 };
+  for (const [powder, concentrate, ion] of [
+    ["potassium-bicarbonate", "baking-soda", "bicarbonate"],
+    ["magnesium-chloride", "epsom-salt", "magnesium"],
+    ["calcium-chloride", "gypsum", "calcium"],
+  ] as const) {
+    const minerals = Array.from(
+      new Set([powder, "calcium-chloride", "magnesium-chloride", "potassium-bicarbonate"]),
+    );
+    const baseline = computeDoses({
+      sourceWater: DISTILLED,
+      target,
+      volumeL: 1,
+      kit: powders(minerals),
+    });
+    const r = computeDoses({
+      sourceWater: DISTILLED,
+      target,
+      volumeL: 1,
+      kit: { ...powders(minerals), concentrates: [UNSET(concentrate)] },
+    });
+    expect(r.shown.mineralGrams).toEqual(baseline.shown.mineralGrams);
+    expect(r.finalIons![ion]).toBeCloseTo(baseline.finalIons![ion], 10);
+    expect(r.warnings.some((w) => SET_BOTTLE.test(w))).toBe(true);
+  }
+});
+
+test("an unconfigured concentrate that is a slot's only source keeps its row and prompt", () => {
+  const r = computeDoses({
+    sourceWater: DISTILLED,
+    target: TARGET,
+    volumeL: 1,
+    kit: {
+      ...powders(["calcium-chloride", "baking-soda"]),
+      concentrates: [UNSET("epsom-salt")],
+    },
+  });
+  expect(r.sources.magnesium).toEqual(["epsom-salt"]);
+  expect(r.shown.concentrateMl["diy:epsom-salt"]).toBe(0);
+  expect(r.warnings.some((w) => SET_BOTTLE.test(w))).toBe(true);
+  expect(r.finalIons!.magnesium).toBe(0);
+});
+
+test("a configured concentrate still wins over the same salt's powder", () => {
+  const r = computeDoses({
+    sourceWater: DISTILLED,
+    target: TARGET,
+    volumeL: 1,
+    kit: {
+      ...powders(STARTER_MINERALS),
+      concentrates: [{ ...UNSET("epsom-salt"), gramsPerMl: 0.2 }],
+    },
+  });
+  expect(r.shown.mineralGrams["epsom-salt"]).toBe(0);
+  expect(r.shown.concentrateMl["diy:epsom-salt"]).toBeGreaterThan(0);
+  expect(r.warnings.some((w) => BOTH_VERSIONS.test(w))).toBe(true);
+});
+
 test("doses for the canonical library recipes match the committed table", async () => {
   type Recipe = Partial<DosingTarget> & { slug: string };
   const recipes = [...(fixture as Recipe[])].sort((a, b) => a.slug.localeCompare(b.slug));
@@ -325,6 +447,16 @@ test("doses for the canonical library recipes match the committed table", async 
       lotusDropperType: "round",
       concentrateUnits: {},
     }),
+    // Unconfigured Mineral Concentrates next to working powders: the doses
+    // must be the powders' own (compare "starter" and the anhydrous kit).
+    "unset-concentrates": {
+      ...powders(STARTER_MINERALS),
+      concentrates: [UNSET("epsom-salt"), UNSET("potassium-bicarbonate"), UNSET("gypsum")],
+    },
+    "anhydrous-unset-dihydrate": {
+      ...powders(["calcium-chloride-anhydrous", "epsom-salt", "baking-soda"]),
+      concentrates: [UNSET("calcium-chloride")],
+    },
   };
   const waters = { distilled: DISTILLED, hard: HARD_TAP };
   const n = (v: number | undefined) => Number(v ?? 0);

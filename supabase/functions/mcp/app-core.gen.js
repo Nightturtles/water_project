@@ -1,7 +1,7 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: 4e41d49bbb64e886f97fa43e9d835a8d5ec367fcd53299a6dbb6ea326d14c5f4
-// body-hash: 606012276552bde2c2a4abea3721339bfd20a7882b4ba1089862561d96c85f20
+// source-hash: 1df32358c37ea216ceed68a593c5c428755d31d40fb1637b210843e3ee1d2b55
+// body-hash: bd57e25248941433ceb98daf12aa4baad9caaefd0abdec8b80763ed7c531efcc
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // src/lib/constants.ts
@@ -725,9 +725,33 @@ function availableMineralIds(kit) {
 	for (const rc of kit.recipeConcentrates) for (const mid of rc.mineralIds) out.add(mid);
 	return Array.from(out);
 }
+/**
+* The salts of one slot (alkalinity, calcium or magnesium) the kit can dose
+* from. A single-mineral concentrate whose bottle isn't configured can't dose
+* anything, so it only counts when the slot has nothing else: counted
+* alongside a working source it drew part (or all) of the slot's dose onto a
+* salt nobody could add, and that mineral was left out of the water. Alone,
+* it keeps the slot so its row shows with the "set bottle mL" prompt.
+*/
+function slotMineralIds(kit, slot) {
+	const usable = new Set(kit.minerals);
+	for (const c of kit.concentrates) if (c.mineralId && c.gramsPerMl > 0) usable.add(c.mineralId);
+	for (const rc of kit.recipeConcentrates) for (const mid of rc.mineralIds) usable.add(mid);
+	const fromUsable = slot.filter((id) => usable.has(id));
+	if (fromUsable.length > 0) return fromUsable;
+	const all = availableMineralIds(kit);
+	return slot.filter((id) => all.includes(id));
+}
+const ALKALINITY_SLOT = ["baking-soda", "potassium-bicarbonate"];
+const CALCIUM_SLOT = [
+	"calcium-chloride",
+	"calcium-chloride-anhydrous",
+	"gypsum"
+];
+const MAGNESIUM_SLOT = ["epsom-salt", "magnesium-chloride"];
 /** Enabled alkalinity sources (baking-soda and/or potassium-bicarbonate). */
 function alkalinitySources(kit) {
-	const selected = availableMineralIds(kit);
+	const selected = slotMineralIds(kit, ALKALINITY_SLOT);
 	const hasBakingSoda = selected.includes("baking-soda");
 	const hasPotBicarb = selected.includes("potassium-bicarbonate");
 	if (!hasBakingSoda && !hasPotBicarb) return [];
@@ -755,7 +779,7 @@ function calciumChlorideForm(kit, selected) {
 }
 /** Enabled calcium sources (a calcium-chloride form and/or gypsum). */
 function calciumSources(kit) {
-	const selected = availableMineralIds(kit);
+	const selected = slotMineralIds(kit, CALCIUM_SLOT);
 	const out = [];
 	const cacl2 = calciumChlorideForm(kit, selected);
 	if (cacl2) out.push(cacl2);
@@ -764,7 +788,7 @@ function calciumSources(kit) {
 }
 /** Enabled magnesium sources (epsom-salt and/or magnesium-chloride). */
 function magnesiumSources(kit) {
-	const selected = availableMineralIds(kit);
+	const selected = slotMineralIds(kit, MAGNESIUM_SLOT);
 	const out = [];
 	if (selected.includes("epsom-salt")) out.push("epsom-salt");
 	if (selected.includes("magnesium-chloride")) out.push("magnesium-chloride");
@@ -3024,6 +3048,7 @@ function computeDoses(input) {
 	kit.concentrates.forEach((c) => {
 		const mineralId = c.mineralId;
 		if (!mineralId) return;
+		if (!(c.gramsPerMl > 0)) return;
 		if (CACL2_FORMS.includes(mineralId) ? CACL2_FORMS.some((form) => selectedMinerals.includes(form)) : selectedMinerals.includes(mineralId)) conflictMineralIds.add(mineralId);
 	});
 	if (conflictMineralIds.size > 0) warnings.push("You’ve selected both the normal and concentrate version of a mineral. We will default to using the concentrate.");
@@ -3077,7 +3102,12 @@ function computeDoses(input) {
 		const gramsPerMl = c.gramsPerMl;
 		if (!Number.isFinite(gramsPerMl) || gramsPerMl <= 0) {
 			result.concentrateMl[c.id] = 0;
-			if (grams > 0 && !dosedByConcentrate[mineralId]) warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
+			const slot = [
+				ALKALINITY_SLOT,
+				CALCIUM_SLOT,
+				MAGNESIUM_SLOT
+			].find((s) => s.includes(mineralId));
+			if ((slot ? Math.max(...slot.map((id) => Number(resultValues[id]) || 0)) : grams) > 0 && !dosedByConcentrate[mineralId]) warnings.push("Set bottle mL and grams per bottle in Settings to use this concentrate.");
 			return;
 		}
 		if (dosedByConcentrate[mineralId]) {
