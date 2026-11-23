@@ -1451,9 +1451,20 @@ function scheduleRealtimePull(): void {
         realtimePullDeferred = true;
         return Promise.resolve();
       }
-      const pendingPush = syncTimer ? syncNow() : Promise.resolve();
+      const pendingPush = syncTimer || hasUnpushedChanges() ? syncNow() : Promise.resolve();
       return Promise.resolve(pendingPush)
         .then(function () {
+          // syncNow resolves even when its upload failed (it reports the
+          // error itself). Pulling then would replace the unpushed recipes
+          // and starting waters with the account's rows and mark those as
+          // pushed, losing the edit for good. Keep it in local data instead:
+          // the next save, realtime event or page load retries the push, and
+          // the pull follows once it gets through. (initSync does the same:
+          // a failed push there skips its pull.)
+          if (hasUnpushedChanges()) {
+            console.warn("[sync] pull skipped: local changes have not reached the account yet");
+            return "discarded" as const;
+          }
           return pullFromCloud({ skipIfLocalWriteDuringPull: true, expectedUserId: gatedUserId });
         })
         .then(function (applied) {

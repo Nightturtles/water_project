@@ -104,7 +104,7 @@ describe("describeMergeOptions", () => {
       summarizeMerge(EMPTY_LOCAL, { ...EMPTY_CLOUD, recipes: [item("d", "Delta")] }),
     );
     expect(copy.accountOnly[0]).toBe(
-      "No recipe, starting water or concentrate is saved only on this device.",
+      "No recipe, starting water or concentrate is removed from this device.",
     );
   });
 
@@ -135,7 +135,7 @@ describe("describeMergeOptions", () => {
     );
     expect(copy.keepBoth[0]).toBe("Adds to your account: 1 concentrate (Epsom Salt).");
     expect(copy.accountOnly[0]).toBe(
-      "No recipe, starting water or concentrate is saved only on this device.",
+      "No recipe, starting water or concentrate is removed from this device.",
     );
   });
 

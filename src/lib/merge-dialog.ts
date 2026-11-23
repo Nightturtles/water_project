@@ -204,7 +204,7 @@ export function describeMergeOptions(summary: MergeSummary | null): MergeOptionC
   if (removed) {
     accountOnly.push("Removes from this device: " + removed + ". This can't be undone.");
   } else {
-    accountOnly.push("No recipe, starting water or concentrate is saved only on this device.");
+    accountOnly.push("No recipe, starting water or concentrate is removed from this device.");
   }
   if (differing) {
     accountOnly.push("Replaces this device's version with your account's: " + differing + ".");
