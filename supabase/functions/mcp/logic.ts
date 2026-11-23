@@ -1207,8 +1207,31 @@ export function deriveFormula(
   return derived;
 }
 
+/**
+ * The database's limits on what connected AI apps may save
+ * (mcp_count_oauth_write): a per-user daily count, and ceilings on how many
+ * recipes and source waters an AI app may add to. Null for any other error.
+ */
+export function quotaError(error: { code?: string; message: string }): ToolError | null {
+  if (error.code === "MCQ01") {
+    return new ToolError(
+      "This account has reached today's limit of 100 saves from connected AI apps, so nothing was saved. The limit resets at midnight UTC. The user can still make changes in the Cafelytic app.",
+    );
+  }
+  if (error.code === "MCQ02") {
+    return new ToolError(
+      /source water/.test(error.message)
+        ? "This account already holds 100 saved source waters, the most an AI app may add to. Nothing was saved. The user can remove some in the Cafelytic app, or change an existing one instead."
+        : "This account already holds 500 recipes, the most an AI app may add to. Nothing was saved. The user can remove some in the Cafelytic app, or change an existing one instead.",
+    );
+  }
+  return null;
+}
+
 /** Turn a mcp_save_concentrate failure into a message the model can act on. */
 export function saveConcentrateError(error: { code?: string; message: string }): ToolError | Error {
+  const overLimit = quotaError(error);
+  if (overLimit) return overLimit;
   switch (error.code) {
     case "42501":
       return new ToolError("Cafelytic does not allow that change from an AI app.");
@@ -1333,9 +1356,20 @@ export function recipeActivationProblem(
   return null;
 }
 
+/**
+ * Said when the user has not approved this app for an ability added after
+ * they connected it (SQLSTATE MCA01 from a gated database function).
+ */
+export const NEEDS_APPROVAL =
+  "Nothing was changed. This ability was added to Cafelytic after the user connected this app, and they have not approved it for this app yet. Ask the user to open https://cafelytic.com/oauth/consent while signed in, press \"Allow new abilities\" next to this app, then try again. Do not retry before they have.";
+
 /** Turn a refusal from one of the mcp_set_* database functions into a tool error. */
 export function selectionError(error: { code?: string; message: string }): ToolError | Error {
+  const overLimit = quotaError(error);
+  if (overLimit) return overLimit;
   switch (error.code) {
+    case "MCA01":
+      return new ToolError(NEEDS_APPROVAL);
     case "42501":
       return new ToolError("Cafelytic does not allow that change from an AI app.");
     case "P0002":

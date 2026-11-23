@@ -36,8 +36,28 @@
 --
 -- First-party sessions may call these too. They grant them nothing they lack.
 --
+-- These are the first abilities added after the list on the consent page was
+-- versioned (20261123064216_mcp_write_quota_and_app_consent.sql), so this
+-- migration raises that version to 2 and each function refuses, with SQLSTATE
+-- MCA01, an app the user has not approved at version 2: one connected while
+-- the page still said an app "cannot switch concentrates on". The user
+-- approves the new abilities for such an app on the Connected apps page.
+-- Every write here is also counted by that migration's daily quota trigger.
+--
 -- (IF branches, not CASE expressions, and \Z instead of a dollar anchor: see
 -- 20261123013834_mcp_save_concentrate.sql.)
+
+-- The consent page's ability list, version 2: version 1 plus switching
+-- minerals and concentrates on or off and choosing the active recipe and
+-- source water. Same signature and grants as before.
+create or replace function public.mcp_abilities_version()
+returns integer
+language sql
+immutable
+set search_path = ''
+as $fn$
+  select 2;
+$fn$;
 
 -- ---------------------------------------------------------------------------
 -- Helper: is this jsonb value a number above zero?
@@ -108,6 +128,9 @@ declare
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not public.mcp_app_allows(2) then
+    raise exception 'this app has not been approved for this ability' using errcode = 'MCA01';
   end if;
   if p_kind is null or p_kind not in ('mineral', 'concentrate') then
     raise exception 'kind must be mineral or concentrate' using errcode = '22023';
@@ -253,6 +276,9 @@ begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
   end if;
+  if not public.mcp_app_allows(2) then
+    raise exception 'this app has not been approved for this ability' using errcode = 'MCA01';
+  end if;
   if p_recipe_id is null then
     raise exception 'recipe id is required' using errcode = '22023';
   end if;
@@ -393,6 +419,9 @@ declare
 begin
   if v_uid is null then
     raise exception 'not authenticated' using errcode = '42501';
+  end if;
+  if not public.mcp_app_allows(2) then
+    raise exception 'this app has not been approved for this ability' using errcode = 'MCA01';
   end if;
   -- 'custom' is the app's hand-typed water, not a source water to select.
   if p_key is null or p_key !~ c_key_re or p_key = 'custom' then

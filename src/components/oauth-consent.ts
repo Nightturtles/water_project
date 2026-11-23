@@ -5,7 +5,8 @@
 //   /oauth/consent?authorization_id=<id>
 // The page shows who is asking and what they will be able to do, then approves
 // or denies the request. Opened with no authorization_id it lists the apps
-// already connected and lets the user disconnect them.
+// already connected, lets the user disconnect them, and lets the user allow
+// abilities that were added after an app was connected.
 //
 // This is its own module entry and deliberately does NOT load
 // legacy-globals.ts: the page needs the Supabase client and nothing else, and
@@ -20,6 +21,7 @@ import {
   consentReturnPath,
   rememberPostLoginRedirect,
 } from "../lib/post-login-redirect";
+import { abilitiesNotYetApproved } from "../lib/consent-abilities";
 
 type View = "loading" | "request" | "apps" | "message";
 
@@ -59,6 +61,75 @@ function goTo(url: string): void {
   window.location.assign(url);
 }
 
+// The database keeps which version of this page's ability list the user
+// approved for each app (mcp_app_consent), so an ability added later is not
+// handed to an app the user approved before it existed. Both calls are best
+// effort: an app with no record is treated as approved for the first version
+// of the list only, which is the safe reading, so a failure here must never
+// block connecting or disconnecting.
+// The wait is bounded too: a request that never settles must not hold up the
+// redirect back to the app or the refresh of the list.
+const CONSENT_RECORD_TIMEOUT_MS = 4000;
+
+async function bestEffort(call: PromiseLike<unknown>): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      Promise.resolve(call),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, CONSENT_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (_) {
+    // See above.
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
+async function recordApproval(clientId: string): Promise<void> {
+  if (!clientId) return;
+  await bestEffort(supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId }));
+}
+
+async function forgetApproval(clientId: string): Promise<void> {
+  if (!clientId) return;
+  await bestEffort(supabaseClient.rpc("mcp_forget_app_consent", { p_client_id: clientId }));
+}
+
+/**
+ * The version each connected app was approved at, and the current version.
+ * Null when either cannot be read: the list then shows no "Allow new
+ * abilities" button, and nothing else on the page depends on it.
+ */
+async function loadApprovals(): Promise<{ current: number; byClient: Map<string, number> } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const read = Promise.all([
+      supabaseClient.rpc("mcp_abilities_version"),
+      supabaseClient.from("mcp_app_consent").select("client_id, abilities_version"),
+    ]);
+    const result = await Promise.race([
+      read,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), CONSENT_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+    if (!result) return null;
+    const [version, rows] = result;
+    if (version.error || rows.error || typeof version.data !== "number") return null;
+    const byClient = new Map<string, number>();
+    for (const row of (rows.data || []) as { client_id: string; abilities_version: number }[]) {
+      byClient.set(row.client_id, row.abilities_version);
+    }
+    return { current: version.data, byClient };
+  } catch (_) {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
+
 async function loadRequest(authorizationId: string): Promise<void> {
   const { data, error } = await supabaseClient.auth.oauth.getAuthorizationDetails(authorizationId);
   if (error || !data) {
@@ -86,6 +157,7 @@ async function loadRequest(authorizationId: string): Promise<void> {
   const allowBtn = el<HTMLButtonElement>("consent-allow");
   const denyBtn = el<HTMLButtonElement>("consent-deny");
   const errorEl = el("consent-error");
+  const clientId = (data.client && data.client.id) || "";
 
   async function decide(approve: boolean): Promise<void> {
     allowBtn.disabled = true;
@@ -103,6 +175,7 @@ async function loadRequest(authorizationId: string): Promise<void> {
         showMessage(EXPIRED_TITLE, EXPIRED_BODY);
         return;
       }
+      if (approve) await recordApproval(clientId);
       goTo(result.data.redirect_url);
     } catch (_) {
       errorEl.textContent = "Something went wrong. Please try again.";
@@ -119,7 +192,10 @@ async function loadConnectedApps(): Promise<void> {
   const list = el("consent-apps-list");
   const empty = el("consent-apps-empty");
   const errorEl = el("consent-apps-error");
-  const { data, error } = await supabaseClient.auth.oauth.listGrants();
+  const [{ data, error }, approvals] = await Promise.all([
+    supabaseClient.auth.oauth.listGrants(),
+    loadApprovals(),
+  ]);
   show("apps");
   list.textContent = "";
   errorEl.textContent = "";
@@ -157,10 +233,51 @@ async function loadConnectedApps(): Promise<void> {
         errorEl.textContent = "Could not disconnect that app. Please try again.";
         return;
       }
+      await forgetApproval(grant.client.id);
       void loadConnectedApps();
     });
+    const actions = document.createElement("div");
+    actions.className = "consent-app-row-actions";
+    // An app with no record was approved before records were kept: version 1.
+    const missing = approvals
+      ? abilitiesNotYetApproved(approvals.byClient.get(grant.client.id) || 1, approvals.current)
+      : [];
+    if (missing.length > 0) {
+      const note = document.createElement("span");
+      note.className = "consent-app-row-new";
+      note.textContent =
+        "Added since you connected this app, and not allowed for it yet: " +
+        missing.join("; ") +
+        ".";
+      info.appendChild(note);
+      const allowBtn = document.createElement("button");
+      allowBtn.type = "button";
+      allowBtn.className = "consent-disconnect-btn consent-allow-new-btn";
+      allowBtn.textContent = "Allow new abilities";
+      allowBtn.addEventListener("click", async () => {
+        allowBtn.disabled = true;
+        errorEl.textContent = "";
+        let failed: boolean;
+        try {
+          const res = await supabaseClient.rpc("mcp_record_app_consent", {
+            p_client_id: grant.client.id,
+          });
+          failed = !!res.error;
+        } catch (_) {
+          failed = true;
+        }
+        if (failed) {
+          allowBtn.disabled = false;
+          errorEl.textContent = "Could not allow the new abilities. Please try again.";
+          return;
+        }
+        void loadConnectedApps();
+      });
+      actions.appendChild(allowBtn);
+    }
+    actions.appendChild(btn);
     row.appendChild(info);
-    row.appendChild(btn);
+    row.appendChild(actions);
     list.appendChild(row);
   }
 }

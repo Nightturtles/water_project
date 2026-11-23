@@ -1,13 +1,13 @@
 -- pgTAP: the three functions through which an OAuth client (an AI app
 -- connected through the MCP server) may change the active selections
--- (20261123063240_mcp_set_selections.sql): mcp_set_enabled,
+-- (20261123180000_mcp_set_selections.sql): mcp_set_enabled,
 -- mcp_set_active_recipe and mcp_set_active_source_water.
 --
 -- Run against the local stack:  supabase test db
 
 begin;
 create extension if not exists pgtap with schema extensions;
-select plan(54);
+select plan(62);
 
 insert into auth.users (id, email)
 values
@@ -54,6 +54,53 @@ values
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'a-tap', 'A tap', 40, 8.5, 120),
   ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'old-tap', 'Old tap', 1, 1, 1),
   ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'b-tap', 'B tap', 99, 9, 9);
+
+-- Each user approved "test-client" with the current list on the consent page
+-- (version 2). A also has "old-client", approved when the list was at version
+-- 1, and "unrecorded-client", connected before approvals were recorded.
+insert into public.mcp_app_consent (user_id, client_id, abilities_version)
+values
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'test-client', 2),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', 'test-client', 2),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'test-client', 2),
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'old-client', 1);
+
+-- Reads the write counter as the table owner: clients cannot see it.
+create function pg_temp.quota_of(p_user uuid) returns integer
+language sql security definer as $$
+  select coalesce((select sum(count)::integer from public.mcp_write_quota where user_id = p_user), 0);
+$$;
+
+-- ---------------------------------------------------------------------------
+-- An app the user has not approved for these abilities is refused
+-- ---------------------------------------------------------------------------
+set local role authenticated;
+set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"old-client"}';
+select throws_ok(
+  $$ select public.mcp_set_enabled('mineral', 'gypsum', true) $$,
+  'MCA01', null, 'an app approved at version 1 cannot switch a mineral');
+select throws_ok(
+  $$ select public.mcp_set_active_recipe('10000000-0000-0000-0000-000000000002') $$,
+  'MCA01', null, 'nor choose the active recipe');
+select throws_ok(
+  $$ select public.mcp_set_active_source_water('a-tap') $$,
+  'MCA01', null, 'nor choose the active source water');
+set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"unrecorded-client"}';
+select throws_ok(
+  $$ select public.mcp_set_enabled('mineral', 'gypsum', true) $$,
+  'MCA01', null, 'an app with no recorded approval is refused too');
+select throws_ok(
+  $$ select public.mcp_set_enabled('mineral', 'epsom-salt', false) $$,
+  'MCA01', null, 'switching off is gated as well');
+set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"old-client"}';
+select is(
+  (select s.selected_minerals::text || '|' || x.target_preset || '|' || x.source_preset
+     from public.user_settings s, public.user_selections x),
+  '["calcium-chloride", "epsom-salt", "baking-soda"]|a-filter|distilled',
+  'and nothing was changed');
+select is(pg_temp.quota_of('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), 0,
+  'a refused call is not counted against the daily limit');
+reset role;
 
 -- ---------------------------------------------------------------------------
 -- User A through an OAuth client
@@ -270,6 +317,10 @@ select throws_ok(
 select is(
   (select count(*)::int from public.user_settings) + (select count(*)::int from public.user_selections),
   0, 'and none was created');
+
+set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"test-client"}';
+select cmp_ok(pg_temp.quota_of('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'), '>', 0,
+  'the approved app''s changes were counted against the daily limit');
 
 -- ---------------------------------------------------------------------------
 -- Signed out

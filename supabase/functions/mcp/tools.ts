@@ -10,7 +10,7 @@
 // the database function public.mcp_save_concentrate.
 // Phase 3 adds the active selections: switch a mineral or a concentrate on or
 // off, and choose the active recipe and source water, each through its own
-// database function (20261123063240_mcp_set_selections.sql).
+// database function (20261123180000_mcp_set_selections.sql).
 // There is no tool that publishes, deletes, or changes a published recipe,
 // and supabase/migrations/20261122200921_restrict_oauth_client_access.sql
 // refuses those at the database for any AI-app login, tool or no tool.
@@ -71,6 +71,7 @@ import {
   recipeSummary,
   resolveIons,
   rowIons,
+  quotaError,
   saveConcentrateError,
   selectionError,
   type SourceRow,
@@ -108,6 +109,7 @@ const INSTRUCTIONS = [
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
   "A concentrate saved here is added to the user's Settings but is NOT switched on by saving it. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
+  "Saves and changes from connected AI apps are limited to 100 per user per day; if one is refused for that reason, tell the user and do not retry it.",
   "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates that are switched on. Do not work doses out yourself.",
   "set_mineral_enabled, set_concentrate_enabled, set_active_recipe and set_active_source_water change what the user's Cafelytic app is set to on every device, so the doses the app shows change with them. Use them only when the user asked for that change or agreed to it; to try something out, pass a recipe, source water or minerals to calculate_doses instead, which changes nothing. After one of them, ask the user to check the app: a device that had unsynced changes can put the old selection back, and making the change again fixes that.",
 ].join(" ");
@@ -143,6 +145,8 @@ function check<T>(result: { data: T; error: { code?: string; message: string } |
     if (result.error.code === "42501") {
       throw new ToolError("Cafelytic does not allow that change from an AI app.");
     }
+    const overLimit = quotaError(result.error);
+    if (overLimit) throw overLimit;
     throw new Error(result.error.message);
   }
   return result.data;

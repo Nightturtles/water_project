@@ -25,6 +25,7 @@ import {
   kitFromSettings,
   pickDefaultSource,
   pickStockKey,
+  quotaError,
   saveConcentrateError,
   selectionError,
   solubilityWarnings,
@@ -801,6 +802,26 @@ Deno.test("deriveFormula: the app's formula for a recipe, weighed in the user's 
   );
 });
 
+Deno.test("quotaError: the database's limits for connected apps become clear messages", () => {
+  const daily = quotaError({ code: "MCQ01", message: "daily save limit for connected apps reached" });
+  assert.ok(daily instanceof ToolError);
+  assert.match(daily!.message, /limit of 100 saves/);
+  assert.match(daily!.message, /nothing was saved/);
+  assert.match(
+    quotaError({ code: "MCQ02", message: "recipe limit for connected apps reached" })!.message,
+    /500 recipes/,
+  );
+  assert.match(
+    quotaError({ code: "MCQ02", message: "source water limit for connected apps reached" })!
+      .message,
+    /100 saved source waters/,
+  );
+  assert.equal(quotaError({ code: "42501", message: "x" }), null);
+  assert.equal(quotaError({ message: "x" }), null);
+  // A concentrate save past the limit says the same thing.
+  assert.match(saveConcentrateError({ code: "MCQ01", message: "x" }).message, /limit of 100 saves/);
+});
+
 Deno.test("saveConcentrateError: database refusals become clear messages", () => {
   const msg = (code: string, message = "x") => saveConcentrateError({ code, message }).message;
   assert.match(msg("42501"), /does not allow/);
@@ -901,4 +922,14 @@ Deno.test("selectionError: database refusals become clear messages", () => {
   assert.match(msg("54000"), /Switch one off/);
   assert.ok(selectionError({ code: "22023", message: "invalid id" }) instanceof ToolError);
   assert.equal(selectionError({ code: "XX000", message: "boom" }) instanceof ToolError, false);
+  assert.match(
+    selectionError({ code: "MCA01", message: "this app has not been approved for this ability" })
+      .message,
+    /Allow new abilities/,
+  );
+  assert.match(
+    selectionError({ code: "MCQ01", message: "daily save limit for connected apps reached" })
+      .message,
+    /today's limit/,
+  );
 });
