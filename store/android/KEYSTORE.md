@@ -38,8 +38,8 @@ keytool -genkey -v \
 
 `keytool` will prompt for:
 
-- A keystore password — generate a long random one in your password manager.
-- A key password — set the same value as the keystore password (Gradle handles either, and using the same one is simpler to remember; pick separate values if your security model requires it).
+- A keystore password — generate a long random one in your password manager. This is a new password that only protects the keystore file; it is not your Google account password.
+- No separate key password: current JDKs create a PKCS12 keystore, where the key always shares the keystore password. Set both password env vars below to that one value.
 - Distinguished name fields (name, org, locality, etc.) — these end up in the signing certificate. Use real values; you can leave optional fields blank.
 
 After it finishes, the file `cafelytic-upload.keystore` will exist at the path you supplied. Keep that path outside the repo; the `.gitignore` blocks `*.keystore` files but the right move is to never have the file in the working tree to begin with.
@@ -72,7 +72,7 @@ echo "$CAFELYTIC_RELEASE_KEYSTORE" && ls -l "$CAFELYTIC_RELEASE_KEYSTORE"
 
 ## Sanity-check the signed build
 
-Without the env vars, `./gradlew bundleRelease` will sign with the debug key (the Gradle config falls back when `CAFELYTIC_RELEASE_KEYSTORE` is unset). To confirm the env vars actually take effect:
+Without the env vars, `./gradlew bundleRelease` fails at the `signReleaseBundle` step with a bare `NullPointerException` (the release signing config is empty when `CAFELYTIC_RELEASE_KEYSTORE` is unset). To confirm the env vars actually take effect:
 
 ```bash
 cd android
@@ -87,16 +87,10 @@ The output should show the certificate's `Owner:` matching the distinguished nam
 
 When the Play Console account exists:
 
-1. Create the app shell on Play Console (Cafelytic, Free, etc.).
-2. In *Setup → App integrity → App signing*, **enable Play App Signing** if it isn't already on. Choose the option to let Google generate the app signing key. Upload the certificate exported from your upload keystore so Google knows which uploads to trust:
-   ```bash
-   keytool -export -rfc \
-     -keystore "$CAFELYTIC_RELEASE_KEYSTORE" \
-     -alias "$CAFELYTIC_RELEASE_KEY_ALIAS" \
-     -file upload_certificate.pem
-   ```
-3. Upload `upload_certificate.pem` in the Play Console step.
-4. Run `scripts/upload-play-internal.sh` (see `store/UPLOAD.md`) to push the first AAB to the Internal Testing track.
+1. Create the app on Play Console (Cafelytic, Free, etc.). Play App Signing is on by default; keep the option that lets Google generate the app signing key.
+2. Run `scripts/upload-play-internal.sh --build-only` to build the signed AAB, then upload it by hand to the Internal Testing track (see `store/UPLOAD.md`, section 7). The key that signed this first AAB becomes the registered upload key, so there is no certificate to upload separately.
+3. Check the App signing page (under App integrity): the upload key certificate's SHA-256 should match the one the script printed.
+4. Later uploads go through the script without `--build-only`.
 
 ## If you lose the upload key
 
@@ -107,4 +101,4 @@ With Play App Signing on, you can request a key reset:
 3. Google reviews the request (usually within 48 hours).
 4. Update your env vars to point at the new keystore. Re-run the upload script.
 
-Without Play App Signing, none of this works — you lose the app. That's why step 2 of "First Play Console upload" above is non-optional.
+Without Play App Signing, none of this works — you lose the app. That's why keeping it on in step 1 of "First Play Console upload" above is non-optional.
