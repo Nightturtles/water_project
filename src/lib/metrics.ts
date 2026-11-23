@@ -927,22 +927,26 @@ export function deriveStockFormulaFromTarget(
     // calculator's calcium slot, but it doesn't change what gets weighed
     // here: following it switched the formula to anhydrous grams, about 25%
     // light for someone weighing dihydrate.
-    const powders = loadSelectedMinerals();
-    const caForm = powders.includes("calcium-chloride")
-      ? "calcium-chloride"
-      : powders.includes("calcium-chloride-anhydrous")
-        ? "calcium-chloride-anhydrous"
-        : getEffectiveCalciumSource();
+    //
     // Trust calciumChlorideId only if it names a known CaCl2 form; otherwise
     // fall back to the user's effective source so a bad id can't silently
-    // skip calcium addition for a non-zero target.
+    // skip calcium addition for a non-zero target. The saved selection is
+    // read only in that fallback: the MCP server always passes the form (from
+    // the user's synced settings) and has no browser storage to read.
     const requestedCaId = options.calciumChlorideId;
-    const caId =
-      requestedCaId === "calcium-chloride" || requestedCaId === "calcium-chloride-anhydrous"
-        ? requestedCaId
-        : caForm === "calcium-chloride-anhydrous"
+    let caId: string;
+    if (requestedCaId === "calcium-chloride" || requestedCaId === "calcium-chloride-anhydrous") {
+      caId = requestedCaId;
+    } else {
+      const powders = loadSelectedMinerals();
+      const caForm = powders.includes("calcium-chloride")
+        ? "calcium-chloride"
+        : powders.includes("calcium-chloride-anhydrous")
           ? "calcium-chloride-anhydrous"
-          : "calcium-chloride";
+          : getEffectiveCalciumSource();
+      caId =
+        caForm === "calcium-chloride-anhydrous" ? "calcium-chloride-anhydrous" : "calcium-chloride";
+    }
     if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
       notes.push(
         "Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
@@ -1007,7 +1011,7 @@ export function deriveStockFormulaFromTarget(
           concentrationGperL.toFixed(1) +
           " g/L) exceeds approximate solubility (" +
           cap +
-          " g/L); try a larger bottle or lower dose.",
+          " g/L); use a higher dose per liter, which makes the bottle weaker.",
       );
     }
   });

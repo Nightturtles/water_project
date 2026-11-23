@@ -5,6 +5,9 @@
 // Phase 1 scope: read recipes, source waters, minerals and concentrates;
 // analyse a water; work out doses (the Calculator page's own math); create
 // and adjust PRIVATE recipes and saved source waters.
+// Phase 2 adds concentrates: derive a formula from a recipe, and create or
+// change a Recipe Concentrate or Mineral Concentrate, one at a time, through
+// the database function public.mcp_save_concentrate.
 // There is no tool that publishes, deletes, or changes a published recipe,
 // and supabase/migrations/20261122200921_restrict_oauth_client_access.sql
 // refuses those at the database for any AI-app login, tool or no tool.
@@ -22,14 +25,28 @@ import {
 import {
   analyze,
   asStringArray,
+  BOTTLE_ML_MAX,
+  BOTTLE_ML_MIN,
+  buildDiySpec,
   buildRecipeInsert,
   buildRecipePatch,
   buildSourcePatch,
   buildSourceValues,
+  buildStockSpec,
+  calciumChlorideFormFor,
   cleanDescription,
   cleanName,
   DESCRIPTION_MAX,
+  deriveFormula,
+  type DiySpec,
+  formulaSaveProblem,
+  ionDifferences,
+  diyView,
+  DOSE_ML_PER_L_MAX,
+  DOSE_ML_PER_L_MIN,
   doseLines,
+  DROP_ML_MAX,
+  DROP_ML_MIN,
   type DosingResult,
   HCO3_TO_CACO3_FACTOR,
   isBuiltinSourceKey,
@@ -37,17 +54,24 @@ import {
   kitSummary,
   likeLiteral,
   mergeSourceWaters,
+  MINERAL_GRAMS_MAX,
   NAME_MAX,
   pickDefaultSource,
   pickProfileKey,
+  pickStockKey,
   pickVerifiedProfileKey,
   recipeDetail,
   recipeReadOnlyReason,
   recipeSummary,
   resolveIons,
   rowIons,
+  saveConcentrateError,
   type SourceRow,
   sourceWaterView,
+  STOCK_MINERALS_MAX,
+  stockKeyFromId,
+  type StockSpec,
+  stockView,
   type TargetRow,
   ToolError,
   VOLUME_MAX_LITERS,
@@ -76,6 +100,7 @@ const INSTRUCTIONS = [
   "Recipes saved here are always private. Publishing a recipe to the public Recipe Library, and deleting anything, can only be done by the user in the Cafelytic app.",
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
+  "A concentrate saved here is added to the user's Settings but is NOT switched on: the user enables it in the Cafelytic app. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
   "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates they enabled in the app. Do not work doses out yourself.",
 ].join(" ");
 
@@ -89,6 +114,9 @@ function ok(payload: unknown) {
 function fail(message: string) {
   return { isError: true, content: [{ type: "text" as const, text: message }] };
 }
+
+/** A concentrate was changed between this request's read and its save. */
+class ChangedUnderneath extends Error {}
 
 /** Run a tool body, turning expected failures into tool errors the model can read. */
 async function run(body: () => Promise<unknown>) {
@@ -317,7 +345,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     {
       title: "List concentrates",
       description:
-        "The user's concentrates: Recipe Concentrates (a multi-mineral bottle dosed in mL per liter), Mineral Concentrates (one mineral dissolved in a bottle), and the ready-made brand concentrates Cafelytic knows. Read-only for now.",
+        "The user's concentrates: Recipe Concentrates (a multi-mineral bottle dosed in mL per liter), Mineral Concentrates (one mineral dissolved in a bottle), and the ready-made brand concentrates Cafelytic knows. selected marks the ones switched on in the app.",
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, openWorldHint: false },
     },
@@ -788,6 +816,326 @@ export function buildServer(supabase: Db, userId: string): McpServer {
             selections.sourcePreset,
           ),
         };
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Concentrates: derive, create, change (phase 2)
+  // -------------------------------------------------------------------------
+
+  const obj = (v: unknown) =>
+    (v && typeof v === "object" && !Array.isArray(v) ? v : {}) as Record<string, unknown>;
+
+  async function loadConcentrateSettings() {
+    const row = check(
+      await supabase.from("user_settings")
+        .select("stock_concentrate_specs, diy_concentrate_specs, selected_concentrates, selected_minerals")
+        .eq("user_id", userId).maybeSingle(),
+    ) as Record<string, unknown> | null;
+    return {
+      row,
+      stock: obj(row?.stock_concentrate_specs) as Record<string, StockSpec | undefined>,
+      diy: obj(row?.diy_concentrate_specs) as Record<string, DiySpec | undefined>,
+      selected: new Set(asStringArray(row?.selected_concentrates)),
+    };
+  }
+
+  /** Save one concentrate through the database's merge function. */
+  async function saveConcentrate(
+    kind: "stock" | "diy",
+    key: string,
+    spec: StockSpec | DiySpec,
+    mode: "create" | "update",
+    // update: the spec this change was built from. The database refuses the
+    // save if the stored spec is no longer this one.
+    expected?: StockSpec | DiySpec,
+  ): Promise<{ spec: Record<string, unknown>; previous: Record<string, unknown> | null }> {
+    const result = await supabase.rpc("mcp_save_concentrate", {
+      p_kind: kind,
+      p_key: key,
+      p_spec: spec,
+      p_mode: mode,
+      p_expected: mode === "update" && expected ? expected : null,
+    });
+    if (result.error) {
+      if (result.error.code === "40001") throw new ChangedUnderneath();
+      throw saveConcentrateError(result.error);
+    }
+    return result.data;
+  }
+
+  /**
+   * Read, build, save, and if the concentrate was changed between the read
+   * and the save, do all three again from the fresh copy. So a change that
+   * sends only some fields is always applied to the current spec.
+   */
+  async function withFreshRead<T>(attempt: () => Promise<T>): Promise<T> {
+    for (let tries = 0;; tries++) {
+      try {
+        return await attempt();
+      } catch (err) {
+        if (!(err instanceof ChangedUnderneath) || tries >= 2) {
+          throw err instanceof ChangedUnderneath
+            ? saveConcentrateError({ code: "40001", message: "" })
+            : err;
+        }
+      }
+    }
+  }
+
+  const SAVED_NOTE =
+    "Saved to the user's Cafelytic Settings. It is not switched on: the user enables it in the app. Ask them to check it appears there; if it is missing (the app had unsynced changes on another device), save it again.";
+  const CHANGED_ENABLED_NOTE =
+    "Saved. This concentrate is switched on in the app: the calculator will use the new values once the app has synced. Ask the user to check the concentrate and the doses in the app.";
+
+  const mineralEntries = z.array(z.object({
+    mineral_id: z.enum(MINERAL_IDS).describe("Mineral id from list_minerals."),
+    grams: z.number().positive().max(MINERAL_GRAMS_MAX).describe(
+      "Grams of this mineral dissolved in the whole bottle.",
+    ),
+  })).min(1).max(STOCK_MINERALS_MAX);
+  const bottleMl = z.number().min(BOTTLE_ML_MIN).max(BOTTLE_ML_MAX);
+  const doseMlPerLiter = z.number().min(DOSE_ML_PER_L_MIN).max(DOSE_ML_PER_L_MAX);
+  const dropMl = z.number().min(DROP_ML_MIN).max(DROP_ML_MAX).nullable().optional().describe(
+    "Average mL per drop of the user's dropper, if they dose in drops. null removes it.",
+  );
+
+  server.registerTool(
+    "derive_concentrate_formula",
+    {
+      title: "Derive concentrate formula",
+      description:
+        "Work out a Recipe Concentrate formula for a recipe: the grams of each mineral to dissolve in a bottle so that the dose per liter comes close to the recipe from distilled water. This is the formula the Cafelytic app derives. It is an approximation: it picks one salt per mineral and rounds to 0.1 g, so some ions (often sulfate or chloride) can land off the recipe. The reply shows the water it makes and the difference from the target per ion; show those to the user before saving. Saves nothing: save it with create_recipe_concentrate.",
+      inputSchema: z.object({
+        recipe_id: uuid.optional().describe(
+          "Recipe to make a concentrate for, from list_recipes. Send this or target ions, not both.",
+        ),
+        ...ionShape,
+        bottle_ml: bottleMl.default(200).describe("Bottle size in mL."),
+        dose_ml_per_liter: doseMlPerLiter.default(4).describe(
+          "mL of concentrate added per liter of water.",
+        ),
+      }),
+      annotations: { readOnlyHint: true, openWorldHint: false },
+    },
+    ({ recipe_id, bottle_ml, dose_ml_per_liter, ...ions }) =>
+      run(async () => {
+        const sentIons = Object.values(ions).some((v) => v !== undefined);
+        if (recipe_id && sentIons) throw new ToolError("Send recipe_id or target ions, not both.");
+        if (!recipe_id && !sentIons) {
+          throw new ToolError("Say what to make: send recipe_id, or the target ions.");
+        }
+        const [recipeResult, settings] = await Promise.all([
+          recipe_id
+            ? supabase.from("target_profiles").select(TARGET_COLUMNS).eq("id", recipe_id)
+              .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          loadConcentrateSettings(),
+        ]);
+        const recipe = check(recipeResult) as TargetRow | null;
+        if (recipe_id && !recipe) {
+          throw new ToolError("No recipe with that id is visible to this account.");
+        }
+        const target = recipe
+          ? {
+            ...rowIons(recipe),
+            alkalinity: recipe.alkalinity == null
+              ? Math.round(rowIons(recipe).bicarbonate * HCO3_TO_CACO3_FACTOR)
+              : Number(recipe.alkalinity),
+          }
+          : resolveIons(ions);
+        const derived = deriveFormula(target, {
+          bottleMl: bottle_ml,
+          doseMlPerLiter: dose_ml_per_liter,
+          calciumChlorideId: calciumChlorideFormFor(settings.row),
+        });
+        if (derived.minerals.length === 0) {
+          throw new ToolError("That recipe has no minerals to put in a concentrate.");
+        }
+        const saveProblem = formulaSaveProblem(derived.minerals);
+        const preview = stockView("preview", {
+          label: recipe ? recipe.label : "Preview",
+          bottleMl: derived.bottleMl,
+          doseGramsPerL: derived.doseGramsPerL,
+          minerals: derived.minerals,
+        });
+        return {
+          for_recipe: recipe ? { id: recipe.id, name: recipe.label } : null,
+          bottle_ml: derived.bottleMl,
+          dose_ml_per_liter: derived.doseGramsPerL,
+          minerals: preview.minerals,
+          adds_per_liter_at_dose: preview.adds_per_liter_at_dose,
+          difference_from_target: {
+            note: "What the concentrate makes minus the recipe, in mg/L. 0 is exact.",
+            ions: ionDifferences(preview.adds_per_liter_at_dose.ions, target),
+          },
+          // The derivation's own notes already cover solubility.
+          notes: derived.notes,
+          next_step: saveProblem
+            ? `This formula cannot be saved as it is. ${saveProblem} Derive again with a smaller bottle or a higher dose per liter.`
+            : "To save this, call create_recipe_concentrate with these minerals, bottle_ml and dose_ml_per_liter" +
+              (recipe ? `, and made_for_recipe_id "${recipe.id}".` : "."),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "create_recipe_concentrate",
+    {
+      title: "Create Recipe Concentrate",
+      description:
+        `Save a new Recipe Concentrate to the user's Cafelytic Settings: one bottle holding several minerals, dosed in mL per liter of water. It is saved but not switched on; the user enables it in the app. The name must be new (max ${NAME_MAX} characters). Use derive_concentrate_formula first to get a formula for a recipe.`,
+      inputSchema: z.object({
+        name: z.string().min(1).max(NAME_MAX),
+        minerals: mineralEntries,
+        bottle_ml: bottleMl.describe("Bottle size in mL."),
+        dose_ml_per_liter: doseMlPerLiter.describe("mL of concentrate added per liter of water."),
+        drop_ml: dropMl,
+        made_for_recipe_id: uuid.optional().describe(
+          "The recipe this concentrate was made for, if any. The calculator then recognises it as that recipe's own concentrate.",
+        ),
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: false,
+      },
+    },
+    ({ made_for_recipe_id, ...input }) =>
+      run(async () => {
+        const spec = buildStockSpec(input);
+        const [settings, recipeResult] = await Promise.all([
+          loadConcentrateSettings(),
+          made_for_recipe_id
+            ? supabase.from("target_profiles").select("slug").eq("id", made_for_recipe_id)
+              .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+        ]);
+        const recipe = check(recipeResult) as { slug: string } | null;
+        if (made_for_recipe_id && !recipe) {
+          throw new ToolError("No recipe with that made_for_recipe_id is visible to this account.");
+        }
+        if (recipe) spec.createdFrom = "derived:" + recipe.slug;
+        const key = pickStockKey(spec.label, settings.stock);
+        const saved = await saveConcentrate("stock", key, spec, "create");
+        return {
+          saved: true,
+          note: SAVED_NOTE,
+          concentrate: stockView(key, saved.spec as unknown as StockSpec, false),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "update_recipe_concentrate",
+    {
+      title: "Update Recipe Concentrate",
+      description:
+        "Change one of the user's Recipe Concentrates by id (from list_concentrates): its name, minerals, bottle size, dose, or dropper size. Only the fields sent are changed; sending minerals replaces the whole mineral list. If the concentrate is switched on in the app, the calculator's doses change with it, so confirm with the user first.",
+      inputSchema: z.object({
+        id: z.string().min(1).max(80).describe("Recipe Concentrate id from list_concentrates, like stock:my-bottle."),
+        name: z.string().min(1).max(NAME_MAX).optional(),
+        minerals: mineralEntries.optional(),
+        bottle_ml: bottleMl.optional(),
+        dose_ml_per_liter: doseMlPerLiter.optional(),
+        drop_ml: dropMl,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    ({ id, ...input }) =>
+      run(async () => {
+        if (Object.values(input).every((v) => v === undefined)) {
+          throw new ToolError("Nothing to change: send at least one field.");
+        }
+        const key = stockKeyFromId(id);
+        return await withFreshRead(async () => {
+          const settings = await loadConcentrateSettings();
+          const existing = Object.prototype.hasOwnProperty.call(settings.stock, key)
+            ? settings.stock[key]
+            : undefined;
+          if (!existing) {
+            throw new ToolError("No Recipe Concentrate with that id. Use list_concentrates.");
+          }
+          const spec = buildStockSpec(input, existing);
+          if (input.name !== undefined) {
+            // A renamed concentrate keeps its key; refuse a name another one has.
+            const others = { ...settings.stock };
+            delete others[key];
+            pickStockKey(spec.label, others);
+          }
+          const saved = await saveConcentrate("stock", key, spec, "update", existing);
+          const enabled = settings.selected.has("stock:" + key);
+          return {
+            saved: true,
+            note: enabled
+              ? CHANGED_ENABLED_NOTE
+              : "Saved. Ask the user to check it in the app's Settings.",
+            // What the database says it replaced, not what was read earlier.
+            before: saved.previous
+              ? stockView(key, saved.previous as unknown as StockSpec, enabled)
+              : null,
+            concentrate: stockView(key, saved.spec as unknown as StockSpec, enabled),
+          };
+        });
+      }),
+  );
+
+  server.registerTool(
+    "save_mineral_concentrate",
+    {
+      title: "Save Mineral Concentrate",
+      description:
+        "Create or change the user's Mineral Concentrate for one mineral: that mineral dissolved in a bottle, dosed by mL or drops. Each mineral has at most one. If one exists, only the fields sent are changed, and the reply shows the values before. A new one is saved but not switched on; the user enables it in the app. If it is already switched on, the calculator's doses change, so confirm with the user first.",
+      inputSchema: z.object({
+        mineral_id: z.enum(MINERAL_IDS).describe("Mineral id from list_minerals."),
+        bottle_ml: bottleMl.optional().describe("Bottle size in mL. Required for a new one."),
+        grams_per_bottle: z.number().positive().max(MINERAL_GRAMS_MAX).optional().describe(
+          "Grams of the mineral dissolved in the whole bottle. Required for a new one.",
+        ),
+        drop_ml: dropMl,
+      }),
+      annotations: {
+        readOnlyHint: false,
+        destructiveHint: true,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    ({ mineral_id, ...input }) =>
+      run(async () => {
+        if (Object.values(input).every((v) => v === undefined)) {
+          throw new ToolError("Nothing to save: send bottle_ml and grams_per_bottle.");
+        }
+        return await withFreshRead(async () => {
+          const settings = await loadConcentrateSettings();
+          const existing = Object.prototype.hasOwnProperty.call(settings.diy, mineral_id)
+            ? settings.diy[mineral_id]
+            : undefined;
+          const spec = buildDiySpec(input, existing ?? null);
+          const saved = await saveConcentrate(
+            "diy",
+            mineral_id,
+            spec,
+            existing ? "update" : "create",
+            existing,
+          );
+          const enabled = settings.selected.has("diy:" + mineral_id);
+          return {
+            saved: true,
+            created: !existing,
+            note: enabled ? CHANGED_ENABLED_NOTE : SAVED_NOTE,
+            before: saved.previous
+              ? diyView(mineral_id, saved.previous as unknown as DiySpec, enabled)
+              : null,
+            concentrate: diyView(mineral_id, saved.spec as unknown as DiySpec, enabled),
+          };
+        });
       }),
   );
 

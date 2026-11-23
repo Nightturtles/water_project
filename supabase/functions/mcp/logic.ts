@@ -9,13 +9,20 @@ import {
   BRAND_CONCENTRATES,
   buildDosingKit,
   CACO3_TO_HCO3,
+  calculateIonPPMs,
   calculateSo4ClRatio,
+  computeStockMineralGramsPerL,
+  deriveStockFormulaFromTarget,
+  effectiveCalciumSource,
   evaluateWaterProfileRanges,
   HCO3_TO_CACO3,
   ION_FIELDS,
   MINERAL_DB,
+  MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
   recipeMetricsSummary,
+  RESERVED_LIBRARY_STOCK_SLUGS,
   RESERVED_TARGET_KEYS,
+  slugify,
   SOURCE_PRESETS,
   validateProfileName,
 } from "./app-core.gen.js";
@@ -884,4 +891,346 @@ export function buildSourceValues(ions: Ions) {
   const out = {} as Ions;
   for (const ion of IONS) out[ion] = round2(ions[ion]);
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Concentrates (phase 2)
+// ---------------------------------------------------------------------------
+// Saved through public.mcp_save_concentrate, which merges ONE concentrate into
+// the user's settings row and re-checks everything below in the database.
+
+/** A Recipe Concentrate as the app stores it (user_settings.stock_concentrate_specs). */
+export interface StockSpec {
+  label: string;
+  bottleMl: number;
+  doseGramsPerL: number;
+  minerals: { mineralId: string; grams: number }[];
+  dropMl?: number;
+  createdFrom?: string;
+  source?: string;
+}
+
+/** A Mineral Concentrate as the app stores it (user_settings.diy_concentrate_specs). */
+export interface DiySpec {
+  bottleMl: number;
+  gramsPerBottle: number;
+  dropMl?: number;
+}
+
+// Bounds on what an AI app may save. Wide enough for any real bottle; they
+// exist to refuse unit mix-ups (liters typed as mL, mg typed as g).
+export const BOTTLE_ML_MIN = 5;
+export const BOTTLE_ML_MAX = 20000;
+export const DOSE_ML_PER_L_MIN = 0.05;
+export const DOSE_ML_PER_L_MAX = 100;
+export const MINERAL_GRAMS_MAX = 5000;
+export const DROP_ML_MIN = 0.001;
+export const DROP_ML_MAX = 1;
+export const STOCK_MINERALS_MAX = 12;
+
+const SOLUBILITY = MINERAL_SOLUBILITY_G_PER_L_25C_APPROX as Record<string, number | undefined>;
+const MINERALS = MINERAL_DB as Record<string, { name: string } | undefined>;
+
+function inRange(name: string, value: unknown, min: number, max: number, unit: string): number {
+  const n = Number(value);
+  if (typeof value !== "number" || !Number.isFinite(n)) {
+    throw new ToolError(`${name} must be a number.`);
+  }
+  if (n < min || n > max) {
+    throw new ToolError(`${name} must be between ${min} and ${max} ${unit}.`);
+  }
+  return n;
+}
+
+/** Dropper size to the app's 0.001 mL, or undefined when none is given. */
+function cleanDropMl(value: unknown): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const n = inRange("drop_ml", value, DROP_ML_MIN, DROP_ML_MAX, "mL per drop");
+  return Math.round(n * 1000) / 1000;
+}
+
+export interface MineralEntryInput {
+  mineral_id: string;
+  grams: number;
+}
+
+function cleanMinerals(minerals: MineralEntryInput[]): StockSpec["minerals"] {
+  if (!Array.isArray(minerals) || minerals.length === 0) {
+    throw new ToolError("A Recipe Concentrate needs at least one mineral.");
+  }
+  if (minerals.length > STOCK_MINERALS_MAX) {
+    throw new ToolError(`A Recipe Concentrate can hold at most ${STOCK_MINERALS_MAX} minerals.`);
+  }
+  const seen = new Set<string>();
+  return minerals.map((m) => {
+    if (!m || !MINERALS[m.mineral_id]) {
+      throw new ToolError(`"${m && m.mineral_id}" is not a mineral Cafelytic knows. Use list_minerals.`);
+    }
+    if (seen.has(m.mineral_id)) {
+      throw new ToolError(`${MINERALS[m.mineral_id]!.name} is listed twice. List each mineral once.`);
+    }
+    seen.add(m.mineral_id);
+    const grams = inRange(
+      `Grams of ${MINERALS[m.mineral_id]!.name}`,
+      m.grams,
+      0.01,
+      MINERAL_GRAMS_MAX,
+      "g",
+    );
+    // The app's editor works in hundredths of a gram.
+    return { mineralId: m.mineral_id, grams: Math.round(grams * 100) / 100 };
+  });
+}
+
+export interface StockInput {
+  name?: string;
+  minerals?: MineralEntryInput[];
+  bottle_ml?: number;
+  dose_ml_per_liter?: number;
+  /** A number sets the dropper size; null removes it; left out keeps what is there. */
+  drop_ml?: number | null;
+}
+
+/**
+ * The spec to store for a Recipe Concentrate. With `existing` this is an
+ * update: fields left out keep their stored values, and the origin fields
+ * (createdFrom, source) are carried over untouched.
+ */
+export function buildStockSpec(input: StockInput, existing?: StockSpec | null): StockSpec {
+  const label = input.name !== undefined ? cleanName(input.name) : existing?.label;
+  if (!label) throw new ToolError("A name is required.");
+  const minerals = input.minerals !== undefined
+    ? cleanMinerals(input.minerals)
+    : existing?.minerals;
+  if (!minerals || minerals.length === 0) {
+    throw new ToolError("A Recipe Concentrate needs at least one mineral.");
+  }
+  const bottleMl = input.bottle_ml !== undefined
+    ? inRange("bottle_ml", input.bottle_ml, BOTTLE_ML_MIN, BOTTLE_ML_MAX, "mL")
+    : Number(existing?.bottleMl);
+  const doseGramsPerL = input.dose_ml_per_liter !== undefined
+    ? inRange("dose_ml_per_liter", input.dose_ml_per_liter, DOSE_ML_PER_L_MIN, DOSE_ML_PER_L_MAX, "mL per liter")
+    : Number(existing?.doseGramsPerL);
+  if (!(bottleMl > 0) || !(doseGramsPerL > 0)) {
+    throw new ToolError("bottle_ml and dose_ml_per_liter are required.");
+  }
+  const spec: StockSpec = { label, bottleMl, doseGramsPerL, minerals };
+  const dropMl = input.drop_ml === undefined ? existing?.dropMl : cleanDropMl(input.drop_ml);
+  if (dropMl !== undefined && dropMl !== null && Number(dropMl) > 0) spec.dropMl = Number(dropMl);
+  if (existing?.createdFrom) spec.createdFrom = existing.createdFrom;
+  if (existing?.source) spec.source = existing.source;
+  return spec;
+}
+
+export interface DiyInput {
+  bottle_ml?: number;
+  grams_per_bottle?: number;
+  drop_ml?: number | null;
+}
+
+/** The spec to store for a Mineral Concentrate; fields left out keep the stored values. */
+export function buildDiySpec(input: DiyInput, existing?: DiySpec | null): DiySpec {
+  // A value that was sent is range-checked. One left out keeps what is stored
+  // as it is: the app's editor accepts any positive bottle size, and a partial
+  // update must not be refused over a field it does not touch.
+  const stored = (v: unknown) => (Number.isFinite(Number(v)) && Number(v) > 0 ? Number(v) : undefined);
+  const bottle = input.bottle_ml !== undefined
+    ? inRange("bottle_ml", input.bottle_ml, BOTTLE_ML_MIN, BOTTLE_ML_MAX, "mL")
+    : stored(existing?.bottleMl);
+  const grams = input.grams_per_bottle !== undefined
+    ? inRange("grams_per_bottle", input.grams_per_bottle, 0.01, MINERAL_GRAMS_MAX, "g")
+    : stored(existing?.gramsPerBottle);
+  if (bottle === undefined || grams === undefined) {
+    throw new ToolError("bottle_ml and grams_per_bottle are both required for a new Mineral Concentrate.");
+  }
+  const spec: DiySpec = { bottleMl: bottle, gramsPerBottle: grams };
+  const dropMl = input.drop_ml === undefined ? existing?.dropMl : cleanDropMl(input.drop_ml);
+  if (dropMl !== undefined && dropMl !== null && Number(dropMl) > 0) spec.dropMl = Number(dropMl);
+  return spec;
+}
+
+/**
+ * A new Recipe Concentrate's key: the app's own rule (stock-editor.ts
+ * uniqueStockSlug): the name's slug, never a library concentrate's slug,
+ * suffixed -2, -3 when taken. Names already in use are refused, so two
+ * concentrates cannot look identical in the app.
+ */
+export function pickStockKey(
+  label: string,
+  existing: Record<string, { label?: string } | undefined>,
+): string {
+  const wanted = label.trim().toLowerCase();
+  for (const [key, spec] of Object.entries(existing)) {
+    if (((spec && spec.label) || key).trim().toLowerCase() === wanted) {
+      throw new ToolError(
+        `A Recipe Concentrate named "${label}" already exists. Choose a different name, or change it with update_recipe_concentrate.`,
+      );
+    }
+  }
+  const taken = new Set([
+    ...Object.keys(existing),
+    ...(RESERVED_LIBRARY_STOCK_SLUGS as readonly string[]),
+    ...OBJECT_PROTOTYPE_KEYS,
+  ]);
+  const base = slugify(label) || "stock";
+  if (!taken.has(base)) return base;
+  let i = 2;
+  while (taken.has(base + "-" + i)) i++;
+  return base + "-" + i;
+}
+
+/** "stock:my-key" or "my-key" -> "my-key". */
+export function stockKeyFromId(id: string): string {
+  return id.startsWith("stock:") ? id.slice(6) : id;
+}
+
+/** Warnings for salts dissolved past their approximate solubility (the app's own check). */
+export function solubilityWarnings(
+  minerals: { mineralId: string; grams: number }[],
+  bottleMl: number,
+): string[] {
+  const out: string[] = [];
+  if (!(bottleMl > 0)) return out;
+  for (const m of minerals) {
+    const cap = SOLUBILITY[m.mineralId];
+    if (!cap) continue;
+    const gPerL = m.grams / (bottleMl / 1000);
+    if (gPerL >= cap) {
+      out.push(
+        `${MINERALS[m.mineralId]?.name || m.mineralId} at ${
+          Math.round(gPerL * 10) / 10
+        } g/L is at or past its approximate solubility (${cap} g/L) and may not dissolve. Use a larger bottle or less of it.`,
+      );
+    }
+  }
+  return out;
+}
+
+/** mg/L of each ion one liter of water gets from the concentrate at its dose. */
+export function stockAddsPerLiter(spec: StockSpec): Ions {
+  const added = calculateIonPPMs(computeStockMineralGramsPerL(spec)) as Ions;
+  const out = {} as Ions;
+  for (const ion of IONS) out[ion] = round2(num(added[ion]));
+  return out;
+}
+
+export function stockView(key: string, spec: StockSpec, selected?: boolean) {
+  const adds = stockAddsPerLiter(spec);
+  const metrics = recipeMetricsSummary(adds);
+  return {
+    id: "stock:" + key,
+    name: spec.label || key,
+    bottle_ml: spec.bottleMl ?? null,
+    dose_ml_per_liter: spec.doseGramsPerL ?? null,
+    drop_ml: spec.dropMl ?? null,
+    minerals: (Array.isArray(spec.minerals) ? spec.minerals : []).map((m) => ({
+      mineral_id: m.mineralId,
+      name: MINERALS[m.mineralId]?.name || m.mineralId,
+      grams: m.grams,
+    })),
+    made_from: spec.createdFrom ?? null,
+    ...(selected === undefined ? {} : { enabled_in_app: selected }),
+    adds_per_liter_at_dose: { ions: adds, gh: metrics.gh, kh: metrics.kh, tds: metrics.tds },
+    warnings: solubilityWarnings(Array.isArray(spec.minerals) ? spec.minerals : [], spec.bottleMl),
+  };
+}
+
+export function diyView(mineralId: string, spec: DiySpec, selected?: boolean) {
+  const bottleMl = Number(spec.bottleMl) || 0;
+  const grams = Number(spec.gramsPerBottle) || 0;
+  return {
+    id: "diy:" + mineralId,
+    mineral_id: mineralId,
+    name: (MINERALS[mineralId]?.name || mineralId) + " concentrate",
+    bottle_ml: spec.bottleMl ?? null,
+    grams_per_bottle: spec.gramsPerBottle ?? null,
+    drop_ml: spec.dropMl ?? null,
+    grams_per_ml: bottleMl > 0 && grams > 0 ? Math.round((grams / bottleMl) * 10000) / 10000 : null,
+    ...(selected === undefined ? {} : { enabled_in_app: selected }),
+    warnings: solubilityWarnings([{ mineralId, grams }], bottleMl),
+  };
+}
+
+/**
+ * The calcium chloride form a derived formula should weigh, by the rule in
+ * deriveStockFormulaFromTarget applied to the synced settings: the form the
+ * user has as a powder (dihydrate when both); with neither powder, the form
+ * their kit's calcium source is (an anhydrous concentrate, say); else dihydrate.
+ */
+export function calciumChlorideFormFor(settingsRow: Record<string, unknown> | null): string {
+  const kit = kitFromSettings(settingsRow);
+  if (kit.minerals.includes("calcium-chloride")) return "calcium-chloride";
+  if (kit.minerals.includes("calcium-chloride-anhydrous")) return "calcium-chloride-anhydrous";
+  return effectiveCalciumSource(kit) === "calcium-chloride-anhydrous"
+    ? "calcium-chloride-anhydrous"
+    : "calcium-chloride";
+}
+
+/** Made minus wanted, per ion, for showing how close a derived formula lands. */
+export function ionDifferences(made: Ions, target: Ions): Ions {
+  const out = {} as Ions;
+  for (const ion of IONS) out[ion] = round2(num(made[ion]) - num(target[ion]));
+  return out;
+}
+
+/** Why create_recipe_concentrate would refuse this formula, or null when it would not. */
+export function formulaSaveProblem(
+  minerals: { mineralId: string; grams: number }[],
+): string | null {
+  const over = minerals.filter((m) => m.grams > MINERAL_GRAMS_MAX);
+  if (minerals.length > STOCK_MINERALS_MAX) {
+    return `It needs more than ${STOCK_MINERALS_MAX} minerals.`;
+  }
+  if (over.length > 0) {
+    return `It needs more than ${MINERAL_GRAMS_MAX} g of ${
+      over.map((m) => MINERALS[m.mineralId]?.name || m.mineralId).join(" and ")
+    } in the bottle.`;
+  }
+  return null;
+}
+
+/** The app's "make a concentrate from this recipe" formula. */
+export function deriveFormula(
+  target: Ions & { alkalinity: number },
+  opts: { bottleMl: number; doseMlPerLiter: number; calciumChlorideId: string },
+) {
+  const derived = deriveStockFormulaFromTarget(target, {
+    bottleMl: opts.bottleMl,
+    doseGramsPerL: opts.doseMlPerLiter,
+    calciumChlorideId: opts.calciumChlorideId,
+  }) as {
+    bottleMl: number;
+    doseGramsPerL: number;
+    minerals: { mineralId: string; grams: number }[];
+    notes: string[];
+  };
+  return derived;
+}
+
+/** Turn a mcp_save_concentrate failure into a message the model can act on. */
+export function saveConcentrateError(error: { code?: string; message: string }): ToolError | Error {
+  switch (error.code) {
+    case "42501":
+      return new ToolError("Cafelytic does not allow that change from an AI app.");
+    case "23505":
+      return new ToolError("A concentrate with that name was just created. Choose a different name.");
+    case "P0002":
+      return new ToolError(
+        /no settings yet/.test(error.message)
+          ? "This account has no synced settings yet. The user needs to open the Cafelytic app once while signed in, then try again."
+          : "That concentrate no longer exists. It may have been removed in the app.",
+      );
+    case "40001":
+      return new ToolError(
+        "That concentrate was changed by something else at the same moment. Read it again with list_concentrates and retry.",
+      );
+    case "54000":
+      return new ToolError(
+        "This account already has the maximum number of concentrates. The user can remove some in the app's Settings.",
+      );
+    case "22023":
+      return new ToolError("Cafelytic refused that concentrate: " + error.message + ".");
+    default:
+      return new Error(error.message);
+  }
 }

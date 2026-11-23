@@ -20,6 +20,8 @@ export {
   ION_FIELDS,
   BRAND_CONCENTRATES,
   LIBRARY_TAGS,
+  MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
+  RESERVED_LIBRARY_STOCK_SLUGS,
   HCO3_TO_CACO3,
   CACO3_TO_HCO3,
 } from "./constants";
@@ -28,8 +30,12 @@ export {
   recipeMetricsSummary,
   calculateSo4ClRatio,
   evaluateWaterProfileRanges,
+  calculateIonPPMs,
+  // Reads the browser's mineral selection only when options.calciumChlorideId
+  // is left out; the server always passes it.
+  deriveStockFormulaFromTarget,
 } from "./metrics";
-export { slugify, validateProfileName } from "./storage";
+export { slugify, validateProfileName, computeStockMineralGramsPerL } from "./storage";
 // The Calculator page's dose math and kit rules. Both take the user's settings
 // as arguments (the page passes this browser's, the server the synced row).
-export { computeDoses, buildDosingKit } from "./dosing";
+export { computeDoses, buildDosingKit, effectiveCalciumSource } from "./dosing";

@@ -13,8 +13,21 @@ import {
   type DosingKit,
   type DosingResult,
   ionBalance,
+  buildDiySpec,
+  buildStockSpec,
+  calciumChlorideFormFor,
+  deriveFormula,
+  diyView,
+  formulaSaveProblem,
+  ionDifferences,
   kitFromSettings,
   pickDefaultSource,
+  pickStockKey,
+  saveConcentrateError,
+  solubilityWarnings,
+  stockKeyFromId,
+  type StockSpec,
+  stockView,
   type Ions,
   likeLiteral,
   mergeSourceWaters,
@@ -585,4 +598,219 @@ Deno.test("pickDefaultSource: the water the app's calculator is using", () => {
 
   // A selection that cannot be resolved at all is an error, not distilled.
   assert.throws(() => pickDefaultSource(waters, "gone", null), /could not be read/);
+});
+
+// ---------------------------------------------------------------------------
+// Concentrates (phase 2)
+// ---------------------------------------------------------------------------
+
+const HOUSE: StockSpec = {
+  label: "House",
+  bottleMl: 200,
+  doseGramsPerL: 4,
+  dropMl: 0.05,
+  minerals: [
+    { mineralId: "epsom-salt", grams: 5 },
+    { mineralId: "baking-soda", grams: 2 },
+  ],
+  createdFrom: "library:rao-perger",
+  source: "Somewhere",
+};
+
+Deno.test("buildStockSpec: a new concentrate, checked and rounded like the app's editor", () => {
+  const spec = buildStockSpec({
+    name: "  Morning Bottle ",
+    minerals: [{ mineral_id: "epsom-salt", grams: 4.126 }, { mineral_id: "gypsum", grams: 0.2 }],
+    bottle_ml: 250,
+    dose_ml_per_liter: 5,
+    drop_ml: 0.04567,
+  });
+  assert.deepEqual(spec, {
+    label: "Morning Bottle",
+    bottleMl: 250,
+    doseGramsPerL: 5,
+    minerals: [{ mineralId: "epsom-salt", grams: 4.13 }, { mineralId: "gypsum", grams: 0.2 }],
+    dropMl: 0.046,
+  });
+});
+
+Deno.test("buildStockSpec: refuses bad input with a message the model can act on", () => {
+  const base = {
+    name: "X",
+    minerals: [{ mineral_id: "epsom-salt", grams: 1 }],
+    bottle_ml: 200,
+    dose_ml_per_liter: 4,
+  };
+  assert.throws(() => buildStockSpec({ ...base, minerals: [] }), /at least one mineral/);
+  assert.throws(
+    () => buildStockSpec({ ...base, minerals: [{ mineral_id: "unobtainium", grams: 1 }] }),
+    /not a mineral Cafelytic knows/,
+  );
+  assert.throws(
+    () => buildStockSpec({ ...base, minerals: [base.minerals[0], base.minerals[0]] }),
+    /listed twice/,
+  );
+  assert.throws(() => buildStockSpec({ ...base, bottle_ml: 0.2 }), /bottle_ml must be between/);
+  assert.throws(
+    () => buildStockSpec({ ...base, dose_ml_per_liter: 4000 }),
+    /dose_ml_per_liter must be between/,
+  );
+  assert.throws(() => buildStockSpec({ ...base, drop_ml: 5 }), /drop_ml must be between/);
+  assert.throws(() => buildStockSpec({ ...base, name: "   " }), ToolError);
+  assert.throws(() => buildStockSpec({ minerals: base.minerals }), /name is required/);
+});
+
+Deno.test("buildStockSpec: an update changes only what was sent and keeps the origin", () => {
+  assert.deepEqual(buildStockSpec({ dose_ml_per_liter: 3 }, HOUSE), { ...HOUSE, doseGramsPerL: 3 });
+  // null removes the dropper size; leaving it out keeps it.
+  const { dropMl: _d, ...noDropper } = HOUSE;
+  assert.deepEqual(buildStockSpec({ drop_ml: null }, HOUSE), noDropper);
+  const renamed = buildStockSpec(
+    { name: "Renamed", minerals: [{ mineral_id: "gypsum", grams: 0.3 }] },
+    HOUSE,
+  );
+  assert.equal(renamed.label, "Renamed");
+  assert.deepEqual(renamed.minerals, [{ mineralId: "gypsum", grams: 0.3 }]);
+  assert.equal(renamed.createdFrom, "library:rao-perger");
+  assert.equal(renamed.source, "Somewhere");
+});
+
+Deno.test("buildDiySpec: new needs both values; an update keeps what was not sent", () => {
+  assert.deepEqual(buildDiySpec({ bottle_ml: 59, grams_per_bottle: 13.5 }), {
+    bottleMl: 59,
+    gramsPerBottle: 13.5,
+  });
+  assert.throws(() => buildDiySpec({ bottle_ml: 59 }), /both required/);
+  // A concentrate ticked in the app before its bottle was set up counts as new.
+  assert.throws(
+    () => buildDiySpec({ bottle_ml: 59 }, { bottleMl: 0, gramsPerBottle: 0 }),
+    /both required/,
+  );
+  const existing = { bottleMl: 59, gramsPerBottle: 13.5, dropMl: 0.072 };
+  assert.deepEqual(buildDiySpec({ grams_per_bottle: 17 }, existing), {
+    bottleMl: 59,
+    gramsPerBottle: 17,
+    dropMl: 0.072,
+  });
+  assert.deepEqual(buildDiySpec({ drop_ml: null }, existing), { bottleMl: 59, gramsPerBottle: 13.5 });
+  // The app accepts any positive bottle size. A stored 4 mL bottle is kept by
+  // an update that does not touch it; only a bottle_ml that is sent is checked.
+  assert.deepEqual(buildDiySpec({ grams_per_bottle: 2 }, { bottleMl: 4, gramsPerBottle: 1 }), {
+    bottleMl: 4,
+    gramsPerBottle: 2,
+  });
+  assert.throws(
+    () => buildDiySpec({ bottle_ml: 4 }, { bottleMl: 4, gramsPerBottle: 1 }),
+    /bottle_ml must be between/,
+  );
+});
+
+Deno.test("pickStockKey: the app's key rule, and names must be new", () => {
+  const existing = { "house": { label: "House" }, "house-2": { label: "House Two" } };
+  assert.equal(pickStockKey("Morning", existing), "morning");
+  assert.equal(pickStockKey("House!", { house: { label: "Something Else" } }), "house-2");
+  assert.throws(() => pickStockKey("  house ", existing), /already exists/);
+  // A library concentrate's key is never taken by a user concentrate.
+  assert.equal(pickStockKey("Rao Perger", {}), "rao-perger-2");
+  assert.equal(pickStockKey("Constructor", {}), "constructor-2");
+  assert.equal(pickStockKey("!!!", {}), "stock");
+  assert.equal(stockKeyFromId("stock:house"), "house");
+  assert.equal(stockKeyFromId("house"), "house");
+});
+
+Deno.test("stockView: what the concentrate adds per liter at its dose, and solubility warnings", () => {
+  const view = stockView("house", HOUSE, true);
+  assert.equal(view.id, "stock:house");
+  assert.equal(view.enabled_in_app, true);
+  assert.equal(view.made_from, "library:rao-perger");
+  // 5 g epsom in 200 mL at 4 mL/L is 0.1 g/L: 9.86 mg/L magnesium.
+  assert.ok(Math.abs(view.adds_per_liter_at_dose.ions.magnesium - 9.86) < 0.02);
+  assert.ok(view.adds_per_liter_at_dose.ions.sodium > 0);
+  assert.deepEqual(view.warnings, []);
+  // Gypsum dissolves to about 2 g/L: 1 g in 200 mL is 5 g/L.
+  const warnings = solubilityWarnings([{ mineralId: "gypsum", grams: 1 }], 200);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /Gypsum.*may not dissolve/);
+  assert.equal(diyView("gypsum", { bottleMl: 200, gramsPerBottle: 1 }).warnings.length, 1);
+  assert.equal(diyView("epsom-salt", { bottleMl: 59, gramsPerBottle: 13.5 }).grams_per_ml, 0.2288);
+});
+
+Deno.test("deriveFormula: the app's formula for a recipe, weighed in the user's calcium chloride", () => {
+  const target = {
+    ...ZERO,
+    calcium: 20,
+    magnesium: 10,
+    sulfate: 40,
+    chloride: 35,
+    sodium: 18,
+    bicarbonate: 49,
+    alkalinity: 40,
+  };
+  const dihydrate = deriveFormula(target, {
+    bottleMl: 200,
+    doseMlPerLiter: 4,
+    calciumChlorideId: "calcium-chloride",
+  });
+  assert.equal(dihydrate.bottleMl, 200);
+  assert.equal(dihydrate.doseGramsPerL, 4);
+  assert.ok(dihydrate.minerals.some((m) => m.mineralId === "calcium-chloride"));
+  // Dosed back at 4 mL/L it lands on the recipe's calcium and magnesium.
+  const made = stockView("x", { label: "x", ...dihydrate }).adds_per_liter_at_dose.ions;
+  assert.ok(Math.abs(made.calcium - 20) < 1.5);
+  assert.ok(Math.abs(made.magnesium - 10) < 1.5);
+
+  const anhydrous = deriveFormula(target, {
+    bottleMl: 200,
+    doseMlPerLiter: 4,
+    calciumChlorideId: "calcium-chloride-anhydrous",
+  });
+  assert.ok(anhydrous.minerals.some((m) => m.mineralId === "calcium-chloride-anhydrous"));
+
+  const form = (selected_minerals: string[], selected_concentrates: string[] = []) =>
+    calciumChlorideFormFor({
+      selected_minerals,
+      selected_concentrates,
+      diy_concentrate_specs: {
+        "calcium-chloride-anhydrous": { bottleMl: 100, gramsPerBottle: 10 },
+      },
+    });
+  assert.equal(form(["calcium-chloride-anhydrous", "epsom-salt"]), "calcium-chloride-anhydrous");
+  assert.equal(form(["calcium-chloride", "calcium-chloride-anhydrous"]), "calcium-chloride");
+  assert.equal(form(["epsom-salt"]), "calcium-chloride");
+  // Neither powder, but the kit doses calcium from an anhydrous concentrate:
+  // the app derives anhydrous weights then, and so does the server.
+  assert.equal(form(["epsom-salt"], ["diy:calcium-chloride-anhydrous"]), "calcium-chloride-anhydrous");
+  // A powder still wins over a concentrate of the other form.
+  assert.equal(form(["calcium-chloride"], ["diy:calcium-chloride-anhydrous"]), "calcium-chloride");
+  assert.equal(calciumChlorideFormFor(null), "calcium-chloride");
+
+  // How far the formula lands from the recipe, per ion.
+  const diff = ionDifferences(made, target);
+  assert.ok(Math.abs(diff.calcium) < 1.5);
+  assert.equal(diff.potassium, 0);
+
+  // A formula past the save limits is reported, not recommended for saving.
+  assert.equal(formulaSaveProblem(dihydrate.minerals), null);
+  assert.match(
+    formulaSaveProblem([{ mineralId: "calcium-chloride", grams: 7336 }]) ?? "",
+    /more than 5000 g of Calcium Chloride/,
+  );
+});
+
+Deno.test("saveConcentrateError: database refusals become clear messages", () => {
+  const msg = (code: string, message = "x") => saveConcentrateError({ code, message }).message;
+  assert.match(msg("42501"), /does not allow/);
+  assert.match(msg("23505"), /different name/);
+  assert.match(
+    msg("P0002", "no settings yet: open the Cafelytic app once while signed in"),
+    /open the Cafelytic app/,
+  );
+  assert.match(msg("P0002", "no concentrate with that key"), /no longer exists/);
+  assert.match(msg("54000"), /maximum number/);
+  assert.match(msg("40001"), /Read it again/);
+  assert.ok(
+    saveConcentrateError({ code: "22023", message: "bottleMl out of range" }) instanceof ToolError,
+  );
+  // Anything else is an internal error, not shown to the model verbatim.
+  assert.equal(saveConcentrateError({ code: "XX000", message: "boom" }) instanceof ToolError, false);
 });
