@@ -16,6 +16,8 @@ import {
   buildDiySpec,
   buildStockSpec,
   calciumChlorideFormFor,
+  concentrateName,
+  concentrateSwitchOnProblem,
   deriveFormula,
   diyView,
   formulaSaveProblem,
@@ -24,6 +26,7 @@ import {
   pickDefaultSource,
   pickStockKey,
   saveConcentrateError,
+  selectionError,
   solubilityWarnings,
   stockKeyFromId,
   type StockSpec,
@@ -33,6 +36,7 @@ import {
   mergeSourceWaters,
   pickProfileKey,
   pickVerifiedProfileKey,
+  recipeActivationProblem,
   recipeReadOnlyReason,
   recipeSummary,
   resolveIons,
@@ -813,4 +817,88 @@ Deno.test("saveConcentrateError: database refusals become clear messages", () =>
   );
   // Anything else is an internal error, not shown to the model verbatim.
   assert.equal(saveConcentrateError({ code: "XX000", message: "boom" }) instanceof ToolError, false);
+});
+
+// ---------------------------------------------------------------------------
+// Active selections (phase 3)
+// ---------------------------------------------------------------------------
+
+const SWITCH_SETTINGS = {
+  stock: {
+    ready: {
+      label: "Ready",
+      bottleMl: 200,
+      doseGramsPerL: 4,
+      minerals: [{ mineralId: "epsom-salt", grams: 5 }],
+    },
+    empty: { label: "Empty", bottleMl: 200, doseGramsPerL: 4, minerals: [] },
+  } as Record<string, StockSpec>,
+  diy: {
+    "epsom-salt": { bottleMl: 59, gramsPerBottle: 13.5 },
+    gypsum: { bottleMl: 100, gramsPerBottle: 0 },
+  },
+};
+
+Deno.test("concentrateSwitchOnProblem: only a concentrate that exists and is set up", () => {
+  const problem = (id: string) => concentrateSwitchOnProblem(id, SWITCH_SETTINGS);
+  assert.equal(problem("stock:ready"), null);
+  assert.equal(problem("diy:epsom-salt"), null);
+  assert.equal(problem("brand:lotus:calcium"), null);
+  assert.match(problem("stock:missing")!, /No Recipe Concentrate/);
+  assert.match(problem("stock:empty")!, /not fully set up/);
+  assert.match(problem("diy:gypsum")!, /not fully set up/);
+  assert.match(problem("diy:baking-soda")!, /no Mineral Concentrate for that mineral/);
+  assert.match(problem("diy:not-a-mineral")!, /No mineral with that id/);
+  assert.match(problem("brand:lotus:unobtainium")!, /does not know a brand/);
+  assert.match(problem("epsom-salt")!, /not a concentrate id/);
+  // Object property names are not concentrates.
+  assert.match(problem("stock:constructor")!, /No Recipe Concentrate/);
+  assert.match(problem("diy:toString")!, /No mineral with that id/);
+});
+
+Deno.test("concentrateName: the name the app shows", () => {
+  assert.equal(concentrateName("stock:ready", SWITCH_SETTINGS), "Ready");
+  assert.equal(concentrateName("stock:gone", SWITCH_SETTINGS), "gone");
+  assert.match(concentrateName("diy:epsom-salt", SWITCH_SETTINGS), /Mineral Concentrate/);
+  assert.notEqual(concentrateName("brand:lotus:calcium", SWITCH_SETTINGS), "brand:lotus:calcium");
+});
+
+Deno.test("recipeActivationProblem: own and library recipes only", () => {
+  const state = { deletedTargets: ["removed"], mySlugs: ["my-recipe", "sca"] };
+  assert.equal(recipeActivationProblem(recipeRow({ slug: "my-recipe" }), ME, state), null);
+  // The user's own published recipe is on their rail too.
+  assert.equal(
+    recipeActivationProblem(recipeRow({ slug: "my-recipe", is_public: true }), ME, state),
+    null,
+  );
+  assert.equal(
+    recipeActivationProblem(recipeRow({ user_id: null, slug: "rao", is_public: true }), ME, state),
+    null,
+  );
+  assert.match(
+    recipeActivationProblem(recipeRow({ user_id: OTHER, is_public: true }), ME, state)!,
+    /another user's community recipe/,
+  );
+  assert.match(
+    recipeActivationProblem(recipeRow({ slug: "removed" }), ME, state)!,
+    /removed it/,
+  );
+  assert.match(
+    recipeActivationProblem(recipeRow({ user_id: null, slug: "sca", is_public: true }), ME, state)!,
+    /their own version/,
+  );
+});
+
+Deno.test("selectionError: database refusals become clear messages", () => {
+  const msg = (code: string, message = "x") => selectionError({ code, message }).message;
+  assert.match(msg("42501"), /does not allow/);
+  assert.match(
+    msg("P0002", "no settings yet: open the Cafelytic app once while signed in"),
+    /open the Cafelytic app/,
+  );
+  assert.match(msg("P0002", "no concentrate with that id"), /no concentrate with that id/);
+  assert.match(msg("55000", "that recipe was removed in the app"), /removed in the app/);
+  assert.match(msg("54000"), /Switch one off/);
+  assert.ok(selectionError({ code: "22023", message: "invalid id" }) instanceof ToolError);
+  assert.equal(selectionError({ code: "XX000", message: "boom" }) instanceof ToolError, false);
 });
