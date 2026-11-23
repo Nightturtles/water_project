@@ -690,6 +690,9 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
     try {
       // A failed earlier run may have left the concentrate behind.
       expect(await removeConcentrate(key), "leftover concentrate removed").toBe(false);
+      // Only the push under test may satisfy the conditional-write check
+      // below, not a write the cleanup above made.
+      conditionalWrites.length = 0;
 
       const result = await pageA.evaluate(async (k) => {
         // @ts-expect-error - global from supabase-client.js

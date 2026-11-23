@@ -17,6 +17,8 @@
 import { describe, test, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   mergeRowForPush,
+  baseAfterUnsyncedPull,
+  snapshotForCompare,
   SETTINGS_PUSH_KINDS,
   SELECTIONS_PUSH_KINDS,
   SELECTIONS_PUSH_GROUPS,
@@ -222,6 +224,70 @@ describe("mergeRowForPush", () => {
     expect(Object.keys(buildSelectionsPayload(USER, "")).filter(skip).sort()).toEqual(
       Object.keys(SELECTIONS_PUSH_KINDS).sort(),
     );
+  });
+});
+
+describe("baseAfterUnsyncedPull", () => {
+  const next = (
+    base: Record<string, unknown>,
+    before: Record<string, unknown>,
+    after: Record<string, unknown>,
+  ) => baseAfterUnsyncedPull(SETTINGS_PUSH_KINDS, base, before, after);
+
+  test("with nothing surviving, it is the payload after the pull", () => {
+    const after = { user_id: "u", theme: "light", selected_minerals: ["a"], drafts: {} };
+    expect(
+      next(
+        { theme: "dark", selected_minerals: ["a"], drafts: {} },
+        { ...after, theme: "dark" },
+        after,
+      ),
+    ).toEqual(after);
+  });
+
+  test("a value the pull applied advances; a local edit that survived keeps its old base", () => {
+    expect(
+      next(
+        { theme: "dark", creator_display_name: "" },
+        // Edited here: the name. Not edited: the theme.
+        { theme: "dark", creator_display_name: "Kyle" },
+        // The pull brought a new theme; the cloud's name was empty, so the edit stayed.
+        { theme: "light", creator_display_name: "Kyle" },
+      ),
+    ).toEqual({ theme: "light", creator_display_name: "" });
+  });
+
+  test("a local edit the pull overwrote advances with it", () => {
+    expect(
+      next({ brew_method: "filter" }, { brew_method: "espresso" }, { brew_method: "filter" }),
+    ).toEqual({ brew_method: "filter" });
+    expect(
+      next({ theme: "system" }, { theme: "light" }, { theme: "dark", updated_at: "x" }),
+    ).toEqual({ theme: "dark" });
+  });
+
+  test("maps go key by key: a surviving new key stays unsynced, pulled keys advance", () => {
+    expect(
+      next(
+        { volume_preferences: { calculator: { value: "1" } } },
+        { volume_preferences: { calculator: { value: "1" }, recipe: { value: "750" } } },
+        { volume_preferences: { calculator: { value: "2" }, recipe: { value: "750" } } },
+      ),
+    ).toEqual({ volume_preferences: { calculator: { value: "2" } } });
+  });
+
+  test("a key deleted here that the pull did not bring back stays 'deleted here'", () => {
+    expect(
+      next(
+        { drafts: { a: { v: 1 }, b: { v: 1 } } },
+        { drafts: { b: { v: 1 } } },
+        { drafts: { b: { v: 2 } } },
+      ),
+    ).toEqual({ drafts: { a: { v: 1 }, b: { v: 2 } } });
+  });
+
+  test("a field with no base that survived stays without one", () => {
+    expect(next({}, { theme: "light" }, { theme: "light" })).toEqual({});
   });
 });
 
@@ -672,18 +738,17 @@ const flush = async () => {
   for (let i = 0; i < 100; i++) await Promise.resolve();
 };
 
-describe("two pushes from one device overlapping", () => {
-  // The first settings write lands in the cloud, but its response is held
-  // back until `release` is called, so the push that sent it has not stored
-  // its snapshot yet.
-  function holdFirstSettingsWriteResponse(): () => void {
+describe("a second push of a row while the first is still out waits its turn", () => {
+  // The first write to `table` lands in the cloud, but its response is held
+  // back until `release` is called, so the push that sent it is still out.
+  function holdFirstWriteResponse(table: string): () => void {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => (release = resolve));
     const from = g.window.supabaseClient.from;
     let held = false;
-    g.window.supabaseClient.from = (table: string) => {
-      const t = from(table);
-      if (table !== "user_settings") return t;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== table) return t;
       const update = t.update;
       t.update = (payload: unknown) => {
         const q = update(payload);
@@ -699,19 +764,77 @@ describe("two pushes from one device overlapping", () => {
     return release;
   }
 
-  test("a setting changed and changed back while the first push is out ends as the user left it", async () => {
+  const settingsWrites = () => cloud.log.filter((l) => l === "update user_settings").length;
+  const baseMatchesLocal = () =>
+    g.localStorage.getItem("cw_last_pushed_settings") ===
+    snapshotForCompare(buildSettingsPayload(USER, ""));
+
+  async function syncedDevice(): Promise<void> {
     newCloud();
     const [a] = await makeDevices(["current"]);
     use(a!);
-    const release = holdFirstSettingsWriteResponse();
+    cloud.log.length = 0;
+  }
+
+  test("a setting changed and changed back between them ends as the user left it", async () => {
+    await syncedDevice();
+    const release = holdFirstWriteResponse("user_settings");
 
     storage.saveBrewMethod("espresso");
     const first = pushAllToCloud();
     await flush();
     expect(settingsRow().brew_method).toBe("espresso");
 
-    // Back to filter, plus another setting, pushed while the first is out.
-    // Against the base both pushes started from, brew_method looks untouched.
+    // Back to filter, plus another setting. Against the base the first push
+    // started from, brew_method looks untouched; the second push must not
+    // build its payload until the first has recorded what it sent.
+    storage.saveBrewMethod("filter");
+    storage.saveMineralDisplayMode("advanced");
+    const second = pushAllToCloud();
+    await flush();
+    expect(settingsWrites(), "the second push has not written yet").toBe(1);
+
+    release();
+    await Promise.all([first, second]);
+    expect(settingsWrites()).toBe(2);
+    expect(settingsRow().brew_method).toBe("filter");
+    expect(settingsRow().mineral_display_mode).toBe("advanced");
+    // The base is the later push's, not the earlier one's arriving late.
+    expect(baseMatchesLocal()).toBe(true);
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("another writer's concentrate survives both, also when the second changes the same map", async () => {
+    await syncedDevice();
+    ai.saveConcentrate();
+    const release = holdFirstWriteResponse("user_settings");
+
+    edits.volume();
+    const first = pushAllToCloud();
+    await flush();
+    storage.saveStockConcentrateSpecs({ mine: AI_SPEC as any });
+    const second = pushAllToCloud();
+    await flush();
+    release();
+    await Promise.all([first, second]);
+    expect(Object.keys(settingsRow().stock_concentrate_specs).sort()).toEqual(["ai", "mine"]);
+    expect(volumeLanded()).toBe(true);
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("a row's snapshot is recorded when its own write succeeds, not when the other row's does", async () => {
+    await syncedDevice();
+    // The first push changes both rows; its selections write stays out.
+    const release = holdFirstWriteResponse("user_selections");
+    storage.saveBrewMethod("espresso");
+    edits.rail();
+    const first = pushAllToCloud();
+    await flush();
+    expect(settingsRow().brew_method).toBe("espresso");
+    expect(baseMatchesLocal(), "settings base recorded while selections is still out").toBe(true);
+
+    // The settings queue is free: a change back goes out now and is not
+    // mistaken for "untouched".
     storage.saveBrewMethod("filter");
     storage.saveMineralDisplayMode("advanced");
     const second = pushAllToCloud();
@@ -721,30 +844,59 @@ describe("two pushes from one device overlapping", () => {
 
     release();
     await Promise.all([first, second]);
-    // The first push stored its (older) snapshot last, so the device knows it
-    // still differs from it; one more push settles it without changing the row.
-    await pushAllToCloud();
-    expect(settingsRow().brew_method).toBe("filter");
-    expect(settingsRow().mineral_display_mode).toBe("advanced");
-    expect(storage.loadBrewMethod()).toBe("filter");
+    expect(railLanded()).toBe(true);
     expect(hasUnpushedChanges()).toBe(false);
   });
 
-  test("overlapping pushes that hold the same values still keep another writer's change", async () => {
-    newCloud();
-    const [a] = await makeDevices(["current"]);
-    use(a!);
-    const release = holdFirstSettingsWriteResponse();
-    ai.saveConcentrate();
+  test("a push that waited does not go out if the device signed out meanwhile", async () => {
+    await syncedDevice();
+    const release = holdFirstWriteResponse("user_settings");
     storage.saveBrewMethod("espresso");
     const first = pushAllToCloud();
     await flush();
+    storage.saveMineralDisplayMode("advanced");
     const second = pushAllToCloud();
     await flush();
+    // Sign-out wipes this marker along with the rest of local storage.
+    g.localStorage.removeItem("cw_synced_user_id");
     release();
-    await Promise.all([first, second]);
+    await first;
+    await expect(second).rejects.toThrow(/failed to upsert/);
+    expect(settingsWrites()).toBe(1);
+    expect(settingsRow().mineral_display_mode).not.toBe("advanced");
+  });
+
+  test("a request that never answers is given up on, and the next push gets its turn", async () => {
+    await syncedDevice();
+    // The first settings read hangs for good.
+    const from = g.window.supabaseClient.from;
+    let hung = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings" || hung) return t;
+      const select = t.select;
+      t.select = (...args: unknown[]) => {
+        if (hung) return select(...args);
+        hung = true;
+        const q: any = { eq: () => q, maybeSingle: () => new Promise(() => {}) };
+        return q;
+      };
+      return t;
+    };
+    storage.saveBrewMethod("espresso");
+    const first = pushAllToCloud();
+    const firstFailed = expect(first).rejects.toThrow(/failed to upsert/);
+    await flush();
+    const second = pushAllToCloud();
+    await flush();
+    expect(settingsWrites(), "nothing can be written while the first is stuck").toBe(0);
+
+    vi.advanceTimersByTime(20000);
+    await firstFailed;
+    await second;
+    expect(settingsWrites()).toBe(1);
     expect(settingsRow().brew_method).toBe("espresso");
-    expect((settingsRow().stock_concentrate_specs || {}).ai).toBeTruthy();
+    expect(hasUnpushedChanges()).toBe(false);
   });
 });
 
@@ -782,6 +934,47 @@ describe("a pull that applies over changes this device has not pushed", () => {
     await pushAllToCloud();
     expect(JSON.stringify(settingsRow().volume_preferences)).toContain("750");
     expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("a value the pull brought in is not pushed back over another writer's later change", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    // Another device changed the theme; this one saves a volume mid-pull.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "light";
+    });
+    duringNextSettingsRead(() => storage.saveVolumePreference("recipe", 750, "liters"));
+    await pullFromCloud();
+    expect(storage.loadThemePreference()).toBe("light");
+    expect(hasUnpushedChanges(), "the surviving volume is still unsynced").toBe(true);
+
+    // The theme changes again elsewhere before this device pushes.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "dark";
+    });
+    await pushAllToCloud();
+    expect(settingsRow().theme).toBe("dark");
+    expect(JSON.stringify(settingsRow().volume_preferences)).toContain("750");
+  });
+
+  test("a local edit the pull overwrote is not resurrected by the next push", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    cloud.outsideWrite("user_settings", (row) => {
+      row.brew_method = "espresso";
+      row.mineral_display_mode = "advanced";
+    });
+    // Saved mid-pull, then overwritten by the pull (the cloud holds a value).
+    duringNextSettingsRead(() => storage.saveMineralDisplayMode("advanced"));
+    await pullFromCloud();
+    cloud.outsideWrite("user_settings", (row) => {
+      row.brew_method = "filter";
+    });
+    cloud.log.length = 0;
+    await pushAllToCloud();
+    expect(settingsRow().brew_method).toBe("filter");
   });
 
   test("a device with no base still adopts the account's rows and has nothing to push", async () => {

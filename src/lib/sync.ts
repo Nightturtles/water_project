@@ -347,9 +347,10 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 // is exactly the local payload, as before.
 //
 // What this deliberately does NOT change:
-//   - Pulls. pullFromCloud still replaces local values with the row's. (It
-//     does stop refreshing the base of a row it applied over unpushed changes;
-//     see heldUnsynced there.)
+//   - Pulls. pullFromCloud still replaces local values with the row's. (What
+//     it records as the base differs in one case: after applying over changes
+//     this device had not pushed, what survived stays marked unsynced; see
+//     baseAfterUnsyncedPull.)
 //   - The base. It stays "what this device held when it last pushed or
 //     pulled", never the merged row: a base holding values local storage
 //     doesn't would make the next push read them as local changes and revert
@@ -400,18 +401,48 @@ export const SELECTIONS_PUSH_GROUPS: string[][] = [["source_preset", "source_wat
 const PUSH_ROW_SKIP_FIELDS = ["user_id", "updated_at"];
 const PUSH_MERGE_MAX_ATTEMPTS = 3;
 
-// The payloads of this page's pushes of each table that are on the network
-// right now. Pushes are not serialized (a stalled one must not hold up every
-// later save), so two can overlap: a debounced save firing while an earlier
-// push is still out, a page-load push next to a save, logout's flush. The
-// later one builds its payload before the earlier one has stored its
-// snapshot, so its base is one push behind. If the user changed a setting and
-// changed it back in between, the field equals that old base, looks untouched,
-// and the merge would keep the cloud's value, which by then is the earlier
-// push's: the change back would be lost. pushSingleRow therefore sends any
-// field an overlapping push holds differently as this push holds it, which is
-// what both pushes did when they sent the whole row.
-const rowPushesInFlight: Record<string, Array<Record<string, unknown>>> = {};
+// One push of each row at a time, per page.
+//
+// A merged push is only right if its base is the last thing this device got
+// into the row. Two pushes of one row overlapping (a debounced save firing
+// while an earlier push is still out, a page-load push next to a save,
+// logout's flush) break that in several ways: the later one's base is a push
+// behind, so a setting changed and changed back looks untouched and the
+// earlier value wins; the earlier one's retry can land after the later one;
+// and whichever answers last records its snapshot as the base, even when it
+// is the older. So each row has a queue: a push builds its payload, reads its
+// base, writes and records its snapshot as one step, and the next push of
+// that row starts only after it. The two rows queue separately.
+//
+// A queued push must not wait for ever on one that stalled, so every request
+// a row push makes is given up on after ROW_REQUEST_TIMEOUT_MS. Giving up
+// fails that push (its changes stay unsynced and the next push sends them);
+// it cannot cancel the request. If the stalled write lands later, the
+// condition on updated_at still holds it to the row it read.
+const rowPushQueues: Record<string, Promise<unknown>> = {};
+const ROW_REQUEST_TIMEOUT_MS = 20000;
+
+function inRowPushQueue<T>(table: string, task: () => Promise<T>): Promise<T> {
+  const next = (rowPushQueues[table] || Promise.resolve()).then(task, task);
+  rowPushQueues[table] = next.then(
+    function () {},
+    function () {},
+  );
+  return next;
+}
+
+// The request's own result, or { error } if it has not answered in time.
+function withinRowTimeout<T>(request: PromiseLike<T>, what: string): Promise<T | { error: Error }> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const gaveUp = new Promise<{ error: Error }>(function (resolve) {
+    timer = setTimeout(function () {
+      resolve({ error: new Error("[sync] timed out " + what) });
+    }, ROW_REQUEST_TIMEOUT_MS);
+  });
+  return Promise.race([Promise.resolve(request), gaveUp]).finally(function () {
+    clearTimeout(timer);
+  });
+}
 
 function sameValue(a: unknown, b: unknown): boolean {
   return (
@@ -475,23 +506,16 @@ function mergeDictForPush(base: unknown, local: unknown, cloud: unknown): Record
 // The row to write: `local` (a buildSettingsPayload / buildSelectionsPayload
 // result) with every field this device has not changed since `base` replaced
 // by the cloud's value. Pure; exported for unit tests.
-//
-// `sendAsIs` names fields to send exactly as local holds them, whatever the
-// base says (see rowPushesInFlight).
 export function mergeRowForPush(
   kinds: Record<string, PushFieldKind>,
   groups: string[][],
   base: Record<string, unknown>,
   local: Record<string, unknown>,
   cloud: Record<string, unknown>,
-  sendAsIs?: (field: string) => boolean,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  const asIs = function (field: string): boolean {
-    return !!sendAsIs && sendAsIs(field);
-  };
   const changedHere = function (field: string): boolean {
-    return asIs(field) || !sameValue(local[field], ownValue(base, field));
+    return !sameValue(local[field], ownValue(base, field));
   };
   const grouped: Record<string, boolean> = {};
   groups.forEach(function (group) {
@@ -508,7 +532,6 @@ export function mergeRowForPush(
     // No base for the field, or nothing in the cloud to keep: send local.
     if (
       kind === "local" ||
-      asIs(field) ||
       !Object.prototype.hasOwnProperty.call(base, field) ||
       c === undefined ||
       c === null
@@ -558,56 +581,110 @@ async function pushSingleRow(
   kinds: Record<string, PushFieldKind>,
   groups: string[][],
   local: Record<string, unknown>,
-  baseSnapshot: string | null,
-  merge: boolean,
+  base: Record<string, unknown> | null,
 ): Promise<{ error: unknown }> {
   const client = window.supabaseClient;
-  const wholeRow = function () {
-    return client.from(table).upsert(local, { onConflict: "user_id" });
+  const wholeRow = function (): Promise<{ error: unknown }> {
+    return withinRowTimeout(
+      client.from(table).upsert(local, { onConflict: "user_id" }),
+      "saving " + table,
+    );
   };
-  const base = merge ? parsePushBase(baseSnapshot) : null;
-  const inFlight = rowPushesInFlight[table] || (rowPushesInFlight[table] = []);
-  inFlight.push(local);
-  // A field another push of this table, still on the network, is sending with
-  // a different value than this one holds. Its write may or may not have
-  // landed, and the base predates it either way, so "unchanged since the
-  // base" says nothing about such a field: send this push's own value.
-  const sentDifferentlyElsewhere = function (field: string): boolean {
-    return inFlight.some(function (other) {
-      return other !== local && !sameValue(other[field], local[field]);
+  if (!base) return wholeRow();
+
+  for (let attempt = 0; attempt < PUSH_MERGE_MAX_ATTEMPTS; attempt++) {
+    const read: any = await withinRowTimeout(
+      client.from(table).select("*").eq("user_id", userId).maybeSingle(),
+      "reading " + table,
+    );
+    if (read && read.error) return { error: read.error };
+    const cloud = read && isPlainObject(read.data) ? read.data : null;
+    if (!cloud) return wholeRow();
+
+    const payload = Object.assign(mergeRowForPush(kinds, groups, base, local, cloud), {
+      updated_at: local.updated_at,
     });
-  };
-  try {
-    if (!base) return await wholeRow();
-
-    for (let attempt = 0; attempt < PUSH_MERGE_MAX_ATTEMPTS; attempt++) {
-      const read = await client.from(table).select("*").eq("user_id", userId).maybeSingle();
-      if (read && read.error) return { error: read.error };
-      const cloud = read && isPlainObject(read.data) ? read.data : null;
-      if (!cloud) return await wholeRow();
-
-      const payload = Object.assign(
-        mergeRowForPush(kinds, groups, base, local, cloud, sentDifferentlyElsewhere),
-        { updated_at: local.updated_at },
-      );
-      let write = client.from(table).update(payload).eq("user_id", userId);
-      write =
-        cloud.updated_at === null || cloud.updated_at === undefined
-          ? write.is("updated_at", null)
-          : write.eq("updated_at", cloud.updated_at);
-      const written = await write.select("user_id");
-      if (written && written.error) return { error: written.error };
-      if (written && Array.isArray(written.data) && written.data.length > 0) {
-        return { error: null };
-      }
+    let write = client.from(table).update(payload).eq("user_id", userId);
+    write =
+      cloud.updated_at === null || cloud.updated_at === undefined
+        ? write.is("updated_at", null)
+        : write.eq("updated_at", cloud.updated_at);
+    const written: any = await withinRowTimeout(write.select("user_id"), "saving " + table);
+    if (written && written.error) return { error: written.error };
+    if (written && Array.isArray(written.data) && written.data.length > 0) {
+      return { error: null };
     }
-    return {
-      error: new Error("[sync] " + table + " kept changing while it was being saved"),
-    };
-  } finally {
-    const at = inFlight.indexOf(local);
-    if (at !== -1) inFlight.splice(at, 1);
   }
+  return {
+    error: new Error("[sync] " + table + " kept changing while it was being saved"),
+  };
+}
+
+type SingleRowSpec = {
+  table: "user_settings" | "user_selections";
+  baseKey: string;
+  kinds: Record<string, PushFieldKind>;
+  groups: string[][];
+  build: (userId: string, now: string) => Record<string, unknown>;
+};
+
+const SETTINGS_ROW: SingleRowSpec = {
+  table: "user_settings",
+  baseKey: LAST_PUSHED_SETTINGS_KEY,
+  kinds: SETTINGS_PUSH_KINDS,
+  groups: [],
+  build: buildSettingsPayload,
+};
+
+const SELECTIONS_ROW: SingleRowSpec = {
+  table: "user_selections",
+  baseKey: LAST_PUSHED_SELECTIONS_KEY,
+  kinds: SELECTIONS_PUSH_KINDS,
+  groups: SELECTIONS_PUSH_GROUPS,
+  build: buildSelectionsPayload,
+};
+
+// One row's whole push, in that row's queue: build the payload from local
+// storage as it is when this push's turn comes, skip it if it matches the
+// base, write, and record the snapshot. Recording belongs to the same step as
+// the write: the next push of this row must find the base this one left.
+//
+// `merge` false is the first-login merge's own push, which sends the row
+// whole (its "new account" / "Keep both" branches).
+function pushRowInTurn(
+  spec: SingleRowSpec,
+  userId: string,
+  merge: boolean,
+): Promise<{ error: unknown }> {
+  return inRowPushQueue(spec.table, async function () {
+    // This push may have waited behind another. If the device signed out or
+    // changed account meanwhile, local storage is no longer this user's.
+    if (merge && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) {
+      return {
+        error: new Error("[sync] the signed-in account changed before the save went out"),
+      };
+    }
+    const local = spec.build(userId, new Date().toISOString());
+    // Skip the write when the payload hasn't changed since our last
+    // successful push to that table. This is the storm-prevention path: every
+    // page-load initSync.push would otherwise rewrite the row, fire a
+    // postgres_changes broadcast that arrives back at our own channel, and
+    // trigger a redundant pullFromCloud — which can race a local write that
+    // happened in the same tick (replication-lag may return the stale value).
+    const snapshot = snapshotForCompare(local);
+    const baseSnapshot = safeGetItem(spec.baseKey);
+    if (snapshot === baseSnapshot) return { error: null };
+    const result = await pushSingleRow(
+      spec.table,
+      userId,
+      spec.kinds,
+      spec.groups,
+      local,
+      merge ? parsePushBase(baseSnapshot) : null,
+    );
+    if (!result.error) safeSetItem(spec.baseKey, snapshot);
+    return result;
+  });
 }
 
 // --- Push all localStorage data to Supabase ---
@@ -671,87 +748,34 @@ export async function pushAllToCloud(options?: {
 
   const now = new Date().toISOString();
 
-  const settingsPayload = buildSettingsPayload(userId, now);
-  const selectionsPayload = buildSelectionsPayload(userId, now);
-
-  // Skip upserts when the payload hasn't changed since our last successful
-  // push to that table. This is the storm-prevention path: every page-load
-  // initSync.push would otherwise re-upsert the full row, fire a
-  // postgres_changes broadcast that arrives back at our own channel, and
-  // trigger a redundant pullFromCloud — which can race a local write that
-  // happened in the same tick (replication-lag may return the stale value).
-  const settingsSnapshot = snapshotForCompare(settingsPayload);
-  const selectionsSnapshot = snapshotForCompare(selectionsPayload);
-  const lastSettingsSnapshot = safeGetItem(LAST_PUSHED_SETTINGS_KEY);
-  const lastSelectionsSnapshot = safeGetItem(LAST_PUSHED_SELECTIONS_KEY);
-  const settingsChanged = settingsSnapshot !== lastSettingsSnapshot;
-  const selectionsChanged = selectionsSnapshot !== lastSelectionsSnapshot;
-
   // The first-login merge's own push sends this device's rows whole: it is the
   // "new account" / "Keep both" choice, with its own fold of the cloud's
-  // concentrates. Every other push merges (see pushSingleRow).
+  // concentrates. Every other push merges (see pushSingleRow). Each row is
+  // pushed in its own queue and records its own snapshot when its write
+  // succeeds, whatever happens to the other (see pushRowInTurn).
   const mergeRows = !(options && options.allowBeforeMerge);
-  const upserts: Array<{ table: string; promise: any; snapshot: string; key: string }> = [];
-  if (settingsChanged) {
-    upserts.push({
-      table: "user_settings",
-      promise: pushSingleRow(
-        "user_settings",
-        userId,
-        SETTINGS_PUSH_KINDS,
-        [],
-        settingsPayload,
-        lastSettingsSnapshot,
-        mergeRows,
-      ),
-      snapshot: settingsSnapshot,
-      key: LAST_PUSHED_SETTINGS_KEY,
+  const rows = [SETTINGS_ROW, SELECTIONS_ROW];
+  const results = await Promise.all(
+    rows.map(function (row) {
+      return pushRowInTurn(row, userId as string, mergeRows);
+    }),
+  );
+  const pushErrors: unknown[] = [];
+  results.forEach(function (r, idx) {
+    const row = rows[idx];
+    if (!row || !r.error) return;
+    reportError("sync.upsert", r.error, { table: row.table });
+    pushErrors.push(r.error);
+  });
+  if (pushErrors.length > 0) {
+    // Carry the underlying upsert errors so reportError can tell a transient
+    // network blip (self-heals on the next push) apart from a real Postgrest
+    // rejection. The throw stays load-bearing: logout's flushPendingSync
+    // await relies on it to abort and preserve unsynced edits, so this
+    // enriches the error without swallowing it.
+    throw new Error("[sync] failed to upsert one or more cloud rows", {
+      cause: pushErrors,
     });
-  }
-  if (selectionsChanged) {
-    upserts.push({
-      table: "user_selections",
-      promise: pushSingleRow(
-        "user_selections",
-        userId,
-        SELECTIONS_PUSH_KINDS,
-        SELECTIONS_PUSH_GROUPS,
-        selectionsPayload,
-        lastSelectionsSnapshot,
-        mergeRows,
-      ),
-      snapshot: selectionsSnapshot,
-      key: LAST_PUSHED_SELECTIONS_KEY,
-    });
-  }
-
-  if (upserts.length > 0) {
-    const results = await Promise.all(
-      upserts.map(function (u) {
-        return u.promise;
-      }),
-    );
-    const pushErrors: unknown[] = [];
-    results.forEach(function (r, idx) {
-      const u = upserts[idx];
-      if (!u) return;
-      if (r.error) {
-        reportError("sync.upsert", r.error, { table: u.table });
-        pushErrors.push(r.error);
-      } else {
-        safeSetItem(u.key, u.snapshot);
-      }
-    });
-    if (pushErrors.length > 0) {
-      // Carry the underlying upsert errors so reportError can tell a transient
-      // network blip (self-heals on the next push) apart from a real Postgrest
-      // rejection. The throw stays load-bearing: logout's flushPendingSync
-      // await relies on it to abort and preserve unsynced edits, so this
-      // enriches the error without swallowing it.
-      throw new Error("[sync] failed to upsert one or more cloud rows", {
-        cause: pushErrors,
-      });
-    }
   }
 
   await syncCustomProfiles(userId, now);
@@ -1087,13 +1111,19 @@ export async function pullFromCloud(options?: {
   // or draft key the cloud lacks, or a field the cloud holds empty, survives.
   // Refreshing the base from local afterwards would then record the survivor
   // as synced, and since a push sends only what differs from the base, it
-  // would never be uploaded. So that row's base is left as it was (see the
-  // refresh at the end), the device stays "unsynced", and its next push sends
-  // the difference. A device with no base yet is not in that state: its first
-  // pull adopts the account's rows and must not leave anything to push.
-  const heldUnsynced = function (baseKey: string, payload: Record<string, unknown>): boolean {
-    const base = safeGetItem(baseKey);
-    return base !== null && snapshotForCompare(payload) !== base;
+  // would never be uploaded. So for such a row the refresh at the end keeps
+  // the old base for what survived and advances it for everything the pull
+  // applied (baseAfterUnsyncedPull). A device with no base yet is not in that
+  // state: its first pull adopts the account's rows and must not leave
+  // anything to push.
+  const heldUnsynced = function (
+    baseKey: string,
+    local: Record<string, unknown>,
+  ): { base: Record<string, unknown>; local: Record<string, unknown> } | null {
+    const raw = safeGetItem(baseKey);
+    if (raw === null || snapshotForCompare(local) === raw) return null;
+    const base = parsePushBase(raw);
+    return base ? { base: base, local: local } : null;
   };
   const settingsHeldUnsynced = heldUnsynced(
     LAST_PUSHED_SETTINGS_KEY,
@@ -1229,23 +1259,89 @@ export async function pullFromCloud(options?: {
   // buildXxxPayload + snapshotForCompare path push uses, so a no-op push
   // immediately after pull is correctly detected as no-op.
   //
-  // Skipped for a row this device held unpushed changes to when the pull
-  // applied (settingsHeldUnsynced / selectionsHeldUnsynced above): its base
-  // stays put so the next push still sends what survived the apply.
-  if (settings && !settingsHeldUnsynced) {
+  // A row this device held unpushed changes to when the pull applied
+  // (settingsHeldUnsynced / selectionsHeldUnsynced above) gets a base that
+  // still shows what survived the apply as unsynced.
+  const refreshBase = function (
+    baseKey: string,
+    kinds: Record<string, PushFieldKind>,
+    held: { base: Record<string, unknown>; local: Record<string, unknown> } | null,
+    after: Record<string, unknown>,
+  ): void {
     safeSetItem(
+      baseKey,
+      held
+        ? stableStringify(baseAfterUnsyncedPull(kinds, held.base, held.local, after))
+        : snapshotForCompare(after),
+    );
+  };
+  if (settings) {
+    refreshBase(
       LAST_PUSHED_SETTINGS_KEY,
-      snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
+      SETTINGS_PUSH_KINDS,
+      settingsHeldUnsynced,
+      buildSettingsPayload(sessionUserId, ""),
     );
   }
-  if (selections && !selectionsHeldUnsynced) {
-    safeSetItem(
+  if (selections) {
+    refreshBase(
       LAST_PUSHED_SELECTIONS_KEY,
-      snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
+      SELECTIONS_PUSH_KINDS,
+      selectionsHeldUnsynced,
+      buildSelectionsPayload(sessionUserId, ""),
     );
   }
 
   return true;
+}
+
+// The base to record after a pull applied over changes this device had not
+// pushed. `base` and `before` are the row's base and payload before the
+// apply, `after` the payload once the apply is done.
+//
+// A field (or, in a map, a key) this device had changed and still holds
+// unchanged after the apply survived it: the cloud had nothing to put there.
+// It keeps its old base, so the next push sees it as changed and sends it.
+// Everything else takes its value after the apply, as a pull's base refresh
+// always did: a value the pull brought in is the cloud's, not a local edit,
+// and must not be pushed back over whatever another writer sets next.
+// Pure; exported for unit tests.
+export function baseAfterUnsyncedPull(
+  kinds: Record<string, PushFieldKind>,
+  base: Record<string, unknown>,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  const put = function (target: Record<string, unknown>, key: string, value: unknown): void {
+    if (value !== undefined) target[key] = value;
+  };
+  Object.keys(after).forEach(function (field) {
+    if (field === "updated_at") return;
+    const a = after[field];
+    const b = ownValue(base, field);
+    const l = before[field];
+    if (field === "user_id" || sameValue(l, b)) {
+      put(out, field, a);
+      return;
+    }
+    if (ownValue(kinds, field) === "dict" && isPlainObject(a)) {
+      const B = isPlainObject(b) ? b : {};
+      const L = isPlainObject(l) ? l : {};
+      const map: Record<string, unknown> = {};
+      new Set([...Object.keys(a), ...Object.keys(B)]).forEach(function (k) {
+        const ak = ownValue(a, k);
+        const lk = ownValue(L, k);
+        const bk = ownValue(B, k);
+        const survived = !sameValue(lk, bk) && sameValue(ak, lk);
+        put(map, k, survived ? bk : ak);
+      });
+      out[field] = map;
+      return;
+    }
+    put(out, field, sameValue(a, l) ? b : a);
+  });
+  return out;
 }
 
 // --- Returns true if local data is entirely default (no user customization) ---

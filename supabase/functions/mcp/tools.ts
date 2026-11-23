@@ -896,7 +896,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
   }
 
   const SAVED_NOTE =
-    "Saved to the user's Cafelytic Settings. It is not switched on. If the user wants to dose with it, switch it on with set_concentrate_enabled (or they can in the app). Ask them to check it appears in the app; if it is missing (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), save it again.";
+    "Saved to the user's Cafelytic Settings. It is not switched on. If the user wants to dose with it, switch it on with set_concentrate_enabled (or they can in the app). Ask them to check it appears in the app; if it is missing (one possible cause: a device still on the phone app at version 1.2.2 or older that had not synced), save it again.";
   const CHANGED_ENABLED_NOTE =
     "Saved. This concentrate is switched on in the app: the calculator will use the new values once the app has synced. Ask the user to check the concentrate and the doses in the app.";
 
@@ -1163,7 +1163,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
   }
 
   const SWITCH_NOTE =
-    "calculate_doses uses this from now on, and the app's calculator does once the app has synced. Ask the user to check it in the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), make the change again.";
+    "calculate_doses uses this from now on, and the app's calculator does once the app has synced. Ask the user to check it in the app; if it has gone back (one possible cause: a device still on the phone app at version 1.2.2 or older that had not synced), make the change again.";
   const NO_CHANGE_NOTE = "It was already set that way, so nothing changed.";
   const switchAnnotations = {
     readOnlyHint: false,
@@ -1286,7 +1286,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           : obj(obj((draftsResult.data as { drafts?: unknown } | null)?.drafts).target_draft_ions);
         const notes = [
           saved.changed
-            ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), set it again."
+            ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (one possible cause: a device still on the phone app at version 1.2.2 or older that had not synced), set it again."
             : "It was already the active recipe.",
         ];
         if (saved.added_to_rail) {
@@ -1364,7 +1364,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           saved: true,
           changed: saved.changed,
           note:
-            "The app's Starting Water is now this water's saved values, and calculate_doses uses it by default. Ask the user to check the app; if it has gone back (a device on the phone app at version 1.2.2 or older had not synced and overwrote it), set it again.",
+            "The app's Starting Water is now this water's saved values, and calculate_doses uses it by default. Ask the user to check the app; if it has gone back (one possible cause: a device still on the phone app at version 1.2.2 or older that had not synced), set it again.",
           before: { key: before.key, name: before.name, ions: before.ions },
           source_water: {
             ...water,

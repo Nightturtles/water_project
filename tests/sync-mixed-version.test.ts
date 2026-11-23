@@ -197,14 +197,30 @@ function applyAction(step: Step): "add" | "remove" | "none" {
 // changes the row: one key or one id, everything else in the row left as it
 // is at that moment. Says which thing it touched (named as applyAction's
 // things are) and what it did to it.
-function applyAiAppWrite(step: Step): { thing: string; effect: "add" | "remove" | "none" } {
+//
+// It only does what the real functions allow. mcp_save_concentrate stores a
+// spec with at least one mineral; mcp_set_enabled switches a concentrate on
+// only if its spec is fully set up (the specs the simulated devices save have
+// no minerals, so the AI app cannot switch those on), and switches one off
+// whatever its spec looks like.
+function applyAiAppWrite(step: Step): {
+  thing: string;
+  effect: "add" | "remove" | "none";
+  // Set when the write made a recipe the active one.
+  activeRecipe?: string;
+} {
   const key = step.key!;
   let effect: "add" | "remove" | "none" = "none";
   if (step.op === "ai-concentrate-spec") {
     cloud.outsideWrite("user_settings", (row) => {
       row.stock_concentrate_specs = {
         ...(row.stock_concentrate_specs || {}),
-        [key]: { label: key, bottleMl: step.value, doseGramsPerL: 4, minerals: [] },
+        [key]: {
+          label: key,
+          bottleMl: step.value,
+          doseGramsPerL: 4,
+          minerals: [{ mineralId: "gypsum", grams: 1 }],
+        },
       };
     });
     return { thing: "concentrate-spec:" + key, effect: "add" };
@@ -215,8 +231,14 @@ function applyAiAppWrite(step: Step): { thing: string; effect: "add" | "remove" 
     const id = mineral ? key : "stock:" + key;
     const row = cloud.rows.user_settings;
     const has = (row[field] || []).includes(id);
-    // Switching a concentrate on needs it to exist.
-    if (!mineral && !has && !(row.stock_concentrate_specs || {})[key]) {
+    const spec = (row.stock_concentrate_specs || {})[key];
+    const fullySetUp =
+      !!spec &&
+      Number(spec.bottleMl) > 0 &&
+      Number(spec.doseGramsPerL) > 0 &&
+      Array.isArray(spec.minerals) &&
+      spec.minerals.length > 0;
+    if (!mineral && !has && !fullySetUp) {
       return { thing: "concentrate:" + key, effect: "none" };
     }
     cloud.outsideWrite("user_settings", (r) => {
@@ -234,7 +256,7 @@ function applyAiAppWrite(step: Step): { thing: string; effect: "add" | "remove" 
         effect = "add";
       }
     });
-    return { thing: "rail:" + key, effect };
+    return { thing: "rail:" + key, effect, activeRecipe: key };
   }
   cloud.outsideWrite("user_selections", (row) => {
     row.source_preset = "volvic";
@@ -266,14 +288,20 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
   const lastAction: Record<string, "add" | "remove"> = {};
   const added = new Set<string>();
   const removed = new Set<string>();
+  let chosenActiveRecipe: string | null = null;
   const trace: string[] = [];
   for (const step of script) {
     if (step.device < 0) {
-      const { thing, effect } = applyAiAppWrite(step);
+      const { thing, effect, activeRecipe } = applyAiAppWrite(step);
       if (effect !== "none") {
         lastAction[thing] = effect;
         (effect === "add" ? added : removed).add(thing);
       }
+      // No device in these scripts chooses the active recipe, so the AI
+      // app's last choice is what the account should end on. Tracked apart
+      // from the rail: making a recipe active that is already on the rail
+      // changes nothing there.
+      if (activeRecipe) chosenActiveRecipe = activeRecipe;
       trace.push(`AI app ${step.op} ${step.key ?? ""} ${step.value ?? ""} -> ${effect}`);
       continue;
     }
@@ -311,6 +339,10 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
     return JSON.stringify({
       recipes: localRecipes(d),
       water: storage.loadSourceWater().calcium,
+      // The key too: two devices can hold the same calcium under different
+      // source waters.
+      waterKey: storage.loadSourcePresetName(),
+      activeRecipe: storage.loadTargetPresetName(storage.loadBrewMethod()),
       minerals: storage.loadSelectedMinerals().slice().sort(),
       rail: storage.loadAddedTargetPresets().slice().sort(),
       specs: Object.keys(storage.loadStockConcentrateSpecs()).sort(),
@@ -335,7 +367,14 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
     converged: views.every((v) => v === views[0]),
     dirty: devices.some((d) => dirty(d)),
     neverQuiet: noisy >= MAX_ROUNDS,
-    lost: things.filter((t) => lastAction[t] === "add" && !exists(t)),
+    lost: things
+      .filter((t) => lastAction[t] === "add" && !exists(t))
+      .concat(
+        chosenActiveRecipe &&
+          storage.loadTargetPresetName(storage.loadBrewMethod()) !== chosenActiveRecipe
+          ? ["active-recipe:" + chosenActiveRecipe]
+          : [],
+      ),
     broughtBack: things.filter((t) => lastAction[t] === "remove" && exists(t)),
     missing: [...added].filter((t) => !removed.has(t) && !exists(t)).sort(),
     deletedRowsLeft: cloud.profiles
