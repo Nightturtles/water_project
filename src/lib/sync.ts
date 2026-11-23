@@ -1059,7 +1059,7 @@ function pushRowInTurn(
     const known = unconfirmed.reduce(function (ids: string[], entry) {
       return ids.concat(entry.ids);
     }, []);
-    const refreshesAtStart = baseRefreshes[spec.baseKey] || 0;
+    const refreshesAtStart = baseRefreshCount(spec.baseKey);
 
     const result = await pushSingleRow(
       spec,
@@ -1077,14 +1077,15 @@ function pushRowInTurn(
     // to replace. A pull is not in this queue: one that ran while the
     // requests were out has refreshed the base from what it applied, and this
     // push's snapshot, built before that, would put back the older view. The
-    // refresh count catches a pull that left the base's text unchanged; the
-    // text catches a push from another tab where the browser has no
-    // cross-tab lock. Either way the other base is the newer one and stays.
-    // If this device still holds something it does not cover, the device
-    // stays unsynced and the next push sends that again, which is harmless.
+    // refresh count catches a pull that left the base's text unchanged, in
+    // this tab or another; the text catches a push from another tab where the
+    // browser has no cross-tab lock. Either way the other base is the newer
+    // one and stays. If this device still holds something it does not cover,
+    // the device stays unsynced and the next push sends that again, which is
+    // harmless.
     if (
       safeGetItem(spec.baseKey) === baseSnapshot &&
-      (baseRefreshes[spec.baseKey] || 0) === refreshesAtStart
+      baseRefreshCount(spec.baseKey) === refreshesAtStart
     ) {
       safeSetItem(spec.baseKey, snapshot);
     }
@@ -1093,8 +1094,21 @@ function pushRowInTurn(
   });
 }
 
-// How many times a pull has refreshed each row's base on this page.
-const baseRefreshes: Record<string, number> = {};
+// How many times a pull has refreshed each row's base. Kept in local storage,
+// not in this page's memory: tabs share the base, and a pull in one tab has
+// to be visible to a push in another.
+function baseRefreshCount(baseKey: string): number {
+  const counts = safeParse(safeGetItem(KEYS.BASE_REFRESHES), null);
+  const n = isPlainObject(counts) ? ownValue(counts, baseKey) : undefined;
+  return typeof n === "number" ? n : 0;
+}
+
+function noteBaseRefresh(baseKey: string): void {
+  const parsed = safeParse(safeGetItem(KEYS.BASE_REFRESHES), null);
+  const counts: Record<string, unknown> = isPlainObject(parsed) ? parsed : {};
+  counts[baseKey] = baseRefreshCount(baseKey) + 1;
+  safeSetItem(KEYS.BASE_REFRESHES, JSON.stringify(counts));
+}
 
 // Name fields of a row as changed here, ahead of that row's push: for the
 // active choice, whose two halves must both be on record before either row
@@ -1707,7 +1721,7 @@ export async function pullFromCloud(options?: {
   ): void {
     // Counted, so that a push whose requests were out while this ran knows
     // not to put its own, older snapshot over this base (pushRowInTurn).
-    baseRefreshes[baseKey] = (baseRefreshes[baseKey] || 0) + 1;
+    noteBaseRefresh(baseKey);
     safeSetItem(
       baseKey,
       held

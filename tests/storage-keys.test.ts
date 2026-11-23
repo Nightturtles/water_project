@@ -55,6 +55,7 @@ const CATEGORY_C_EXPECTED = [
   "cw_last_pushed_target_profiles",
   "cw_pending_push_settings",
   "cw_pending_push_selections",
+  "cw_base_refreshes",
   "cw_synced_user_id",
   "cw_starter_migration_applied",
 ];

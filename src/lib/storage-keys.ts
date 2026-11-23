@@ -60,6 +60,9 @@ export const KEYS = {
   // confirmed or refused it (sync.ts pushSingleRow).
   PENDING_PUSH_SETTINGS: "cw_pending_push_settings",
   PENDING_PUSH_SELECTIONS: "cw_pending_push_selections",
+  // How many times a pull has refreshed each single row's base, so that a
+  // push in any tab can tell one ran while its requests were out.
+  BASE_REFRESHES: "cw_base_refreshes",
   SYNCED_USER_ID: "cw_synced_user_id",
   STARTER_MIGRATION_APPLIED: "cw_starter_migration_applied",
 } as const;
@@ -111,6 +114,7 @@ export const CATEGORY_C: string[] = [
   KEYS.LAST_PUSHED_TARGET_PROFILES,
   KEYS.PENDING_PUSH_SETTINGS,
   KEYS.PENDING_PUSH_SELECTIONS,
+  KEYS.BASE_REFRESHES,
   KEYS.SYNCED_USER_ID,
   KEYS.STARTER_MIGRATION_APPLIED,
 ];

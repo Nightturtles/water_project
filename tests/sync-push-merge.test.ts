@@ -1638,6 +1638,62 @@ describe("two tabs", () => {
     expect(hasUnpushedChanges()).toBe(false);
   });
 
+  test("a pull in another tab while this tab's push is out is seen by the push", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    const tabB = await openSecondTab();
+    expect(settingsRow().theme).toBe("system");
+    // Hold tab A's read of the row.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const from = g.window.supabaseClient.from;
+    let held = false;
+    g.window.supabaseClient.from = (name: string) => {
+      const t = from(name);
+      if (name !== "user_settings") return t;
+      const select = t.select;
+      t.select = (...args: unknown[]) => {
+        const q = select(...args);
+        if (held) return q;
+        held = true;
+        const maybeSingle = q.maybeSingle;
+        q.maybeSingle = async () => {
+          await gate;
+          return maybeSingle();
+        };
+        return q;
+      };
+      return t;
+    };
+
+    storage.saveThemePreference("light");
+    const first = pushAllToCloud();
+    await flush();
+
+    // Tab B pulls: it reads "system", applies it over the edit in the local
+    // storage both tabs share, and records a base with the same text as
+    // before. Nothing in tab A's own memory changes.
+    await tabB.sync.pullFromCloud();
+    expect(g.localStorage.getItem("cw_theme")).toBe("system");
+    const baseFromPull = g.localStorage.getItem("cw_last_pushed_settings");
+
+    release();
+    await first;
+    expect(settingsRow().theme).toBe("light");
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBe(baseFromPull);
+
+    // Another device then chooses dark; a later save here must not send the
+    // pulled "system" over it.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.theme = "dark";
+    });
+    tabB.storage.saveVolumePreference("recipe", 250, "liters");
+    await tabB.sync.pushAllToCloud();
+    expect(settingsRow().theme).toBe("dark");
+    expect(JSON.stringify(settingsRow().volume_preferences)).toContain("250");
+  });
+
   test("without the lock, a tab that finishes does not clear another tab's unconfirmed change", async () => {
     newCloud();
     const [a] = await makeDevices(["current"]);
