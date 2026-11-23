@@ -48,7 +48,7 @@ for arg in "$@"; do
     --draft) RELEASE_STATUS="draft" ;;
     -h|--help)
       # Print the header comment (everything up to the first blank line).
-      awk 'NR > 1 && /^$/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"
+      awk 'NR > 1 && /^$/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$REPO_ROOT/scripts/upload-play-internal.sh"
       exit 0
       ;;
     *)
