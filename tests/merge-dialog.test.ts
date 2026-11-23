@@ -126,6 +126,29 @@ describe("describeMergeOptions", () => {
     expect(copy.keepBoth[0]).toBe("Adds to your account: 6 recipes (A, B, C, D, and 2 more).");
   });
 
+  test("concentrates the account has no list for are added by Keep both and kept by Use account only", () => {
+    const copy = describeMergeOptions(
+      summarizeMerge(
+        { ...EMPTY_LOCAL, concentrates: [item("diy:epsom-salt", "Epsom Salt")] },
+        { ...EMPTY_CLOUD, keptLocalConcentrateKeys: ["diy:epsom-salt"] },
+      ),
+    );
+    expect(copy.keepBoth[0]).toBe("Adds to your account: 1 concentrate (Epsom Salt).");
+    expect(copy.accountOnly[0]).toBe(
+      "No recipe, starting water or concentrate is saved only on this device.",
+    );
+  });
+
+  test("drafts: Keep both replaces them outright, Use account only just where the account has one", () => {
+    const copy = describeMergeOptions(summarizeMerge(EMPTY_LOCAL, EMPTY_CLOUD));
+    expect(copy.keepBoth[copy.keepBoth.length - 1]).toMatch(
+      /Recipe Library picks, and unsaved drafts\.$/,
+    );
+    expect(copy.accountOnly[copy.accountOnly.length - 1]).toMatch(
+      /replaced only where your account has one too\.$/,
+    );
+  });
+
   test("falls back to general wording when the account could not be read", () => {
     const copy = describeMergeOptions(null);
     expect(copy.keepBoth.join(" ")).toMatch(/this device's version replaces your account's/);

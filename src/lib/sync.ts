@@ -1093,6 +1093,8 @@ async function buildMergeSummary(userId: string): Promise<MergeSummary | null> {
     };
     const localDiy = loadDiyConcentrateSpecs();
     const localStock = loadStockConcentrateSpecs();
+    const cloudDiy = settings && settings.diy_concentrate_specs;
+    const cloudStock = settings && settings.stock_concentrate_specs;
     return summarizeMerge(
       {
         recipes: profileItems(loadCustomTargetProfiles(), buildTarget),
@@ -1104,12 +1106,16 @@ async function buildMergeSummary(userId: string): Promise<MergeSummary | null> {
       {
         recipes: profileItems(cloudTargets, buildTarget),
         waters: profileItems(cloudSources, buildSource),
+        concentrates: concentrateItems(cloudDiy, cloudStock),
         // pullFromCloud leaves a local spec dict alone when the account has no
-        // value for it, so a missing one is "same as this device", not "empty".
-        concentrates: concentrateItems(
-          (settings && settings.diy_concentrate_specs) || localDiy,
-          (settings && settings.stock_concentrate_specs) || localStock,
-        ),
+        // value for it, so Use account only keeps those concentrates here
+        // (and a later push adds them to the account).
+        keptLocalConcentrateKeys: concentrateItems(
+          cloudDiy ? {} : localDiy,
+          cloudStock ? {} : localStock,
+        ).map(function (c) {
+          return c.key;
+        }),
       },
     );
   } catch (err) {
@@ -1227,6 +1233,9 @@ export async function handleFirstLoginMerge(): Promise<void> {
           // concentrate specs in it are named artifacts (Category B), not
           // preferences: fold the cloud's into local first so choosing
           // "local" can't erase concentrates saved on another device.
+          // Baseline for the pull below, taken before the push reads its
+          // payload: any save from here on isn't in that push.
+          const seqBeforePush = localWriteSeq;
           await foldCloudConcentratesIntoLocal(userId);
           await pushAllToCloud({ allowBeforeMerge: true, mergeUserId: userId });
           // The push leaves the account's own recipes and starting waters in
@@ -1234,8 +1243,18 @@ export async function handleFirstLoginMerge(): Promise<void> {
           // would, instead of on the next page load. Best-effort: the local
           // data is already safe in the account, and every later load pushes
           // then pulls anyway.
+          //
+          // The page stays editable during the merge, and a save made now
+          // can't push itself (the merge gate is still closed). Pulling over
+          // it would replace the edit with the account's rows and mark them
+          // as pushed, losing it on both sides. So if anything was saved
+          // since the baseline, before or during the fetch, leave local alone
+          // and let the catch-up below push that save and then pull.
           try {
-            await pullFromCloud({ mergeUserId: userId });
+            const applied =
+              localWriteSeq === seqBeforePush &&
+              (await pullFromCloud({ mergeUserId: userId, skipIfLocalWriteDuringPull: true }));
+            if (applied === false) realtimePullDeferred = true;
           } catch (err) {
             reportError("sync.merge-keep-both-pull", err);
           }

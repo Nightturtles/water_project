@@ -28,6 +28,14 @@ export interface MergeSide {
   concentrates: MergeItem[];
 }
 
+export interface MergeCloudSide extends MergeSide {
+  /**
+   * Keys of this device's concentrates that Use account only leaves in place,
+   * because the account has no concentrate list of that kind to replace them.
+   */
+  keptLocalConcentrateKeys?: string[];
+}
+
 export interface MergeLocalSide extends MergeSide {
   /** Slugs deleted on this device; a Keep-both push deletes them from the account. */
   deletedRecipeKeys: string[];
@@ -47,6 +55,11 @@ export interface MergeSummary {
   recipes: MergeGroup;
   waters: MergeGroup;
   concentrates: MergeGroup;
+  /**
+   * Device-only concentrates that Use account only removes. Usually all of
+   * concentrates.localOnly; fewer when the account has no list to replace them.
+   */
+  concentratesRemovedByAccountOnly: string[];
 }
 
 function diffGroup(local: MergeItem[], cloud: MergeItem[], deletedKeys: string[]): MergeGroup {
@@ -72,8 +85,21 @@ function diffGroup(local: MergeItem[], cloud: MergeItem[], deletedKeys: string[]
   return group;
 }
 
-export function summarizeMerge(local: MergeLocalSide, cloud: MergeSide): MergeSummary {
+export function summarizeMerge(local: MergeLocalSide, cloud: MergeCloudSide): MergeSummary {
+  const cloudConcentrateKeys = new Set(
+    cloud.concentrates.map(function (c) {
+      return c.key;
+    }),
+  );
+  const kept = new Set(cloud.keptLocalConcentrateKeys || []);
   return {
+    concentratesRemovedByAccountOnly: local.concentrates
+      .filter(function (c) {
+        return !cloudConcentrateKeys.has(c.key) && !kept.has(c.key);
+      })
+      .map(function (c) {
+        return c.name;
+      }),
     recipes: diffGroup(local.recipes, cloud.recipes, local.deletedRecipeKeys),
     waters: diffGroup(local.waters, cloud.waters, local.deletedWaterKeys),
     // Concentrates have no tombstones: Keep both always unions them.
@@ -108,8 +134,7 @@ export interface MergeOptionCopy {
   accountOnly: string[];
 }
 
-const SETTINGS_LIST =
-  "selected minerals, current starting water and recipe, Recipe Library picks, and unsaved drafts";
+const SETTINGS_LIST = "selected minerals, current starting water and recipe, Recipe Library picks";
 
 /**
  * The bullet points under each choice. With a summary they name the exact
@@ -117,8 +142,16 @@ const SETTINGS_LIST =
  * contents couldn't be read) they describe the same rules in general terms.
  */
 export function describeMergeOptions(summary: MergeSummary | null): MergeOptionCopy {
-  const keepSettings = "This device's settings replace your account's: " + SETTINGS_LIST + ".";
-  const accountSettings = "Your account's settings replace this device's: " + SETTINGS_LIST + ".";
+  // Keep both pushes this device's whole drafts blob, so the account's drafts
+  // go even where this device has none. The pull behind Use account only
+  // restores only the draft keys the account has, leaving the rest of this
+  // device's drafts alone; the wording differs to match.
+  const keepSettings =
+    "This device's settings replace your account's: " + SETTINGS_LIST + ", and unsaved drafts.";
+  const accountSettings =
+    "Your account's settings replace this device's: " +
+    SETTINGS_LIST +
+    ". An unsaved draft here is replaced only where your account has one too.";
 
   if (!summary) {
     return {
@@ -160,8 +193,16 @@ export function describeMergeOptions(summary: MergeSummary | null): MergeOptionC
   keepBoth.push(keepSettings);
 
   const accountOnly: string[] = [];
-  if (localOnly) {
-    accountOnly.push("Removes from this device: " + localOnly + ". This can't be undone.");
+  const removed = bucketPhrase(
+    Object.assign({}, summary, {
+      concentrates: Object.assign({}, summary.concentrates, {
+        localOnly: summary.concentratesRemovedByAccountOnly,
+      }),
+    }),
+    "localOnly",
+  );
+  if (removed) {
+    accountOnly.push("Removes from this device: " + removed + ". This can't be undone.");
   } else {
     accountOnly.push("No recipe, starting water or concentrate is saved only on this device.");
   }
