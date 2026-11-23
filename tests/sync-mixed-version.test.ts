@@ -472,20 +472,34 @@ async function expectMixesNoWorse(
   const baseline = zero();
   const mixed = fleet.mixes.map(zero);
   const current = zero();
+  const currentByKind: Record<string, number> = {};
   for (let seed = 1; seed <= SEEDS; seed++) {
     const script = scriptFor(seed);
     addTo(baseline, await run(fleet.baseline, script));
     for (let m = 0; m < fleet.mixes.length; m++) {
       addTo(mixed[m]!, await run(fleet.mixes[m]!, script));
     }
-    if (report) addTo(current, await run(allCurrent, script));
+    if (report) {
+      const outcome = await run(allCurrent, script);
+      addTo(current, outcome);
+      // What the all-current fleet still loses, by kind of thing: these are
+      // the conflicts the merge settles on purpose, and worth reading.
+      outcome.lost.concat(outcome.missing, outcome.broughtBack).forEach((thing) => {
+        const kind = thing.slice(0, thing.indexOf(":"));
+        currentByKind[kind] = (currentByKind[kind] || 0) + 1;
+      });
+    }
   }
   if (report) {
     const rows: Array<[string, Totals]> = [[fleet.baseline.join(" + "), baseline]];
     fleet.mixes.forEach((mix, m) => rows.push([mix.join(" + "), mixed[m]!]));
     rows.push([allCurrent.join(" + "), current]);
     console.log(
-      label + "\n" + rows.map(([name, t]) => "  " + name + ": " + JSON.stringify(t)).join("\n"),
+      label +
+        "\n" +
+        rows.map(([name, t]) => "  " + name + ": " + JSON.stringify(t)).join("\n") +
+        "\n  all current, by kind: " +
+        JSON.stringify(currentByKind),
     );
   }
   for (let m = 0; m < fleet.mixes.length; m++) {
