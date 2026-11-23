@@ -280,7 +280,7 @@ export function showConfirm(
     unlockBodyScroll("confirm");
     yesBtn.removeEventListener("click", yesHandler);
     noBtn.removeEventListener("click", noHandler);
-    document.removeEventListener("keydown", keyHandler);
+    window.removeEventListener("keydown", keyHandler, true);
     overlay.removeEventListener("click", overlayClickHandler);
     if (inputWrap && inputWrap.parentNode) inputWrap.parentNode.removeChild(inputWrap);
     yesBtn.disabled = false;
@@ -297,12 +297,19 @@ export function showConfirm(
   function noHandler() {
     close();
   }
+  // The confirm is the top of the modal stack, so it owns Escape and Tab while
+  // it is open. It listens on window in the capture phase (ahead of every
+  // modal's document-level handler, capture or bubble) and stops the event
+  // there: otherwise Escape would also close the modal the confirm was opened
+  // from, and that modal's focus trap would fight this one.
   function keyHandler(e: KeyboardEvent) {
     if (e.key === "Escape") {
+      e.stopImmediatePropagation();
       noHandler();
       return;
     }
     if (e.key === "Tab") {
+      e.stopImmediatePropagation();
       const focusable: HTMLElement[] = input ? [input, yesBtn, noBtn] : [yesBtn, noBtn];
       const idx = focusable.indexOf(document.activeElement as HTMLElement);
       if (e.shiftKey) {
@@ -322,7 +329,7 @@ export function showConfirm(
 
   yesBtn.addEventListener("click", yesHandler);
   noBtn.addEventListener("click", noHandler);
-  document.addEventListener("keydown", keyHandler);
+  window.addEventListener("keydown", keyHandler, true);
   overlay.addEventListener("click", overlayClickHandler);
 }
 

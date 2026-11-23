@@ -1942,6 +1942,17 @@ select:focus {
   z-index: 200;
 }
 
+/* The showConfirm() dialog is always the top of the modal stack: it is opened
+   from inside other modals (Edit Minerals, the concentrate editors, the recipe
+   detail and edit modals) and must paint above whichever one opened it, no
+   matter which node comes first in the DOM. Keep this above every other
+   overlay z-index in this file (the highest are the 1000s: .rx-edit-overlay
+   and .login-modal-overlay). The other .confirm-overlay users (share prompt,
+   sign-in merge prompt) are not opened from a modal and stay at 200. */
+#confirm-overlay {
+  z-index: 1100;
+}
+
 .confirm-dialog {
   background: var(--surface);
   border: 1px solid var(--gray-200);
