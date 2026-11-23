@@ -29,7 +29,7 @@ Each run writes PNGs under `store/screenshots/<platform>/<device>/<NN-scene>.png
 | iOS | iPhone 15 Pro Max | 1290 × 2796 | 6.7" — REQUIRED for App Store submission |
 | iOS | iPhone 14 Plus | 1284 × 2778 | 6.5" — optional, accepted as the older-template fallback |
 | iOS | iPad Pro 12.9" | 2048 × 2732 | 12.9" — required tablet set for the Universal build |
-| Android | Phone (360 pt wide) | 1080 × 1920 | Phone screenshots: Play needs at least two, 9:16, and rejects one whose long side is over twice its short side (so not 1080 × 2400) |
+| Android | Phone (360 pt wide) | 1080 × 1920 | Phone screenshots: Play needs at least two, with the long side at most 2.3 times the short side. 9:16 at 1080 px or more is the shape it asks for to recommend an app |
 
 The 1024 × 500 Play Store feature graphic is NOT script-generated; it's a Figma export. See `store/android/full-description.md` for the launch-graphic source link once it exists.
 

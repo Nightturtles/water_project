@@ -49,10 +49,11 @@ const PREVIEW_URL = `http://localhost:${PREVIEW_PORT}`;
 //
 // iOS 6.7" is the modern required iPhone size; 6.5" remains as the fallback
 // for older review templates; iPad Pro 12.9" covers the required tablet set
-// for the Universal build. The Android phone set is 1080x1920 (9:16): Play
-// rejects a screenshot whose long side is more than twice its short side
-// (so not a 1080x2400 device frame), and 9:16 at 1080px is the shape it
-// asks for to feature an app. 360 points wide is a common Android width.
+// for the Universal build. The Android phone set is 1080x1920: Play allows
+// a long side up to 2.3x the short side, but 9:16 at 1080px or more is the
+// shape it asks for to recommend an app. It is captured at 360 points wide
+// (a common Android width) and scale 3, so the page lays out as a phone
+// rather than 1080 CSS px wide.
 const DEVICES = {
   ios: [
     { name: "iphone-15-pro-max-6.7", width: 430, height: 932, scale: 3 },
