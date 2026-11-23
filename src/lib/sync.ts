@@ -414,13 +414,16 @@ const PUSH_MERGE_MAX_ATTEMPTS = 3;
 // base, writes and records its snapshot as one step, and the next push of
 // that row starts only after it. The two rows queue separately.
 //
-// A queued push must not wait for ever on one that stalled, so every request
-// a row push makes is given up on after ROW_REQUEST_TIMEOUT_MS. Giving up
-// fails that push (its changes stay unsynced and the next push sends them);
-// it cannot cancel the request. If the stalled write lands later, the
-// condition on updated_at still holds it to the row it read.
+// A push waits for the one before it until that one's requests have settled,
+// however long that takes. Giving up on a slow request and letting the queue
+// move on was tried and removed: giving up cannot cancel the request, so a
+// write that had "timed out" could still land, after a later push had gone
+// out or been skipped as "nothing to send", leaving the row and the base
+// disagreeing with nothing marked unsynced. A request the browser itself
+// never settles therefore holds up that row's later pushes on this page (the
+// next page load starts a fresh queue, and logout's flush has its own time
+// limit and asks before discarding anything).
 const rowPushQueues: Record<string, Promise<unknown>> = {};
-const ROW_REQUEST_TIMEOUT_MS = 20000;
 
 function inRowPushQueue<T>(table: string, task: () => Promise<T>): Promise<T> {
   const next = (rowPushQueues[table] || Promise.resolve()).then(task, task);
@@ -429,19 +432,6 @@ function inRowPushQueue<T>(table: string, task: () => Promise<T>): Promise<T> {
     function () {},
   );
   return next;
-}
-
-// The request's own result, or { error } if it has not answered in time.
-function withinRowTimeout<T>(request: PromiseLike<T>, what: string): Promise<T | { error: Error }> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const gaveUp = new Promise<{ error: Error }>(function (resolve) {
-    timer = setTimeout(function () {
-      resolve({ error: new Error("[sync] timed out " + what) });
-    }, ROW_REQUEST_TIMEOUT_MS);
-  });
-  return Promise.race([Promise.resolve(request), gaveUp]).finally(function () {
-    clearTimeout(timer);
-  });
 }
 
 function sameValue(a: unknown, b: unknown): boolean {
@@ -584,19 +574,13 @@ async function pushSingleRow(
   base: Record<string, unknown> | null,
 ): Promise<{ error: unknown }> {
   const client = window.supabaseClient;
-  const wholeRow = function (): Promise<{ error: unknown }> {
-    return withinRowTimeout(
-      client.from(table).upsert(local, { onConflict: "user_id" }),
-      "saving " + table,
-    );
+  const wholeRow = function () {
+    return client.from(table).upsert(local, { onConflict: "user_id" });
   };
   if (!base) return wholeRow();
 
   for (let attempt = 0; attempt < PUSH_MERGE_MAX_ATTEMPTS; attempt++) {
-    const read: any = await withinRowTimeout(
-      client.from(table).select("*").eq("user_id", userId).maybeSingle(),
-      "reading " + table,
-    );
+    const read = await client.from(table).select("*").eq("user_id", userId).maybeSingle();
     if (read && read.error) return { error: read.error };
     const cloud = read && isPlainObject(read.data) ? read.data : null;
     if (!cloud) return wholeRow();
@@ -609,7 +593,7 @@ async function pushSingleRow(
       cloud.updated_at === null || cloud.updated_at === undefined
         ? write.is("updated_at", null)
         : write.eq("updated_at", cloud.updated_at);
-    const written: any = await withinRowTimeout(write.select("user_id"), "saving " + table);
+    const written = await write.select("user_id");
     if (written && written.error) return { error: written.error };
     if (written && Array.isArray(written.data) && written.data.length > 0) {
       return { error: null };
@@ -1267,11 +1251,12 @@ export async function pullFromCloud(options?: {
     kinds: Record<string, PushFieldKind>,
     held: { base: Record<string, unknown>; local: Record<string, unknown> } | null,
     after: Record<string, unknown>,
+    row: Record<string, unknown>,
   ): void {
     safeSetItem(
       baseKey,
       held
-        ? stableStringify(baseAfterUnsyncedPull(kinds, held.base, held.local, after))
+        ? stableStringify(baseAfterUnsyncedPull(kinds, held.base, held.local, after, row))
         : snapshotForCompare(after),
     );
   };
@@ -1281,6 +1266,7 @@ export async function pullFromCloud(options?: {
       SETTINGS_PUSH_KINDS,
       settingsHeldUnsynced,
       buildSettingsPayload(sessionUserId, ""),
+      settings,
     );
   }
   if (selections) {
@@ -1289,6 +1275,7 @@ export async function pullFromCloud(options?: {
       SELECTIONS_PUSH_KINDS,
       selectionsHeldUnsynced,
       buildSelectionsPayload(sessionUserId, ""),
+      selections,
     );
   }
 
@@ -1299,28 +1286,37 @@ export async function pullFromCloud(options?: {
 // pushed. `base` and `before` are the row's base and payload before the
 // apply, `after` the payload once the apply is done.
 //
-// A field (or, in a map, a key) this device had changed and still holds
-// unchanged after the apply survived it: the cloud had nothing to put there.
-// It keeps its old base, so the next push sees it as changed and sends it.
-// Everything else takes its value after the apply, as a pull's base refresh
-// always did: a value the pull brought in is the cloud's, not a local edit,
-// and must not be pushed back over whatever another writer sets next.
+// `cloud` is the row the pull read.
+//
+// A field (or, in a map, a key) survived the apply as an unpushed edit when
+// all three hold: this device had changed it, it is the same after the apply,
+// and the account does not hold that value. It keeps its old base, so the
+// next push sees it as changed and sends it. Everything else takes its value
+// after the apply, as a pull's base refresh always did. That covers a value
+// the pull brought in, and also an edit the account happened to hold already:
+// either way the value is the account's now, and must not be pushed back over
+// whatever another writer sets next.
 // Pure; exported for unit tests.
 export function baseAfterUnsyncedPull(
   kinds: Record<string, PushFieldKind>,
   base: Record<string, unknown>,
   before: Record<string, unknown>,
   after: Record<string, unknown>,
+  cloud: Record<string, unknown>,
 ): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   const put = function (target: Record<string, unknown>, key: string, value: unknown): void {
     if (value !== undefined) target[key] = value;
+  };
+  const survived = function (was: unknown, synced: unknown, now: unknown, account: unknown) {
+    return !sameValue(was, synced) && sameValue(now, was) && !sameValue(now, account);
   };
   Object.keys(after).forEach(function (field) {
     if (field === "updated_at") return;
     const a = after[field];
     const b = ownValue(base, field);
     const l = before[field];
+    const c = ownValue(cloud, field);
     if (field === "user_id" || sameValue(l, b)) {
       put(out, field, a);
       return;
@@ -1328,18 +1324,17 @@ export function baseAfterUnsyncedPull(
     if (ownValue(kinds, field) === "dict" && isPlainObject(a)) {
       const B = isPlainObject(b) ? b : {};
       const L = isPlainObject(l) ? l : {};
+      const C = isPlainObject(c) ? c : {};
       const map: Record<string, unknown> = {};
       new Set([...Object.keys(a), ...Object.keys(B)]).forEach(function (k) {
         const ak = ownValue(a, k);
-        const lk = ownValue(L, k);
         const bk = ownValue(B, k);
-        const survived = !sameValue(lk, bk) && sameValue(ak, lk);
-        put(map, k, survived ? bk : ak);
+        put(map, k, survived(ownValue(L, k), bk, ak, ownValue(C, k)) ? bk : ak);
       });
       out[field] = map;
       return;
     }
-    put(out, field, sameValue(a, l) ? b : a);
+    put(out, field, survived(l, b, a, c) ? b : a);
   });
   return out;
 }

@@ -208,6 +208,8 @@ function applyAiAppWrite(step: Step): {
   effect: "add" | "remove" | "none";
   // Set when the write made a recipe the active one.
   activeRecipe?: string;
+  // Set when the write chose the active source water.
+  sourceWater?: { key: string; calcium: number };
 } {
   const key = step.key!;
   let effect: "add" | "remove" | "none" = "none";
@@ -262,7 +264,11 @@ function applyAiAppWrite(step: Step): {
     row.source_preset = "volvic";
     row.source_water = { ...(row.source_water || {}), calcium: step.value };
   });
-  return { thing: "source-water", effect: "none" };
+  return {
+    thing: "source-water",
+    effect: "none",
+    sourceWater: { key: "volvic", calcium: step.value! },
+  };
 }
 
 type Outcome = {
@@ -289,10 +295,11 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
   const added = new Set<string>();
   const removed = new Set<string>();
   let chosenActiveRecipe: string | null = null;
+  let chosenSourceWater: { key: string; calcium: number } | null = null;
   const trace: string[] = [];
   for (const step of script) {
     if (step.device < 0) {
-      const { thing, effect, activeRecipe } = applyAiAppWrite(step);
+      const { thing, effect, activeRecipe, sourceWater } = applyAiAppWrite(step);
       if (effect !== "none") {
         lastAction[thing] = effect;
         (effect === "add" ? added : removed).add(thing);
@@ -302,6 +309,10 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
       // from the rail: making a recipe active that is already on the rail
       // changes nothing there.
       if (activeRecipe) chosenActiveRecipe = activeRecipe;
+      // The source water it chose stands until a device edits the Starting
+      // Water after it (below). Devices all agreeing on some other water is
+      // convergence, not the choice surviving, so it is counted on its own.
+      if (sourceWater) chosenSourceWater = sourceWater;
       trace.push(`AI app ${step.op} ${step.key ?? ""} ${step.value ?? ""} -> ${effect}`);
       continue;
     }
@@ -314,6 +325,8 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
       act(d, () => {
         effect = applyAction(step);
       });
+      // A deliberate edit of the Starting Water after the AI app's choice.
+      if (step.op === "source-water") chosenSourceWater = null;
       if (effect !== "none") {
         const thing =
           (step.op === "save" || step.op === "delete" ? "recipe" : step.op) + ":" + step.key;
@@ -373,6 +386,13 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
         chosenActiveRecipe &&
           storage.loadTargetPresetName(storage.loadBrewMethod()) !== chosenActiveRecipe
           ? ["active-recipe:" + chosenActiveRecipe]
+          : [],
+      )
+      .concat(
+        chosenSourceWater &&
+          (storage.loadSourcePresetName() !== chosenSourceWater.key ||
+            storage.loadSourceWater().calcium !== chosenSourceWater.calcium)
+          ? ["source-water:" + chosenSourceWater.key]
           : [],
       ),
     broughtBack: things.filter((t) => lastAction[t] === "remove" && exists(t)),

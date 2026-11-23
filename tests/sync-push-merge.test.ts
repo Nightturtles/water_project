@@ -232,7 +232,8 @@ describe("baseAfterUnsyncedPull", () => {
     base: Record<string, unknown>,
     before: Record<string, unknown>,
     after: Record<string, unknown>,
-  ) => baseAfterUnsyncedPull(SETTINGS_PUSH_KINDS, base, before, after);
+    cloudRow: Record<string, unknown>,
+  ) => baseAfterUnsyncedPull(SETTINGS_PUSH_KINDS, base, before, after, cloudRow);
 
   test("with nothing surviving, it is the payload after the pull", () => {
     const after = { user_id: "u", theme: "light", selected_minerals: ["a"], drafts: {} };
@@ -240,6 +241,7 @@ describe("baseAfterUnsyncedPull", () => {
       next(
         { theme: "dark", selected_minerals: ["a"], drafts: {} },
         { ...after, theme: "dark" },
+        after,
         after,
       ),
     ).toEqual(after);
@@ -253,17 +255,48 @@ describe("baseAfterUnsyncedPull", () => {
         { theme: "dark", creator_display_name: "Kyle" },
         // The pull brought a new theme; the cloud's name was empty, so the edit stayed.
         { theme: "light", creator_display_name: "Kyle" },
+        { theme: "light", creator_display_name: "" },
       ),
     ).toEqual({ theme: "light", creator_display_name: "" });
   });
 
   test("a local edit the pull overwrote advances with it", () => {
     expect(
-      next({ brew_method: "filter" }, { brew_method: "espresso" }, { brew_method: "filter" }),
+      next(
+        { brew_method: "filter" },
+        { brew_method: "espresso" },
+        { brew_method: "filter" },
+        { brew_method: "filter" },
+      ),
     ).toEqual({ brew_method: "filter" });
     expect(
-      next({ theme: "system" }, { theme: "light" }, { theme: "dark", updated_at: "x" }),
+      next(
+        { theme: "system" },
+        { theme: "light" },
+        { theme: "dark", updated_at: "x" },
+        { theme: "dark" },
+      ),
     ).toEqual({ theme: "dark" });
+  });
+
+  test("an edit the account already held is the account's value, not an unsynced one", () => {
+    // Saved here while the pull was fetching; the row it read held the same.
+    expect(
+      next(
+        { mineral_display_mode: "standard" },
+        { mineral_display_mode: "advanced" },
+        { mineral_display_mode: "advanced" },
+        { mineral_display_mode: "advanced" },
+      ),
+    ).toEqual({ mineral_display_mode: "advanced" });
+    expect(
+      next(
+        { volume_preferences: {} },
+        { volume_preferences: { recipe: { value: "750" } } },
+        { volume_preferences: { recipe: { value: "750" } } },
+        { volume_preferences: { recipe: { value: "750" } } },
+      ),
+    ).toEqual({ volume_preferences: { recipe: { value: "750" } } });
   });
 
   test("maps go key by key: a surviving new key stays unsynced, pulled keys advance", () => {
@@ -272,6 +305,7 @@ describe("baseAfterUnsyncedPull", () => {
         { volume_preferences: { calculator: { value: "1" } } },
         { volume_preferences: { calculator: { value: "1" }, recipe: { value: "750" } } },
         { volume_preferences: { calculator: { value: "2" }, recipe: { value: "750" } } },
+        { volume_preferences: { calculator: { value: "2" } } },
       ),
     ).toEqual({ volume_preferences: { calculator: { value: "2" } } });
   });
@@ -282,12 +316,23 @@ describe("baseAfterUnsyncedPull", () => {
         { drafts: { a: { v: 1 }, b: { v: 1 } } },
         { drafts: { b: { v: 1 } } },
         { drafts: { b: { v: 2 } } },
+        // The account still holds `a`.
+        { drafts: { a: { v: 1 }, b: { v: 2 } } },
       ),
     ).toEqual({ drafts: { a: { v: 1 }, b: { v: 2 } } });
+    // Deleted here and gone from the account too: nothing left to push.
+    expect(
+      next(
+        { drafts: { a: { v: 1 }, b: { v: 1 } } },
+        { drafts: { b: { v: 1 } } },
+        { drafts: { b: { v: 2 } } },
+        { drafts: { b: { v: 2 } } },
+      ),
+    ).toEqual({ drafts: { b: { v: 2 } } });
   });
 
   test("a field with no base that survived stays without one", () => {
-    expect(next({}, { theme: "light" }, { theme: "light" })).toEqual({});
+    expect(next({}, { theme: "light" }, { theme: "light" }, {})).toEqual({});
   });
 });
 
@@ -866,36 +911,47 @@ describe("a second push of a row while the first is still out waits its turn", (
     expect(settingsRow().mineral_display_mode).not.toBe("advanced");
   });
 
-  test("a request that never answers is given up on, and the next push gets its turn", async () => {
+  test("a slow request is waited for, not given up on: the next push goes out after it", async () => {
     await syncedDevice();
-    // The first settings read hangs for good.
+    // The first settings read answers only when released.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
     const from = g.window.supabaseClient.from;
-    let hung = false;
+    let slowed = false;
     g.window.supabaseClient.from = (name: string) => {
       const t = from(name);
-      if (name !== "user_settings" || hung) return t;
+      if (name !== "user_settings") return t;
       const select = t.select;
       t.select = (...args: unknown[]) => {
-        if (hung) return select(...args);
-        hung = true;
-        const q: any = { eq: () => q, maybeSingle: () => new Promise(() => {}) };
+        const q = select(...args);
+        if (slowed) return q;
+        slowed = true;
+        const maybeSingle = q.maybeSingle;
+        q.maybeSingle = async () => {
+          await gate;
+          return maybeSingle();
+        };
         return q;
       };
       return t;
     };
     storage.saveBrewMethod("espresso");
     const first = pushAllToCloud();
-    const firstFailed = expect(first).rejects.toThrow(/failed to upsert/);
     await flush();
+    storage.saveBrewMethod("filter");
+    storage.saveMineralDisplayMode("advanced");
     const second = pushAllToCloud();
     await flush();
-    expect(settingsWrites(), "nothing can be written while the first is stuck").toBe(0);
+    // However long it takes: no time limit moves the queue on with a request
+    // still out, because a request that was given up on can still land.
+    vi.advanceTimersByTime(10 * 60 * 1000);
+    await flush();
+    expect(settingsWrites(), "nothing is written while the first is still out").toBe(0);
 
-    vi.advanceTimersByTime(20000);
-    await firstFailed;
-    await second;
-    expect(settingsWrites()).toBe(1);
-    expect(settingsRow().brew_method).toBe("espresso");
+    release();
+    await Promise.all([first, second]);
+    expect(settingsRow().brew_method).toBe("filter");
+    expect(settingsRow().mineral_display_mode).toBe("advanced");
     expect(hasUnpushedChanges()).toBe(false);
   });
 });
@@ -958,23 +1014,51 @@ describe("a pull that applies over changes this device has not pushed", () => {
     expect(JSON.stringify(settingsRow().volume_preferences)).toContain("750");
   });
 
-  test("a local edit the pull overwrote is not resurrected by the next push", async () => {
+  const settingsWritesLogged = () => cloud.log.filter((l) => / user_settings/.test(l));
+
+  test("a local edit the pull overwrote is not sent again by the next push", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    expect(settingsRow().mineral_display_mode).toBe("standard");
+    // Saved mid-pull, then overwritten: the pull applies the account's "standard".
+    duringNextSettingsRead(() => storage.saveMineralDisplayMode("advanced"));
+    await pullFromCloud();
+    expect(storage.loadMineralDisplayMode()).toBe("standard");
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // Another device now chooses "advanced". This device has nothing to push
+    // and must not send its "standard" back.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.mineral_display_mode = "advanced";
+    });
+    cloud.log.length = 0;
+    await pushAllToCloud();
+    expect(settingsWritesLogged()).toEqual([]);
+    expect(settingsRow().mineral_display_mode).toBe("advanced");
+  });
+
+  test("an edit the pull's row already held is not left marked unsynced", async () => {
     newCloud();
     const [a] = await makeDevices(["current"]);
     use(a!);
     cloud.outsideWrite("user_settings", (row) => {
-      row.brew_method = "espresso";
       row.mineral_display_mode = "advanced";
     });
-    // Saved mid-pull, then overwritten by the pull (the cloud holds a value).
+    // Saved here mid-pull; the row the pull read holds the same value.
     duringNextSettingsRead(() => storage.saveMineralDisplayMode("advanced"));
     await pullFromCloud();
+    expect(storage.loadMineralDisplayMode()).toBe("advanced");
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // Another device goes back to "standard": this device must not undo that.
     cloud.outsideWrite("user_settings", (row) => {
-      row.brew_method = "filter";
+      row.mineral_display_mode = "standard";
     });
     cloud.log.length = 0;
     await pushAllToCloud();
-    expect(settingsRow().brew_method).toBe("filter");
+    expect(settingsWritesLogged()).toEqual([]);
+    expect(settingsRow().mineral_display_mode).toBe("standard");
   });
 
   test("a device with no base still adopts the account's rows and has nothing to push", async () => {
