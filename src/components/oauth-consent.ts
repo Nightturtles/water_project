@@ -5,7 +5,8 @@
 //   /oauth/consent?authorization_id=<id>
 // The page shows who is asking and what they will be able to do, then approves
 // or denies the request. Opened with no authorization_id it lists the apps
-// already connected and lets the user disconnect them.
+// already connected, lets the user disconnect them, and lets the user allow
+// abilities that were added after an app was connected.
 //
 // This is its own module entry and deliberately does NOT load
 // legacy-globals.ts: the page needs the Supabase client and nothing else, and
@@ -20,6 +21,7 @@ import {
   consentReturnPath,
   rememberPostLoginRedirect,
 } from "../lib/post-login-redirect";
+import { abilitiesNotYetApproved, SHOWN_ABILITIES_VERSION } from "../lib/consent-abilities";
 
 type View = "loading" | "request" | "apps" | "message";
 
@@ -87,12 +89,56 @@ async function bestEffort(call: PromiseLike<unknown>): Promise<void> {
 
 async function recordApproval(clientId: string): Promise<void> {
   if (!clientId) return;
-  await bestEffort(supabaseClient.rpc("mcp_record_app_consent", { p_client_id: clientId }));
+  // Refused when this page shows a different list from the database's current
+  // one; the app then counts as approved for the first version only.
+  await bestEffort(
+    supabaseClient.rpc("mcp_record_app_consent", {
+      p_client_id: clientId,
+      p_shown_version: SHOWN_ABILITIES_VERSION,
+    }),
+  );
 }
 
 async function forgetApproval(clientId: string): Promise<void> {
   if (!clientId) return;
   await bestEffort(supabaseClient.rpc("mcp_forget_app_consent", { p_client_id: clientId }));
+}
+
+/**
+ * The version each connected app was approved at, and the current version.
+ * Null when either cannot be read: the list then shows no "Allow new
+ * abilities" button, and nothing else on the page depends on it.
+ */
+async function loadApprovals(): Promise<{ current: number; byClient: Map<string, number> } | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const read = Promise.all([
+      supabaseClient.rpc("mcp_abilities_version"),
+      supabaseClient.from("mcp_app_consent").select("client_id, abilities_version"),
+    ]);
+    const result = await Promise.race([
+      read,
+      new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), CONSENT_RECORD_TIMEOUT_MS);
+      }),
+    ]);
+    if (!result) return null;
+    const [version, rows] = result;
+    if (version.error || rows.error || typeof version.data !== "number") return null;
+    // This build can only describe, and so only ask about, its own list. When
+    // the database's list differs (this page is older or newer than it), the
+    // button is not offered; the database would refuse the approval anyway.
+    if (version.data !== SHOWN_ABILITIES_VERSION) return null;
+    const byClient = new Map<string, number>();
+    for (const row of (rows.data || []) as { client_id: string; abilities_version: number }[]) {
+      byClient.set(row.client_id, row.abilities_version);
+    }
+    return { current: version.data, byClient };
+  } catch (_) {
+    return null;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 async function loadRequest(authorizationId: string): Promise<void> {
@@ -157,7 +203,10 @@ async function loadConnectedApps(): Promise<void> {
   const list = el("consent-apps-list");
   const empty = el("consent-apps-empty");
   const errorEl = el("consent-apps-error");
-  const { data, error } = await supabaseClient.auth.oauth.listGrants();
+  const [{ data, error }, approvals] = await Promise.all([
+    supabaseClient.auth.oauth.listGrants(),
+    loadApprovals(),
+  ]);
   show("apps");
   list.textContent = "";
   errorEl.textContent = "";
@@ -198,8 +247,53 @@ async function loadConnectedApps(): Promise<void> {
       await forgetApproval(grant.client.id);
       void loadConnectedApps();
     });
+    const actions = document.createElement("div");
+    actions.className = "consent-app-row-actions";
+    // An app with no record was approved before records were kept: version 1.
+    const missing = approvals
+      ? abilitiesNotYetApproved(approvals.byClient.get(grant.client.id) || 1, approvals.current)
+      : [];
+    if (missing.length > 0) {
+      const note = document.createElement("span");
+      note.className = "consent-app-row-new";
+      note.textContent =
+        "Added since you connected this app, and not allowed for it yet: " +
+        missing.join("; ") +
+        ".";
+      info.appendChild(note);
+      const allowBtn = document.createElement("button");
+      allowBtn.type = "button";
+      allowBtn.className = "consent-disconnect-btn consent-allow-new-btn";
+      allowBtn.textContent = "Allow new abilities";
+      allowBtn.addEventListener("click", async () => {
+        allowBtn.disabled = true;
+        errorEl.textContent = "";
+        let failure: string | null;
+        try {
+          const res = await supabaseClient.rpc("mcp_record_app_consent", {
+            p_client_id: grant.client.id,
+            p_shown_version: SHOWN_ABILITIES_VERSION,
+          });
+          failure = !res.error
+            ? null
+            : res.error.code === "MCA02"
+              ? "The list of abilities has changed. Reload this page and try again."
+              : "Could not allow the new abilities. Please try again.";
+        } catch (_) {
+          failure = "Could not allow the new abilities. Please try again.";
+        }
+        if (failure) {
+          allowBtn.disabled = false;
+          errorEl.textContent = failure;
+          return;
+        }
+        void loadConnectedApps();
+      });
+      actions.appendChild(allowBtn);
+    }
+    actions.appendChild(btn);
     row.appendChild(info);
-    row.appendChild(btn);
+    row.appendChild(actions);
     list.appendChild(row);
   }
 }

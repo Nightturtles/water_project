@@ -190,7 +190,8 @@ select lives_ok(
 -- ===========================================================================
 -- What each connected app was approved for
 -- ===========================================================================
-select is(public.mcp_abilities_version(), 1, 'the ability list is at version 1');
+select is(public.mcp_abilities_version(), 2,
+  'the ability list is at version 2 (raised by 20261123180000_mcp_set_selections.sql)');
 
 -- A connected app cannot approve itself, forget an approval, or read them.
 set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"test-client"}';
@@ -212,12 +213,29 @@ select is(public.mcp_app_allows(null), false, 'a missing version is refused');
 -- The user approves the app from the consent page (a first-party session).
 set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated"}';
 select is(public.mcp_app_allows(2), true, 'the app itself is never gated');
-select is(public.mcp_record_app_consent('test-client'), 1, 'the user''s approval is recorded at the current version');
+select is(public.mcp_record_app_consent('test-client', 2), 2, 'the user''s approval is recorded at the current version');
 select is(
-  (select abilities_version from public.mcp_app_consent where client_id = 'test-client'), 1,
+  (select abilities_version from public.mcp_app_consent where client_id = 'test-client'), 2,
   'the user can read their own approval');
 select throws_ok(
-  $$ select public.mcp_record_app_consent('') $$,
+  $$ select public.mcp_record_app_consent('stale-page-client', 1) $$,
+  'MCA02', null, 'an approval from a page that showed an older list is refused');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client', 3) $$,
+  'MCA02', null, 'and one from a page that showed a list the database does not have yet');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client') $$,
+  'MCA02', null, 'an approval that does not say which list was shown is refused');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('stale-page-client', null) $$,
+  'MCA02', null, 'and so is one with a null version');
+select is(
+  (select count(*)::integer from public.mcp_app_consent where client_id = 'stale-page-client'), 0,
+  'none of them wrote an approval');
+select is(public.mcp_record_app_consent('test-client', 2), 2,
+  'an approval that names the current list is recorded');
+select throws_ok(
+  $$ select public.mcp_record_app_consent('', 2) $$,
   '22023', null, 'an empty client id is refused');
 select throws_ok(
   $$ insert into public.mcp_app_consent (user_id, client_id, abilities_version)
@@ -225,17 +243,21 @@ select throws_ok(
   '42501', null, 'the table is not writable directly, even by the user');
 
 set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"test-client"}';
-select is(public.mcp_app_allows(2), false, 'an approval at version 1 does not cover a version 2 ability');
+select is(public.mcp_app_allows(2), true, 'an approval at version 2 covers a version 2 ability');
 select is((select count(*)::integer from public.mcp_app_consent), 0,
   'a connected app cannot read approvals');
 
--- Once the user has approved at version 2 (set here as the table owner: the
--- recording function only ever writes the current version).
+-- An approval given when the list was at version 1 (set here as the table
+-- owner: the recording function only ever writes the current version).
+reset role;
+update public.mcp_app_consent set abilities_version = 1
+ where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and client_id = 'test-client';
+set local role authenticated;
+select is(public.mcp_app_allows(2), false, 'an approval at version 1 does not cover a version 2 ability');
 reset role;
 update public.mcp_app_consent set abilities_version = 2
  where user_id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa' and client_id = 'test-client';
 set local role authenticated;
-select is(public.mcp_app_allows(2), true, 'an approval at version 2 covers a version 2 ability');
 select is(public.mcp_app_allows(3), false, 'but not a version 3 one');
 
 set local request.jwt.claims = '{"sub":"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa","role":"authenticated","client_id":"another-client"}';

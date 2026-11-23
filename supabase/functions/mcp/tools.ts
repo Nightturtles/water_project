@@ -8,6 +8,9 @@
 // Phase 2 adds concentrates: derive a formula from a recipe, and create or
 // change a Recipe Concentrate or Mineral Concentrate, one at a time, through
 // the database function public.mcp_save_concentrate.
+// Phase 3 adds the active selections: switch a mineral or a concentrate on or
+// off, and choose the active recipe and source water, each through its own
+// database function (20261123180000_mcp_set_selections.sql).
 // There is no tool that publishes, deletes, or changes a published recipe,
 // and supabase/migrations/20261122200921_restrict_oauth_client_access.sql
 // refuses those at the database for any AI-app login, tool or no tool.
@@ -34,6 +37,8 @@ import {
   buildSourceValues,
   buildStockSpec,
   calciumChlorideFormFor,
+  concentrateName,
+  concentrateSwitchOnProblem,
   cleanDescription,
   cleanName,
   DESCRIPTION_MAX,
@@ -60,6 +65,7 @@ import {
   pickProfileKey,
   pickStockKey,
   pickVerifiedProfileKey,
+  recipeActivationProblem,
   recipeDetail,
   recipeReadOnlyReason,
   recipeSummary,
@@ -67,6 +73,7 @@ import {
   rowIons,
   quotaError,
   saveConcentrateError,
+  selectionError,
   type SourceRow,
   sourceWaterView,
   STOCK_MINERALS_MAX,
@@ -101,9 +108,10 @@ const INSTRUCTIONS = [
   "Recipes saved here are always private. Publishing a recipe to the public Recipe Library, and deleting anything, can only be done by the user in the Cafelytic app.",
   "Published and library recipes are read-only here: to change one, save a new private recipe with create_recipe.",
   "Every write returns the app's own range findings for the saved water; relay any warn or danger finding to the user.",
-  "A concentrate saved here is added to the user's Settings but is NOT switched on: the user enables it in the Cafelytic app. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
-  "Saves from connected AI apps are limited to 100 per user per day; if a save is refused for that reason, tell the user and do not retry it.",
-  "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates they enabled in the app. Do not work doses out yourself.",
+  "A concentrate saved here is added to the user's Settings but is NOT switched on by saving it. After saving one, tell the user to check that it appears in the app; if the app had unsynced changes on another device it can be missing, and saving it again fixes that. Concentrates cannot be deleted from here.",
+  "Saves and changes from connected AI apps are limited to 100 per user per day; if one is refused for that reason, tell the user and do not retry it.",
+  "To tell the user how much of each mineral or concentrate to add, use calculate_doses: it runs the Cafelytic calculator's own math with the minerals and concentrates that are switched on. Do not work doses out yourself.",
+  "set_mineral_enabled, set_concentrate_enabled, set_active_recipe and set_active_source_water change what the user's Cafelytic app is set to on every device, so the doses the app shows change with them. Use them only when the user asked for that change or agreed to it; to try something out, pass a recipe, source water or minerals to calculate_doses instead, which changes nothing. After one of them, ask the user to check the app: a device that had unsynced changes can put the old selection back, and making the change again fixes that.",
 ].join(" ");
 
 function ok(payload: unknown) {
@@ -546,7 +554,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
           throw new ToolError(
             minerals
               ? "Those minerals include no alkalinity source. Add baking-soda or potassium-bicarbonate."
-              : "The minerals enabled in the app include no alkalinity source, and the calculator needs one. The user can enable Baking Soda or Potassium Bicarbonate in the app's Settings, or pass `minerals` including baking-soda or potassium-bicarbonate.",
+              : "The minerals enabled in the app include no alkalinity source, and the calculator needs one. If the user wants one switched on, use set_mineral_enabled with baking-soda or potassium-bicarbonate; or pass `minerals` including one of them to try it without changing anything.",
           );
         }
         if (result.status !== "ok" || !result.finalIons) {
@@ -888,7 +896,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
   }
 
   const SAVED_NOTE =
-    "Saved to the user's Cafelytic Settings. It is not switched on: the user enables it in the app. Ask them to check it appears there; if it is missing (the app had unsynced changes on another device), save it again.";
+    "Saved to the user's Cafelytic Settings. It is not switched on. If the user wants to dose with it, switch it on with set_concentrate_enabled (or they can in the app). Ask them to check it appears in the app; if it is missing (the app had unsynced changes on another device), save it again.";
   const CHANGED_ENABLED_NOTE =
     "Saved. This concentrate is switched on in the app: the calculator will use the new values once the app has synced. Ask the user to check the concentrate and the doses in the app.";
 
@@ -988,7 +996,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     {
       title: "Create Recipe Concentrate",
       description:
-        `Save a new Recipe Concentrate to the user's Cafelytic Settings: one bottle holding several minerals, dosed in mL per liter of water. It is saved but not switched on; the user enables it in the app. The name must be new (max ${NAME_MAX} characters). Use derive_concentrate_formula first to get a formula for a recipe.`,
+        `Save a new Recipe Concentrate to the user's Cafelytic Settings: one bottle holding several minerals, dosed in mL per liter of water. It is saved but not switched on: switch it on with set_concentrate_enabled if the user wants to dose with it. The name must be new (max ${NAME_MAX} characters). Use derive_concentrate_formula first to get a formula for a recipe.`,
       inputSchema: z.object({
         name: z.string().min(1).max(NAME_MAX),
         minerals: mineralEntries,
@@ -1095,7 +1103,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     {
       title: "Save Mineral Concentrate",
       description:
-        "Create or change the user's Mineral Concentrate for one mineral: that mineral dissolved in a bottle, dosed by mL or drops. Each mineral has at most one. If one exists, only the fields sent are changed, and the reply shows the values before. A new one is saved but not switched on; the user enables it in the app. If it is already switched on, the calculator's doses change, so confirm with the user first.",
+        "Create or change the user's Mineral Concentrate for one mineral: that mineral dissolved in a bottle, dosed by mL or drops. Each mineral has at most one. If one exists, only the fields sent are changed, and the reply shows the values before. A new one is saved but not switched on: switch it on with set_concentrate_enabled if the user wants to dose with it. If it is already switched on, the calculator's doses change, so confirm with the user first.",
       inputSchema: z.object({
         mineral_id: z.enum(MINERAL_IDS).describe("Mineral id from list_minerals."),
         bottle_ml: bottleMl.optional().describe("Bottle size in mL. Required for a new one."),
@@ -1140,6 +1148,230 @@ export function buildServer(supabase: Db, userId: string): McpServer {
             concentrate: diyView(mineral_id, saved.spec as unknown as DiySpec, enabled),
           };
         });
+      }),
+  );
+
+  // -------------------------------------------------------------------------
+  // Active selections: minerals, concentrates, recipe, source water (phase 3)
+  // -------------------------------------------------------------------------
+
+  /** Call one of the mcp_set_* database functions. */
+  async function setSelection<T>(fn: string, args: Record<string, unknown>): Promise<T> {
+    const result = await supabase.rpc(fn, args);
+    if (result.error) throw selectionError(result.error);
+    return result.data as T;
+  }
+
+  const SWITCH_NOTE =
+    "calculate_doses uses this from now on, and the app's calculator does once the app has synced. Ask the user to check it in the app; if it has gone back (the app had unsynced changes on another device), make the change again.";
+  const NO_CHANGE_NOTE = "It was already set that way, so nothing changed.";
+  const switchAnnotations = {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false,
+  };
+
+  server.registerTool(
+    "set_mineral_enabled",
+    {
+      title: "Switch a mineral on or off",
+      description:
+        "Switch one mineral powder on or off in the user's Cafelytic app. The calculator doses only with the minerals and concentrates that are switched on, so this changes the doses the app shows on every device. Use it only when the user asked for it or agreed to it; to try a set of minerals without changing anything, pass `minerals` to calculate_doses instead. The reply lists every mineral that is now on.",
+      inputSchema: z.object({
+        mineral_id: z.enum(MINERAL_IDS).describe("Mineral id from list_minerals."),
+        enabled: z.boolean().describe("true switches it on, false switches it off."),
+      }),
+      annotations: switchAnnotations,
+    },
+    ({ mineral_id, enabled }) =>
+      run(async () => {
+        const saved = await setSelection<{ changed: boolean; selected: unknown }>(
+          "mcp_set_enabled",
+          { p_kind: "mineral", p_id: mineral_id, p_enabled: enabled },
+        );
+        return {
+          saved: true,
+          changed: saved.changed,
+          note: saved.changed ? SWITCH_NOTE : NO_CHANGE_NOTE,
+          mineral: {
+            id: mineral_id,
+            name: (MINERAL_DB as Record<string, { name: string }>)[mineral_id].name,
+            enabled,
+          },
+          enabled_minerals: asStringArray(saved.selected),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "set_concentrate_enabled",
+    {
+      title: "Switch a concentrate on or off",
+      description:
+        "Switch one concentrate on or off in the user's Cafelytic app, by id from list_concentrates (stock:... is a Recipe Concentrate, diy:... a Mineral Concentrate, brand:... a ready-made one). The calculator doses with the concentrates that are switched on, so this changes the doses the app shows on every device. Use it only when the user asked for it or agreed to it. Only a concentrate that exists and is fully set up can be switched on. Several can be on at once, as in the app. The reply lists every concentrate that is now on.",
+      inputSchema: z.object({
+        id: z.string().min(1).max(80).describe(
+          "Concentrate id from list_concentrates, like stock:my-bottle, diy:epsom-salt or brand:lotus:calcium.",
+        ),
+        enabled: z.boolean().describe("true switches it on, false switches it off."),
+      }),
+      annotations: switchAnnotations,
+    },
+    ({ id, enabled }) =>
+      run(async () => {
+        const settings = await loadConcentrateSettings();
+        if (enabled) {
+          const problem = concentrateSwitchOnProblem(id, settings);
+          if (problem) throw new ToolError(problem);
+        } else if (!settings.selected.has(id)) {
+          return {
+            saved: true,
+            changed: false,
+            note: "That concentrate is not switched on, so nothing changed.",
+            concentrate: { id, name: concentrateName(id, settings), enabled: false },
+            enabled_concentrates: [...settings.selected],
+          };
+        }
+        const saved = await setSelection<{ changed: boolean; selected: unknown }>(
+          "mcp_set_enabled",
+          { p_kind: "concentrate", p_id: id, p_enabled: enabled },
+        );
+        return {
+          saved: true,
+          changed: saved.changed,
+          note: saved.changed ? SWITCH_NOTE : NO_CHANGE_NOTE,
+          concentrate: { id, name: concentrateName(id, settings), enabled },
+          enabled_concentrates: asStringArray(saved.selected),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "set_active_recipe",
+    {
+      title: "Set the active recipe",
+      description:
+        "Make one recipe the active one in the user's Cafelytic app: the recipe the Calculator opens on, on every device. Works for the user's own recipes and for official library recipes (a library recipe is added to the user's recipe list if it is not on it). If the recipe is for the other brew method (filter or espresso), the app's brew method is switched to match, because the app only shows a recipe in its own mode; the reply says when that happened. Another user's community recipe cannot be made active. Use this only when the user asked for it or agreed to it: calculate_doses can work out any recipe by recipe_id without changing what is active.",
+      inputSchema: z.object({ recipe_id: uuid.describe("Recipe id from list_recipes.") }),
+      annotations: switchAnnotations,
+    },
+    ({ recipe_id }) =>
+      run(async () => {
+        const [recipeResult, mine, selections, draftsResult] = await Promise.all([
+          supabase.from("target_profiles").select(TARGET_COLUMNS).eq("id", recipe_id)
+            .maybeSingle(),
+          supabase.from("target_profiles").select("slug").eq("user_id", userId),
+          loadSelections(),
+          supabase.from("user_settings").select("drafts").eq("user_id", userId).maybeSingle(),
+        ]);
+        const row = check(recipeResult) as TargetRow | null;
+        if (!row) throw new ToolError("No recipe with that id is visible to this account.");
+        const problem = recipeActivationProblem(row, userId, {
+          deletedTargets: selections.deletedTargets,
+          mySlugs: (check(mine) as { slug: string }[]).map((r) => r.slug),
+        });
+        if (problem) throw new ToolError(`"${row.label}" cannot be made active here. ${problem}`);
+        const saved = await setSelection<{
+          changed: boolean;
+          previous: string | null;
+          added_to_rail: boolean;
+          brew_method: string | null;
+          brew_method_changed: boolean;
+        }>("mcp_set_active_recipe", { p_recipe_id: recipe_id });
+        // Read for a note only: the change is already saved, so a failed read
+        // must not turn the reply into an error.
+        const drafts = draftsResult.error
+          ? {}
+          : obj(obj((draftsResult.data as { drafts?: unknown } | null)?.drafts).target_draft_ions);
+        const notes = [
+          saved.changed
+            ? "The app opens on this recipe once it has synced; a page that is already open may need a reload. Ask the user to check the app; if it has gone back (the app had unsynced changes on another device), set it again."
+            : "It was already the active recipe.",
+        ];
+        if (saved.added_to_rail) {
+          notes.push("It was added to the user's recipe list in the app.");
+        }
+        if (saved.brew_method_changed) {
+          notes.push(
+            `The app's brew method was switched to ${saved.brew_method}, because this is ${
+              saved.brew_method === "espresso" ? "an espresso" : "a filter"
+            } recipe. Tell the user.`,
+          );
+        }
+        if (Object.prototype.hasOwnProperty.call(drafts, row.slug)) {
+          notes.push(
+            "The app holds unsaved edits to this recipe's target values and will show those until the user saves or discards them.",
+          );
+        }
+        return {
+          saved: true,
+          changed: saved.changed,
+          note: notes.join(" "),
+          previous_recipe_key: saved.previous,
+          added_to_recipe_list: saved.added_to_rail,
+          brew_method_switched_to: saved.brew_method_changed ? saved.brew_method : null,
+          recipe: recipeSummary(row, userId, row.slug),
+        };
+      }),
+  );
+
+  server.registerTool(
+    "set_active_source_water",
+    {
+      title: "Set the active source water",
+      description:
+        "Make one source water the active one in the user's Cafelytic app: the starting water the Calculator doses from, on every device. Works for the user's saved source waters and the built-in ones, by id or key from list_source_waters. The app's Starting Water fields are set to that water's saved values, so values the user typed there without saving are replaced; the reply shows what was there before. Use this only when the user asked for it or agreed to it: calculate_doses can use any source water by id or key without changing what is active.",
+      inputSchema: z.object({
+        source_water_id: uuid.optional().describe("A saved source water, from list_source_waters."),
+        source_water_key: z.string().min(1).max(60).optional().describe(
+          "A source water by key from list_source_waters, such as distilled.",
+        ),
+      }),
+      annotations: { ...switchAnnotations, destructiveHint: true },
+    },
+    ({ source_water_id, source_water_key }) =>
+      run(async () => {
+        if (!source_water_id === !source_water_key) {
+          throw new ToolError("Send source_water_id or source_water_key (one of them).");
+        }
+        const [rows, selections] = await Promise.all([
+          supabase.from("source_profiles").select(SOURCE_COLUMNS).eq("user_id", userId),
+          loadSelections(),
+        ]);
+        const waters = mergeSourceWaters(
+          check(rows) as SourceRow[],
+          selections.deletedSources,
+          selections.sourcePreset,
+        );
+        const water = source_water_id
+          ? waters.find((w) => w.id === source_water_id)
+          : waters.find((w) => w.key === source_water_key);
+        if (!water) {
+          throw new ToolError(
+            "No source water with that id or key is available to this account. Use list_source_waters.",
+          );
+        }
+        // What the app was dosing from, so the reply can show what was replaced.
+        const before = pickDefaultSource(waters, selections.sourcePreset, selections.sourceWater);
+        // A saved water's values are taken from its row by the database; the
+        // values sent only count for a built-in the user has not edited.
+        const saved = await setSelection<{
+          changed: boolean;
+          source_water: Record<string, unknown>;
+        }>("mcp_set_active_source_water", { p_key: water.key, p_ions: water.ions });
+        return {
+          saved: true,
+          changed: saved.changed,
+          note:
+            "The app's Starting Water is now this water's saved values, and calculate_doses uses it by default. Ask the user to check the app; if it has gone back (the app had unsynced changes on another device), set it again.",
+          before: { key: before.key, name: before.name, ions: before.ions },
+          source_water: {
+            ...water,
+            active_in_app: true,
+            ions: buildSourceValues(rowIons(saved.source_water as Parameters<typeof rowIons>[0])),
+          },
+        };
       }),
   );
 

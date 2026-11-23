@@ -1257,3 +1257,136 @@ export function saveConcentrateError(error: { code?: string; message: string }):
       return new Error(error.message);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Active selections (phase 3)
+// ---------------------------------------------------------------------------
+
+const positive = (v: unknown) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0;
+};
+
+/**
+ * Why a concentrate cannot be switched on, or null when it can. Mirrors the
+ * checks in public.mcp_set_enabled, plus the two the database cannot make:
+ * that a brand id is one Cafelytic knows and a mineral id is a real mineral.
+ */
+export function concentrateSwitchOnProblem(
+  id: string,
+  settings: {
+    stock: Record<string, StockSpec | undefined>;
+    diy: Record<string, DiySpec | undefined>;
+  },
+): string | null {
+  const own = (map: Record<string, unknown>, key: string) =>
+    Object.prototype.hasOwnProperty.call(map, key) ? map[key] : undefined;
+  if (id.startsWith("stock:")) {
+    const spec = own(settings.stock, id.slice(6)) as StockSpec | undefined;
+    if (!spec) return "No Recipe Concentrate with that id. Use list_concentrates.";
+    if (
+      !positive(spec.bottleMl) || !positive(spec.doseGramsPerL) ||
+      !Array.isArray(spec.minerals) || spec.minerals.length === 0
+    ) {
+      return "That Recipe Concentrate is not fully set up (it needs a bottle size, a dose and at least one mineral). Finish it with update_recipe_concentrate or in the app first.";
+    }
+    return null;
+  }
+  if (id.startsWith("diy:")) {
+    const mineralId = id.slice(4);
+    if (!Object.prototype.hasOwnProperty.call(MINERAL_DB, mineralId)) {
+      return "No mineral with that id. Use list_minerals.";
+    }
+    const spec = own(settings.diy, mineralId) as DiySpec | undefined;
+    if (!spec) {
+      return "There is no Mineral Concentrate for that mineral yet. Create it with save_mineral_concentrate first.";
+    }
+    if (!positive(spec.bottleMl) || !positive(spec.gramsPerBottle)) {
+      return "That Mineral Concentrate is not fully set up (it needs a bottle size and grams). Finish it with save_mineral_concentrate first.";
+    }
+    return null;
+  }
+  if (id.startsWith("brand:")) {
+    return Object.prototype.hasOwnProperty.call(BRAND_CONCENTRATES, id)
+      ? null
+      : "Cafelytic does not know a brand concentrate with that id. Use list_concentrates.";
+  }
+  return "That is not a concentrate id. Ids look like stock:my-bottle, diy:epsom-salt or brand:lotus:calcium; use list_concentrates.";
+}
+
+/** The name the app shows for a concentrate id. */
+export function concentrateName(
+  id: string,
+  settings: { stock: Record<string, StockSpec | undefined> },
+): string {
+  if (id.startsWith("stock:")) {
+    const key = id.slice(6);
+    const spec = Object.prototype.hasOwnProperty.call(settings.stock, key)
+      ? settings.stock[key]
+      : undefined;
+    return spec?.label || key;
+  }
+  if (id.startsWith("diy:")) {
+    const mineral = (MINERAL_DB as Record<string, { name: string } | undefined>)[id.slice(4)];
+    return (mineral?.name || id.slice(4)) + " (Mineral Concentrate)";
+  }
+  const brand = (BRAND_CONCENTRATES as Record<string, { name: string } | undefined>)[id];
+  return brand?.name || id;
+}
+
+/**
+ * Why a recipe cannot be made the active one, or null when it can. Mirrors
+ * public.mcp_set_active_recipe so the model gets a reason it can act on.
+ */
+export function recipeActivationProblem(
+  row: TargetRow,
+  userId: string,
+  state: { deletedTargets: string[]; mySlugs: string[] },
+): string | null {
+  const owner = recipeOwner(row, userId);
+  if (owner === "community") {
+    return "It is another user's community recipe. The user can save it to their own recipes in the Cafelytic app (or you can save a private copy with create_recipe), and that copy can then be made active.";
+  }
+  if (state.deletedTargets.includes(row.slug)) {
+    return "The user removed it from their recipes in the Cafelytic app. They can add it back there.";
+  }
+  if (owner === "library" && state.mySlugs.includes(row.slug)) {
+    return "The user has their own version of this library recipe, and the app shows that one. Use the id of their version (owner: mine in list_recipes).";
+  }
+  return null;
+}
+
+/**
+ * Said when the user has not approved this app for an ability added after
+ * they connected it (SQLSTATE MCA01 from a gated database function).
+ */
+export const NEEDS_APPROVAL =
+  "Nothing was changed. This ability was added to Cafelytic after the user connected this app, and they have not approved it for this app yet. Ask the user to open https://cafelytic.com/oauth/consent while signed in, press \"Allow new abilities\" next to this app, then try again. Do not retry before they have.";
+
+/** Turn a refusal from one of the mcp_set_* database functions into a tool error. */
+export function selectionError(error: { code?: string; message: string }): ToolError | Error {
+  const overLimit = quotaError(error);
+  if (overLimit) return overLimit;
+  switch (error.code) {
+    case "MCA01":
+      return new ToolError(NEEDS_APPROVAL);
+    case "42501":
+      return new ToolError("Cafelytic does not allow that change from an AI app.");
+    case "P0002":
+      return new ToolError(
+        /no settings yet/.test(error.message)
+          ? "This account has no synced settings yet. The user needs to open the Cafelytic app once while signed in, then try again."
+          : "Cafelytic could not make that change: " + error.message +
+            ". It may have just been changed or removed in the app; read the list again.",
+      );
+    case "54000":
+      return new ToolError(
+        "Too many minerals or concentrates are switched on. Switch one off first.",
+      );
+    case "55000":
+    case "22023":
+      return new ToolError("Cafelytic refused that change: " + error.message + ".");
+    default:
+      return new Error(error.message);
+  }
+}

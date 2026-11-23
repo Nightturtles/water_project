@@ -6,21 +6,21 @@ Endpoint once deployed: `https://srlwgayrxzamxlodpsrq.supabase.co/functions/v1/m
 
 ## Status
 
-Phases 1, 1b and 2 (this code): reads, analysis, dose calculation, private recipe / source-water writes, and concentrates. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now.
+Phases 1, 1b, 2 and 3 (this code): reads, analysis, dose calculation, private recipe / source-water writes, concentrates, and the active selections. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now.
 
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Read recipes, source waters, minerals, concentrates; `analyze_water`; create / update private recipes and saved source waters | Built |
 | 1b | `calculate_doses`: the Calculator page's dose math, moved into a shared module (`src/lib/dosing.ts`) that the page and the server both call | Built |
 | 2 | Derive a concentrate formula from a recipe; create / update Recipe Concentrates and Mineral Concentrates, through a database function that merges one concentrate into `user_settings` atomically | Built |
-| 3 | Maybe: change the active selection (recipe, source water, minerals) | Undecided |
+| 3 | Change the active selections: switch a mineral or a concentrate on or off, choose the active recipe and the active source water, each through its own narrow database function | Built |
 
 ### Before this is offered to the public
 
 - **Write quotas are in the database** (`supabase/migrations/20261123064216_mcp_write_quota_and_app_consent.sql`). A trigger on `target_profiles`, `source_profiles`, `user_settings` and `user_selections` counts every row a connected app's request writes: 100 per user per UTC day across all of that user's apps (SQLSTATE `MCQ01` when over), and a connected app cannot add a recipe to an account holding 500, or a source water to one holding 100 (`MCQ02`). The app itself is never counted or limited. A new function that writes one of those tables for a connected app is counted with no further work; its tool should pass the error through `quotaError` (`supabase/functions/mcp/logic.ts`). Reads are not limited.
 - Supabase's OAuth 2.1 server is still beta. Known gaps as of 2026-11: access tokens are not bound to this server (`aud` is always `authenticated`), and clients register through dynamic registration only.
 - The consent page lists what a connected app can do. It must be updated in the same change as any new write tool.
-- **New abilities are asked for per app.** Supabase records that a user approved an app, not what the consent page listed. So the list is versioned (`public.mcp_abilities_version()`, 1 today) and the consent page records the version the user approved for each app (`public.mcp_app_consent`, written by `mcp_record_app_consent`, which refuses connected apps). To ship a new ability: raise the version in its migration, gate its database function with `public.mcp_app_allows(<that version>)`, add the line to `oauth/consent.html`, and give the Connected apps list a way to approve the new abilities for an app recorded at a lower version. That last control is NOT built yet, because no version 2 ability exists; it must ship with the first one. An app with no record counts as version 1.
+- **New abilities are asked for per app.** Supabase records that a user approved an app, not what the consent page listed. So the list is versioned (`public.mcp_abilities_version()`, 2 today: version 2 added phase 3's switches) and the consent page records the version the user approved for each app (`public.mcp_app_consent`, written by `mcp_record_app_consent`, which refuses connected apps). To ship a new ability: raise the version in its migration, gate its database function with `public.mcp_app_allows(<that version>)`, add the line to `oauth/consent.html`, and give the Connected apps list a way to approve the new abilities for an app recorded at a lower version. The Connected apps list (`src/components/oauth-consent.ts`) does that last part for any ability: an app recorded below the current version shows an "Allow new abilities" button that records the current version. Until the user presses it, that app's calls to a gated function are refused with SQLSTATE `MCA01` and the tool tells the user where to approve. An approval is tied to the list the user saw: the page sends the version it shows (`SHOWN_ABILITIES_VERSION` in `src/lib/consent-abilities.ts`) and `mcp_record_app_consent` refuses a different or missing one with `MCA02`, writing nothing. So a new version also needs, in the same change, `SHOWN_ABILITIES_VERSION` raised to match the database and the new abilities' wording added to `ABILITIES_ADDED` in that file; without the wording the Connected apps list has nothing to show and offers no button. `tests/consent-abilities.test.ts` fails when either is missed. An app with no record counts as version 1.
 - Concentrates are also capped per account by count (50 Recipe Concentrates, 20 Mineral Concentrates, in `mcp_save_concentrate`).
 - The privacy policy has a "Connected AI apps" section (`privacy/index.html`). Keep it true when abilities change.
 
@@ -36,11 +36,15 @@ Enforced twice: in the tool code, and in the database by `supabase/migrations/20
 | Publish a recipe, or change a published one | No | Yes |
 | Delete a recipe or source water | No | Yes |
 | Create / change concentrates, one at a time | Yes | Yes |
-| Delete a concentrate, or switch one on or off | No | Yes |
-| Write any other setting or the active selections | No (phase 3, undecided) | Yes |
+| Delete a concentrate | No | Yes |
+| Switch a mineral or a concentrate on or off, one at a time | Yes; a concentrate only if it exists and is fully set up | Yes |
+| Choose the active recipe (own or official library) | Yes; the brew method follows the recipe | Yes |
+| Choose the active source water (saved or built-in) | Yes | Yes |
+| Bring back something the user removed (the delete lists) | No | Yes |
+| Write any other setting (theme, units, drafts, hand-typed "custom" water or target) | No | Yes |
 | Delete the account | No | Yes |
 
-`supabase/tests/oauth_client_restrictions.test.sql` and `supabase/tests/mcp_save_concentrate.test.sql` pin every row of that table (`supabase test db`). `supabase/tests/mcp_write_quota_and_app_consent.test.sql` pins the daily limit, the account ceilings and the per-app approval record.
+`supabase/tests/oauth_client_restrictions.test.sql`, `supabase/tests/mcp_save_concentrate.test.sql` and `supabase/tests/mcp_set_selections.test.sql` pin every row of that table (`supabase test db`). `supabase/tests/mcp_write_quota_and_app_consent.test.sql` pins the daily limit, the account ceilings and the per-app approval record; `mcp_set_selections.test.sql` pins the version 2 gate.
 
 ## Tools
 
@@ -56,6 +60,9 @@ Enforced twice: in the tool code, and in the database by `supabase/migrations/20
 | `derive_concentrate_formula` | No | The app's own "make a concentrate from this recipe" formula, weighed in the calcium chloride form the user has as a powder |
 | `create_recipe_concentrate`, `update_recipe_concentrate` | Yes | Saved but not switched on. An update changes only the fields sent and returns the values before. Solubility warnings are the app's |
 | `save_mineral_concentrate` | Yes | One per mineral: creates it, or changes the fields sent |
+| `set_mineral_enabled`, `set_concentrate_enabled` | Yes | Switch one mineral powder or one concentrate on or off. Switching a concentrate on needs it to exist and be fully set up; several Recipe Concentrates can be on at once, as in the app. The reply lists everything that is now on |
+| `set_active_recipe` | Yes | The user's own recipes and official library recipes (added to the user's recipe list when not on it). Another user's community recipe, a recipe the user removed, and a library recipe the user has their own version of are refused. Switches the app's brew method when the recipe is for the other one, and says so |
+| `set_active_source_water` | Yes | A saved or built-in source water. Sets the key and the Starting Water values together, replacing values typed there without saving; the reply shows what was there before |
 
 Chemistry and naming rules are not re-implemented: `src/lib/mcp-core.ts` re-exports the app's own functions, and `npm run mcp:build` bundles them into `supabase/functions/mcp/app-core.gen.js` (committed; `npm test` fails when it is stale). Only re-export functions that take every input as an argument: one that falls back to browser storage would silently use defaults on the server.
 
@@ -67,9 +74,19 @@ Doses work the same way. `computeDoses` (`src/lib/dosing.ts`) is the one copy of
 - **A key that was deleted is never reused.** Every device holding the deletion record would delete the new row on its next sync, so `create_*` picks a fresh key (`name-2`) and keeps the typed name.
 - **An update can lose to a stale device.** This applies to `update_recipe` and `update_source_water` alike. Sync is last-write-wins per row with no timestamp check, and a device pushes its pending edits before it pulls: a device with an unsynced edit to the same recipe or source water writes its whole cached row back, overwriting the value the tool just saved (including fields that device never touched). The update tools themselves write only the fields they were sent, so they do not do this to the app. Fixing it properly belongs in the sync layer (per-field merge or an `updated_at` check) and is not part of this work.
 - **Profile keys that are JavaScript object property names are never issued** (`constructor`, `toString`, ...). The app keeps profiles in plain objects, so a profile under such a key reads as a built-in and is dropped from the picker. The server gives it `constructor-2` instead.
-- **`user_settings` and `user_selections` are off limits to direct writes.** Each is one row per user that devices upsert whole, so any outside write races them.
+- **`user_settings` and `user_selections` are off limits to direct writes.** Each is one row per user that devices upsert whole, so any outside write races them. The database functions below are the only ways in.
 - **Concentrates go through one database function.** `public.mcp_save_concentrate` (`supabase/migrations/20261123013834_mcp_save_concentrate.sql`) sets one key in one of the two concentrate maps in a single statement, merging into whatever the row holds at that moment, and stores a spec it rebuilt from checked fields. It cannot remove a concentrate, switch one on, or touch another setting, so it can never cost the user something they already had. An update also says which spec it was built from, and is refused if the stored one has changed since; the tool then reads again and retries, so two changes to different fields of one concentrate both land.
 - **A saved concentrate can still be dropped by a stale device.** The app saves the settings row whole. A device with unsynced settings changes (it was offline, or a save was mid-flight) writes its copy of the concentrate maps back and the newly saved concentrate is gone; an update to an existing one is reverted the same way. Devices without pending changes pick the concentrate up on their next pull or Realtime event. Accepted on 2026-11-22 instead of changing sync: the tool replies ask the user to check the app, and saving again fixes it. The proper fix is a per-item merge of the concentrate maps in `src/lib/sync.ts`, which installed apps would not get until their next release.
+
+- **Selections go through three database functions** (`supabase/migrations/20261123180000_mcp_set_selections.sql`). Each locks the caller's row and changes only its own fields in one statement, keeping everything else as it is at that moment:
+  - `mcp_set_enabled` adds or removes ONE id in `selected_minerals` or `selected_concentrates`. Switching a concentrate on requires its spec to exist with a bottle size, strength and (for a Recipe Concentrate) at least one mineral. Switching off removes that exact id, so an entry left behind by a deleted concentrate can be cleared.
+  - `mcp_set_active_recipe` sets `target_preset` to a recipe the app can show on this account's rail: the caller's own, or an official library recipe (appended to `added_target_presets` when it is outside the starter set). It also sets `user_settings.brew_method` when the recipe is for the other brew method, because the app lists a recipe only in its own mode and falls back to another recipe (saving that choice) when the active one is not listed.
+  - `mcp_set_active_source_water` sets `source_preset` and `source_water` together. A saved water's values come from its row. Any other key must be one of the app's built-in waters, from a list the function carries; a key that is neither is refused, so a key the app does not know is never stored. A built-in's values live in the app's code, not the database, so the server sends them and the function checks and rebuilds them; called directly with an AI app's token, the most it allows is a built-in's name over what typing numbers into the Starting Water fields does.
+  - None of them writes the delete lists, so nothing the user removed comes back, and none can set the hand-typed "custom" recipe or water.
+  - Each is gated with `public.mcp_app_allows(2)`: an app the user approved before these abilities were on the consent page (or with no recorded approval) is refused with SQLSTATE `MCA01` and nothing is written, until the user presses "Allow new abilities" for it on the Connected apps page. The tools turn that refusal into a message saying so. An app approved between this change going live on the website and `supabase db push` saw the new list but is recorded at version 1, so it needs the button too.
+  - Their writes are counted by the daily limit like any other write from a connected app (two rows when `set_active_recipe` also switches the brew method); a refused call is not counted.
+  - The mineral ids and brand concentrate ids the app knows live in the app's code (`src/lib/constants.ts`), so `mcp_set_enabled` carries its own copy and switches on nothing else. `mcp_set_active_source_water` carries the built-in source water keys the same way. `tests/mcp-selection-ids.test.ts` fails when a list differs from the app's: a new mineral, brand concentrate or built-in source water needs a migration that re-creates the function with the longer list.
+- **A selection can be put back by a stale device.** The same whole-row save as above: a device with unsynced changes to `user_settings` (or `user_selections`) writes its copy back and the switch, active recipe or active source water returns to what that device had. Devices without pending changes adopt the change on their next pull or Realtime event; a Calculator page that is already open keeps showing the recipe it had until it is reloaded. Accepted on 2026-11-22: nothing is lost, `calculate_doses` always reads the live rows so its doses match what is actually switched on, and every reply asks the user to check the app.
 
 ## One-time setup (hosted project)
 
@@ -77,14 +94,14 @@ Done by the project owner; Claude does not deploy functions or push migrations.
 
 1. **Supabase dashboard > Authentication > OAuth Server**: enable it, Site URL `https://cafelytic.com`, authorization path `/oauth/consent`. Leave **Allow Dynamic OAuth Apps** off until step 5.
 2. Merge the change so `cafelytic.com/oauth/consent` is live.
-3. `supabase db push` (applies the restriction migration), then `supabase migration list` to confirm it is on Local and Remote.
+3. `supabase db push` (applies the restriction migration and the functions the write tools call), then `supabase migration list` to confirm every migration is on Local and Remote. A later phase is the same two steps in the same order: `db push` first, then `functions deploy mcp`, so no tool is live before its database function.
 4. `supabase functions deploy mcp` (needs Supabase CLI 2.117.0 or later on the 2.x line; the repo's `config.toml` is not yet migrated for CLI 3).
 5. Turn **Allow Dynamic OAuth Apps** on. Only now can an AI app complete a sign-in.
 6. Connect a client to the endpoint above. In Claude Code: `claude mcp add --transport http cafelytic https://srlwgayrxzamxlodpsrq.supabase.co/functions/v1/mcp`, then `/mcp` to sign in.
 
 The project already signs JWTs with an asymmetric key (ES256), which the server requires.
 
-To disconnect an app: `cafelytic.com/oauth/consent` with no parameters lists connected apps with a Disconnect button.
+To disconnect an app: `cafelytic.com/oauth/consent` with no parameters lists connected apps with a Disconnect button. An app connected before an ability was added also shows what was added and an "Allow new abilities" button.
 
 ## Local walkthrough
 
