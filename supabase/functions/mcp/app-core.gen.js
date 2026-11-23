@@ -1,7 +1,7 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: ac9f1d35a286c01f10ffeb0b26b0cb1c6503edd743f3d94e0de7c6d9d7bb958b
-// body-hash: e66aa1f65f5ca9fcef72ff7e12dfea15b9675719133500e62771ab04200ff459
+// source-hash: 4e41d49bbb64e886f97fa43e9d835a8d5ec367fcd53299a6dbb6ea326d14c5f4
+// body-hash: 606012276552bde2c2a4abea3721339bfd20a7882b4ba1089862561d96c85f20
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // src/lib/constants.ts
@@ -2290,7 +2290,11 @@ function splitAlkalinityDelta(alkalinitySources, deltaAlkAsCaCO3, sourceWater, t
 * Greedy heuristic order:
 *   1. HCO3 split between baking-soda (Na carrier) and KHCO3 (K carrier)
 *      proportional to target Na and K (mirrors splitAlkalinityDelta).
-*   2. Mg → epsom-salt or magnesium-chloride based on target SO4/Cl ratio.
+*   2. Mg → epsom-salt when the recipe names no chloride, magnesium-chloride
+*      when it names no sulfate, and a blend of the two when it names both,
+*      sized so the concentrate's sulfate and chloride land as close as
+*      possible to the recipe's (least squares, as allocateCaMgDoses does for
+*      the Calculator's powders).
 *   3. Ca → the selected calcium-chloride form (dihydrate by default; anhydrous
 *      when that is the form the user has). Gypsum would match SO4-heavy targets
 *      but its ~2 g/L solubility cap (MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
@@ -2399,19 +2403,34 @@ function deriveStockFormulaFromTarget(target, options) {
 		}
 	}
 	if (tMg > 0) {
-		let mgPick;
-		if (tCl === 0) mgPick = "epsom-salt";
-		else if (tSO4 === 0) mgPick = "magnesium-chloride";
-		else if (tSO4 / Math.max(tCl, 1) > 1) mgPick = "epsom-salt";
-		else mgPick = "magnesium-chloride";
-		const gMg = gramsForIon(mgPick, "magnesium", tMg);
-		if (gMg > 0) {
-			minerals.push({
-				mineralId: mgPick,
-				grams: gMg
-			});
-			if (mgPick === "epsom-salt") producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
+		let mgOnEpsom;
+		if (tCl === 0) mgOnEpsom = tMg;
+		else if (tSO4 === 0) mgOnEpsom = 0;
+		else {
+			const so4PerMg = sideIonProduced("epsom-salt", "magnesium", 1, "sulfate");
+			const clPerMg = sideIonProduced("magnesium-chloride", "magnesium", 1, "chloride");
+			const fixedCl = sideIonProduced("calcium-chloride", "calcium", tCa, "chloride") + sideIonProduced("potassium-chloride", "potassium", Math.max(0, tK - producedK), "chloride") + sideIonProduced("sodium-chloride", "sodium", Math.max(0, tNa - producedNa), "chloride");
+			const denom = so4PerMg * so4PerMg + clPerMg * clPerMg;
+			let x = denom > 0 ? (so4PerMg * tSO4 + clPerMg * (fixedCl + clPerMg * tMg - tCl)) / denom : tSO4 / Math.max(tCl, 1) > 1 ? tMg : 0;
+			x = Math.min(tMg, Math.max(0, x));
+			if (x < .02 * tMg) x = 0;
+			else if (x > .98 * tMg) x = tMg;
+			mgOnEpsom = x;
 		}
+		const mgOnMgCl2 = tMg - mgOnEpsom;
+		const gEpsom = gramsForIon("epsom-salt", "magnesium", mgOnEpsom);
+		if (gEpsom > 0) {
+			minerals.push({
+				mineralId: "epsom-salt",
+				grams: gEpsom
+			});
+			producedSO4 += sideIonProduced("epsom-salt", "magnesium", mgOnEpsom, "sulfate");
+		}
+		const gMgCl2 = gramsForIon("magnesium-chloride", "magnesium", mgOnMgCl2);
+		if (gMgCl2 > 0) minerals.push({
+			mineralId: "magnesium-chloride",
+			grams: gMgCl2
+		});
 	}
 	if (tCa > 0) {
 		const requestedCaId = options.calciumChlorideId;
@@ -2421,7 +2440,7 @@ function deriveStockFormulaFromTarget(target, options) {
 			const powders = loadSelectedMinerals();
 			caId = (powders.includes("calcium-chloride") ? "calcium-chloride" : powders.includes("calcium-chloride-anhydrous") ? "calcium-chloride-anhydrous" : getEffectiveCalciumSource()) === "calcium-chloride-anhydrous" ? "calcium-chloride-anhydrous" : "calcium-chloride";
 		}
-		if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) notes.push("Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.");
+		if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1 && tSO4 - producedSO4 > 1) notes.push("Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.");
 		const gCa = gramsForIon(caId, "calcium", tCa);
 		if (gCa > 0) minerals.push({
 			mineralId: caId,

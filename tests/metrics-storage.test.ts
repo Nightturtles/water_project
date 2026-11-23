@@ -322,28 +322,101 @@ describe("deriveStockFormulaFromTarget", () => {
     expect(mineralIdsOf(formula)).toEqual(["baking-soda", "epsom-salt"]);
   });
 
-  test("Rao/Perger (multi-mineral with SO4 and Cl) round-trips ions within ~15%", () => {
-    const target = ionsFromRecipeGrams({
+  function ionsMadeBy(formula: any) {
+    const perLGrams: Record<string, number> = {};
+    formula.minerals.forEach((m: any) => {
+      perLGrams[m.mineralId] = (m.grams / formula.bottleMl) * formula.doseGramsPerL;
+    });
+    return metrics.calculateIonPPMs(perLGrams);
+  }
+
+  test("Rao/Perger (epsom AND MgCl2 in the original bottle) → derive recovers the bottle", () => {
+    const bottle = {
       "epsom-salt": 5,
       "magnesium-chloride": 2,
       "calcium-chloride": 2,
       "baking-soda": 1.7,
       "potassium-bicarbonate": 2,
-    });
+    };
+    const target = ionsFromRecipeGrams(bottle);
     const formula = metrics.deriveStockFormulaFromTarget(target);
-    // The derived formula's minerals are picked heuristically (HCO3 split,
-    // Mg by SO4/Cl ratio, Ca always CaCl2). Re-derive ions from the
-    // formula's grams and check that the main ions match within tolerance.
-    const perLGrams: Record<string, number> = {};
-    formula.minerals.forEach((m: any) => {
-      perLGrams[m.mineralId] = (m.grams / formula.bottleMl) * formula.doseGramsPerL;
+    // The recipe names both sulfate and chloride, so the magnesium is split
+    // between the two salts. Picking one salt by the SO4/Cl ratio used to put
+    // it all on epsom: sulfate 58 for a recipe at 39, chloride 19 for 33.
+    const derived = Object.fromEntries(formula.minerals.map((m: any) => [m.mineralId, m.grams]));
+    expect(derived).toEqual(bottle);
+    const reIons = ionsMadeBy(formula);
+    for (const ion of ["calcium", "magnesium", "sulfate", "chloride", "sodium", "potassium"]) {
+      expect(reIons[ion as "calcium"]).toBeCloseTo(target[ion as "calcium"], 0);
+    }
+    expect(formula.notes).toEqual([]);
+  });
+
+  test("a recipe with both sulfate and chloride gets both: Cafelytic Filter 2.0", () => {
+    const target = {
+      calcium: 4,
+      magnesium: 11,
+      alkalinity: 11,
+      potassium: 9,
+      sodium: 0,
+      sulfate: 16,
+      chloride: 26,
+      bicarbonate: 13,
+    };
+    const formula = metrics.deriveStockFormulaFromTarget(target, {
+      calciumChlorideId: "calcium-chloride",
     });
-    const reIons = metrics.calculateIonPPMs(perLGrams);
-    // The round trip should preserve total mineral content reasonably well.
-    // We pin the dominant ions (Mg, Ca, K) and tolerate larger drift on Na/SO4
-    // since the derive may substitute one buffer for another.
-    expect(reIons.magnesium).toBeCloseTo(target.magnesium, 0);
-    expect(reIons.calcium).toBeCloseTo(target.calcium, 0);
+    expect(mineralIdsOf(formula)).toEqual(
+      [
+        "calcium-chloride",
+        "epsom-salt",
+        "magnesium-chloride",
+        "potassium-bicarbonate",
+        "potassium-chloride",
+      ].sort(),
+    );
+    const made = ionsMadeBy(formula);
+    // Was sulfate 0 / chloride 40 when all the magnesium rode on MgCl2.
+    expect(Math.abs(made.sulfate - 16)).toBeLessThan(1.5);
+    expect(Math.abs(made.chloride - 26)).toBeLessThan(1.5);
+    expect(made.magnesium).toBeCloseTo(11, 0);
+    expect(made.calcium).toBeCloseTo(4, 0);
+  });
+
+  test("the magnesium split is clamped: a recipe wanting more sulfate than its magnesium can carry", () => {
+    const formula = metrics.deriveStockFormulaFromTarget(
+      { calcium: 20, magnesium: 5, sulfate: 80, chloride: 10 },
+      { calciumChlorideId: "calcium-chloride" },
+    );
+    // All magnesium on epsom (5 mg/L carries about 20 mg/L sulfate), none on
+    // MgCl2, and the shortfall is reported.
+    expect(mineralIdsOf(formula)).toEqual(["calcium-chloride", "epsom-salt"]);
+    expect(formula.notes.some((n: string) => /Target sulfate of 80/.test(n))).toBe(true);
+  });
+
+  test("a split within 2% of a single salt uses the single salt", () => {
+    // Chloride far above what the calcium salt brings and a trace of sulfate:
+    // the fit puts under 2% of the magnesium on epsom, which is dropped.
+    const formula = metrics.deriveStockFormulaFromTarget(
+      { calcium: 10, magnesium: 20, sulfate: 0.5, chloride: 76 },
+      { calciumChlorideId: "calcium-chloride" },
+    );
+    expect(mineralIdsOf(formula)).toEqual(["calcium-chloride", "magnesium-chloride"]);
+  });
+
+  test("recipes naming only one of sulfate / chloride keep a single magnesium salt", () => {
+    const sulfateOnly = metrics.deriveStockFormulaFromTarget({ magnesium: 10, sulfate: 40 });
+    expect(mineralIdsOf(sulfateOnly)).toEqual(["epsom-salt"]);
+    const chlorideOnly = metrics.deriveStockFormulaFromTarget({ magnesium: 10, chloride: 29 });
+    expect(mineralIdsOf(chlorideOnly)).toEqual(["magnesium-chloride"]);
+    // Spec-style (neither named): epsom, so chloride comes only from the calcium salt.
+    const neither = metrics.deriveStockFormulaFromTarget(
+      { calcium: 51, magnesium: 17, alkalinity: 40 },
+      { calciumChlorideId: "calcium-chloride" },
+    );
+    expect(mineralIdsOf(neither)).toEqual(
+      ["calcium-chloride", "epsom-salt", "potassium-bicarbonate"].sort(),
+    );
   });
 });
 

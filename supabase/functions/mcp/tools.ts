@@ -905,7 +905,7 @@ export function buildServer(supabase: Db, userId: string): McpServer {
     {
       title: "Derive concentrate formula",
       description:
-        "Work out a Recipe Concentrate formula for a recipe: the grams of each mineral to dissolve in a bottle so that the dose per liter comes close to the recipe from distilled water. This is the formula the Cafelytic app derives. It is an approximation: it picks one salt per mineral and rounds to 0.1 g, so some ions (often sulfate or chloride) can land off the recipe. The reply shows the water it makes and the difference from the target per ion; show those to the user before saving. Saves nothing: save it with create_recipe_concentrate.",
+        "Work out a Recipe Concentrate formula for a recipe: the grams of each mineral to dissolve in a bottle so that the dose per liter comes close to the recipe from distilled water. This is the formula the Cafelytic app derives. It is an approximation: grams are rounded to 0.1 g and a concentrate has few salts to work with (epsom salt is its only source of sulfate), so some ions can land off the recipe. The reply shows the water it makes and the difference from the target per ion; show those to the user before saving. Saves nothing: save it with create_recipe_concentrate.",
       inputSchema: z.object({
         recipe_id: uuid.optional().describe(
           "Recipe to make a concentrate for, from list_recipes. Send this or target ions, not both.",

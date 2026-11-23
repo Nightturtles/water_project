@@ -7,7 +7,7 @@ derive bh-simplified-hendon: dose 4.00 bottle 200 baking-soda 2.60, epsom-salt 1
 derive bh-simplified-rao-2008: dose 4.00 bottle 200 baking-soda 4.20, epsom-salt 9.20
 derive bh-simplified-sca-optimal: dose 4.00 bottle 200 baking-soda 3.40, epsom-salt 8.40
 derive cafelytic-espresso: dose 4.00 bottle 200 calcium-chloride 0.40, magnesium-chloride 3.60, potassium-bicarbonate 1.70
-derive cafelytic-filter: dose 4.00 bottle 200 calcium-chloride 0.70, magnesium-chloride 4.60, potassium-bicarbonate 1.10, potassium-chloride 0.10
+derive cafelytic-filter: dose 4.00 bottle 200 calcium-chloride 0.70, epsom-salt 2.20, magnesium-chloride 2.80, potassium-bicarbonate 1.10, potassium-chloride 0.10
 derive cafelytic-filter-sulfate-free: dose 4.00 bottle 200 calcium-chloride 0.70, magnesium-chloride 4.20, potassium-bicarbonate 1.10
 derive dan-eils: dose 4.00 bottle 200 calcium-chloride 5.00, magnesium-chloride 5.00, potassium-bicarbonate 5.00
 derive eaf-fam-29th-wave: dose 4.00 bottle 200 baking-soda 7.60, epsom-salt 2.50
@@ -28,14 +28,14 @@ derive matt-perger: dose 4.00 bottle 200 baking-soda 3.40, epsom-salt 10.00
 derive melbourne-2013-wbc: dose 4.00 bottle 200 baking-soda 1.00, epsom-salt 2.90
 derive rao: dose 4.00 bottle 200 calcium-chloride 3.80, epsom-salt 4.30, potassium-bicarbonate 4.00
 derive rao-2013: dose 4.00 bottle 200 baking-soda 3.40, calcium-chloride 4.00, magnesium-chloride 4.00
-derive rao-perger: dose 4.00 bottle 200 baking-soda 1.70, calcium-chloride 2.00, epsom-salt 7.40, potassium-bicarbonate 2.00
+derive rao-perger: dose 4.00 bottle 200 baking-soda 1.70, calcium-chloride 2.00, epsom-salt 5.00, magnesium-chloride 2.00, potassium-bicarbonate 2.00
 derive rasami-w1d1: dose 4.00 bottle 200 baking-soda 1.30, epsom-salt 7.50
 derive rasami-w1d2: dose 4.00 bottle 200 baking-soda 1.30, calcium-chloride 2.20
 derive rasami-w1d3: dose 4.00 bottle 200 baking-soda 1.30, calcium-chloride 1.10, epsom-salt 5.00
-derive rasami-w1d4: dose 4.00 bottle 200 baking-soda 1.30, calcium-chloride 2.20, magnesium-chloride 2.10
+derive rasami-w1d4: dose 4.00 bottle 200 baking-soda 1.30, calcium-chloride 2.20, epsom-salt 2.50
 derive rasami-w1d5: dose 4.00 bottle 200 calcium-chloride 1.70, epsom-salt 3.70, potassium-bicarbonate 1.50
-derive rasami-w1d6: dose 4.00 bottle 200 baking-soda 1.00, calcium-chloride 0.80, magnesium-chloride 3.00, potassium-bicarbonate 0.30, potassium-chloride 0.20, sodium-chloride 0.60
-derive rasami-w1d7: dose 4.00 bottle 200 baking-soda 0.70, calcium-chloride 0.80, magnesium-chloride 1.50, potassium-bicarbonate 0.20, potassium-chloride 0.20, sodium-chloride 0.80
+derive rasami-w1d6: dose 4.00 bottle 200 baking-soda 1.00, calcium-chloride 0.80, epsom-salt 1.90, magnesium-chloride 1.50, potassium-bicarbonate 0.30, potassium-chloride 0.20, sodium-chloride 0.60
+derive rasami-w1d7: dose 4.00 bottle 200 baking-soda 0.70, calcium-chloride 0.80, epsom-salt 1.90, potassium-bicarbonate 0.20, potassium-chloride 0.20, sodium-chloride 0.80
 derive sca: dose 4.00 bottle 200 calcium-chloride 9.40, epsom-salt 8.60, potassium-bicarbonate 4.00
 derive sey: dose 4.00 bottle 200 calcium-chloride 3.70, epsom-salt 7.60, potassium-bicarbonate 1.50
 derive world-of-coffee-budapest: dose 4.00 bottle 200 baking-soda 3.40, epsom-salt 6.20
@@ -54,7 +54,7 @@ single aviary-espresso <- stock:bh-simplified-rao-2008-derived: 2.42
 single aviary-espresso <- stock:bh-simplified-sca-optimal: 2.64
 single aviary-espresso <- stock:bh-simplified-sca-optimal-derived: 2.64
 single aviary-espresso <- stock:cafelytic-espresso-derived: 4.00
-single aviary-espresso <- stock:cafelytic-filter-derived: 2.42
+single aviary-espresso <- stock:cafelytic-filter-derived: 4.00
 single aviary-espresso <- stock:cafelytic-filter-sulfate-free-derived: 2.84
 single aviary-espresso <- stock:dan-eils: 1.51
 single aviary-espresso <- stock:dan-eils-derived: 1.51
@@ -80,14 +80,14 @@ single aviary-espresso <- stock:rao-2013: 2.32
 single aviary-espresso <- stock:rao-2013-derived: 2.32
 single aviary-espresso <- stock:rao-derived: 2.63
 single aviary-espresso <- stock:rao-perger: 3.14
-single aviary-espresso <- stock:rao-perger-derived: 2.72
+single aviary-espresso <- stock:rao-perger-derived: 3.14
 single aviary-espresso <- stock:rasami-w1d1-derived: 2.22
 single aviary-espresso <- stock:rasami-w1d2-derived: 6.79
 single aviary-espresso <- stock:rasami-w1d3-derived: 4.00
-single aviary-espresso <- stock:rasami-w1d4-derived: 4.00
+single aviary-espresso <- stock:rasami-w1d4-derived: 5.48
 single aviary-espresso <- stock:rasami-w1d5-derived: 4.00
-single aviary-espresso <- stock:rasami-w1d6-derived: 4.00
-single aviary-espresso <- stock:rasami-w1d7-derived: 4.55
+single aviary-espresso <- stock:rasami-w1d6-derived: 5.15
+single aviary-espresso <- stock:rasami-w1d7-derived: 6.53
 single aviary-espresso <- stock:sca-derived: 1.03
 single aviary-espresso <- stock:sey-derived: 1.52
 single aviary-espresso <- stock:world-of-coffee-budapest: 3.53
@@ -107,7 +107,7 @@ single aviary-filter <- stock:bh-simplified-rao-2008-derived: 2.05
 single aviary-filter <- stock:bh-simplified-sca-optimal: 2.35
 single aviary-filter <- stock:bh-simplified-sca-optimal-derived: 2.35
 single aviary-filter <- stock:cafelytic-espresso-derived: 3.22
-single aviary-filter <- stock:cafelytic-filter-derived: 2.39
+single aviary-filter <- stock:cafelytic-filter-derived: 4.42
 single aviary-filter <- stock:cafelytic-filter-sulfate-free-derived: 2.69
 single aviary-filter <- stock:dan-eils: 1.12
 single aviary-filter <- stock:dan-eils-derived: 1.12
@@ -133,14 +133,14 @@ single aviary-filter <- stock:rao-2013: 1.63
 single aviary-filter <- stock:rao-2013-derived: 1.63
 single aviary-filter <- stock:rao-derived: 2.28
 single aviary-filter <- stock:rao-perger: 2.70
-single aviary-filter <- stock:rao-perger-derived: 2.53
+single aviary-filter <- stock:rao-perger-derived: 2.70
 single aviary-filter <- stock:rasami-w1d1-derived: 2.87
 single aviary-filter <- stock:rasami-w1d2-derived: 4.57
 single aviary-filter <- stock:rasami-w1d3-derived: 4.00
-single aviary-filter <- stock:rasami-w1d4-derived: 3.04
+single aviary-filter <- stock:rasami-w1d4-derived: 5.33
 single aviary-filter <- stock:rasami-w1d5-derived: 4.71
-single aviary-filter <- stock:rasami-w1d6-derived: 2.89
-single aviary-filter <- stock:rasami-w1d7-derived: 3.59
+single aviary-filter <- stock:rasami-w1d6-derived: 4.75
+single aviary-filter <- stock:rasami-w1d7-derived: 6.36
 single aviary-filter <- stock:sca-derived: 1.26
 single aviary-filter <- stock:sey-derived: 2.41
 single aviary-filter <- stock:world-of-coffee-budapest: 2.78
@@ -160,7 +160,7 @@ single bh-default <- stock:bh-simplified-rao-2008-derived: 4.00
 single bh-default <- stock:bh-simplified-sca-optimal: 4.41
 single bh-default <- stock:bh-simplified-sca-optimal-derived: 4.41
 single bh-default <- stock:cafelytic-espresso-derived: 3.12
-single bh-default <- stock:cafelytic-filter-derived: 1.76
+single bh-default <- stock:cafelytic-filter-derived: 6.05
 single bh-default <- stock:cafelytic-filter-sulfate-free-derived: 2.05
 single bh-default <- stock:dan-eils: 0.99
 single bh-default <- stock:dan-eils-derived: 0.99
@@ -190,10 +190,10 @@ single bh-default <- stock:rao-perger-derived: 4.00
 single bh-default <- stock:rasami-w1d1-derived: 5.75
 single bh-default <- stock:rasami-w1d2-derived: 4.00
 single bh-default <- stock:rasami-w1d3-derived: 7.80
-single bh-default <- stock:rasami-w1d4-derived: 2.50
+single bh-default <- stock:rasami-w1d4-derived: 7.54
 single bh-default <- stock:rasami-w1d5-derived: 7.59
-single bh-default <- stock:rasami-w1d6-derived: 2.51
-single bh-default <- stock:rasami-w1d7-derived: 2.95
+single bh-default <- stock:rasami-w1d6-derived: 6.32
+single bh-default <- stock:rasami-w1d7-derived: 8.95
 single bh-default <- stock:sca-derived: 1.66
 single bh-default <- stock:sey-derived: 4.00
 single bh-default <- stock:world-of-coffee-budapest: 5.10
@@ -213,7 +213,7 @@ single bh-hard <- stock:bh-simplified-rao-2008-derived: 4.97
 single bh-hard <- stock:bh-simplified-sca-optimal: 5.84
 single bh-hard <- stock:bh-simplified-sca-optimal-derived: 5.84
 single bh-hard <- stock:cafelytic-espresso-derived: 2.98
-single bh-hard <- stock:cafelytic-filter-derived: 1.81
+single bh-hard <- stock:cafelytic-filter-derived: 8.19
 single bh-hard <- stock:cafelytic-filter-sulfate-free-derived: 2.09
 single bh-hard <- stock:dan-eils: 0.90
 single bh-hard <- stock:dan-eils-derived: 0.90
@@ -239,14 +239,14 @@ single bh-hard <- stock:rao-2013: 1.37
 single bh-hard <- stock:rao-2013-derived: 1.37
 single bh-hard <- stock:rao-derived: 4.00
 single bh-hard <- stock:rao-perger: 5.15
-single bh-hard <- stock:rao-perger-derived: 5.66
+single bh-hard <- stock:rao-perger-derived: 5.15
 single bh-hard <- stock:rasami-w1d1-derived: 8.28
 single bh-hard <- stock:rasami-w1d2-derived: 4.00
 single bh-hard <- stock:rasami-w1d3-derived: 10.84
-single bh-hard <- stock:rasami-w1d4-derived: 2.28
+single bh-hard <- stock:rasami-w1d4-derived: 9.67
 single bh-hard <- stock:rasami-w1d5-derived: 10.41
-single bh-hard <- stock:rasami-w1d6-derived: 2.34
-single bh-hard <- stock:rasami-w1d7-derived: 2.68
+single bh-hard <- stock:rasami-w1d6-derived: 7.83
+single bh-hard <- stock:rasami-w1d7-derived: 11.47
 single bh-hard <- stock:sca-derived: 2.24
 single bh-hard <- stock:sey-derived: 5.66
 single bh-hard <- stock:world-of-coffee-budapest: 6.49
@@ -266,7 +266,7 @@ single bh-hard-af <- stock:bh-simplified-rao-2008-derived: 6.84
 single bh-hard-af <- stock:bh-simplified-sca-optimal: 8.05
 single bh-hard-af <- stock:bh-simplified-sca-optimal-derived: 8.05
 single bh-hard-af <- stock:cafelytic-espresso-derived: 4.00
-single bh-hard-af <- stock:cafelytic-filter-derived: 2.42
+single bh-hard-af <- stock:cafelytic-filter-derived: 11.30
 single bh-hard-af <- stock:cafelytic-filter-sulfate-free-derived: 2.80
 single bh-hard-af <- stock:dan-eils: 1.19
 single bh-hard-af <- stock:dan-eils-derived: 1.19
@@ -292,14 +292,14 @@ single bh-hard-af <- stock:rao-2013: 1.81
 single bh-hard-af <- stock:rao-2013-derived: 1.81
 single bh-hard-af <- stock:rao-derived: 5.48
 single bh-hard-af <- stock:rao-perger: 7.06
-single bh-hard-af <- stock:rao-perger-derived: 7.79
+single bh-hard-af <- stock:rao-perger-derived: 7.06
 single bh-hard-af <- stock:rasami-w1d1-derived: 11.49
 single bh-hard-af <- stock:rasami-w1d2-derived: 4.75
 single bh-hard-af <- stock:rasami-w1d3-derived: 14.99
-single bh-hard-af <- stock:rasami-w1d4-derived: 3.01
+single bh-hard-af <- stock:rasami-w1d4-derived: 13.28
 single bh-hard-af <- stock:rasami-w1d5-derived: 14.38
-single bh-hard-af <- stock:rasami-w1d6-derived: 3.11
-single bh-hard-af <- stock:rasami-w1d7-derived: 3.55
+single bh-hard-af <- stock:rasami-w1d6-derived: 10.73
+single bh-hard-af <- stock:rasami-w1d7-derived: 15.75
 single bh-hard-af <- stock:sca-derived: 3.09
 single bh-hard-af <- stock:sey-derived: 7.86
 single bh-hard-af <- stock:world-of-coffee-budapest: 8.90
@@ -319,7 +319,7 @@ single bh-simplified-hendon <- stock:bh-simplified-rao-2008-derived: 4.00
 single bh-simplified-hendon <- stock:bh-simplified-sca-optimal: 4.77
 single bh-simplified-hendon <- stock:bh-simplified-sca-optimal-derived: 4.77
 single bh-simplified-hendon <- stock:cafelytic-espresso-derived: 2.60
-single bh-simplified-hendon <- stock:cafelytic-filter-derived: 1.55
+single bh-simplified-hendon <- stock:cafelytic-filter-derived: 6.65
 single bh-simplified-hendon <- stock:cafelytic-filter-sulfate-free-derived: 1.80
 single bh-simplified-hendon <- stock:dan-eils: 0.80
 single bh-simplified-hendon <- stock:dan-eils-derived: 0.80
@@ -345,14 +345,14 @@ single bh-simplified-hendon <- stock:rao-2013: 1.22
 single bh-simplified-hendon <- stock:rao-2013-derived: 1.22
 single bh-simplified-hendon <- stock:rao-derived: 3.31
 single bh-simplified-hendon <- stock:rao-perger: 4.00
-single bh-simplified-hendon <- stock:rao-perger-derived: 4.62
+single bh-simplified-hendon <- stock:rao-perger-derived: 4.00
 single bh-simplified-hendon <- stock:rasami-w1d1-derived: 6.66
 single bh-simplified-hendon <- stock:rasami-w1d2-derived: 3.25
 single bh-simplified-hendon <- stock:rasami-w1d3-derived: 8.76
-single bh-simplified-hendon <- stock:rasami-w1d4-derived: 2.01
+single bh-simplified-hendon <- stock:rasami-w1d4-derived: 7.93
 single bh-simplified-hendon <- stock:rasami-w1d5-derived: 8.44
-single bh-simplified-hendon <- stock:rasami-w1d6-derived: 2.06
-single bh-simplified-hendon <- stock:rasami-w1d7-derived: 2.37
+single bh-simplified-hendon <- stock:rasami-w1d6-derived: 6.47
+single bh-simplified-hendon <- stock:rasami-w1d7-derived: 9.41
 single bh-simplified-hendon <- stock:sca-derived: 1.82
 single bh-simplified-hendon <- stock:sey-derived: 4.54
 single bh-simplified-hendon <- stock:world-of-coffee-budapest: 5.33
@@ -372,7 +372,7 @@ single bh-simplified-rao-2008 <- stock:bh-simplified-rao-2008-derived: 4.00
 single bh-simplified-rao-2008 <- stock:bh-simplified-sca-optimal: 4.59
 single bh-simplified-rao-2008 <- stock:bh-simplified-sca-optimal-derived: 4.59
 single bh-simplified-rao-2008 <- stock:cafelytic-espresso-derived: 4.00
-single bh-simplified-rao-2008 <- stock:cafelytic-filter-derived: 2.04
+single bh-simplified-rao-2008 <- stock:cafelytic-filter-derived: 6.22
 single bh-simplified-rao-2008 <- stock:cafelytic-filter-sulfate-free-derived: 2.40
 single bh-simplified-rao-2008 <- stock:dan-eils: 1.21
 single bh-simplified-rao-2008 <- stock:dan-eils-derived: 1.21
@@ -398,14 +398,14 @@ single bh-simplified-rao-2008 <- stock:rao-2013: 1.86
 single bh-simplified-rao-2008 <- stock:rao-2013-derived: 1.86
 single bh-simplified-rao-2008 <- stock:rao-derived: 3.50
 single bh-simplified-rao-2008 <- stock:rao-perger: 4.40
-single bh-simplified-rao-2008 <- stock:rao-perger-derived: 4.49
+single bh-simplified-rao-2008 <- stock:rao-perger-derived: 4.40
 single bh-simplified-rao-2008 <- stock:rasami-w1d1-derived: 5.71
 single bh-simplified-rao-2008 <- stock:rasami-w1d2-derived: 5.25
 single bh-simplified-rao-2008 <- stock:rasami-w1d3-derived: 7.90
-single bh-simplified-rao-2008 <- stock:rasami-w1d4-derived: 3.02
+single bh-simplified-rao-2008 <- stock:rasami-w1d4-derived: 7.97
 single bh-simplified-rao-2008 <- stock:rasami-w1d5-derived: 7.75
-single bh-simplified-rao-2008 <- stock:rasami-w1d6-derived: 3.01
-single bh-simplified-rao-2008 <- stock:rasami-w1d7-derived: 3.57
+single bh-simplified-rao-2008 <- stock:rasami-w1d6-derived: 6.79
+single bh-simplified-rao-2008 <- stock:rasami-w1d7-derived: 9.47
 single bh-simplified-rao-2008 <- stock:sca-derived: 1.70
 single bh-simplified-rao-2008 <- stock:sey-derived: 4.00
 single bh-simplified-rao-2008 <- stock:world-of-coffee-budapest: 5.41
@@ -425,7 +425,7 @@ single bh-simplified-sca-optimal <- stock:bh-simplified-rao-2008-derived: 3.47
 single bh-simplified-sca-optimal <- stock:bh-simplified-sca-optimal: 4.00
 single bh-simplified-sca-optimal <- stock:bh-simplified-sca-optimal-derived: 4.00
 single bh-simplified-sca-optimal <- stock:cafelytic-espresso-derived: 3.06
-single bh-simplified-sca-optimal <- stock:cafelytic-filter-derived: 1.70
+single bh-simplified-sca-optimal <- stock:cafelytic-filter-derived: 5.45
 single bh-simplified-sca-optimal <- stock:cafelytic-filter-sulfate-free-derived: 1.99
 single bh-simplified-sca-optimal <- stock:dan-eils: 0.98
 single bh-simplified-sca-optimal <- stock:dan-eils-derived: 0.98
@@ -455,10 +455,10 @@ single bh-simplified-sca-optimal <- stock:rao-perger-derived: 4.00
 single bh-simplified-sca-optimal <- stock:rasami-w1d1-derived: 5.08
 single bh-simplified-sca-optimal <- stock:rasami-w1d2-derived: 4.00
 single bh-simplified-sca-optimal <- stock:rasami-w1d3-derived: 6.96
-single bh-simplified-sca-optimal <- stock:rasami-w1d4-derived: 2.47
+single bh-simplified-sca-optimal <- stock:rasami-w1d4-derived: 6.90
 single bh-simplified-sca-optimal <- stock:rasami-w1d5-derived: 6.81
-single bh-simplified-sca-optimal <- stock:rasami-w1d6-derived: 2.47
-single bh-simplified-sca-optimal <- stock:rasami-w1d7-derived: 2.92
+single bh-simplified-sca-optimal <- stock:rasami-w1d6-derived: 5.83
+single bh-simplified-sca-optimal <- stock:rasami-w1d7-derived: 8.19
 single bh-simplified-sca-optimal <- stock:sca-derived: 1.49
 single bh-simplified-sca-optimal <- stock:sey-derived: 3.42
 single bh-simplified-sca-optimal <- stock:world-of-coffee-budapest: 4.67
@@ -478,7 +478,7 @@ single cafelytic-espresso <- stock:bh-simplified-rao-2008-derived: 0.59
 single cafelytic-espresso <- stock:bh-simplified-sca-optimal: 0.65
 single cafelytic-espresso <- stock:bh-simplified-sca-optimal-derived: 0.65
 single cafelytic-espresso <- stock:cafelytic-espresso-derived: 4.00
-single cafelytic-espresso <- stock:cafelytic-filter-derived: 3.37
+single cafelytic-espresso <- stock:cafelytic-filter-derived: 4.00
 single cafelytic-espresso <- stock:cafelytic-filter-sulfate-free-derived: 4.00
 single cafelytic-espresso <- stock:dan-eils: 1.35
 single cafelytic-espresso <- stock:dan-eils-derived: 1.35
@@ -504,13 +504,13 @@ single cafelytic-espresso <- stock:rao-2013: 1.60
 single cafelytic-espresso <- stock:rao-2013-derived: 1.60
 single cafelytic-espresso <- stock:rao-derived: 1.67
 single cafelytic-espresso <- stock:rao-perger: 1.66
-single cafelytic-espresso <- stock:rao-perger-derived: 1.16
+single cafelytic-espresso <- stock:rao-perger-derived: 1.66
 single cafelytic-espresso <- stock:rasami-w1d1-derived: 0.52
 single cafelytic-espresso <- stock:rasami-w1d2-derived: 4.00
 single cafelytic-espresso <- stock:rasami-w1d3-derived: 1.49
-single cafelytic-espresso <- stock:rasami-w1d4-derived: 3.25
+single cafelytic-espresso <- stock:rasami-w1d4-derived: 3.09
 single cafelytic-espresso <- stock:rasami-w1d5-derived: 2.58
-single cafelytic-espresso <- stock:rasami-w1d6-derived: 3.31
+single cafelytic-espresso <- stock:rasami-w1d6-derived: 3.52
 single cafelytic-espresso <- stock:rasami-w1d7-derived: 4.00
 single cafelytic-espresso <- stock:sca-derived: 0.92
 single cafelytic-espresso <- stock:sey-derived: 1.20
@@ -531,7 +531,7 @@ single cafelytic-filter <- stock:bh-simplified-rao-2008-derived: 0.88
 single cafelytic-filter <- stock:bh-simplified-sca-optimal: 1.02
 single cafelytic-filter <- stock:bh-simplified-sca-optimal-derived: 1.02
 single cafelytic-filter <- stock:cafelytic-espresso-derived: 3.27
-single cafelytic-filter <- stock:cafelytic-filter-derived: 2.88
+single cafelytic-filter <- stock:cafelytic-filter-derived: 4.00
 single cafelytic-filter <- stock:cafelytic-filter-sulfate-free-derived: 3.15
 single cafelytic-filter <- stock:dan-eils: 1.09
 single cafelytic-filter <- stock:dan-eils-derived: 1.09
@@ -557,14 +557,14 @@ single cafelytic-filter <- stock:rao-2013: 1.32
 single cafelytic-filter <- stock:rao-2013-derived: 1.32
 single cafelytic-filter <- stock:rao-derived: 1.63
 single cafelytic-filter <- stock:rao-perger: 1.74
-single cafelytic-filter <- stock:rao-perger-derived: 1.42
+single cafelytic-filter <- stock:rao-perger-derived: 1.74
 single cafelytic-filter <- stock:rasami-w1d1-derived: 1.33
 single cafelytic-filter <- stock:rasami-w1d2-derived: 3.38
 single cafelytic-filter <- stock:rasami-w1d3-derived: 2.35
-single cafelytic-filter <- stock:rasami-w1d4-derived: 2.75
+single cafelytic-filter <- stock:rasami-w1d4-derived: 3.45
 single cafelytic-filter <- stock:rasami-w1d5-derived: 3.15
-single cafelytic-filter <- stock:rasami-w1d6-derived: 2.77
-single cafelytic-filter <- stock:rasami-w1d7-derived: 3.44
+single cafelytic-filter <- stock:rasami-w1d6-derived: 3.54
+single cafelytic-filter <- stock:rasami-w1d7-derived: 4.42
 single cafelytic-filter <- stock:sca-derived: 1.00
 single cafelytic-filter <- stock:sey-derived: 1.67
 single cafelytic-filter <- stock:world-of-coffee-budapest: 1.18
@@ -584,7 +584,7 @@ single cafelytic-filter-sulfate-free <- stock:bh-simplified-rao-2008-derived: 0.
 single cafelytic-filter-sulfate-free <- stock:bh-simplified-sca-optimal: 0.45
 single cafelytic-filter-sulfate-free <- stock:bh-simplified-sca-optimal-derived: 0.45
 single cafelytic-filter-sulfate-free <- stock:cafelytic-espresso-derived: 4.00
-single cafelytic-filter-sulfate-free <- stock:cafelytic-filter-derived: 3.50
+single cafelytic-filter-sulfate-free <- stock:cafelytic-filter-derived: 4.00
 single cafelytic-filter-sulfate-free <- stock:cafelytic-filter-sulfate-free-derived: 4.00
 single cafelytic-filter-sulfate-free <- stock:dan-eils: 1.29
 single cafelytic-filter-sulfate-free <- stock:dan-eils-derived: 1.29
@@ -610,13 +610,13 @@ single cafelytic-filter-sulfate-free <- stock:rao-2013: 1.59
 single cafelytic-filter-sulfate-free <- stock:rao-2013-derived: 1.59
 single cafelytic-filter-sulfate-free <- stock:rao-derived: 1.47
 single cafelytic-filter-sulfate-free <- stock:rao-perger: 1.48
-single cafelytic-filter-sulfate-free <- stock:rao-perger-derived: 0.96
+single cafelytic-filter-sulfate-free <- stock:rao-perger-derived: 1.48
 single cafelytic-filter-sulfate-free <- stock:rasami-w1d1-derived: 0.39
 single cafelytic-filter-sulfate-free <- stock:rasami-w1d2-derived: 4.00
 single cafelytic-filter-sulfate-free <- stock:rasami-w1d3-derived: 1.35
-single cafelytic-filter-sulfate-free <- stock:rasami-w1d4-derived: 3.37
+single cafelytic-filter-sulfate-free <- stock:rasami-w1d4-derived: 3.04
 single cafelytic-filter-sulfate-free <- stock:rasami-w1d5-derived: 2.36
-single cafelytic-filter-sulfate-free <- stock:rasami-w1d6-derived: 3.39
+single cafelytic-filter-sulfate-free <- stock:rasami-w1d6-derived: 3.48
 single cafelytic-filter-sulfate-free <- stock:rasami-w1d7-derived: 4.00
 single cafelytic-filter-sulfate-free <- stock:sca-derived: 0.92
 single cafelytic-filter-sulfate-free <- stock:sey-derived: 1.22
@@ -637,7 +637,7 @@ single dan-eils <- stock:bh-simplified-rao-2008-derived: 1.62
 single dan-eils <- stock:bh-simplified-sca-optimal: 1.75
 single dan-eils <- stock:bh-simplified-sca-optimal-derived: 1.75
 single dan-eils <- stock:cafelytic-espresso-derived: 11.42
-single dan-eils <- stock:cafelytic-filter-derived: 9.51
+single dan-eils <- stock:cafelytic-filter-derived: 10.22
 single dan-eils <- stock:cafelytic-filter-sulfate-free-derived: 10.48
 single dan-eils <- stock:dan-eils: 4.00
 single dan-eils <- stock:dan-eils-derived: 4.00
@@ -663,14 +663,14 @@ single dan-eils <- stock:rao-2013: 4.76
 single dan-eils <- stock:rao-2013-derived: 4.76
 single dan-eils <- stock:rao-derived: 5.00
 single dan-eils <- stock:rao-perger: 4.80
-single dan-eils <- stock:rao-perger-derived: 3.35
+single dan-eils <- stock:rao-perger-derived: 4.80
 single dan-eils <- stock:rasami-w1d1-derived: 1.31
 single dan-eils <- stock:rasami-w1d2-derived: 12.94
 single dan-eils <- stock:rasami-w1d3-derived: 4.00
-single dan-eils <- stock:rasami-w1d4-derived: 9.70
+single dan-eils <- stock:rasami-w1d4-derived: 9.39
 single dan-eils <- stock:rasami-w1d5-derived: 7.65
-single dan-eils <- stock:rasami-w1d6-derived: 9.47
-single dan-eils <- stock:rasami-w1d7-derived: 11.89
+single dan-eils <- stock:rasami-w1d6-derived: 10.06
+single dan-eils <- stock:rasami-w1d7-derived: 11.91
 single dan-eils <- stock:sca-derived: 2.81
 single dan-eils <- stock:sey-derived: 3.58
 single dan-eils <- stock:world-of-coffee-budapest: 2.39
@@ -690,7 +690,7 @@ single eaf-fam-29th-wave <- stock:bh-simplified-rao-2008-derived: 4.00
 single eaf-fam-29th-wave <- stock:bh-simplified-sca-optimal: 4.00
 single eaf-fam-29th-wave <- stock:bh-simplified-sca-optimal-derived: 4.00
 single eaf-fam-29th-wave <- stock:cafelytic-espresso-derived: 6.08
-single eaf-fam-29th-wave <- stock:cafelytic-filter-derived: 3.06
+single eaf-fam-29th-wave <- stock:cafelytic-filter-derived: 5.12
 single eaf-fam-29th-wave <- stock:cafelytic-filter-sulfate-free-derived: 4.00
 single eaf-fam-29th-wave <- stock:dan-eils: 2.07
 single eaf-fam-29th-wave <- stock:dan-eils-derived: 2.07
@@ -716,14 +716,14 @@ single eaf-fam-29th-wave <- stock:rao-2013: 3.20
 single eaf-fam-29th-wave <- stock:rao-2013-derived: 3.20
 single eaf-fam-29th-wave <- stock:rao-derived: 4.00
 single eaf-fam-29th-wave <- stock:rao-perger: 4.62
-single eaf-fam-29th-wave <- stock:rao-perger-derived: 4.00
+single eaf-fam-29th-wave <- stock:rao-perger-derived: 4.62
 single eaf-fam-29th-wave <- stock:rasami-w1d1-derived: 3.51
 single eaf-fam-29th-wave <- stock:rasami-w1d2-derived: 9.44
 single eaf-fam-29th-wave <- stock:rasami-w1d3-derived: 5.80
-single eaf-fam-29th-wave <- stock:rasami-w1d4-derived: 5.13
+single eaf-fam-29th-wave <- stock:rasami-w1d4-derived: 7.85
 single eaf-fam-29th-wave <- stock:rasami-w1d5-derived: 6.05
-single eaf-fam-29th-wave <- stock:rasami-w1d6-derived: 5.01
-single eaf-fam-29th-wave <- stock:rasami-w1d7-derived: 6.08
+single eaf-fam-29th-wave <- stock:rasami-w1d6-derived: 7.30
+single eaf-fam-29th-wave <- stock:rasami-w1d7-derived: 9.32
 single eaf-fam-29th-wave <- stock:sca-derived: 1.41
 single eaf-fam-29th-wave <- stock:sey-derived: 2.18
 single eaf-fam-29th-wave <- stock:world-of-coffee-budapest: 5.43
@@ -743,7 +743,7 @@ single eaf-fam-69th-wave <- stock:bh-simplified-rao-2008-derived: 4.96
 single eaf-fam-69th-wave <- stock:bh-simplified-sca-optimal: 5.56
 single eaf-fam-69th-wave <- stock:bh-simplified-sca-optimal-derived: 5.56
 single eaf-fam-69th-wave <- stock:cafelytic-espresso-derived: 6.30
-single eaf-fam-69th-wave <- stock:cafelytic-filter-derived: 3.28
+single eaf-fam-69th-wave <- stock:cafelytic-filter-derived: 7.27
 single eaf-fam-69th-wave <- stock:cafelytic-filter-sulfate-free-derived: 4.00
 single eaf-fam-69th-wave <- stock:dan-eils: 2.11
 single eaf-fam-69th-wave <- stock:dan-eils-derived: 2.11
@@ -769,14 +769,14 @@ single eaf-fam-69th-wave <- stock:rao-2013: 3.25
 single eaf-fam-69th-wave <- stock:rao-2013-derived: 3.25
 single eaf-fam-69th-wave <- stock:rao-derived: 4.69
 single eaf-fam-69th-wave <- stock:rao-perger: 5.79
-single eaf-fam-69th-wave <- stock:rao-perger-derived: 5.51
+single eaf-fam-69th-wave <- stock:rao-perger-derived: 5.79
 single eaf-fam-69th-wave <- stock:rasami-w1d1-derived: 5.91
 single eaf-fam-69th-wave <- stock:rasami-w1d2-derived: 9.44
 single eaf-fam-69th-wave <- stock:rasami-w1d3-derived: 8.78
-single eaf-fam-69th-wave <- stock:rasami-w1d4-derived: 5.23
+single eaf-fam-69th-wave <- stock:rasami-w1d4-derived: 10.15
 single eaf-fam-69th-wave <- stock:rasami-w1d5-derived: 8.85
-single eaf-fam-69th-wave <- stock:rasami-w1d6-derived: 5.15
-single eaf-fam-69th-wave <- stock:rasami-w1d7-derived: 6.20
+single eaf-fam-69th-wave <- stock:rasami-w1d6-derived: 9.04
+single eaf-fam-69th-wave <- stock:rasami-w1d7-derived: 12.04
 single eaf-fam-69th-wave <- stock:sca-derived: 2.00
 single eaf-fam-69th-wave <- stock:sey-derived: 4.00
 single eaf-fam-69th-wave <- stock:world-of-coffee-budapest: 6.95
@@ -796,7 +796,7 @@ single eaf-holy-water <- stock:bh-simplified-rao-2008-derived: 2.56
 single eaf-holy-water <- stock:bh-simplified-sca-optimal: 2.99
 single eaf-holy-water <- stock:bh-simplified-sca-optimal-derived: 2.99
 single eaf-holy-water <- stock:cafelytic-espresso-derived: 2.49
-single eaf-holy-water <- stock:cafelytic-filter-derived: 1.43
+single eaf-holy-water <- stock:cafelytic-filter-derived: 4.78
 single eaf-holy-water <- stock:cafelytic-filter-sulfate-free-derived: 1.63
 single eaf-holy-water <- stock:dan-eils: 0.79
 single eaf-holy-water <- stock:dan-eils-derived: 0.79
@@ -822,14 +822,14 @@ single eaf-holy-water <- stock:rao-2013: 0.79
 single eaf-holy-water <- stock:rao-2013-derived: 0.79
 single eaf-holy-water <- stock:rao-derived: 2.55
 single eaf-holy-water <- stock:rao-perger: 2.93
-single eaf-holy-water <- stock:rao-perger-derived: 3.12
+single eaf-holy-water <- stock:rao-perger-derived: 2.93
 single eaf-holy-water <- stock:rasami-w1d1-derived: 4.00
 single eaf-holy-water <- stock:rasami-w1d2-derived: 2.11
 single eaf-holy-water <- stock:rasami-w1d3-derived: 5.48
-single eaf-holy-water <- stock:rasami-w1d4-derived: 1.30
+single eaf-holy-water <- stock:rasami-w1d4-derived: 4.99
 single eaf-holy-water <- stock:rasami-w1d5-derived: 5.92
-single eaf-holy-water <- stock:rasami-w1d6-derived: 1.43
-single eaf-holy-water <- stock:rasami-w1d7-derived: 1.58
+single eaf-holy-water <- stock:rasami-w1d6-derived: 4.00
+single eaf-holy-water <- stock:rasami-w1d7-derived: 5.99
 single eaf-holy-water <- stock:sca-derived: 1.29
 single eaf-holy-water <- stock:sey-derived: 3.02
 single eaf-holy-water <- stock:world-of-coffee-budapest: 3.35
@@ -849,7 +849,7 @@ single eaf-melbourne-water <- stock:bh-simplified-rao-2008-derived: 2.21
 single eaf-melbourne-water <- stock:bh-simplified-sca-optimal: 2.57
 single eaf-melbourne-water <- stock:bh-simplified-sca-optimal-derived: 2.57
 single eaf-melbourne-water <- stock:cafelytic-espresso-derived: 1.61
-single eaf-melbourne-water <- stock:cafelytic-filter-derived: 0.93
+single eaf-melbourne-water <- stock:cafelytic-filter-derived: 3.56
 single eaf-melbourne-water <- stock:cafelytic-filter-sulfate-free-derived: 1.08
 single eaf-melbourne-water <- stock:dan-eils: 0.51
 single eaf-melbourne-water <- stock:dan-eils-derived: 0.51
@@ -875,14 +875,14 @@ single eaf-melbourne-water <- stock:rao-2013: 0.77
 single eaf-melbourne-water <- stock:rao-2013-derived: 0.77
 single eaf-melbourne-water <- stock:rao-derived: 1.84
 single eaf-melbourne-water <- stock:rao-perger: 2.35
-single eaf-melbourne-water <- stock:rao-perger-derived: 2.50
+single eaf-melbourne-water <- stock:rao-perger-derived: 2.35
 single eaf-melbourne-water <- stock:rasami-w1d1-derived: 3.48
 single eaf-melbourne-water <- stock:rasami-w1d2-derived: 2.12
 single eaf-melbourne-water <- stock:rasami-w1d3-derived: 4.64
-single eaf-melbourne-water <- stock:rasami-w1d4-derived: 1.27
+single eaf-melbourne-water <- stock:rasami-w1d4-derived: 4.00
 single eaf-melbourne-water <- stock:rasami-w1d5-derived: 4.50
-single eaf-melbourne-water <- stock:rasami-w1d6-derived: 1.28
-single eaf-melbourne-water <- stock:rasami-w1d7-derived: 1.49
+single eaf-melbourne-water <- stock:rasami-w1d6-derived: 3.58
+single eaf-melbourne-water <- stock:rasami-w1d7-derived: 5.14
 single eaf-melbourne-water <- stock:sca-derived: 0.97
 single eaf-melbourne-water <- stock:sey-derived: 2.36
 single eaf-melbourne-water <- stock:world-of-coffee-budapest: 2.92
@@ -902,7 +902,7 @@ single eaf-rpavlis <- stock:bh-simplified-rao-2008-derived: 1.53
 single eaf-rpavlis <- stock:bh-simplified-sca-optimal: 1.64
 single eaf-rpavlis <- stock:bh-simplified-sca-optimal-derived: 1.64
 single eaf-rpavlis <- stock:cafelytic-espresso-derived: 4.67
-single eaf-rpavlis <- stock:cafelytic-filter-derived: 2.40
+single eaf-rpavlis <- stock:cafelytic-filter-derived: 3.30
 single eaf-rpavlis <- stock:cafelytic-filter-sulfate-free-derived: 2.76
 single eaf-rpavlis <- stock:dan-eils: 1.61
 single eaf-rpavlis <- stock:dan-eils-derived: 1.61
@@ -928,14 +928,14 @@ single eaf-rpavlis <- stock:rao-2013: 1.55
 single eaf-rpavlis <- stock:rao-2013-derived: 1.55
 single eaf-rpavlis <- stock:rao-derived: 2.65
 single eaf-rpavlis <- stock:rao-perger: 2.53
-single eaf-rpavlis <- stock:rao-perger-derived: 2.13
+single eaf-rpavlis <- stock:rao-perger-derived: 2.53
 single eaf-rpavlis <- stock:rasami-w1d1-derived: 1.14
 single eaf-rpavlis <- stock:rasami-w1d2-derived: 4.59
 single eaf-rpavlis <- stock:rasami-w1d3-derived: 2.12
-single eaf-rpavlis <- stock:rasami-w1d4-derived: 2.47
+single eaf-rpavlis <- stock:rasami-w1d4-derived: 3.27
 single eaf-rpavlis <- stock:rasami-w1d5-derived: 4.00
-single eaf-rpavlis <- stock:rasami-w1d6-derived: 2.62
-single eaf-rpavlis <- stock:rasami-w1d7-derived: 3.05
+single eaf-rpavlis <- stock:rasami-w1d6-derived: 3.43
+single eaf-rpavlis <- stock:rasami-w1d7-derived: 4.00
 single eaf-rpavlis <- stock:sca-derived: 0.88
 single eaf-rpavlis <- stock:sey-derived: 1.07
 single eaf-rpavlis <- stock:world-of-coffee-budapest: 2.28
@@ -955,7 +955,7 @@ single eaf-tww-espresso-inspired <- stock:bh-simplified-rao-2008-derived: 6.90
 single eaf-tww-espresso-inspired <- stock:bh-simplified-sca-optimal: 8.05
 single eaf-tww-espresso-inspired <- stock:bh-simplified-sca-optimal-derived: 8.05
 single eaf-tww-espresso-inspired <- stock:cafelytic-espresso-derived: 7.20
-single eaf-tww-espresso-inspired <- stock:cafelytic-filter-derived: 4.00
+single eaf-tww-espresso-inspired <- stock:cafelytic-filter-derived: 12.97
 single eaf-tww-espresso-inspired <- stock:cafelytic-filter-sulfate-free-derived: 4.67
 single eaf-tww-espresso-inspired <- stock:dan-eils: 2.32
 single eaf-tww-espresso-inspired <- stock:dan-eils-derived: 2.32
@@ -981,14 +981,14 @@ single eaf-tww-espresso-inspired <- stock:rao-2013: 2.28
 single eaf-tww-espresso-inspired <- stock:rao-2013-derived: 2.28
 single eaf-tww-espresso-inspired <- stock:rao-derived: 7.06
 single eaf-tww-espresso-inspired <- stock:rao-perger: 8.03
-single eaf-tww-espresso-inspired <- stock:rao-perger-derived: 8.46
+single eaf-tww-espresso-inspired <- stock:rao-perger-derived: 8.03
 single eaf-tww-espresso-inspired <- stock:rasami-w1d1-derived: 11.01
 single eaf-tww-espresso-inspired <- stock:rasami-w1d2-derived: 6.21
 single eaf-tww-espresso-inspired <- stock:rasami-w1d3-derived: 14.62
-single eaf-tww-espresso-inspired <- stock:rasami-w1d4-derived: 4.00
+single eaf-tww-espresso-inspired <- stock:rasami-w1d4-derived: 13.51
 single eaf-tww-espresso-inspired <- stock:rasami-w1d5-derived: 16.01
-single eaf-tww-espresso-inspired <- stock:rasami-w1d6-derived: 4.00
-single eaf-tww-espresso-inspired <- stock:rasami-w1d7-derived: 4.59
+single eaf-tww-espresso-inspired <- stock:rasami-w1d6-derived: 11.50
+single eaf-tww-espresso-inspired <- stock:rasami-w1d7-derived: 16.24
 single eaf-tww-espresso-inspired <- stock:sca-derived: 3.51
 single eaf-tww-espresso-inspired <- stock:sey-derived: 8.04
 single eaf-tww-espresso-inspired <- stock:world-of-coffee-budapest: 9.09
@@ -1008,7 +1008,7 @@ single empirical-glacial <- stock:bh-simplified-rao-2008-derived: 1.04
 single empirical-glacial <- stock:bh-simplified-sca-optimal: 1.16
 single empirical-glacial <- stock:bh-simplified-sca-optimal-derived: 1.16
 single empirical-glacial <- stock:cafelytic-espresso-derived: 2.25
-single empirical-glacial <- stock:cafelytic-filter-derived: 1.48
+single empirical-glacial <- stock:cafelytic-filter-derived: 2.22
 single empirical-glacial <- stock:cafelytic-filter-sulfate-free-derived: 1.70
 single empirical-glacial <- stock:dan-eils: 0.82
 single empirical-glacial <- stock:dan-eils-derived: 0.82
@@ -1034,14 +1034,14 @@ single empirical-glacial <- stock:rao-2013: 1.13
 single empirical-glacial <- stock:rao-2013-derived: 1.13
 single empirical-glacial <- stock:rao-derived: 1.40
 single empirical-glacial <- stock:rao-perger: 1.54
-single empirical-glacial <- stock:rao-perger-derived: 1.33
+single empirical-glacial <- stock:rao-perger-derived: 1.54
 single empirical-glacial <- stock:rasami-w1d1-derived: 1.12
 single empirical-glacial <- stock:rasami-w1d2-derived: 3.33
 single empirical-glacial <- stock:rasami-w1d3-derived: 1.98
-single empirical-glacial <- stock:rasami-w1d4-derived: 2.04
+single empirical-glacial <- stock:rasami-w1d4-derived: 2.90
 single empirical-glacial <- stock:rasami-w1d5-derived: 2.37
-single empirical-glacial <- stock:rasami-w1d6-derived: 1.82
-single empirical-glacial <- stock:rasami-w1d7-derived: 2.21
+single empirical-glacial <- stock:rasami-w1d6-derived: 2.54
+single empirical-glacial <- stock:rasami-w1d7-derived: 3.19
 single empirical-glacial <- stock:sca-derived: 0.67
 single empirical-glacial <- stock:sey-derived: 1.04
 single empirical-glacial <- stock:world-of-coffee-budapest: 1.49
@@ -1061,7 +1061,7 @@ single empirical-spring <- stock:bh-simplified-rao-2008-derived: 1.34
 single empirical-spring <- stock:bh-simplified-sca-optimal: 1.52
 single empirical-spring <- stock:bh-simplified-sca-optimal-derived: 1.52
 single empirical-spring <- stock:cafelytic-espresso-derived: 2.85
-single empirical-spring <- stock:cafelytic-filter-derived: 2.19
+single empirical-spring <- stock:cafelytic-filter-derived: 3.48
 single empirical-spring <- stock:cafelytic-filter-sulfate-free-derived: 2.46
 single empirical-spring <- stock:dan-eils: 1.06
 single empirical-spring <- stock:dan-eils-derived: 1.06
@@ -1087,14 +1087,14 @@ single empirical-spring <- stock:rao-2013: 1.43
 single empirical-spring <- stock:rao-2013-derived: 1.43
 single empirical-spring <- stock:rao-derived: 1.89
 single empirical-spring <- stock:rao-perger: 2.05
-single empirical-spring <- stock:rao-perger-derived: 1.83
+single empirical-spring <- stock:rao-perger-derived: 2.05
 single empirical-spring <- stock:rasami-w1d1-derived: 1.79
 single empirical-spring <- stock:rasami-w1d2-derived: 4.00
 single empirical-spring <- stock:rasami-w1d3-derived: 3.02
-single empirical-spring <- stock:rasami-w1d4-derived: 2.77
+single empirical-spring <- stock:rasami-w1d4-derived: 4.00
 single empirical-spring <- stock:rasami-w1d5-derived: 4.00
-single empirical-spring <- stock:rasami-w1d6-derived: 2.41
-single empirical-spring <- stock:rasami-w1d7-derived: 2.97
+single empirical-spring <- stock:rasami-w1d6-derived: 3.56
+single empirical-spring <- stock:rasami-w1d7-derived: 4.61
 single empirical-spring <- stock:sca-derived: 1.07
 single empirical-spring <- stock:sey-derived: 1.83
 single empirical-spring <- stock:world-of-coffee-budapest: 1.84
@@ -1114,7 +1114,7 @@ single hendon-espresso <- stock:bh-simplified-rao-2008-derived: 1.13
 single hendon-espresso <- stock:bh-simplified-sca-optimal: 1.23
 single hendon-espresso <- stock:bh-simplified-sca-optimal-derived: 1.23
 single hendon-espresso <- stock:cafelytic-espresso-derived: 2.60
-single hendon-espresso <- stock:cafelytic-filter-derived: 1.55
+single hendon-espresso <- stock:cafelytic-filter-derived: 2.14
 single hendon-espresso <- stock:cafelytic-filter-sulfate-free-derived: 1.79
 single hendon-espresso <- stock:dan-eils: 0.80
 single hendon-espresso <- stock:dan-eils-derived: 0.80
@@ -1140,14 +1140,14 @@ single hendon-espresso <- stock:rao-2013: 1.08
 single hendon-espresso <- stock:rao-2013-derived: 1.08
 single hendon-espresso <- stock:rao-derived: 1.29
 single hendon-espresso <- stock:rao-perger: 1.55
-single hendon-espresso <- stock:rao-perger-derived: 1.30
+single hendon-espresso <- stock:rao-perger-derived: 1.55
 single hendon-espresso <- stock:rasami-w1d1-derived: 1.06
 single hendon-espresso <- stock:rasami-w1d2-derived: 2.85
 single hendon-espresso <- stock:rasami-w1d3-derived: 1.75
-single hendon-espresso <- stock:rasami-w1d4-derived: 1.79
+single hendon-espresso <- stock:rasami-w1d4-derived: 2.37
 single hendon-espresso <- stock:rasami-w1d5-derived: 2.02
-single hendon-espresso <- stock:rasami-w1d6-derived: 1.76
-single hendon-espresso <- stock:rasami-w1d7-derived: 1.88
+single hendon-espresso <- stock:rasami-w1d6-derived: 2.31
+single hendon-espresso <- stock:rasami-w1d7-derived: 2.52
 single hendon-espresso <- stock:sca-derived: 0.47
 single hendon-espresso <- stock:sey-derived: 0.71
 single hendon-espresso <- stock:world-of-coffee-budapest: 1.64
@@ -1167,7 +1167,7 @@ single lotus-bright-juicy <- stock:bh-simplified-rao-2008-derived: 0.59
 single lotus-bright-juicy <- stock:bh-simplified-sca-optimal: 0.64
 single lotus-bright-juicy <- stock:bh-simplified-sca-optimal-derived: 0.64
 single lotus-bright-juicy <- stock:cafelytic-espresso-derived: 5.05
-single lotus-bright-juicy <- stock:cafelytic-filter-derived: 4.61
+single lotus-bright-juicy <- stock:cafelytic-filter-derived: 4.75
 single lotus-bright-juicy <- stock:cafelytic-filter-sulfate-free-derived: 5.05
 single lotus-bright-juicy <- stock:dan-eils: 1.76
 single lotus-bright-juicy <- stock:dan-eils-derived: 1.76
@@ -1193,14 +1193,14 @@ single lotus-bright-juicy <- stock:rao-2013: 2.30
 single lotus-bright-juicy <- stock:rao-2013-derived: 2.30
 single lotus-bright-juicy <- stock:rao-derived: 2.01
 single lotus-bright-juicy <- stock:rao-perger: 2.03
-single lotus-bright-juicy <- stock:rao-perger-derived: 1.33
+single lotus-bright-juicy <- stock:rao-perger-derived: 2.03
 single lotus-bright-juicy <- stock:rasami-w1d1-derived: 0.51
 single lotus-bright-juicy <- stock:rasami-w1d2-derived: 6.12
 single lotus-bright-juicy <- stock:rasami-w1d3-derived: 1.92
-single lotus-bright-juicy <- stock:rasami-w1d4-derived: 4.83
+single lotus-bright-juicy <- stock:rasami-w1d4-derived: 4.47
 single lotus-bright-juicy <- stock:rasami-w1d5-derived: 3.20
-single lotus-bright-juicy <- stock:rasami-w1d6-derived: 4.66
-single lotus-bright-juicy <- stock:rasami-w1d7-derived: 5.92
+single lotus-bright-juicy <- stock:rasami-w1d6-derived: 4.81
+single lotus-bright-juicy <- stock:rasami-w1d7-derived: 5.71
 single lotus-bright-juicy <- stock:sca-derived: 1.29
 single lotus-bright-juicy <- stock:sey-derived: 1.67
 single lotus-bright-juicy <- stock:world-of-coffee-budapest: 0.86
@@ -1220,7 +1220,7 @@ single lotus-light-bright <- stock:bh-simplified-rao-2008-derived: 0.74
 single lotus-light-bright <- stock:bh-simplified-sca-optimal: 0.80
 single lotus-light-bright <- stock:bh-simplified-sca-optimal-derived: 0.80
 single lotus-light-bright <- stock:cafelytic-espresso-derived: 5.47
-single lotus-light-bright <- stock:cafelytic-filter-derived: 4.57
+single lotus-light-bright <- stock:cafelytic-filter-derived: 4.89
 single lotus-light-bright <- stock:cafelytic-filter-sulfate-free-derived: 5.04
 single lotus-light-bright <- stock:dan-eils: 2.00
 single lotus-light-bright <- stock:dan-eils-derived: 2.00
@@ -1246,14 +1246,14 @@ single lotus-light-bright <- stock:rao-2013: 2.39
 single lotus-light-bright <- stock:rao-2013-derived: 2.39
 single lotus-light-bright <- stock:rao-derived: 2.52
 single lotus-light-bright <- stock:rao-perger: 2.35
-single lotus-light-bright <- stock:rao-perger-derived: 1.64
+single lotus-light-bright <- stock:rao-perger-derived: 2.35
 single lotus-light-bright <- stock:rasami-w1d1-derived: 0.55
 single lotus-light-bright <- stock:rasami-w1d2-derived: 6.75
 single lotus-light-bright <- stock:rasami-w1d3-derived: 2.07
-single lotus-light-bright <- stock:rasami-w1d4-derived: 4.90
+single lotus-light-bright <- stock:rasami-w1d4-derived: 4.81
 single lotus-light-bright <- stock:rasami-w1d5-derived: 4.00
-single lotus-light-bright <- stock:rasami-w1d6-derived: 4.60
-single lotus-light-bright <- stock:rasami-w1d7-derived: 5.85
+single lotus-light-bright <- stock:rasami-w1d6-derived: 4.89
+single lotus-light-bright <- stock:rasami-w1d7-derived: 5.87
 single lotus-light-bright <- stock:sca-derived: 1.45
 single lotus-light-bright <- stock:sey-derived: 1.81
 single lotus-light-bright <- stock:world-of-coffee-budapest: 1.11
@@ -1273,7 +1273,7 @@ single lotus-light-bright-espresso <- stock:bh-simplified-rao-2008-derived: 1.39
 single lotus-light-bright-espresso <- stock:bh-simplified-sca-optimal: 1.49
 single lotus-light-bright-espresso <- stock:bh-simplified-sca-optimal-derived: 1.49
 single lotus-light-bright-espresso <- stock:cafelytic-espresso-derived: 5.12
-single lotus-light-bright-espresso <- stock:cafelytic-filter-derived: 3.14
+single lotus-light-bright-espresso <- stock:cafelytic-filter-derived: 4.00
 single lotus-light-bright-espresso <- stock:cafelytic-filter-sulfate-free-derived: 3.55
 single lotus-light-bright-espresso <- stock:dan-eils: 1.74
 single lotus-light-bright-espresso <- stock:dan-eils-derived: 1.74
@@ -1299,14 +1299,14 @@ single lotus-light-bright-espresso <- stock:rao-2013: 1.79
 single lotus-light-bright-espresso <- stock:rao-2013-derived: 1.79
 single lotus-light-bright-espresso <- stock:rao-derived: 2.65
 single lotus-light-bright-espresso <- stock:rao-perger: 2.56
-single lotus-light-bright-espresso <- stock:rao-perger-derived: 2.06
+single lotus-light-bright-espresso <- stock:rao-perger-derived: 2.56
 single lotus-light-bright-espresso <- stock:rasami-w1d1-derived: 1.07
 single lotus-light-bright-espresso <- stock:rasami-w1d2-derived: 5.06
 single lotus-light-bright-espresso <- stock:rasami-w1d3-derived: 2.18
-single lotus-light-bright-espresso <- stock:rasami-w1d4-derived: 3.13
+single lotus-light-bright-espresso <- stock:rasami-w1d4-derived: 4.00
 single lotus-light-bright-espresso <- stock:rasami-w1d5-derived: 4.00
-single lotus-light-bright-espresso <- stock:rasami-w1d6-derived: 3.28
-single lotus-light-bright-espresso <- stock:rasami-w1d7-derived: 4.00
+single lotus-light-bright-espresso <- stock:rasami-w1d6-derived: 4.00
+single lotus-light-bright-espresso <- stock:rasami-w1d7-derived: 4.65
 single lotus-light-bright-espresso <- stock:sca-derived: 1.02
 single lotus-light-bright-espresso <- stock:sey-derived: 1.27
 single lotus-light-bright-espresso <- stock:world-of-coffee-budapest: 2.07
@@ -1326,7 +1326,7 @@ single lotus-simple-sweet <- stock:bh-simplified-rao-2008-derived: 1.39
 single lotus-simple-sweet <- stock:bh-simplified-sca-optimal: 1.50
 single lotus-simple-sweet <- stock:bh-simplified-sca-optimal-derived: 1.50
 single lotus-simple-sweet <- stock:cafelytic-espresso-derived: 8.22
-single lotus-simple-sweet <- stock:cafelytic-filter-derived: 6.97
+single lotus-simple-sweet <- stock:cafelytic-filter-derived: 7.41
 single lotus-simple-sweet <- stock:cafelytic-filter-sulfate-free-derived: 7.71
 single lotus-simple-sweet <- stock:dan-eils: 2.90
 single lotus-simple-sweet <- stock:dan-eils-derived: 2.90
@@ -1352,14 +1352,14 @@ single lotus-simple-sweet <- stock:rao-2013: 4.00
 single lotus-simple-sweet <- stock:rao-2013-derived: 4.00
 single lotus-simple-sweet <- stock:rao-derived: 3.57
 single lotus-simple-sweet <- stock:rao-perger: 4.00
-single lotus-simple-sweet <- stock:rao-perger-derived: 2.53
+single lotus-simple-sweet <- stock:rao-perger-derived: 4.00
 single lotus-simple-sweet <- stock:rasami-w1d1-derived: 1.11
 single lotus-simple-sweet <- stock:rasami-w1d2-derived: 10.46
 single lotus-simple-sweet <- stock:rasami-w1d3-derived: 3.48
-single lotus-simple-sweet <- stock:rasami-w1d4-derived: 7.70
+single lotus-simple-sweet <- stock:rasami-w1d4-derived: 7.57
 single lotus-simple-sweet <- stock:rasami-w1d5-derived: 5.49
-single lotus-simple-sweet <- stock:rasami-w1d6-derived: 7.39
-single lotus-simple-sweet <- stock:rasami-w1d7-derived: 9.35
+single lotus-simple-sweet <- stock:rasami-w1d6-derived: 7.89
+single lotus-simple-sweet <- stock:rasami-w1d7-derived: 9.45
 single lotus-simple-sweet <- stock:sca-derived: 2.07
 single lotus-simple-sweet <- stock:sey-derived: 2.64
 single lotus-simple-sweet <- stock:world-of-coffee-budapest: 2.06
@@ -1379,7 +1379,7 @@ single lotus-simple-sweet-espresso <- stock:bh-simplified-rao-2008-derived: 2.01
 single lotus-simple-sweet-espresso <- stock:bh-simplified-sca-optimal: 2.16
 single lotus-simple-sweet-espresso <- stock:bh-simplified-sca-optimal-derived: 2.16
 single lotus-simple-sweet-espresso <- stock:cafelytic-espresso-derived: 4.73
-single lotus-simple-sweet-espresso <- stock:cafelytic-filter-derived: 2.87
+single lotus-simple-sweet-espresso <- stock:cafelytic-filter-derived: 3.56
 single lotus-simple-sweet-espresso <- stock:cafelytic-filter-sulfate-free-derived: 3.31
 single lotus-simple-sweet-espresso <- stock:dan-eils: 1.60
 single lotus-simple-sweet-espresso <- stock:dan-eils-derived: 1.60
@@ -1405,14 +1405,14 @@ single lotus-simple-sweet-espresso <- stock:rao-2013: 2.42
 single lotus-simple-sweet-espresso <- stock:rao-2013-derived: 2.42
 single lotus-simple-sweet-espresso <- stock:rao-derived: 2.42
 single lotus-simple-sweet-espresso <- stock:rao-perger: 2.86
-single lotus-simple-sweet-espresso <- stock:rao-perger-derived: 2.31
+single lotus-simple-sweet-espresso <- stock:rao-perger-derived: 2.86
 single lotus-simple-sweet-espresso <- stock:rasami-w1d1-derived: 1.53
 single lotus-simple-sweet-espresso <- stock:rasami-w1d2-derived: 6.93
 single lotus-simple-sweet-espresso <- stock:rasami-w1d3-derived: 3.04
-single lotus-simple-sweet-espresso <- stock:rasami-w1d4-derived: 4.00
+single lotus-simple-sweet-espresso <- stock:rasami-w1d4-derived: 5.00
 single lotus-simple-sweet-espresso <- stock:rasami-w1d5-derived: 3.46
-single lotus-simple-sweet-espresso <- stock:rasami-w1d6-derived: 4.00
-single lotus-simple-sweet-espresso <- stock:rasami-w1d7-derived: 5.00
+single lotus-simple-sweet-espresso <- stock:rasami-w1d6-derived: 5.00
+single lotus-simple-sweet-espresso <- stock:rasami-w1d7-derived: 6.10
 single lotus-simple-sweet-espresso <- stock:sca-derived: 0.94
 single lotus-simple-sweet-espresso <- stock:sey-derived: 1.18
 single lotus-simple-sweet-espresso <- stock:world-of-coffee-budapest: 3.00
@@ -1432,7 +1432,7 @@ single matt-perger <- stock:bh-simplified-rao-2008-derived: 4.00
 single matt-perger <- stock:bh-simplified-sca-optimal: 4.47
 single matt-perger <- stock:bh-simplified-sca-optimal-derived: 4.47
 single matt-perger <- stock:cafelytic-espresso-derived: 3.13
-single matt-perger <- stock:cafelytic-filter-derived: 1.77
+single matt-perger <- stock:cafelytic-filter-derived: 6.13
 single matt-perger <- stock:cafelytic-filter-sulfate-free-derived: 2.06
 single matt-perger <- stock:dan-eils: 1.00
 single matt-perger <- stock:dan-eils-derived: 1.00
@@ -1462,10 +1462,10 @@ single matt-perger <- stock:rao-perger-derived: 4.00
 single matt-perger <- stock:rasami-w1d1-derived: 5.85
 single matt-perger <- stock:rasami-w1d2-derived: 4.00
 single matt-perger <- stock:rasami-w1d3-derived: 7.91
-single matt-perger <- stock:rasami-w1d4-derived: 2.50
+single matt-perger <- stock:rasami-w1d4-derived: 7.63
 single matt-perger <- stock:rasami-w1d5-derived: 7.70
-single matt-perger <- stock:rasami-w1d6-derived: 2.51
-single matt-perger <- stock:rasami-w1d7-derived: 2.95
+single matt-perger <- stock:rasami-w1d6-derived: 6.38
+single matt-perger <- stock:rasami-w1d7-derived: 9.05
 single matt-perger <- stock:sca-derived: 1.68
 single matt-perger <- stock:sey-derived: 4.00
 single matt-perger <- stock:world-of-coffee-budapest: 5.15
@@ -1485,7 +1485,7 @@ single melbourne-2013-wbc <- stock:bh-simplified-rao-2008-derived: 1.13
 single melbourne-2013-wbc <- stock:bh-simplified-sca-optimal: 1.30
 single melbourne-2013-wbc <- stock:bh-simplified-sca-optimal-derived: 1.30
 single melbourne-2013-wbc <- stock:cafelytic-espresso-derived: 0.92
-single melbourne-2013-wbc <- stock:cafelytic-filter-derived: 0.52
+single melbourne-2013-wbc <- stock:cafelytic-filter-derived: 1.79
 single melbourne-2013-wbc <- stock:cafelytic-filter-sulfate-free-derived: 0.60
 single melbourne-2013-wbc <- stock:dan-eils: 0.29
 single melbourne-2013-wbc <- stock:dan-eils-derived: 0.29
@@ -1511,14 +1511,14 @@ single melbourne-2013-wbc <- stock:rao-2013: 0.45
 single melbourne-2013-wbc <- stock:rao-2013-derived: 0.45
 single melbourne-2013-wbc <- stock:rao-derived: 0.96
 single melbourne-2013-wbc <- stock:rao-perger: 1.21
-single melbourne-2013-wbc <- stock:rao-perger-derived: 1.27
+single melbourne-2013-wbc <- stock:rao-perger-derived: 1.21
 single melbourne-2013-wbc <- stock:rasami-w1d1-derived: 1.70
 single melbourne-2013-wbc <- stock:rasami-w1d2-derived: 1.25
 single melbourne-2013-wbc <- stock:rasami-w1d3-derived: 2.30
-single melbourne-2013-wbc <- stock:rasami-w1d4-derived: 0.73
+single melbourne-2013-wbc <- stock:rasami-w1d4-derived: 2.22
 single melbourne-2013-wbc <- stock:rasami-w1d5-derived: 2.24
-single melbourne-2013-wbc <- stock:rasami-w1d6-derived: 0.74
-single melbourne-2013-wbc <- stock:rasami-w1d7-derived: 0.87
+single melbourne-2013-wbc <- stock:rasami-w1d6-derived: 1.86
+single melbourne-2013-wbc <- stock:rasami-w1d7-derived: 2.64
 single melbourne-2013-wbc <- stock:sca-derived: 0.49
 single melbourne-2013-wbc <- stock:sey-derived: 1.15
 single melbourne-2013-wbc <- stock:world-of-coffee-budapest: 1.50
@@ -1538,7 +1538,7 @@ single rao <- stock:bh-simplified-rao-2008-derived: 1.29
 single rao <- stock:bh-simplified-sca-optimal: 1.39
 single rao <- stock:bh-simplified-sca-optimal-derived: 1.39
 single rao <- stock:cafelytic-espresso-derived: 2.97
-single rao <- stock:cafelytic-filter-derived: 1.66
+single rao <- stock:cafelytic-filter-derived: 2.29
 single rao <- stock:cafelytic-filter-sulfate-free-derived: 1.96
 single rao <- stock:dan-eils: 1.12
 single rao <- stock:dan-eils-derived: 1.12
@@ -1564,14 +1564,14 @@ single rao <- stock:rao-2013: 1.52
 single rao <- stock:rao-2013-derived: 1.52
 single rao <- stock:rao-derived: 4.00
 single rao <- stock:rao-perger: 1.93
-single rao <- stock:rao-perger-derived: 1.62
+single rao <- stock:rao-perger-derived: 1.93
 single rao <- stock:rasami-w1d1-derived: 1.04
 single rao <- stock:rasami-w1d2-derived: 4.68
 single rao <- stock:rasami-w1d3-derived: 2.08
-single rao <- stock:rasami-w1d4-derived: 2.61
+single rao <- stock:rasami-w1d4-derived: 3.46
 single rao <- stock:rasami-w1d5-derived: 2.68
-single rao <- stock:rasami-w1d6-derived: 2.13
-single rao <- stock:rasami-w1d7-derived: 2.47
+single rao <- stock:rasami-w1d6-derived: 2.78
+single rao <- stock:rasami-w1d7-derived: 3.28
 single rao <- stock:sca-derived: 0.76
 single rao <- stock:sey-derived: 0.98
 single rao <- stock:world-of-coffee-budapest: 1.91
@@ -1591,7 +1591,7 @@ single rao-2013 <- stock:bh-simplified-rao-2008-derived: 1.49
 single rao-2013 <- stock:bh-simplified-sca-optimal: 1.60
 single rao-2013 <- stock:bh-simplified-sca-optimal-derived: 1.60
 single rao-2013 <- stock:cafelytic-espresso-derived: 8.09
-single rao-2013 <- stock:cafelytic-filter-derived: 7.02
+single rao-2013 <- stock:cafelytic-filter-derived: 7.37
 single rao-2013 <- stock:cafelytic-filter-sulfate-free-derived: 7.77
 single rao-2013 <- stock:dan-eils: 2.84
 single rao-2013 <- stock:dan-eils-derived: 2.84
@@ -1617,14 +1617,14 @@ single rao-2013 <- stock:rao-2013: 4.00
 single rao-2013 <- stock:rao-2013-derived: 4.00
 single rao-2013 <- stock:rao-derived: 3.40
 single rao-2013 <- stock:rao-perger: 4.00
-single rao-2013 <- stock:rao-perger-derived: 2.52
+single rao-2013 <- stock:rao-perger-derived: 4.00
 single rao-2013 <- stock:rasami-w1d1-derived: 1.19
 single rao-2013 <- stock:rasami-w1d2-derived: 10.94
 single rao-2013 <- stock:rasami-w1d3-derived: 4.00
-single rao-2013 <- stock:rasami-w1d4-derived: 8.07
+single rao-2013 <- stock:rasami-w1d4-derived: 7.93
 single rao-2013 <- stock:rasami-w1d5-derived: 5.30
-single rao-2013 <- stock:rasami-w1d6-derived: 7.71
-single rao-2013 <- stock:rasami-w1d7-derived: 9.79
+single rao-2013 <- stock:rasami-w1d6-derived: 8.22
+single rao-2013 <- stock:rasami-w1d7-derived: 9.89
 single rao-2013 <- stock:sca-derived: 2.05
 single rao-2013 <- stock:sey-derived: 2.62
 single rao-2013 <- stock:world-of-coffee-budapest: 2.20
@@ -1644,7 +1644,7 @@ single rao-perger <- stock:bh-simplified-rao-2008-derived: 2.58
 single rao-perger <- stock:bh-simplified-sca-optimal: 2.94
 single rao-perger <- stock:bh-simplified-sca-optimal-derived: 2.94
 single rao-perger <- stock:cafelytic-espresso-derived: 6.13
-single rao-perger <- stock:cafelytic-filter-derived: 4.68
+single rao-perger <- stock:cafelytic-filter-derived: 7.15
 single rao-perger <- stock:cafelytic-filter-sulfate-free-derived: 5.22
 single rao-perger <- stock:dan-eils: 2.10
 single rao-perger <- stock:dan-eils-derived: 2.10
@@ -1670,14 +1670,14 @@ single rao-perger <- stock:rao-2013: 2.67
 single rao-perger <- stock:rao-2013-derived: 2.67
 single rao-perger <- stock:rao-derived: 4.00
 single rao-perger <- stock:rao-perger: 4.00
-single rao-perger <- stock:rao-perger-derived: 3.52
+single rao-perger <- stock:rao-perger-derived: 4.00
 single rao-perger <- stock:rasami-w1d1-derived: 3.45
 single rao-perger <- stock:rasami-w1d2-derived: 7.30
 single rao-perger <- stock:rasami-w1d3-derived: 5.66
-single rao-perger <- stock:rasami-w1d4-derived: 5.13
+single rao-perger <- stock:rasami-w1d4-derived: 7.57
 single rao-perger <- stock:rasami-w1d5-derived: 6.91
-single rao-perger <- stock:rasami-w1d6-derived: 5.04
-single rao-perger <- stock:rasami-w1d7-derived: 6.23
+single rao-perger <- stock:rasami-w1d6-derived: 7.22
+single rao-perger <- stock:rasami-w1d7-derived: 9.29
 single rao-perger <- stock:sca-derived: 1.96
 single rao-perger <- stock:sey-derived: 3.41
 single rao-perger <- stock:world-of-coffee-budapest: 3.54
@@ -1697,7 +1697,7 @@ single rasami-w1d1 <- stock:bh-simplified-rao-2008-derived: 2.36
 single rasami-w1d1 <- stock:bh-simplified-sca-optimal: 2.78
 single rasami-w1d1 <- stock:bh-simplified-sca-optimal-derived: 2.78
 single rasami-w1d1 <- stock:cafelytic-espresso-derived: 1.32
-single rasami-w1d1 <- stock:cafelytic-filter-derived: 0.82
+single rasami-w1d1 <- stock:cafelytic-filter-derived: 4.00
 single rasami-w1d1 <- stock:cafelytic-filter-sulfate-free-derived: 0.94
 single rasami-w1d1 <- stock:dan-eils: 0.39
 single rasami-w1d1 <- stock:dan-eils-derived: 0.39
@@ -1723,14 +1723,14 @@ single rasami-w1d1 <- stock:rao-2013: 0.60
 single rasami-w1d1 <- stock:rao-2013-derived: 0.60
 single rasami-w1d1 <- stock:rao-derived: 1.88
 single rasami-w1d1 <- stock:rao-perger: 2.42
-single rasami-w1d1 <- stock:rao-perger-derived: 2.69
+single rasami-w1d1 <- stock:rao-perger-derived: 2.42
 single rasami-w1d1 <- stock:rasami-w1d1-derived: 4.00
 single rasami-w1d1 <- stock:rasami-w1d2-derived: 1.57
 single rasami-w1d1 <- stock:rasami-w1d3-derived: 5.19
-single rasami-w1d1 <- stock:rasami-w1d4-derived: 1.00
+single rasami-w1d1 <- stock:rasami-w1d4-derived: 4.57
 single rasami-w1d1 <- stock:rasami-w1d5-derived: 4.97
-single rasami-w1d1 <- stock:rasami-w1d6-derived: 1.04
-single rasami-w1d1 <- stock:rasami-w1d7-derived: 1.18
+single rasami-w1d1 <- stock:rasami-w1d6-derived: 4.00
+single rasami-w1d1 <- stock:rasami-w1d7-derived: 5.42
 single rasami-w1d1 <- stock:sca-derived: 1.07
 single rasami-w1d1 <- stock:sey-derived: 2.73
 single rasami-w1d1 <- stock:world-of-coffee-budapest: 3.06
@@ -1750,7 +1750,7 @@ single rasami-w1d2 <- stock:bh-simplified-rao-2008-derived: 0.52
 single rasami-w1d2 <- stock:bh-simplified-sca-optimal: 0.56
 single rasami-w1d2 <- stock:bh-simplified-sca-optimal-derived: 0.56
 single rasami-w1d2 <- stock:cafelytic-espresso-derived: 2.67
-single rasami-w1d2 <- stock:cafelytic-filter-derived: 2.28
+single rasami-w1d2 <- stock:cafelytic-filter-derived: 2.40
 single rasami-w1d2 <- stock:cafelytic-filter-sulfate-free-derived: 2.53
 single rasami-w1d2 <- stock:dan-eils: 0.98
 single rasami-w1d2 <- stock:dan-eils-derived: 0.98
@@ -1776,14 +1776,14 @@ single rasami-w1d2 <- stock:rao-2013: 1.39
 single rasami-w1d2 <- stock:rao-2013-derived: 1.39
 single rasami-w1d2 <- stock:rao-derived: 1.21
 single rasami-w1d2 <- stock:rao-perger: 1.26
-single rasami-w1d2 <- stock:rao-perger-derived: 0.88
+single rasami-w1d2 <- stock:rao-perger-derived: 1.26
 single rasami-w1d2 <- stock:rasami-w1d1-derived: 0.39
 single rasami-w1d2 <- stock:rasami-w1d2-derived: 4.00
 single rasami-w1d2 <- stock:rasami-w1d3-derived: 1.27
-single rasami-w1d2 <- stock:rasami-w1d4-derived: 2.79
+single rasami-w1d2 <- stock:rasami-w1d4-derived: 2.81
 single rasami-w1d2 <- stock:rasami-w1d5-derived: 1.85
-single rasami-w1d2 <- stock:rasami-w1d6-derived: 2.57
-single rasami-w1d2 <- stock:rasami-w1d7-derived: 3.29
+single rasami-w1d2 <- stock:rasami-w1d6-derived: 2.77
+single rasami-w1d2 <- stock:rasami-w1d7-derived: 3.38
 single rasami-w1d2 <- stock:sca-derived: 0.72
 single rasami-w1d2 <- stock:sey-derived: 0.91
 single rasami-w1d2 <- stock:world-of-coffee-budapest: 0.78
@@ -1803,7 +1803,7 @@ single rasami-w1d3 <- stock:bh-simplified-rao-2008-derived: 1.74
 single rasami-w1d3 <- stock:bh-simplified-sca-optimal: 2.04
 single rasami-w1d3 <- stock:bh-simplified-sca-optimal-derived: 2.04
 single rasami-w1d3 <- stock:cafelytic-espresso-derived: 2.05
-single rasami-w1d3 <- stock:cafelytic-filter-derived: 1.60
+single rasami-w1d3 <- stock:cafelytic-filter-derived: 4.00
 single rasami-w1d3 <- stock:cafelytic-filter-sulfate-free-derived: 1.79
 single rasami-w1d3 <- stock:dan-eils: 0.70
 single rasami-w1d3 <- stock:dan-eils-derived: 0.70
@@ -1829,14 +1829,14 @@ single rasami-w1d3 <- stock:rao-2013: 1.01
 single rasami-w1d3 <- stock:rao-2013-derived: 1.01
 single rasami-w1d3 <- stock:rao-derived: 1.77
 single rasami-w1d3 <- stock:rao-perger: 2.13
-single rasami-w1d3 <- stock:rao-perger-derived: 2.14
+single rasami-w1d3 <- stock:rao-perger-derived: 2.13
 single rasami-w1d3 <- stock:rasami-w1d1-derived: 2.79
 single rasami-w1d3 <- stock:rasami-w1d2-derived: 2.75
 single rasami-w1d3 <- stock:rasami-w1d3-derived: 4.00
-single rasami-w1d3 <- stock:rasami-w1d4-derived: 1.92
+single rasami-w1d3 <- stock:rasami-w1d4-derived: 4.00
 single rasami-w1d3 <- stock:rasami-w1d5-derived: 4.00
-single rasami-w1d3 <- stock:rasami-w1d6-derived: 1.84
-single rasami-w1d3 <- stock:rasami-w1d7-derived: 2.27
+single rasami-w1d3 <- stock:rasami-w1d6-derived: 4.00
+single rasami-w1d3 <- stock:rasami-w1d7-derived: 5.08
 single rasami-w1d3 <- stock:sca-derived: 1.04
 single rasami-w1d3 <- stock:sey-derived: 2.23
 single rasami-w1d3 <- stock:world-of-coffee-budapest: 2.30
@@ -1856,7 +1856,7 @@ single rasami-w1d4 <- stock:bh-simplified-rao-2008-derived: 1.13
 single rasami-w1d4 <- stock:bh-simplified-sca-optimal: 1.30
 single rasami-w1d4 <- stock:bh-simplified-sca-optimal-derived: 1.30
 single rasami-w1d4 <- stock:cafelytic-espresso-derived: 2.78
-single rasami-w1d4 <- stock:cafelytic-filter-derived: 2.39
+single rasami-w1d4 <- stock:cafelytic-filter-derived: 3.48
 single rasami-w1d4 <- stock:cafelytic-filter-sulfate-free-derived: 2.65
 single rasami-w1d4 <- stock:dan-eils: 1.00
 single rasami-w1d4 <- stock:dan-eils-derived: 1.00
@@ -1882,14 +1882,14 @@ single rasami-w1d4 <- stock:rao-2013: 1.41
 single rasami-w1d4 <- stock:rao-2013-derived: 1.41
 single rasami-w1d4 <- stock:rao-derived: 1.65
 single rasami-w1d4 <- stock:rao-perger: 1.84
-single rasami-w1d4 <- stock:rao-perger-derived: 1.59
+single rasami-w1d4 <- stock:rao-perger-derived: 1.84
 single rasami-w1d4 <- stock:rasami-w1d1-derived: 1.59
 single rasami-w1d4 <- stock:rasami-w1d2-derived: 4.00
 single rasami-w1d4 <- stock:rasami-w1d3-derived: 2.76
-single rasami-w1d4 <- stock:rasami-w1d4-derived: 2.84
+single rasami-w1d4 <- stock:rasami-w1d4-derived: 4.00
 single rasami-w1d4 <- stock:rasami-w1d5-derived: 3.25
-single rasami-w1d4 <- stock:rasami-w1d6-derived: 2.64
-single rasami-w1d4 <- stock:rasami-w1d7-derived: 3.35
+single rasami-w1d4 <- stock:rasami-w1d6-derived: 4.00
+single rasami-w1d4 <- stock:rasami-w1d7-derived: 4.74
 single rasami-w1d4 <- stock:sca-derived: 1.01
 single rasami-w1d4 <- stock:sey-derived: 1.74
 single rasami-w1d4 <- stock:world-of-coffee-budapest: 1.54
@@ -1909,7 +1909,7 @@ single rasami-w1d5 <- stock:bh-simplified-rao-2008-derived: 1.36
 single rasami-w1d5 <- stock:bh-simplified-sca-optimal: 1.59
 single rasami-w1d5 <- stock:bh-simplified-sca-optimal-derived: 1.59
 single rasami-w1d5 <- stock:cafelytic-espresso-derived: 2.83
-single rasami-w1d5 <- stock:cafelytic-filter-derived: 2.22
+single rasami-w1d5 <- stock:cafelytic-filter-derived: 4.00
 single rasami-w1d5 <- stock:cafelytic-filter-sulfate-free-derived: 2.46
 single rasami-w1d5 <- stock:dan-eils: 0.99
 single rasami-w1d5 <- stock:dan-eils-derived: 0.99
@@ -1935,14 +1935,14 @@ single rasami-w1d5 <- stock:rao-2013: 1.15
 single rasami-w1d5 <- stock:rao-2013-derived: 1.15
 single rasami-w1d5 <- stock:rao-derived: 1.93
 single rasami-w1d5 <- stock:rao-perger: 2.06
-single rasami-w1d5 <- stock:rao-perger-derived: 1.92
+single rasami-w1d5 <- stock:rao-perger-derived: 2.06
 single rasami-w1d5 <- stock:rasami-w1d1-derived: 2.12
 single rasami-w1d5 <- stock:rasami-w1d2-derived: 3.16
 single rasami-w1d5 <- stock:rasami-w1d3-derived: 3.25
-single rasami-w1d5 <- stock:rasami-w1d4-derived: 2.28
+single rasami-w1d5 <- stock:rasami-w1d4-derived: 4.00
 single rasami-w1d5 <- stock:rasami-w1d5-derived: 4.00
-single rasami-w1d5 <- stock:rasami-w1d6-derived: 2.21
-single rasami-w1d5 <- stock:rasami-w1d7-derived: 2.72
+single rasami-w1d5 <- stock:rasami-w1d6-derived: 3.59
+single rasami-w1d5 <- stock:rasami-w1d7-derived: 4.77
 single rasami-w1d5 <- stock:sca-derived: 1.10
 single rasami-w1d5 <- stock:sey-derived: 2.07
 single rasami-w1d5 <- stock:world-of-coffee-budapest: 1.81
@@ -1962,7 +1962,7 @@ single rasami-w1d6 <- stock:bh-simplified-rao-2008-derived: 1.04
 single rasami-w1d6 <- stock:bh-simplified-sca-optimal: 1.18
 single rasami-w1d6 <- stock:bh-simplified-sca-optimal-derived: 1.18
 single rasami-w1d6 <- stock:cafelytic-espresso-derived: 3.44
-single rasami-w1d6 <- stock:cafelytic-filter-derived: 2.99
+single rasami-w1d6 <- stock:cafelytic-filter-derived: 4.00
 single rasami-w1d6 <- stock:cafelytic-filter-sulfate-free-derived: 3.29
 single rasami-w1d6 <- stock:dan-eils: 1.16
 single rasami-w1d6 <- stock:dan-eils-derived: 1.16
@@ -1988,14 +1988,14 @@ single rasami-w1d6 <- stock:rao-2013: 1.61
 single rasami-w1d6 <- stock:rao-2013-derived: 1.61
 single rasami-w1d6 <- stock:rao-derived: 1.69
 single rasami-w1d6 <- stock:rao-perger: 1.90
-single rasami-w1d6 <- stock:rao-perger-derived: 1.53
+single rasami-w1d6 <- stock:rao-perger-derived: 1.90
 single rasami-w1d6 <- stock:rasami-w1d1-derived: 1.36
 single rasami-w1d6 <- stock:rasami-w1d2-derived: 4.00
 single rasami-w1d6 <- stock:rasami-w1d3-derived: 2.54
-single rasami-w1d6 <- stock:rasami-w1d4-derived: 3.24
+single rasami-w1d6 <- stock:rasami-w1d4-derived: 4.00
 single rasami-w1d6 <- stock:rasami-w1d5-derived: 3.15
-single rasami-w1d6 <- stock:rasami-w1d6-derived: 3.24
-single rasami-w1d6 <- stock:rasami-w1d7-derived: 4.00
+single rasami-w1d6 <- stock:rasami-w1d6-derived: 4.00
+single rasami-w1d6 <- stock:rasami-w1d7-derived: 5.11
 single rasami-w1d6 <- stock:sca-derived: 1.02
 single rasami-w1d6 <- stock:sey-derived: 1.65
 single rasami-w1d6 <- stock:world-of-coffee-budapest: 1.43
@@ -2015,7 +2015,7 @@ single rasami-w1d7 <- stock:bh-simplified-rao-2008-derived: 0.85
 single rasami-w1d7 <- stock:bh-simplified-sca-optimal: 0.97
 single rasami-w1d7 <- stock:bh-simplified-sca-optimal-derived: 0.97
 single rasami-w1d7 <- stock:cafelytic-espresso-derived: 2.44
-single rasami-w1d7 <- stock:cafelytic-filter-derived: 2.14
+single rasami-w1d7 <- stock:cafelytic-filter-derived: 2.92
 single rasami-w1d7 <- stock:cafelytic-filter-sulfate-free-derived: 2.35
 single rasami-w1d7 <- stock:dan-eils: 0.84
 single rasami-w1d7 <- stock:dan-eils-derived: 0.84
@@ -2041,14 +2041,14 @@ single rasami-w1d7 <- stock:rao-2013: 1.16
 single rasami-w1d7 <- stock:rao-2013-derived: 1.16
 single rasami-w1d7 <- stock:rao-derived: 1.30
 single rasami-w1d7 <- stock:rao-perger: 1.46
-single rasami-w1d7 <- stock:rao-perger-derived: 1.22
+single rasami-w1d7 <- stock:rao-perger-derived: 1.46
 single rasami-w1d7 <- stock:rasami-w1d1-derived: 1.18
 single rasami-w1d7 <- stock:rasami-w1d2-derived: 3.13
 single rasami-w1d7 <- stock:rasami-w1d3-derived: 2.10
-single rasami-w1d7 <- stock:rasami-w1d4-derived: 2.36
+single rasami-w1d7 <- stock:rasami-w1d4-derived: 3.08
 single rasami-w1d7 <- stock:rasami-w1d5-derived: 2.53
-single rasami-w1d7 <- stock:rasami-w1d6-derived: 2.36
-single rasami-w1d7 <- stock:rasami-w1d7-derived: 3.03
+single rasami-w1d7 <- stock:rasami-w1d6-derived: 3.08
+single rasami-w1d7 <- stock:rasami-w1d7-derived: 4.00
 single rasami-w1d7 <- stock:sca-derived: 0.80
 single rasami-w1d7 <- stock:sey-derived: 1.35
 single rasami-w1d7 <- stock:world-of-coffee-budapest: 1.15
@@ -2068,7 +2068,7 @@ single sca <- stock:bh-simplified-rao-2008-derived: 1.35
 single sca <- stock:bh-simplified-sca-optimal: 1.47
 single sca <- stock:bh-simplified-sca-optimal-derived: 1.47
 single sca <- stock:cafelytic-espresso-derived: 3.33
-single sca <- stock:cafelytic-filter-derived: 2.08
+single sca <- stock:cafelytic-filter-derived: 2.87
 single sca <- stock:cafelytic-filter-sulfate-free-derived: 2.44
 single sca <- stock:dan-eils: 1.40
 single sca <- stock:dan-eils-derived: 1.40
@@ -2094,14 +2094,14 @@ single sca <- stock:rao-2013: 1.90
 single sca <- stock:rao-2013-derived: 1.90
 single sca <- stock:rao-derived: 2.27
 single sca <- stock:rao-perger: 2.25
-single sca <- stock:rao-perger-derived: 1.89
+single sca <- stock:rao-perger-derived: 2.25
 single sca <- stock:rasami-w1d1-derived: 1.16
 single sca <- stock:rasami-w1d2-derived: 6.12
 single sca <- stock:rasami-w1d3-derived: 2.57
-single sca <- stock:rasami-w1d4-derived: 3.48
+single sca <- stock:rasami-w1d4-derived: 4.60
 single sca <- stock:rasami-w1d5-derived: 3.48
-single sca <- stock:rasami-w1d6-derived: 2.52
-single sca <- stock:rasami-w1d7-derived: 3.01
+single sca <- stock:rasami-w1d6-derived: 3.30
+single sca <- stock:rasami-w1d7-derived: 4.00
 single sca <- stock:sca-derived: 4.00
 single sca <- stock:sey-derived: 1.48
 single sca <- stock:world-of-coffee-budapest: 1.99
@@ -2121,7 +2121,7 @@ single sey <- stock:bh-simplified-rao-2008-derived: 2.32
 single sey <- stock:bh-simplified-sca-optimal: 2.74
 single sey <- stock:bh-simplified-sca-optimal-derived: 2.74
 single sey <- stock:cafelytic-espresso-derived: 4.55
-single sey <- stock:cafelytic-filter-derived: 4.00
+single sey <- stock:cafelytic-filter-derived: 7.14
 single sey <- stock:cafelytic-filter-sulfate-free-derived: 4.43
 single sey <- stock:dan-eils: 1.61
 single sey <- stock:dan-eils-derived: 1.61
@@ -2147,14 +2147,14 @@ single sey <- stock:rao-2013: 1.97
 single sey <- stock:rao-2013-derived: 1.97
 single sey <- stock:rao-derived: 3.22
 single sey <- stock:rao-perger: 3.52
-single sey <- stock:rao-perger-derived: 3.32
+single sey <- stock:rao-perger-derived: 3.52
 single sey <- stock:rasami-w1d1-derived: 4.00
 single sey <- stock:rasami-w1d2-derived: 5.34
 single sey <- stock:rasami-w1d3-derived: 6.08
-single sey <- stock:rasami-w1d4-derived: 4.00
+single sey <- stock:rasami-w1d4-derived: 7.30
 single sey <- stock:rasami-w1d5-derived: 7.14
-single sey <- stock:rasami-w1d6-derived: 4.00
-single sey <- stock:rasami-w1d7-derived: 4.92
+single sey <- stock:rasami-w1d6-derived: 6.50
+single sey <- stock:rasami-w1d7-derived: 8.79
 single sey <- stock:sca-derived: 2.05
 single sey <- stock:sey-derived: 4.00
 single sey <- stock:world-of-coffee-budapest: 3.00
@@ -2174,7 +2174,7 @@ single world-of-coffee-budapest <- stock:bh-simplified-rao-2008-derived: 2.93
 single world-of-coffee-budapest <- stock:bh-simplified-sca-optimal: 3.35
 single world-of-coffee-budapest <- stock:bh-simplified-sca-optimal-derived: 3.35
 single world-of-coffee-budapest <- stock:cafelytic-espresso-derived: 2.96
-single world-of-coffee-budapest <- stock:cafelytic-filter-derived: 1.60
+single world-of-coffee-budapest <- stock:cafelytic-filter-derived: 4.50
 single world-of-coffee-budapest <- stock:cafelytic-filter-sulfate-free-derived: 1.88
 single world-of-coffee-budapest <- stock:dan-eils: 0.97
 single world-of-coffee-budapest <- stock:dan-eils-derived: 0.97
@@ -2200,14 +2200,14 @@ single world-of-coffee-budapest <- stock:rao-2013: 1.49
 single world-of-coffee-budapest <- stock:rao-2013-derived: 1.49
 single world-of-coffee-budapest <- stock:rao-derived: 2.61
 single world-of-coffee-budapest <- stock:rao-perger: 3.27
-single world-of-coffee-budapest <- stock:rao-perger-derived: 3.29
+single world-of-coffee-budapest <- stock:rao-perger-derived: 3.27
 single world-of-coffee-budapest <- stock:rasami-w1d1-derived: 4.00
 single world-of-coffee-budapest <- stock:rasami-w1d2-derived: 4.00
 single world-of-coffee-budapest <- stock:rasami-w1d3-derived: 5.65
-single world-of-coffee-budapest <- stock:rasami-w1d4-derived: 2.42
+single world-of-coffee-budapest <- stock:rasami-w1d4-derived: 5.88
 single world-of-coffee-budapest <- stock:rasami-w1d5-derived: 5.57
-single world-of-coffee-budapest <- stock:rasami-w1d6-derived: 2.40
-single world-of-coffee-budapest <- stock:rasami-w1d7-derived: 2.86
+single world-of-coffee-budapest <- stock:rasami-w1d6-derived: 5.06
+single world-of-coffee-budapest <- stock:rasami-w1d7-derived: 6.98
 single world-of-coffee-budapest <- stock:sca-derived: 1.23
 single world-of-coffee-budapest <- stock:sey-derived: 2.68
 single world-of-coffee-budapest <- stock:world-of-coffee-budapest: 4.00
@@ -2680,58 +2680,58 @@ pair cafelytic-espresso <- stock:cafelytic-espresso-derived + stock:sca-derived:
 pair cafelytic-espresso <- stock:cafelytic-espresso-derived + stock:sey-derived: 4.00 + 0.00
 pair cafelytic-espresso <- stock:cafelytic-espresso-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
 pair cafelytic-espresso <- stock:cafelytic-espresso-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:aviary-espresso-derived: 2.69 + 0.31
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:aviary-filter-derived: 2.14 + 1.23
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-default: 2.58 + 0.67
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-default-derived: 2.58 + 0.67
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard: 2.65 + 0.51
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-af: 2.65 + 0.37
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-af-derived: 2.65 + 0.37
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-derived: 2.65 + 0.51
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-hendon: 2.63 + 0.63
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-hendon-derived: 2.63 + 0.63
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-rao-2008: 2.56 + 0.61
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-rao-2008-derived: 2.56 + 0.61
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-sca-optimal: 2.57 + 0.72
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-sca-optimal-derived: 2.57 + 0.72
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:cafelytic-espresso-derived: 1.64 + 1.48
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:cafelytic-filter-sulfate-free-derived: 0.00 + 3.15
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:dan-eils: 2.12 + 0.32
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:dan-eils-derived: 2.12 + 0.32
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-fam-29th-wave-derived: 2.71 + 0.21
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-fam-69th-wave-derived: 2.60 + 0.33
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-holy-water-derived: 2.52 + 0.98
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-melbourne-water-derived: 2.60 + 1.18
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-rpavlis-derived: 2.72 + 0.25
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-tww-espresso-inspired-derived: 2.50 + 0.36
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:empirical-glacial-derived: 2.15 + 1.30
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:empirical-spring-derived: 1.28 + 1.67
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:hendon-espresso-derived: 2.55 + 0.64
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-bright-juicy-derived: 2.87 + 0.01
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-light-bright-derived: 2.52 + 0.31
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-light-bright-espresso-derived: 2.64 + 0.31
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-simple-sweet-derived: 2.43 + 0.26
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-simple-sweet-espresso-derived: 2.74 + 0.19
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:matt-perger: 2.58 + 0.67
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:matt-perger-derived: 2.58 + 0.67
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:melbourne-2013-wbc: 2.58 + 2.28
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:melbourne-2013-wbc-derived: 2.58 + 2.28
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-2013: 2.66 + 0.12
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-2013-derived: 2.66 + 0.12
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-derived: 1.61 + 0.97
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-perger: 1.62 + 1.07
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-perger-derived: 2.10 + 0.87
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d1-derived: 2.66 + 1.06
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d2-derived: 2.72 + 0.27
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d3-derived: 2.26 + 1.51
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d4-derived: 2.87 + 0.01
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d5-derived: 1.74 + 2.00
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d6-derived: 2.88 + 0.00
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d7-derived: 2.88 + 0.00
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:sca-derived: 1.13 + 0.70
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:sey-derived: 1.81 + 1.05
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:world-of-coffee-budapest: 2.56 + 0.79
-pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:world-of-coffee-budapest-derived: 2.56 + 0.79
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:aviary-espresso-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:aviary-filter-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-default: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-default-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-af: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-af-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-hard-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-hendon: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-hendon-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-rao-2008: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-rao-2008-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-sca-optimal: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:bh-simplified-sca-optimal-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:cafelytic-espresso-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:cafelytic-filter-sulfate-free-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:dan-eils: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:dan-eils-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-fam-29th-wave-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-fam-69th-wave-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-holy-water-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-melbourne-water-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-rpavlis-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:eaf-tww-espresso-inspired-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:empirical-glacial-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:empirical-spring-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:hendon-espresso-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-bright-juicy-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-light-bright-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-light-bright-espresso-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-simple-sweet-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:lotus-simple-sweet-espresso-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:matt-perger: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:matt-perger-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:melbourne-2013-wbc: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:melbourne-2013-wbc-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-2013: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-2013-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-perger: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rao-perger-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d1-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d2-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d3-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d4-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d5-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d6-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:rasami-w1d7-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:sca-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:sey-derived: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
+pair cafelytic-filter <- stock:cafelytic-filter-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
 pair cafelytic-filter-sulfate-free <- stock:cafelytic-filter-sulfate-free-derived + stock:aviary-espresso-derived: 4.00 + 0.00
 pair cafelytic-filter-sulfate-free <- stock:cafelytic-filter-sulfate-free-derived + stock:aviary-filter-derived: 4.00 + 0.00
 pair cafelytic-filter-sulfate-free <- stock:cafelytic-filter-sulfate-free-derived + stock:bh-default: 4.00 + 0.00
@@ -3188,7 +3188,7 @@ pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-2013: 3.35
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-2013-derived: 3.35 + 0.00
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-derived: 3.32 + 0.02
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-perger: 3.35 + 0.00
-pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-perger-derived: 3.07 + 0.15
+pair empirical-glacial <- stock:empirical-glacial-derived + stock:rao-perger-derived: 3.35 + 0.00
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rasami-w1d1-derived: 3.29 + 0.07
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rasami-w1d2-derived: 3.35 + 0.00
 pair empirical-glacial <- stock:empirical-glacial-derived + stock:rasami-w1d3-derived: 3.35 + 0.00
@@ -3240,11 +3240,11 @@ pair empirical-spring <- stock:empirical-spring-derived + stock:rao-2013: 3.18 +
 pair empirical-spring <- stock:empirical-spring-derived + stock:rao-2013-derived: 3.18 + 0.00
 pair empirical-spring <- stock:empirical-spring-derived + stock:rao-derived: 0.00 + 2.24
 pair empirical-spring <- stock:empirical-spring-derived + stock:rao-perger: 1.66 + 1.10
-pair empirical-spring <- stock:empirical-spring-derived + stock:rao-perger-derived: 2.05 + 0.83
+pair empirical-spring <- stock:empirical-spring-derived + stock:rao-perger-derived: 1.66 + 1.10
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d1-derived: 2.80 + 0.52
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d2-derived: 3.18 + 0.00
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d3-derived: 2.51 + 0.93
-pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d4-derived: 3.18 + 0.00
+pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d4-derived: 0.75 + 3.34
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d5-derived: 2.11 + 1.48
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d6-derived: 3.18 + 0.00
 pair empirical-spring <- stock:empirical-spring-derived + stock:rasami-w1d7-derived: 3.18 + 0.00
@@ -3980,58 +3980,58 @@ pair rasami-w1d3 <- stock:rasami-w1d3-derived + stock:sca-derived: 4.00 + 0.00
 pair rasami-w1d3 <- stock:rasami-w1d3-derived + stock:sey-derived: 4.00 + 0.00
 pair rasami-w1d3 <- stock:rasami-w1d3-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
 pair rasami-w1d3 <- stock:rasami-w1d3-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:aviary-espresso-derived: 2.32 + 0.54
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:aviary-filter-derived: 1.42 + 1.86
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-default: 2.30 + 0.86
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-default-derived: 2.30 + 0.86
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard: 2.48 + 0.62
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-af: 2.50 + 0.45
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-af-derived: 2.50 + 0.45
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-derived: 2.48 + 0.62
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-hendon: 2.45 + 0.78
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-hendon-derived: 2.45 + 0.78
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-rao-2008: 2.23 + 0.81
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-rao-2008-derived: 2.23 + 0.81
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-sca-optimal: 2.26 + 0.95
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-sca-optimal-derived: 2.26 + 0.95
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-espresso-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-filter-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-filter-sulfate-free-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:dan-eils: 2.60 + 0.10
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:dan-eils-derived: 2.60 + 0.10
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-fam-29th-wave-derived: 2.38 + 0.35
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-fam-69th-wave-derived: 2.19 + 0.49
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-holy-water-derived: 2.47 + 1.13
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-melbourne-water-derived: 2.37 + 1.48
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-rpavlis-derived: 2.68 + 0.26
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-tww-espresso-inspired-derived: 2.45 + 0.42
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:empirical-glacial-derived: 0.77 + 2.91
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:empirical-spring-derived: 0.81 + 2.02
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:hendon-espresso-derived: 2.51 + 0.73
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-bright-juicy-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-light-bright-derived: 2.43 + 0.33
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-light-bright-espresso-derived: 2.63 + 0.28
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-simple-sweet-derived: 1.19 + 0.85
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-simple-sweet-espresso-derived: 2.46 + 0.37
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:matt-perger: 2.31 + 0.85
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:matt-perger-derived: 2.31 + 0.85
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:melbourne-2013-wbc: 2.30 + 2.92
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:melbourne-2013-wbc-derived: 2.30 + 2.92
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-2013: 0.00 + 1.41
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-2013-derived: 0.00 + 1.41
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-derived: 1.31 + 1.13
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-perger: 1.03 + 1.41
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-perger-derived: 1.71 + 1.11
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d1-derived: 2.51 + 1.29
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d2-derived: 0.82 + 2.87
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d3-derived: 1.88 + 1.97
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d5-derived: 1.51 + 2.30
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d6-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d7-derived: 2.84 + 0.00
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:sca-derived: 0.56 + 0.87
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:sey-derived: 1.56 + 1.22
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:world-of-coffee-budapest: 2.19 + 1.07
-pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:world-of-coffee-budapest-derived: 2.19 + 1.07
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:aviary-espresso-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:aviary-filter-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-default: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-default-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-af: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-af-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-hard-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-hendon: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-hendon-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-rao-2008: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-rao-2008-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-sca-optimal: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:bh-simplified-sca-optimal-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-espresso-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-filter-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:cafelytic-filter-sulfate-free-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:dan-eils: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:dan-eils-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-fam-29th-wave-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-fam-69th-wave-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-holy-water-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-melbourne-water-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-rpavlis-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:eaf-tww-espresso-inspired-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:empirical-glacial-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:empirical-spring-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:hendon-espresso-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-bright-juicy-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-light-bright-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-light-bright-espresso-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-simple-sweet-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:lotus-simple-sweet-espresso-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:matt-perger: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:matt-perger-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:melbourne-2013-wbc: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:melbourne-2013-wbc-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-2013: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-2013-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-perger: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rao-perger-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d1-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d2-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d3-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d5-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d6-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:rasami-w1d7-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:sca-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:sey-derived: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
+pair rasami-w1d4 <- stock:rasami-w1d4-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:aviary-espresso-derived: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:aviary-filter-derived: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:bh-default: 4.00 + 0.00
@@ -4084,110 +4084,110 @@ pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:sca-derived: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:sey-derived: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
 pair rasami-w1d5 <- stock:rasami-w1d5-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:aviary-espresso-derived: 2.84 + 0.43
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:aviary-filter-derived: 2.24 + 1.37
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-default: 2.82 + 0.66
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-default-derived: 2.82 + 0.66
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard: 2.96 + 0.47
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-af: 2.97 + 0.34
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-af-derived: 2.97 + 0.34
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-derived: 2.96 + 0.47
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-hendon: 2.93 + 0.59
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-hendon-derived: 2.93 + 0.59
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-rao-2008: 2.77 + 0.62
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-rao-2008-derived: 2.77 + 0.62
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-sca-optimal: 2.79 + 0.72
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-sca-optimal-derived: 2.79 + 0.72
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-espresso-derived: 3.03 + 0.26
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-filter-derived: 3.24 + 0.00
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-filter-sulfate-free-derived: 3.24 + 0.00
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:dan-eils: 3.01 + 0.10
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:dan-eils-derived: 3.01 + 0.10
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-fam-29th-wave-derived: 2.88 + 0.28
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-fam-69th-wave-derived: 2.74 + 0.38
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-holy-water-derived: 2.93 + 0.86
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-melbourne-water-derived: 2.87 + 1.13
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-rpavlis-derived: 3.09 + 0.22
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-tww-espresso-inspired-derived: 2.91 + 0.32
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:empirical-glacial-derived: 1.94 + 1.94
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:empirical-spring-derived: 1.95 + 1.35
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:hendon-espresso-derived: 2.96 + 0.56
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-bright-juicy-derived: 3.24 + 0.00
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-light-bright-derived: 3.09 + 0.12
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-light-bright-espresso-derived: 3.03 + 0.25
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-simple-sweet-derived: 2.43 + 0.44
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-simple-sweet-espresso-derived: 2.91 + 0.32
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:matt-perger: 2.83 + 0.65
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:matt-perger-derived: 2.83 + 0.65
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:melbourne-2013-wbc: 2.82 + 2.23
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:melbourne-2013-wbc-derived: 2.82 + 2.23
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-2013: 2.13 + 0.58
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-2013-derived: 2.13 + 0.58
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-derived: 2.17 + 0.82
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-perger: 1.85 + 1.10
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-perger-derived: 2.40 + 0.84
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d1-derived: 2.98 + 0.97
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d2-derived: 2.65 + 0.89
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d3-derived: 2.55 + 1.46
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d4-derived: 3.03 + 0.22
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d5-derived: 2.29 + 1.68
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d7-derived: 3.24 + 0.00
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:sca-derived: 1.90 + 0.54
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:sey-derived: 2.37 + 0.87
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:world-of-coffee-budapest: 2.74 + 0.82
-pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:world-of-coffee-budapest-derived: 2.74 + 0.82
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:aviary-espresso-derived: 2.65 + 0.33
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:aviary-filter-derived: 1.91 + 1.25
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-default: 2.58 + 0.61
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-default-derived: 2.58 + 0.61
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard: 2.73 + 0.45
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-af: 2.74 + 0.33
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-af-derived: 2.74 + 0.33
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-derived: 2.73 + 0.45
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-hendon: 2.70 + 0.56
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-hendon-derived: 2.70 + 0.56
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-rao-2008: 2.52 + 0.57
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-rao-2008-derived: 2.52 + 0.57
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-sca-optimal: 2.55 + 0.67
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-sca-optimal-derived: 2.55 + 0.67
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-espresso-derived: 2.90 + 0.13
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-filter-derived: 3.03 + 0.00
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-filter-sulfate-free-derived: 3.03 + 0.00
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:dan-eils: 2.80 + 0.08
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:dan-eils-derived: 2.80 + 0.08
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-fam-29th-wave-derived: 2.69 + 0.22
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-fam-69th-wave-derived: 2.51 + 0.33
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-holy-water-derived: 2.71 + 0.82
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-melbourne-water-derived: 2.63 + 1.06
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-rpavlis-derived: 2.91 + 0.16
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-tww-espresso-inspired-derived: 2.68 + 0.30
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:empirical-glacial-derived: 1.65 + 1.65
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:empirical-spring-derived: 1.53 + 1.25
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:hendon-espresso-derived: 2.74 + 0.54
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-bright-juicy-derived: 3.03 + 0.00
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-light-bright-derived: 2.83 + 0.14
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-light-bright-espresso-derived: 2.85 + 0.19
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-simple-sweet-derived: 2.41 + 0.26
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-simple-sweet-espresso-derived: 2.76 + 0.21
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:matt-perger: 2.58 + 0.61
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:matt-perger-derived: 2.58 + 0.61
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:melbourne-2013-wbc: 2.58 + 2.08
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:melbourne-2013-wbc-derived: 2.58 + 2.08
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-2013: 2.28 + 0.31
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-2013-derived: 2.28 + 0.31
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-derived: 1.83 + 0.74
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-perger: 1.54 + 0.96
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-perger-derived: 2.10 + 0.77
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d1-derived: 2.75 + 0.93
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d2-derived: 2.47 + 0.68
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d3-derived: 2.23 + 1.39
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d4-derived: 2.98 + 0.04
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d5-derived: 1.92 + 1.60
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d6-derived: 3.03 + 0.00
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:sca-derived: 1.36 + 0.54
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:sey-derived: 1.97 + 0.86
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:world-of-coffee-budapest: 2.50 + 0.75
-pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:world-of-coffee-budapest-derived: 2.50 + 0.75
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:aviary-espresso-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:aviary-filter-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-default: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-default-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-af: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-af-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-hard-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-hendon: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-hendon-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-rao-2008: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-rao-2008-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-sca-optimal: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:bh-simplified-sca-optimal-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-espresso-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-filter-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:cafelytic-filter-sulfate-free-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:dan-eils: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:dan-eils-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-fam-29th-wave-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-fam-69th-wave-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-holy-water-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-melbourne-water-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-rpavlis-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:eaf-tww-espresso-inspired-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:empirical-glacial-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:empirical-spring-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:hendon-espresso-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-bright-juicy-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-light-bright-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-light-bright-espresso-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-simple-sweet-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:lotus-simple-sweet-espresso-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:matt-perger: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:matt-perger-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:melbourne-2013-wbc: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:melbourne-2013-wbc-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-2013: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-2013-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-perger: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rao-perger-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d1-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d2-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d3-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d4-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d5-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:rasami-w1d7-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:sca-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:sey-derived: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
+pair rasami-w1d6 <- stock:rasami-w1d6-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:aviary-espresso-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:aviary-filter-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-default: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-default-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-af: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-af-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-hard-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-hendon: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-hendon-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-rao-2008: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-rao-2008-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-sca-optimal: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:bh-simplified-sca-optimal-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-espresso-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-filter-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:cafelytic-filter-sulfate-free-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:dan-eils: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:dan-eils-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-fam-29th-wave-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-fam-69th-wave-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-holy-water-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-melbourne-water-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-rpavlis-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:eaf-tww-espresso-inspired-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:empirical-glacial-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:empirical-spring-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:hendon-espresso-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-bright-juicy-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-light-bright-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-light-bright-espresso-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-simple-sweet-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:lotus-simple-sweet-espresso-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:matt-perger: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:matt-perger-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:melbourne-2013-wbc: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:melbourne-2013-wbc-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-2013: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-2013-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-perger: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rao-perger-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d1-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d2-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d3-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d4-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d5-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:rasami-w1d6-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:sca-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:sey-derived: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:world-of-coffee-budapest: 4.00 + 0.00
+pair rasami-w1d7 <- stock:rasami-w1d7-derived + stock:world-of-coffee-budapest-derived: 4.00 + 0.00
 pair sca <- stock:sca-derived + stock:aviary-espresso-derived: 4.00 + 0.00
 pair sca <- stock:sca-derived + stock:aviary-filter-derived: 4.00 + 0.00
 pair sca <- stock:sca-derived + stock:bh-default: 4.00 + 0.00
