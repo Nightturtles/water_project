@@ -744,7 +744,11 @@ export function splitAlkalinityDelta(
  * Greedy heuristic order:
  *   1. HCO3 split between baking-soda (Na carrier) and KHCO3 (K carrier)
  *      proportional to target Na and K (mirrors splitAlkalinityDelta).
- *   2. Mg → epsom-salt or magnesium-chloride based on target SO4/Cl ratio.
+ *   2. Mg → epsom-salt when the recipe names no chloride, magnesium-chloride
+ *      when it names no sulfate, and a blend of the two when it names both,
+ *      sized so the concentrate's sulfate and chloride land as close as
+ *      possible to the recipe's (least squares, as allocateCaMgDoses does for
+ *      the Calculator's powders).
  *   3. Ca → the selected calcium-chloride form (dihydrate by default; anhydrous
  *      when that is the form the user has). Gypsum would match SO4-heavy targets
  *      but its ~2 g/L solubility cap (MINERAL_SOLUBILITY_G_PER_L_25C_APPROX,
@@ -897,24 +901,57 @@ export function deriveStockFormulaFromTarget(
   //   contributes its own Cl, so defaulting Mg to epsom keeps the side-ion
   //   spread balanced rather than compounding Cl.
   // - tSO4 === 0 with tCl > 0: MgCl2 (Mg side matches the recipe's Cl target).
-  // - Both > 0: pick by SO4/Cl ratio.
+  // - Both > 0: split the magnesium between the two salts. Epsom is the only
+  //   sulfate source a concentrate has (gypsum does not dissolve at these
+  //   strengths), so picking one salt by the SO4/Cl ratio left a recipe that
+  //   wants both with none of one: Cafelytic Filter 2.0 (SO4 16, Cl 26) came
+  //   out at SO4 0 / Cl 40. The split is the least-squares fit to the
+  //   recipe's sulfate and chloride, counting the chloride the calcium salt
+  //   and the residual K / Na salts (steps 3 and 4) will add anyway.
   if (tMg > 0) {
-    let mgPick;
+    let mgOnEpsom: number;
     if (tCl === 0) {
-      mgPick = "epsom-salt";
+      mgOnEpsom = tMg;
     } else if (tSO4 === 0) {
-      mgPick = "magnesium-chloride";
-    } else if (tSO4 / Math.max(tCl, 1) > 1) {
-      mgPick = "epsom-salt";
+      mgOnEpsom = 0;
     } else {
-      mgPick = "magnesium-chloride";
+      const so4PerMg = sideIonProduced("epsom-salt", "magnesium", 1, "sulfate");
+      const clPerMg = sideIonProduced("magnesium-chloride", "magnesium", 1, "chloride");
+      const fixedCl =
+        sideIonProduced("calcium-chloride", "calcium", tCa, "chloride") +
+        sideIonProduced(
+          "potassium-chloride",
+          "potassium",
+          Math.max(0, tK - producedK),
+          "chloride",
+        ) +
+        sideIonProduced("sodium-chloride", "sodium", Math.max(0, tNa - producedNa), "chloride");
+      // Minimize (x*so4PerMg - tSO4)^2 + (fixedCl + (tMg - x)*clPerMg - tCl)^2
+      // over x = magnesium carried by epsom, 0 <= x <= tMg.
+      const denom = so4PerMg * so4PerMg + clPerMg * clPerMg;
+      let x =
+        denom > 0
+          ? (so4PerMg * tSO4 + clPerMg * (fixedCl + clPerMg * tMg - tCl)) / denom
+          : tSO4 / Math.max(tCl, 1) > 1
+            ? tMg
+            : 0;
+      x = Math.min(tMg, Math.max(0, x));
+      // Within 2% of a single salt, use the single salt (same snap as
+      // allocateCaMgDoses): no 0.1 g rows of a second salt for nothing.
+      const SNAP_SHARE = 0.02;
+      if (x < SNAP_SHARE * tMg) x = 0;
+      else if (x > (1 - SNAP_SHARE) * tMg) x = tMg;
+      mgOnEpsom = x;
     }
-    const gMg = gramsForIon(mgPick, "magnesium", tMg);
-    if (gMg > 0) {
-      minerals.push({ mineralId: mgPick, grams: gMg });
-      if (mgPick === "epsom-salt") {
-        producedSO4 += sideIonProduced("epsom-salt", "magnesium", tMg, "sulfate");
-      }
+    const mgOnMgCl2 = tMg - mgOnEpsom;
+    const gEpsom = gramsForIon("epsom-salt", "magnesium", mgOnEpsom);
+    if (gEpsom > 0) {
+      minerals.push({ mineralId: "epsom-salt", grams: gEpsom });
+      producedSO4 += sideIonProduced("epsom-salt", "magnesium", mgOnEpsom, "sulfate");
+    }
+    const gMgCl2 = gramsForIon("magnesium-chloride", "magnesium", mgOnMgCl2);
+    if (gMgCl2 > 0) {
+      minerals.push({ mineralId: "magnesium-chloride", grams: gMgCl2 });
     }
   }
 
@@ -947,7 +984,9 @@ export function deriveStockFormulaFromTarget(
       caId =
         caForm === "calcium-chloride-anhydrous" ? "calcium-chloride-anhydrous" : "calcium-chloride";
     }
-    if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1) {
+    // Only worth saying when the magnesium salts could not carry the recipe's
+    // sulfate either (the shortfall itself is reported further down).
+    if (tSO4 > 0 && tSO4 / Math.max(tCl, 1) > 1 && tSO4 - producedSO4 > 1) {
       notes.push(
         "Used calcium-chloride for Ca even though target favors sulfate; gypsum's ~2 g/L solubility limit makes it impractical at concentrate strengths.",
       );
