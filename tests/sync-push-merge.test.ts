@@ -1240,6 +1240,33 @@ describe("a push whose answer never arrived", () => {
     expect(hasUnpushedChanges()).toBe(false);
   });
 
+  // A pull that refreshes the row's base leaves nothing pending: the device
+  // holds what the account holds, and the names left from the lost answer
+  // must not send that again over what another device sets next.
+  test("a pull after the lost answer settles it", async () => {
+    await oneSyncedDevice();
+    loseNextAnswer("user_settings", true);
+    storage.saveBrewMethod("espresso");
+    await pushAllToCloud().catch(() => {});
+    // Put back, so the device holds what it last synced; then a pull runs
+    // with no push before it (as when the same user signs in again).
+    storage.saveBrewMethod("filter");
+    vi.clearAllTimers();
+    await pullFromCloud();
+    expect(storage.loadBrewMethod()).toBe("espresso");
+    expect(g.localStorage.getItem("cw_pending_push_settings")).toBeNull();
+    expect(hasUnpushedChanges()).toBe(false);
+
+    // Another device then changes it. This device has nothing to send.
+    cloud.outsideWrite("user_settings", (row) => {
+      row.brew_method = "filter";
+    });
+    cloud.log.length = 0;
+    await pushAllToCloud();
+    expect(cloud.log.filter((l) => / user_settings/.test(l))).toEqual([]);
+    expect(settingsRow().brew_method).toBe("filter");
+  });
+
   test("a refused write is kept the same way until a push of that row succeeds", async () => {
     await oneSyncedDevice();
     cloud.onSingleRowWrite = () => ({ error: { message: "permission denied", code: "42501" } });
@@ -1265,6 +1292,9 @@ describe("a push whose answer never arrived", () => {
     loseNextAnswer("user_settings", true);
     edits.volume();
     await pushAllToCloud().catch(() => {});
+    // The first write did commit; only its answer was lost.
+    expect(volumeLanded()).toBe(true);
+    expect(hasUnpushedChanges()).toBe(true);
     expect(settingsRow().stock_concentrate_specs.ai, "carried through by the merge").toBeTruthy();
     // Still not pulled: this device does not hold the concentrate itself.
     expect(storage.loadStockConcentrateSpecs().ai).toBeUndefined();

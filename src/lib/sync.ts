@@ -834,7 +834,11 @@ function pushSingleRows(
               changesSince(row.kinds, b.base, b.local),
             ].concat(activeChoiceChanged ? [row.activeChoice(b.local)] : []),
           );
-          // Saved before anything is sent, removed only on success.
+          // Saved before anything is sent, removed only on success. That is
+          // before this row's read too, not just before its write: both rows
+          // start here in one step, and when the two halves of the active
+          // choice go out, each must be saved before either request, so that
+          // one row saving and the other failing leaves the other half owed.
           if (hasChanges(changes)) safeSetItem(row.pendingKey, JSON.stringify(changes));
           result = await writeMerged(row, userId, b.local, changes, rowChanged);
         }
@@ -1417,17 +1421,24 @@ export async function pullFromCloud(options?: {
   // had. The next push then sends everything that differs from that base:
   // whatever of the device's own change survived the apply, and also what
   // the pull just brought in, as a whole-row push would have.
+  //
+  // A row whose base is refreshed has nothing pending either: the device now
+  // holds what the account holds. Names left over from a push that was never
+  // confirmed would otherwise send those pulled values again, over whatever
+  // another device sets next.
   if (settings && !settingsHeldUnpushed) {
     safeSetItem(
       LAST_PUSHED_SETTINGS_KEY,
       snapshotForCompare(buildSettingsPayload(sessionUserId, "")),
     );
+    safeRemoveItem(KEYS.PENDING_PUSH_SETTINGS);
   }
   if (selections && !selectionsHeldUnpushed) {
     safeSetItem(
       LAST_PUSHED_SELECTIONS_KEY,
       snapshotForCompare(buildSelectionsPayload(sessionUserId, "")),
     );
+    safeRemoveItem(KEYS.PENDING_PUSH_SELECTIONS);
   }
 
   return true;
