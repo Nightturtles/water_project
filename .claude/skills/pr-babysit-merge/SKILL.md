@@ -25,7 +25,7 @@ These facts override the generic guidance below. Re-check them if the workflows 
 - **Merge gates by changed files** (`gh pr diff <n> --name-only`). Check these before the merge step, not after:
   - `src/lib/sync.ts`, `src/lib/storage.ts`, `src/lib/supabase-client.ts`, or the `window.*` auth surface → the **full** `npm run test:e2e` (not just smoke-sync) must have passed locally on the final head with `.env.test` credentials, per CLAUDE.md "Supabase safety". Before running it locally, confirm no CI e2e job is in progress (`gh run list --workflow CI --status in_progress`): the local run signs in as the same shared prod test account and the CI concurrency group cannot see it.
   - `supabase/migrations/**` → **stop before merging and ask.** Only the user runs `supabase db push --remote=srlwgayrxzamxlodpsrq` (`supabase db push` is denied to Claude in every form), and merging deploys the web app immediately, so the user must decide the order (usually: migration applied first, then merge).
-  - `supabase/functions/**` → same: only the user runs `supabase functions deploy <name>`; stop and ask about order.
+  - `supabase/functions/**` → same: only the user runs `supabase functions deploy <name> --remote=srlwgayrxzamxlodpsrq`; stop and ask about order.
   - `@capacitor/*` version bumps (including Dependabot PRs) → `npm run build && npx cap sync` output must be committed (`ios/App/CapApp-SPM/Package.swift` exact-pins capacitor-swift-pm; `Package.resolved` follows). Dependabot does not do this.
 - **Dependabot PRs** get no Actions secrets, so the signed-in e2e describes skip on them. For `@supabase/supabase-js` bumps, run the full local e2e before merging.
 

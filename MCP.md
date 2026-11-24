@@ -114,7 +114,7 @@ These are Supabase CLI 3 commands (the read-only ones verified on 3.3.0). Run th
 - `db push` and `migration list` without `--remote` act on the local stack. A bare `supabase db push` leaves the hosted project untouched.
 - The ref is written out so the target is the same in every checkout. A bare `--remote` means the linked project, or the one `SUPABASE_PROJECT_ID` names when that is set, and a worktree is not linked.
 - `db push` and `functions deploy` each ask for confirmation before changing the hosted project. The default answer is No, so pressing Enter declines. An exported `SUPABASE_YES` skips that prompt, so check it is unset (`echo $SUPABASE_YES`) first.
-- `supabase functions list` shows what is deployed (`estimate-water`, `submit-support`, `mcp`) and changes nothing.
+- `supabase functions list --remote=srlwgayrxzamxlodpsrq` shows what is deployed (`estimate-water`, `submit-support`, `mcp`) and changes nothing.
 
 The project already signs JWTs with an asymmetric key (ES256), which the server requires.
 
