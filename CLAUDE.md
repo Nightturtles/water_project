@@ -87,15 +87,15 @@ Project is linked to Supabase ref `srlwgayrxzamxlodpsrq` via the CLI; config in 
 
 The repo is on **Supabase CLI 3** (verified on 3.3.0; the `[local_smtp]` section in `supabase/config.toml` needs 2.108.0 or later, so older 2.x can no longer load the file). Two CLI 3 rules shape every command below:
 
-- **Local unless told otherwise.** `db push`, `migration list`, `db reset` and `test db` target the local stack when given no target. `--remote` means the linked project, which works in the main checkout; a worktree is not linked (`supabase/.temp/` is gitignored), so there pass the ref: `--remote=srlwgayrxzamxlodpsrq`. A bare `supabase db push` applies to the local stack only and leaves production untouched.
-- **Every change to the hosted project asks first, and the default answer is No.** A run that cannot prompt (Claude, CI, piped input) fails unless it passes `--yes`. Claude never passes `--yes`, or sets `SUPABASE_YES`, on a command that targets the hosted project.
+- **Local unless told otherwise.** `db push`, `migration list`, `db reset` and `test db` target the local stack when given no target. A bare `supabase db push` applies to the local stack only and leaves production untouched. For production always write the ref, `--remote=srlwgayrxzamxlodpsrq`: it means the same project in every checkout. A bare `--remote` means the linked project, or the one `SUPABASE_PROJECT_ID` names when that is set, and a worktree is not linked (`supabase/.temp/` is gitignored).
+- **Every change to the hosted project asks first, and the default answer is No.** A run that cannot prompt (Claude, CI, piped input) fails unless it passes `--yes`. Claude never passes `--yes`, or sets `SUPABASE_YES`, on a command that targets the hosted project. An exported `SUPABASE_YES` answers the prompt for every run in that shell, Claude's included: keep it out of shell profiles, and check it is unset (`echo $SUPABASE_YES`) before a hosted command.
 
 When adding a migration:
 
 1. **Claude:** `supabase migration new <name>`, then edit the generated SQL.
 2. **Claude:** `supabase start` (if local stack isn't up), then `supabase db reset` — replays every migration against local Postgres from scratch. Catches name collisions, ordering bugs, broken SQL.
-3. **User:** runs `supabase db push --remote` against prod from the linked main checkout and confirms the prompt (the default answer is No, so pressing Enter declines). **Claude does not push**, and never passes `--yes` to a command that targets the hosted project. Production schema changes have cost users recipes before; the human gate is intentional.
-4. **Claude:** `supabase migration list --remote` to confirm the new version appears on both Local and Remote, then run `e2e/smoke-sync.md` against the live site (local DB doesn't catch prod-only issues like extension availability or RLS edge cases).
+3. **User:** runs `supabase db push --remote=srlwgayrxzamxlodpsrq` against prod from a checkout that contains the migration file (the PR's worktree before the merge; the main checkout after the merge and a pull) and confirms the prompt (the default answer is No, so pressing Enter declines). **Claude does not push**, and never passes `--yes` to a command that targets the hosted project. Production schema changes have cost users recipes before; the human gate is intentional.
+4. **Claude:** `supabase migration list --remote=srlwgayrxzamxlodpsrq`, from a checkout that contains the migration file, to confirm the new version appears on both Local and Remote, then run `e2e/smoke-sync.md` against the live site (local DB doesn't catch prod-only issues like extension availability or RLS edge cases).
 
 ## Claude Code config
 
