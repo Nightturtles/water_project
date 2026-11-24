@@ -68,6 +68,16 @@ Explicitly answer "No" to every other category. Apple shows the full list during
 
 Apple requires this be declared separately from "linked to the user." The answer is **None** — no IDFA, no cross-app tracking, no fingerprinting.
 
+## What the app does that the answers above do not cover
+
+Checked against the code on 2026-11-23 (app 1.2.2). The sections above record the answers as declared, and none of them has been changed for the points below. Each point is an open owner decision: declare it, change the app, or leave it and write down why here.
+
+- **Support form.** The Support page (`support.html`, in the native apps too) takes a name (up to 100 characters), an email address and a message (up to 5000 characters), from signed-out users as well. The `submit-support` Edge Function emails all three to info@cafelytic.com through Resend and does not save them in the database. For rate limiting it stores a daily counter keyed by a SHA-256 hash of the sender's IP address (`support_submission_quota`); the IP itself is not stored. The "NOT collected" list above says no name and no messages.
+- **Privacy manifest.** `ios/App/App/PrivacyInfo.xcprivacy` declares one collected data type, the email address. The Nutrition Label section above lists four (Email Address, Other User Content, Crash Data, Performance Data).
+- **Sentry does more than crash reports.** `src/lib/sentry-init.ts` also turns on performance tracing for a sampled 10% of page loads (`browserTracingIntegration`, `tracesSampleRate: 0.1`) and records a session replay whenever an error fires (`replayIntegration`, `replaysOnErrorSampleRate: 1.0`). The replay is the page's structure and the user's clicks and navigation around the error; the SDK defaults mask all text and inputs and block media, and request bodies are not captured. The same bundle runs in the native apps, so both happen there too. The "no page view tracking" line above is true of Google Analytics, which the native apps never load.
+- **Sentry gets no user identity.** Nothing calls `Sentry.setUser`, and `dataCollection.userInfo` is `false`, so events carry no account id, email or IP address from the SDK. The Nutrition Label section above lists Crash Data and Performance Data as linked to the user.
+- **Connected AI apps.** A signed-in user can connect an AI app to their account through the MCP server ([MCP.md](../../MCP.md)). What that app reads is sent to it at the user's request. The database keeps two records per user for this: which apps they approved and at which version of the ability list (`mcp_app_consent`), and a daily count of the rows connected apps wrote (`mcp_write_quota`). Both are deleted with the account. The privacy page has a "Connected AI apps" section; this file does not mention the feature.
+
 ## Keeping the three sources in sync
 
 When updating any of the following, update all of them:
