@@ -35,17 +35,21 @@ The 1024 × 500 Play Store feature graphic is NOT script-generated; it's a Figma
 
 ## Five canonical scenes
 
-Identical across all platforms so the store listings tell the same story.
+Identical across all platforms so the store listings tell the same story. Every scene is the same demo account, signed in: the script answers the app's sign-in checks itself (no real account, no credentials) and writes the account's data into the `cw_*` localStorage keys the app reads. Most scenes are scrolled to the part of the page that shows that data, because a phone viewport only reaches a page's first card.
 
 | ID | Scene |
 |---|---|
-| `01-calculator` | Calculator with a recipe loaded (everyday pour over) |
-| `02-library` | Recipe library browser showing public recipes |
-| `03-minerals` | Mineral selector with multiple minerals enabled |
-| `04-recipe-builder` | Recipe builder mid-edit |
-| `05-signed-in-nav` | Signed-in state with the Delete account button visible (proves to reviewers that the in-app deletion path exists, which Apple Guideline 5.1.1(v) requires) |
+| `01-calculator` | Calculator with the account's saved recipe ("Sunday Brew") selected and the doses for one gallon worked out |
+| `02-library` | Recipe Library showing the official catalog |
+| `03-minerals` | Settings: the mineral selector with four minerals enabled |
+| `04-recipe-builder` | Recipe Builder mid-edit: grams typed in for the same four minerals, with the resulting water below |
+| `05-delete-account` | Settings, signed in, scrolled to the Delete account section (proves to reviewers that the in-app deletion path exists, which Apple Guideline 5.1.1(v) requires) |
 
-Edit `scripts/capture-screenshots-shared/seed.cjs` to change what each scene displays. Re-run the capture script to regenerate.
+Edit `scripts/capture-screenshots-shared/seed.cjs` to change the demo account. Re-run the capture script to regenerate. Each scene waits for its seeded data to be on screen and the run fails if it is not, so a renamed storage key or selector stops the run instead of capturing the page's default state.
+
+The Library scene reads the official recipe catalog live from Supabase (the public read any visitor's page load makes), so it needs network access and shows the catalog as it is that day. Recipes published by users are left out, so no user's recipe or display name ends up on a store listing. Every other Supabase request is blocked: a capture run cannot sign in, sync, or write anything.
+
+An output folder from before this scene list changed may still hold `05-signed-in-nav.png`. Delete it; the script does not remove files it no longer writes.
 
 ## Verifying
 
