@@ -36,7 +36,9 @@
     ],
     "deny": [
       "Bash(supabase db push)",
-      "Bash(supabase db push *)"
+      "Bash(supabase db push *)",
+      "Bash(supabase * --yes*)",
+      "Bash(supabase --yes *)"
     ]
   },
   "hooks": {
