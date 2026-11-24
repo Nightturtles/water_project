@@ -47,8 +47,12 @@ account, so this is a manual gate by design.
    union all select 'mcp_app_consent', count(*) from public.mcp_app_consent where user_id = '<UID>';
    ```
 
-   The two `mcp_*` tables hold rows only if the throwaway account connected
-   an AI app (see MCP.md); 0 before and after is fine otherwise.
+   The two `mcp_*` tables hold rows only once the throwaway account has
+   connected an AI app. To test their cascade, connect one (MCP.md, "One-time
+   setup" step 6), approve it on the consent page (writes `mcp_app_consent`)
+   and have it save one recipe (writes `mcp_write_quota`), so both counts
+   are non-zero here. If you skip that, both stay 0 before and after and
+   this run has not tested those two tables: say so in the result.
 
    Note the UID (from auth.users) and the counts.
 

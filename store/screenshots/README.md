@@ -47,7 +47,7 @@ Identical across all platforms so the store listings tell the same story.
 
 Edit `scripts/capture-screenshots-shared/seed.cjs` to change what each scene displays. Re-run the capture script to regenerate.
 
-**Known gap:** the seed is currently not applied. `scripts/capture-screenshots.mjs` writes it under `cafelytic:*` storage keys, and the app reads only `cw_*` keys (`src/lib/storage-keys.ts`), so every scene captures its page's default, signed-out state. Scene `05-signed-in-nav` is also out of date: Delete account now lives on the Settings page (`minerals.html`), not in the nav, and the scene loads the Calculator. Until the script seeds the real keys, treat its output as page-default captures and take the store screenshots by hand.
+**Known gap:** the seed is currently not applied. `scripts/capture-screenshots.mjs` writes it under `cafelytic:*` storage keys, and the app reads only `cw_*` keys (`src/lib/storage-keys.ts`), so every scene captures its page's default, signed-out state. Scene `05-signed-in-nav` is also out of date: Delete account now lives on the Settings page (`minerals.html`), not in the nav, and the scene loads the Calculator. Until both are fixed (the script seeds the real keys, and scene 05 loads the Settings page signed in), treat its output as page-default captures and take the store screenshots by hand.
 
 ## Verifying
 
