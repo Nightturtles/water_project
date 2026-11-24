@@ -347,11 +347,12 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 //      the one that was read. If someone wrote in between, it reads again.
 //
 // The names from step 1 are saved (PENDING_PUSH_*) before anything is sent
-// and removed when the write succeeds. If the answer never arrives (the
-// connection drops, the page is left, the app is suspended) they stay, and
-// the next push counts them as changed whatever the base says. Without that,
-// a setting sent, never confirmed and then put back would look untouched, and
-// the value that was sent would stay in the account.
+// and removed when the write succeeds (or when a pull refreshes the row's
+// base: the device then holds what the account holds). If the answer never
+// arrives (the connection drops, the page is left, the app is suspended)
+// they stay, and the next push counts them as changed whatever the base
+// says. Without that, a setting sent, never confirmed and then put back would
+// look untouched, and the value that was sent would stay in the account.
 //
 // Pushes run one at a time (inPushQueue): step 1 is only right if the base is
 // the last thing this device got into the row.
