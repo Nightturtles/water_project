@@ -34,7 +34,7 @@ account, so this is a manual gate by design.
    theme, change one of the mineral selections. (You want non-empty data
    across every cascaded table.)
 4. In the Supabase dashboard, open the SQL editor and confirm rows exist
-   for this user across all five tables:
+   for this user across all seven tables:
 
    ```sql
    select 'user_settings' as t, count(*) from public.user_settings where user_id = '<UID>'
@@ -42,8 +42,13 @@ account, so this is a manual gate by design.
    union all select 'target_profiles_owned', count(*) from public.target_profiles where user_id = '<UID>'
    union all select 'target_profiles_created', count(*) from public.target_profiles where creator_user_id = '<UID>'
    union all select 'user_selections', count(*) from public.user_selections where user_id = '<UID>'
-   union all select 'estimate_water_quota', count(*) from public.estimate_water_quota where user_id = '<UID>';
+   union all select 'estimate_water_quota', count(*) from public.estimate_water_quota where user_id = '<UID>'
+   union all select 'mcp_write_quota', count(*) from public.mcp_write_quota where user_id = '<UID>'
+   union all select 'mcp_app_consent', count(*) from public.mcp_app_consent where user_id = '<UID>';
    ```
+
+   The two `mcp_*` tables hold rows only if the throwaway account connected
+   an AI app (see MCP.md); 0 before and after is fine otherwise.
 
    Note the UID (from auth.users) and the counts.
 

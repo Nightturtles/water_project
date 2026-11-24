@@ -17,8 +17,9 @@
 - Assert the signed-in affordances are present (logout button visible, no sign-in CTA).
 
 ### 2. Create a recipe on Device A
-- Enter a recipe — set `#src-calcium` = `42`, pick a profile, change volume.
-- Click "Save Changes" / `#source-save-changes-btn`. Note the profile name in the save status.
+- Select a saved (named) Starting Water profile, then click "Edit Starting Water" (`#source-edit-mode-btn`): the `#src-*` inputs are hidden until edit mode is on.
+- Set `#src-calcium` = `42` (the edit bar now reads "Editing: <profile name>"; note the name) and change `#recipe-volume`.
+- Click "Save Changes" (`#source-save-changes-btn`) and confirm the "Are you sure you want to change this profile?" dialog (`#confirm-yes`). `#source-save-status` reads `Saved!`.
 
 ### 3. Save-on-navigate reliability (commit 6464fdb)
 - Immediately after saving on Device A, navigate to `/` (don't wait — this is testing the race condition).
@@ -38,7 +39,7 @@
 
 ### 6. Concurrent edits
 - Context A and B: within ~5 s of each other, each edit a *different* profile.
-- On **both** contexts, poll until the save-status element for the edited section reads `Saved!` (emitted by `showSourceSaveStatus`/`showTargetSaveStatus` once the local persist + cloud push both resolve). Use Playwright's `page.locator('#source-save-status, #recipe-save-status, #target-save-status').filter({ hasText: 'Saved!' }).first().waitFor({ timeout: 15000 })`. Failing this wait within 15 s is itself a regression — surface that as the assertion failure, not a timeout.
+- On **both** contexts, poll until the save-status element for the edited section reads `Saved!` (emitted by `showSourceSaveStatus`/`showTargetSaveStatus` as soon as the local save completes; the cloud push that follows reports separately in `#save-status-indicator`: "Saving…", then "Saved", or "Couldn't save - retrying"). Use Playwright's `page.locator('#source-save-status, #recipe-save-status, #target-save-status').filter({ hasText: 'Saved!' }).first().waitFor({ timeout: 15000 })`. Failing this wait within 15 s is itself a regression — surface that as the assertion failure, not a timeout.
 - Reload both. Assert both edits are present on both devices — last-writer-wins should only apply at the same-profile level.
 
 **Codified note**: Step 6 is intentionally NOT in `smoke-sync.spec.ts`. The race is Supabase read-replica lag, and it affects every cross-device read primitive we tried (broadcast-triggered `pullFromCloud`, reload-triggered initSync pull, direct Supabase `SELECT`): PostgREST can route any request to a lagging replica that hasn't seen the recent write, returning stale data. A codified test can't deterministically wait for "the replica B's next pull happens to hit has caught up," so any spec we write either fails sporadically (which `--retries=1` would mask, diluting the signal of the rest of the codified subset) or relies on a fixed timeout long enough to be cargo-cult. PR #86's dirty-tracking makes the race non-destructive — cloud state is correct (A's push did commit), the next sync cycle detects the localStorage/cloud mismatch, and a reload recovers — so the manual UX walk above is the appropriate gate. If you ever see *cloud state* diverge (A's edit missing from `target_profiles` after the dust settles) or *both reloads* show stale data, that's a real regression, not the known race.
@@ -52,9 +53,9 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 ### 7. Add-from-library propagates to the other device's rail
 - Context A: navigate to `/library.html`. Confirm the recipe browser mounts (`main#rx-root` populated, `.rx-recipe-card` cards visible).
 - Context B: navigate to `/index.html`. Wait for `#profile-buttons [data-profile]` to render. Snapshot the list of `data-profile` slugs into `bSlugsBefore`.
-- Context A: pick a non-starter library card whose slug is **not** in `bSlugsBefore`. Click its `.rx-card-bookmark` (the heart). The button's `aria-label` flips from "Save recipe" → "Unsave recipe".
+- Context A: pick a non-starter library card whose slug is **not** in `bSlugsBefore`. Click its `.rx-card-bookmark` (the star). The button's `aria-label` flips from "Save recipe" → "Unsave recipe".
 - Context B: **without reloading**, wait for `#profile-buttons [data-profile="<slug>"]` to appear. Timeout 4 s.
-- Regression guard: if Context B's rail still doesn't have the slug after 4 s but a manual reload makes it appear, the Realtime subscription isn't firing → check `subscribeToCloudChanges` ran (look for `[sync] realtime channel status: ...` warnings) and that migration 012 added the table to `supabase_realtime`.
+- Regression guard: if Context B's rail still doesn't have the slug after 4 s but a manual reload makes it appear, the Realtime subscription isn't firing → check `subscribeToCloudChanges` ran (look for `[sync] realtime channel status (<channel>): ...` warnings, logged only for `CHANNEL_ERROR` / `TIMED_OUT`) and that migration 012 added the table to `supabase_realtime`.
 
 ### 8. Edit propagates to the other device's library card
 - Context A: on `/library.html`, find a recipe the test user owns (the card has the `.rx-card-owner-actions` block visible). Note its current `.rx-card-title` text as `originalLabel`.
@@ -88,7 +89,7 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 
 ### 12. Realtime auto-reconnects after a channel drop (sync-hardening)
 - Context B: on `/index.html`, confirm Realtime delivery is live (a Step 7-9 change from A lands without reload).
-- Drop B's connection so the channel fails rather than closes cleanly: `await contextB.setOffline(true)`, wait ~10 s for the channel to emit `TIMED_OUT` / `CHANNEL_ERROR` (console shows the one-time `[sync] realtime channel status (...)` warning), then `await contextB.setOffline(false)`.
+- Drop B's connection so the channel fails rather than closes cleanly: `await contextB.setOffline(true)`, wait ~10 s for the channel to emit `TIMED_OUT` / `CHANNEL_ERROR` (console shows a `[sync] realtime channel status (...)` warning), then `await contextB.setOffline(false)`.
 - Context A: make a change (rename a recipe + save, or add-from-library) so a fresh Realtime event is emitted.
 - Context B: the change appears within a few seconds **without a reload** — confirming the channel resubscribed (capped exponential backoff, first retry ~1 s). Before this fix a `TIMED_OUT` was only logged and updates stopped arriving until a manual reload. (Note: a clean `unsubscribe()` emits `CLOSED`, which we deliberately do NOT reconnect on — only genuine failures resubscribe, so use the offline toggle here.)
 
@@ -96,7 +97,7 @@ The propagation budget per assertion is **~2 s**: 250 ms `scheduleRealtimePull` 
 - Context A: on `/index.html`, wait for sync to be ready, then take it off Realtime so it cannot pull what comes next: `await window.supabaseClient.removeAllChannels()`.
 - Make a change to the settings row from outside the app's sync, the way a connected AI app does: `await window.supabaseClient.rpc('mcp_save_concentrate', { p_kind: 'stock', p_key: 'e2e-outside-write', p_spec: { label: 'E2E outside write', bottleMl: 100, doseGramsPerL: 4, minerals: [{ mineralId: 'gypsum', grams: 1 }] }, p_mode: 'create' })`.
 - Context A: confirm it has not seen it (`loadStockConcentrateSpecs()['e2e-outside-write']` is undefined), change the Calculator's brew volume, and let the save go out (`await window.pushAllToCloud()`).
-- Query the row: `stock_concentrate_specs` still holds `e2e-outside-write` **and** `volume_preferences.calculator` holds the new volume. **If the concentrate is gone, the whole-row overwrite is back** (`pushSingleRow` in `src/lib/sync.ts`). The network log shows the save as a `PATCH .../user_settings?...&updated_at=eq.<timestamp>`.
+- Query the row: `stock_concentrate_specs` still holds `e2e-outside-write` **and** `volume_preferences.calculator` holds the new volume. **If the concentrate is gone, the whole-row overwrite is back** (`pushSingleRows` / `writeMerged` in `src/lib/sync.ts`). The network log shows the save as a `PATCH .../user_settings?...&updated_at=eq.<timestamp>`.
 - Clean up on Context A: `await window.pullFromCloud()`, delete the concentrate in Settings (or `saveStockConcentrateSpecs` without the key), push, and confirm the row no longer holds it.
 
 ## Post-run cleanup
@@ -123,13 +124,13 @@ Before signing out, on the test user:
 ## Exit criteria
 
 - All thirteen steps pass.
-- No "sync error" toasts in the save-status elements on either device.
-- No console errors on either context. Warnings about `[sync] realtime channel status: SUBSCRIBED` are fine. A `CHANNEL_ERROR` / `TIMED_OUT` warning is acceptable ONLY when intentionally induced in Step 12 (offline simulation) and the channel then recovers (updates resume without reload); an unexpected one outside Step 12, or one that never recovers, is a failure.
+- `#save-status-indicator` never reads "Couldn't save - retrying" on either device.
+- No console errors on either context. The app logs `[sync] realtime channel status (<channel>): <status>` only for `CHANNEL_ERROR` / `TIMED_OUT` (nothing for `SUBSCRIBED`). Such a warning is acceptable ONLY when intentionally induced in Step 12 (offline simulation) and the channel then recovers (updates resume without reload); an unexpected one outside Step 12, or one that never recovers, is a failure.
 - Sentry Feed shows no new issues tagged with the sync code paths (`src/lib/sync.ts`, `src/lib/storage.ts`).
 - localStorage on both contexts is in sync with Supabase — for each Playwright context, `await page.evaluate(() => Object.keys(localStorage).sort())` and assert the two arrays are deep-equal.
 - After each Realtime step, `await page.evaluate(() => loadCustomTargetProfiles())` returns the same dict on both contexts (the JSON.stringify of which should be deep-equal). This is the strict "always identical" check from the user requirement.
 
 ## Known limits
 
-- This runbook does *not* cover the anonymous-to-signed-in migration path. Add a dedicated runbook for that flow if we ship changes there.
+- This runbook does *not* cover the first-sign-in merge (a device with its own data signing in to an account that has data too). That flow is codified in [`merge-prompt.spec.ts`](merge-prompt.spec.ts), with the prompt's wording rules in `tests/merge-dialog.test.ts`.
 - Recipe-library operations (share, unshare, copy) are out of scope for this runbook; see [`smoke-library.spec.ts`](smoke-library.spec.ts) for those checks.

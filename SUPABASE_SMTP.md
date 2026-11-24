@@ -76,6 +76,7 @@ Supabase dashboard → **Auth → Email Templates** controls the body. Defaults 
 - **Quota**: Resend's free tier resets daily (100/day) and monthly (3,000/mo). Cafelytic-scale traffic should sit well under both, but the dashboard shows current usage. If we ever push the daily cap, password resets silently fail — same failure mode as the Supabase default.
 - **Bounces / complaints**: Resend automatically suppresses addresses that bounce hard or mark us as spam. If a real user reports they can't receive resets, check **Resend → Suppressions** before debugging anything else.
 - **Rotating the key**: revoke in Resend, generate a new one, paste into Supabase. Rotation is zero-downtime — Supabase reads the credential per-send.
+- **The Support form also sends through Resend**: the `submit-support` Edge Function emails info@cafelytic.com with its own `RESEND_API_KEY` function secret, on the same domain and counting against the same quota. If the key being rotated is that one, the project owner also runs `supabase secrets set RESEND_API_KEY=<new key> --remote=srlwgayrxzamxlodpsrq` and confirms its prompt (Supabase CLI 3; without `--remote` the command does not reach the hosted project).
 - **DNS records**: don't remove them when you do unrelated DNS work. Without DKIM, every cafelytic.com auth email starts going to spam again silently.
 
 ## What to do if SMTP breaks

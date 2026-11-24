@@ -1,6 +1,6 @@
 # Export compliance
 
-The US export regulations require every iOS app to declare its use of encryption. Apple asks this on every TestFlight and App Store submission via App Store Connect. Cafelytic's answer is the same across all builds.
+The US export regulations require every iOS app to declare its use of encryption. Cafelytic's answer is the same across all builds and ships inside the app: `ios/App/App/Info.plist` sets `ITSAppUsesNonExemptEncryption` to `false` (only exempt, standard encryption), so App Store Connect does not ask on each TestFlight or App Store submission. The table below records the reasoning, in case the key is ever removed or the questionnaire is shown again.
 
 ## App Store Connect answers
 
@@ -11,7 +11,7 @@ The US export regulations require every iOS app to declare its use of encryption
 | Does your app meet any of the following: (a) Uses encryption only for authentication. (b) Uses standard encryption algorithms... (c) Uses encryption ONLY in support of authentication. (d) etc. | **(b) Yes** — Cafelytic uses only standard cryptography (HTTPS / TLS via the system networking stack) and qualifies for the exemption in 15 CFR §740.17(b). |
 | Is your app available on the French App Store? | Yes (we ship globally) |
 
-After the first build, Apple lets you check "Use the same answers for all future builds" — do that.
+With the `Info.plist` key in place there is nothing to answer per build. If the questionnaire does appear, give the answers above.
 
 ## BIS Annual Self-Classification Report
 

@@ -9,7 +9,7 @@ before starting, honor its STOP conditions, and update your row when done.
 
 Repo-wide gate reminders (from CLAUDE.md):
 - Any plan touching `src/lib/sync.ts` or `src/lib/storage.ts` (002, 003) requires the full e2e pass before merge, not just the smoke-sync subset.
-- Any plan adding a migration (008) is validated locally with `supabase db reset`; the **human** runs `supabase db push` — Claude does not push.
+- Any plan adding a migration (008) is validated locally with `supabase db reset`; the **human** runs `supabase db push --remote=srlwgayrxzamxlodpsrq` and confirms its prompt (on Supabase CLI 3 a bare `supabase db push` only touches the local stack) — Claude does not push.
 
 ## Execution order & status
 
@@ -56,13 +56,13 @@ Run 2:
 From Run 1 — three findings vetted as real but NOT planned, because they overlap each other and the in-flight classic-JS → TypeScript migration, and they live in the repo's highest-churn files. Execute as **one sequenced effort**, each planned (`improve plan <description>`) only when it's actually next:
 
 1. **Characterization tests for `src/components/script.ts` / `src/components/recipe-browser.ts`** (highest churn, no dedicated unit coverage) — both files have since been migrated to TypeScript (#200, #201) and are now tsc-checked, so this is no longer a migration prerequisite; backfilling unit coverage remains valuable but optional.
-2. **recipe.html stops full-page-reloading on mineral changes** (recipe.html ~316/320, ~1243/1250). The natural fix is restructuring recipe.html's giant inline script as part of migrating it to a TS module.
+2. **recipe.html stops full-page-reloading on mineral changes** (recipe.html ~313/317, ~1425/1432). The natural fix is restructuring recipe.html's giant inline script as part of migrating it to a TS module.
 3. **Remove `'unsafe-inline'` from the CSP script-src** (partials/head-top.html:3). Blocked on externalizing the per-page inline scripts — which is what (2)'s migration does. Tighten the CSP **last**. (Note: support.html added its own inline submit script in #183, so it's now part of what must be externalized before the CSP can tighten.)
 
 The classic → TypeScript migration is complete: constants and metrics migrated to `src/lib/constants.ts` (#210) and `src/lib/metrics.ts`; `theme-init.js` is the one permanent classic — render-blocking `<head>` primer, guarded by smoke-index.spec.ts. (The UI/data files migrated under `src/components/` and `src/lib/` via PRs #193-#202: stock-editor #193, diy-editor #194, estimate-water-ui #195, source-water-ui #196, library-picker #197, my-recipes-ui #198, mineral-selector #199, recipe-browser #200, script #201, library-data #202; `analytics-init.js` via #207.)
 
 Also deferred:
-- **vite 5 → current major.** Clears the remaining esbuild audit highs (plan 006 leaves those, since they only fix via `npm audit fix --force` → vite 8). Schedule as its own migration with the full e2e suite as the gate (`*.spec.ts` runs against the built dist, exactly what a Vite major can break).
+- **vite 5 → 8: DONE** (#229, with Vitest 3 → 5; cleared the vite, esbuild and sharp audit highs that plan 006 had left).
 - **Bring `estimate-water/index.ts` under `deno check`** (plan 007 only `deno lint`s it, because its `https://esm.sh` import makes type-checking heavy/flaky). Needs the remote import vendored or import-mapped first.
 
 ## Direction findings (surfaced Run 2, options for the maintainer — not planned)

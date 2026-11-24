@@ -2,11 +2,11 @@
 
 Lets a user connect an AI app (Claude, ChatGPT, any MCP client) to their own Cafelytic account. The server is the Supabase Edge Function in `supabase/functions/mcp/`; sign-in is OAuth 2.1 against this project's Supabase Auth, so every tool call runs as the signed-in user under row-level security.
 
-Endpoint once deployed: `https://srlwgayrxzamxlodpsrq.supabase.co/functions/v1/mcp`
+Endpoint: `https://srlwgayrxzamxlodpsrq.supabase.co/functions/v1/mcp`
 
 ## Status
 
-Phases 1, 1b, 2 and 3 (this code): reads, analysis, dose calculation, private recipe / source-water writes, concentrates, and the active selections. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now.
+Phases 1, 1b, 2 and 3 are built and live on the hosted project (every migration applied, the function deployed, dynamic OAuth apps on): reads, analysis, dose calculation, private recipe / source-water writes, concentrates, and the active selections. Built in the public shape (per-user sign-in, no admin powers), used by the owner only for now. A later change to the function or its migrations is live only after the owner runs the two commands under "One-time setup" again; `supabase functions list --remote=srlwgayrxzamxlodpsrq` and `supabase migration list --remote=srlwgayrxzamxlodpsrq` show what is deployed.
 
 | Phase | Scope | State |
 |---|---|---|
