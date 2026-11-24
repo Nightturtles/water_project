@@ -1126,7 +1126,12 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
       }
     }
     if (deleteErrors.length > 0) {
-      throw new Error("[sync] failed to delete one or more tombstoned rows");
+      // Carry the underlying errors, as the upsert throw below does, so
+      // reportError can tell a dropped request (the tombstone stays queued
+      // and the next push retries it) from a real Postgrest rejection.
+      throw new Error("[sync] failed to delete one or more tombstoned rows", {
+        cause: deleteErrors,
+      });
     }
   }
 

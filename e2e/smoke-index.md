@@ -58,4 +58,4 @@ Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirst
 
 - No console errors.
 - All assertions above pass.
-- No uncaught exceptions surfaced in Sentry within 30s after the run (check the Feed filtered to the last 5 minutes).
+- No uncaught exceptions surfaced in Sentry within 30s after the run (check the Feed filtered to the last 5 minutes). This applies to the prod smoke: on `http://localhost` Sentry does not start (see SENTRY_SETUP.md).
