@@ -474,7 +474,13 @@ export function changesSince(
             return !listHas(l, x);
           }),
         );
-      // Same members in another order: the whole list is the change.
+      // Same members in another order: the whole list is the change. This
+      // happens when an item is switched off and on again between pushes (it
+      // moves to the end), and the list then goes out as this device holds
+      // it, as a whole-row push sent it. Treating it as no change was tried:
+      // it keeps what another device added meanwhile, but loses this device's
+      // switch-on to another device's removal, and lost more in the
+      // mixed-version runs than it saved.
       if (moved.length > 0) out.items[field] = moved;
       else out.fields.push(field);
     } else {
@@ -662,8 +668,8 @@ type SingleRow = {
   pendingKey: string;
   kinds: Record<string, PushFieldKind>;
   groups: string[][];
-  // This row's half of the active choice (see pushSingleRows).
-  activeChoiceField: string;
+  // This row's part of the active choice (see pushSingleRows).
+  activeChoice: (local: Record<string, unknown>) => RowChanges;
   build: (userId: string, now: string) => Record<string, unknown>;
 };
 
@@ -674,7 +680,9 @@ const SINGLE_ROWS: SingleRow[] = [
     pendingKey: KEYS.PENDING_PUSH_SETTINGS,
     kinds: SETTINGS_PUSH_KINDS,
     groups: [],
-    activeChoiceField: "brew_method",
+    activeChoice: function () {
+      return { fields: ["brew_method"], keys: {}, items: {} };
+    },
     build: buildSettingsPayload,
   },
   {
@@ -683,7 +691,16 @@ const SINGLE_ROWS: SingleRow[] = [
     pendingKey: KEYS.PENDING_PUSH_SELECTIONS,
     kinds: SELECTIONS_PUSH_KINDS,
     groups: SELECTIONS_PUSH_GROUPS,
-    activeChoiceField: "target_preset",
+    // The recipe, and its place on the rail if it has one: a library recipe
+    // is only shown while it is on the rail, so the device that chose it
+    // keeps it there even if another device has taken it off meanwhile.
+    activeChoice: function (local) {
+      const recipe = local.target_preset;
+      const rail = local.added_target_presets;
+      const items: Record<string, unknown[]> = {};
+      if (Array.isArray(rail) && rail.indexOf(recipe) !== -1) items.added_target_presets = [recipe];
+      return { fields: ["target_preset"], keys: {}, items: items };
+    },
     build: buildSelectionsPayload,
   },
 ];
@@ -772,11 +789,19 @@ function pushSingleRows(
     // to another recipe when the two disagree. So if this device changed
     // either, both go out as it holds them; otherwise both stay the cloud's.
     // They are still two requests, so another writer can land between them.
+    //
+    // A row with no base is no evidence of a change here: it goes out whole
+    // for its own reasons and does not pull the other row along.
     const activeChoiceChanged =
       merge &&
       built.some(function (b) {
-        const field = b.row.activeChoiceField;
-        return !b.base || !sameValue(b.local[field], ownValue(b.base, field));
+        const base = b.base;
+        return (
+          !!base &&
+          b.row.activeChoice(b.local).fields.some(function (field) {
+            return !sameValue(b.local[field], ownValue(base, field));
+          })
+        );
       });
 
     return Promise.all(
@@ -803,11 +828,12 @@ function pushSingleRows(
             .from(row.table)
             .upsert(b.local, { onConflict: "user_id" });
         } else {
-          const changes = combineChanges([
-            pending || { fields: [], keys: {}, items: {} },
-            changesSince(row.kinds, b.base, b.local),
-            { fields: activeChoiceChanged ? [row.activeChoiceField] : [], keys: {}, items: {} },
-          ]);
+          const changes = combineChanges(
+            [
+              pending || { fields: [], keys: {}, items: {} },
+              changesSince(row.kinds, b.base, b.local),
+            ].concat(activeChoiceChanged ? [row.activeChoice(b.local)] : []),
+          );
           // Saved before anything is sent, removed only on success.
           if (hasChanges(changes)) safeSetItem(row.pendingKey, JSON.stringify(changes));
           result = await writeMerged(row, userId, b.local, changes, rowChanged);
@@ -815,7 +841,12 @@ function pushSingleRows(
         if (result && result.error) return { table: row.table, error: result.error };
         // The requests took time. If the device signed out or changed account
         // meanwhile, local storage was wiped and is not this push's to write.
-        if (!merge || safeGetItem(KEYS.SYNCED_USER_ID) === userId) {
+        // (The first-login merge's push runs before the device is marked as
+        // merged, so it goes by the signed-in user instead.)
+        const stillThisUser = merge
+          ? safeGetItem(KEYS.SYNCED_USER_ID) === userId
+          : window._cachedAuthUserId === userId;
+        if (stillThisUser) {
           safeSetItem(row.baseKey, b.snapshot);
           safeRemoveItem(row.pendingKey);
         }

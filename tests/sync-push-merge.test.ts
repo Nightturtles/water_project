@@ -32,6 +32,7 @@ import {
   buildSelectionsPayload,
   pushAllToCloud,
   pullFromCloud,
+  clearLocalUserContent,
   hasUnpushedChanges,
 } from "../src/lib/sync";
 import {
@@ -601,6 +602,62 @@ describe("pushes that still send the whole row", () => {
     cloud.log.length = 0;
     await pushAllToCloud();
     expect(writes()).toEqual(["upsert user_settings"]);
+  });
+
+  // A row sent whole for want of a base is not evidence that the device
+  // changed its recipe or brew method, so it does not pull the other row's
+  // half of that choice along. (The 1.2 sync gets this right; an earlier
+  // version of the merged push did not.)
+  test("seeding a missing settings row leaves another device's recipe alone", async () => {
+    newCloud();
+    const [a] = await makeDevices(["current"]);
+    use(a!);
+    // A pull that finds selections but no settings row records only the
+    // selections base.
+    cloud.rows.user_settings = null;
+    g.localStorage.removeItem("cw_last_pushed_settings");
+    await pullFromCloud();
+    cloud.outsideWrite("user_selections", (row) => {
+      row.target_preset = "lotus-light-bright";
+    });
+    cloud.log.length = 0;
+    await pushAllToCloud();
+    expect(writes()).toEqual(["upsert user_settings"]);
+    expect(settingsRow()).toBeTruthy();
+    expect(selectionsRow().target_preset).toBe("lotus-light-bright");
+  });
+
+  test("a first-login push answered after sign-out writes nothing back to local storage", async () => {
+    newCloud();
+    const client = g.window.supabaseClient;
+    const from = client.from;
+    let landed!: () => void;
+    let release!: () => void;
+    const hasLanded = new Promise<void>((resolve) => (landed = resolve));
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    client.from = (table: string) => {
+      const t = from(table);
+      if (table !== "user_settings") return t;
+      const upsert = t.upsert;
+      t.upsert = async (...args: unknown[]) => {
+        const result = await upsert(...args);
+        landed();
+        await gate;
+        return result;
+      };
+      return t;
+    };
+    storage.saveTargetDraftIons("private-recipe", { calcium: 57 } as any);
+    const merging = pushAllToCloud({ allowBeforeMerge: true, mergeUserId: USER });
+    await hasLanded;
+
+    // The user signs out before the answer arrives.
+    g.window._cachedAuthUserId = null;
+    client.auth.getUser = async () => ({ data: { user: null }, error: null });
+    clearLocalUserContent();
+    release();
+    await merging.catch(() => {});
+    expect(g.localStorage.getItem("cw_last_pushed_settings")).toBeNull();
   });
 });
 
@@ -1426,5 +1483,26 @@ describe("the active recipe and the brew method are one choice", () => {
     expect(selectionsRow().target_preset).toBe(storage.loadTargetPresetName("espresso"));
     expect(selectionsRow().target_preset).not.toBe("rao");
     expect(recipe).not.toBe("rao");
+  });
+
+  // A library recipe is only shown while it is on the rail, so the recipe a
+  // device chose keeps its place there. (The 1.2 sync sends its whole rail.)
+  test("the device chose a library recipe another device had taken off the rail: it stays on", async () => {
+    await staleDevice();
+    storage.addAddedTargetPreset("sey");
+    storage.addAddedTargetPreset("onyx");
+    await pushAllToCloud();
+    // Another device takes both off its rail; this one has not pulled.
+    cloud.outsideWrite("user_selections", (row) => {
+      row.added_target_presets = row.added_target_presets.filter(
+        (key: string) => key !== "sey" && key !== "onyx",
+      );
+    });
+    storage.saveTargetPresetName("sey");
+    await pushAllToCloud();
+    expect(selectionsRow().target_preset).toBe("sey");
+    expect(selectionsRow().added_target_presets).toContain("sey");
+    // The other removal is not this device's to undo.
+    expect(selectionsRow().added_target_presets).not.toContain("onyx");
   });
 });
