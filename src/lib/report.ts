@@ -44,6 +44,17 @@ function isTransientNetworkError(err: unknown): boolean {
   return false;
 }
 
+// Build the generic Error sync re-throws, carrying the underlying failures as
+// `cause` for isTransientNetworkError above. The cause is assigned rather than
+// passed as `new Error(msg, { cause })`: that option needs Chrome 93 and is
+// silently ignored before it, and the native apps run on WebViews that old, so
+// there a dropped request would still be reported as a real failure.
+export function errorWithCause(message: string, cause: unknown): Error {
+  const err = new Error(message);
+  err.cause = cause;
+  return err;
+}
+
 // Lift the diagnostic fields off a Supabase/Postgrest error (a plain object, so
 // the captureException Error-only path would otherwise drop them) into Sentry's
 // `extra`. Without this, the "[sync] failed to upsert" incident reached Sentry

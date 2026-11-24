@@ -33,7 +33,7 @@ import {
   TRANSIENT_KEYS,
   TRANSIENT_KEYS_PREFIX,
 } from "./storage-keys";
-import { reportError } from "./report";
+import { errorWithCause, reportError } from "./report";
 import { showMergeDialog, summarizeMerge } from "./merge-dialog";
 import type { MergeItem, MergeSummary } from "./merge-dialog";
 
@@ -948,7 +948,7 @@ export async function pushAllToCloud(options?: {
     try {
       userId = await lookupUserId();
     } catch (err) {
-      throw new Error("[sync] not synced: could not reach the account", { cause: err });
+      throw errorWithCause("[sync] not synced: could not reach the account", err);
     }
     if (!userId) throw new Error("[sync] not synced: no signed-in user");
   } else {
@@ -993,9 +993,7 @@ export async function pushAllToCloud(options?: {
     // rejection. The throw stays load-bearing: logout's flushPendingSync
     // await relies on it to abort and preserve unsynced edits, so this
     // enriches the error without swallowing it.
-    throw new Error("[sync] failed to upsert one or more cloud rows", {
-      cause: pushErrors,
-    });
+    throw errorWithCause("[sync] failed to upsert one or more cloud rows", pushErrors);
   }
 
   await syncCustomProfiles(userId, now);
@@ -1129,9 +1127,7 @@ async function syncCustomProfiles(userId: string, now?: string): Promise<void> {
       // Carry the underlying errors, as the upsert throw below does, so
       // reportError can tell a dropped request (the tombstone stays queued
       // and the next push retries it) from a real Postgrest rejection.
-      throw new Error("[sync] failed to delete one or more tombstoned rows", {
-        cause: deleteErrors,
-      });
+      throw errorWithCause("[sync] failed to delete one or more tombstoned rows", deleteErrors);
     }
   }
 
