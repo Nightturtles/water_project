@@ -2,7 +2,7 @@
 // storage/sync pipeline. Browser globals are pre-stubbed by vitest.setup.js
 // (window = global, localStorage = makeFakeStorage, etc.).
 import { describe, test, expect, vi, beforeEach, afterEach } from "vitest";
-import { reportError, _resetReportCounts } from "../src/lib/report";
+import { errorWithCause, reportError, _resetReportCounts } from "../src/lib/report";
 import { safeSetItem } from "../src/lib/storage";
 
 describe("reportError", () => {
@@ -116,6 +116,35 @@ describe("reportError", () => {
     });
     reportError("sync.init", wrapped);
 
+    expect(captureException).not.toHaveBeenCalled();
+    expect(addBreadcrumb).toHaveBeenCalledTimes(1);
+  });
+
+  test("7b. errorWithCause keeps the cause on an engine that ignores the constructor option (Chrome < 93)", () => {
+    const captureException = vi.fn();
+    const addBreadcrumb = vi.fn();
+    (window as any).Sentry = { captureException, captureMessage: vi.fn(), addBreadcrumb };
+
+    // Stand-in for the old engine: an Error that takes the message and drops
+    // any second argument, as WebView 90 does.
+    const NativeError = globalThis.Error;
+    class OldEngineError extends NativeError {
+      constructor(message?: string) {
+        super(message);
+      }
+    }
+    const cause = [{ code: "", message: "TypeError: Failed to fetch" }];
+    let wrapped: Error;
+    try {
+      (globalThis as any).Error = OldEngineError;
+      wrapped = errorWithCause("[sync] failed to delete one or more tombstoned rows", cause);
+    } finally {
+      (globalThis as any).Error = NativeError;
+    }
+    expect(wrapped.message).toBe("[sync] failed to delete one or more tombstoned rows");
+    expect(wrapped.cause).toBe(cause);
+
+    reportError("sync.push", wrapped);
     expect(captureException).not.toHaveBeenCalled();
     expect(addBreadcrumb).toHaveBeenCalledTimes(1);
   });

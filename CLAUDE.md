@@ -27,7 +27,7 @@ A pointer file for Claude Code sessions working in this repo. Not user-facing.
 | MCP server | `supabase/functions/mcp/` (`index.ts` entry, `tools.ts` tool definitions, `logic.ts` pure helpers + `logic.test.ts`, `deno.json` import map), `src/lib/mcp-core.ts` (the app logic the server shares, bundled by `npm run mcp:build` into the committed `supabase/functions/mcp/app-core.gen.js`; regenerate when it or its imports change, `npm test` fails if stale), `supabase/tests/` (pgTAP tests for what an AI-app login may do, including the database functions it may save concentrates and change selections through; `supabase test db`) |
 | Native (Capacitor) | `capacitor.config.ts` (appId, splash + status-bar plugin config), `src/lib/capacitor-bootstrap.ts` (native-only: splash dismiss, status bar, haptics via `window.cwHaptic`, share via `window.cwNativeShare`, deep-link OAuth), `ios/`, `android/`, `ios/debug.xcconfig` (`#include?`s the gitignored `team.xcconfig` for the Apple Team ID; template `team.xcconfig.example`) |
 | Styles | `style.css` |
-| Tooling | `vite.config.mts` (multi-page build, HTML partials, static copy, Sentry sourcemaps), `partials/` (shared `<head>` fragments injected at build time), `globals.d.ts` (ambient types for the `window` bridge), `tsconfig.json`, `eslint.config.js`, `vitest.config.js`, `tests/` (Vitest unit tests + `setup.js`, the browser-global stubs they load first), `playwright.config.ts`, `scripts/` (build verify, screenshot capture, asset PNGs, TestFlight/Play upload, `build-mcp-core.mjs`), `.coderabbit.yaml`, `src/lib/analytics-init.ts` (GA4 load gating), `src/lib/sentry-init.ts`, `SENTRY_SETUP.md`, `e2e/` |
+| Tooling | `vite.config.mts` (multi-page build, HTML partials, static copy, Sentry sourcemaps), `partials/` (shared `<head>` fragments injected at build time), `globals.d.ts` (ambient types for the `window` bridge), `tsconfig.json`, `eslint.config.js`, `vitest.config.js`, `tests/` (Vitest unit tests + `setup.js`, the browser-global stubs they load first), `playwright.config.ts`, `scripts/` (build verify, screenshot capture, asset PNGs, TestFlight/Play upload, `build-mcp-core.mjs`), `.coderabbit.yaml`, `src/lib/analytics-init.ts` (GA4 load gating), `src/lib/sentry-init.ts`, `src/lib/polyfills.ts` (`Array.prototype.at` for old WebViews; imported first by both module entries), `SENTRY_SETUP.md`, `e2e/` |
 
 ## Verification stack
 
@@ -55,6 +55,10 @@ When you (Claude) make a code change, verify it using this cheat sheet:
 ### Analytics on localhost
 
 [analytics-init.ts](src/lib/analytics-init.ts) skips loading GA4 when the hostname is `localhost`/`127.0.0.1` (and other loopback addresses: `0.0.0.0`, `::1`, `[::1]`, empty), when `navigator.webdriver` is true, or when `localStorage.cafelytic_no_analytics === "1"`. So local traffic (the dev server, `vite preview`, Playwright, and browser-pane previews of localhost) is excluded automatically by hostname, and webdriver-driven browsers anywhere. Visits to the live site from any other browser, including the desktop app's browser pane, are NOT excluded automatically: opt out first. To exclude a browser on the live site, visit `https://cafelytic.com/?no-analytics=1` once (the script sets the flag and strips the param via `history.replaceState`; subsequent loads run without GA) — `?no-analytics=0` clears it. Devtools fallback: `localStorage.setItem("cafelytic_no_analytics","1")`.
+
+### Sentry on localhost
+
+[sentry-init.ts](src/lib/sentry-init.ts) does not start Sentry on a page loaded over `http://` from a loopback host, so the dev server, `vite preview`, Playwright and CI runs report nothing. To send local events (tagged with the environment `development`), run `localStorage.setItem("cafelytic_sentry_local", "1")` and reload. The native apps load from `capacitor://localhost` (iOS) and `https://localhost` (Android) and report as `production`; do not widen the check to the hostname alone.
 
 ## Keeping docs in sync
 

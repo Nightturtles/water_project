@@ -65,7 +65,9 @@ export function formatStockSpec(
       if (!Number.isFinite(grams)) continue;
       // Own-property check so ids like "toString" fall back to the raw id
       // instead of resolving to Object.prototype members.
-      const short = Object.hasOwn(STOCK_MINERAL_SHORT, m.mineralId ?? "")
+      // Not Object.hasOwn: it needs Chrome 93 / Safari 15.4, and the native
+      // apps run on older WebViews than that (iOS 15.0, un-updated Android).
+      const short = Object.prototype.hasOwnProperty.call(STOCK_MINERAL_SHORT, m.mineralId ?? "")
         ? STOCK_MINERAL_SHORT[m.mineralId ?? ""]
         : undefined;
       const label = short || m.mineralId || "?";

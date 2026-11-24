@@ -14,6 +14,7 @@
 // visitor is sent to login.html, which runs the normal sign-in, and comes back
 // (src/lib/post-login-redirect.ts).
 
+import "../lib/polyfills";
 import "../lib/sentry-init";
 import { supabaseClient } from "../lib/supabase-client";
 import {

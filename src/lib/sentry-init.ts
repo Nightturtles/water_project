@@ -32,10 +32,52 @@ function sentryDisabled(): boolean {
   }
 }
 
-if (!sentryDisabled()) {
+// Which Sentry environment this page reports as, or null for none.
+//
+// The dev server, `vite preview` and the Playwright suite (locally and in CI)
+// all load over http from a loopback host. Their errors used to arrive as
+// production events: nearly every "[sync] failed to delete" event in November
+// 2026 was a test run. They now report nothing, unless
+// `localStorage.cafelytic_sentry_local` is "1", which sends them tagged
+// "development" (SENTRY_SETUP.md uses that to check the wiring locally).
+//
+// The protocol is part of the test because the native apps also load from
+// "localhost": capacitor://localhost on iOS, https://localhost on Android.
+// Those are real users and stay "production".
+export function sentryEnvironment(
+  protocol: string,
+  hostname: string,
+  localOptIn: boolean,
+): "production" | "development" | null {
+  const loopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "0.0.0.0" ||
+    hostname === "[::1]";
+  if (protocol !== "http:" || !loopback) return "production";
+  return localOptIn ? "development" : null;
+}
+
+function localOptIn(): boolean {
+  try {
+    return localStorage.getItem("cafelytic_sentry_local") === "1";
+  } catch (_) {
+    return false;
+  }
+}
+
+// `location` is missing only under the unit tests, which import this module
+// for sentryEnvironment and must not start a client.
+const environment =
+  typeof location === "undefined"
+    ? null
+    : sentryEnvironment(location.protocol, location.hostname, localOptIn());
+
+if (environment && !sentryDisabled()) {
   Sentry.init({
     dsn: "https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4511243165433856",
     release: window.SENTRY_RELEASE?.id,
+    environment,
     tracesSampleRate: 0.1,
     replaysSessionSampleRate: 0,
     replaysOnErrorSampleRate: 1.0,

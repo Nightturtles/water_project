@@ -25,8 +25,8 @@ https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4
 ## Where it's wired
 
 Sentry is initialized once in `src/lib/sentry-init.ts`, which is imported
-near the top of `src/lib/legacy-globals.ts` (right after the side-effect-free
-`constants` module) — the `<script type="module">` entry every HTML page
+near the top of `src/lib/legacy-globals.ts` (after only `polyfills`, which the
+SDK needs on old WebViews, and the side-effect-free `constants` module) — the `<script type="module">` entry every HTML page
 loads except `oauth/consent.html`, whose own entry
 (`src/components/oauth-consent.ts`) imports `sentry-init` directly. There is
 no per-page Sentry snippet to mirror; a new entry point that includes
@@ -37,8 +37,9 @@ import `sentry-init` itself.
 
 Options are passed directly to `Sentry.init({ ... })` in `src/lib/sentry-init.ts`
 using the bundled `@sentry/browser` SDK. The module is imported ahead of every
-module with side effects in `src/lib/legacy-globals.ts`, so init runs at
-module-evaluation time before their top-level code can throw. (The old CDN Loader Script and its
+app module with side effects in `src/lib/legacy-globals.ts` (only `polyfills`
+and `constants` come first), so init runs at module-evaluation time before
+their top-level code can throw. (The old CDN Loader Script and its
 `window.sentryOnLoad` hook were removed in Phase A PR h; #132.)
 
 - `tracesSampleRate: 0.1` — 10% performance sampling (BrowserTracing is enabled in code via `Sentry.browserTracingIntegration()` in the `integrations` array).
@@ -121,15 +122,27 @@ release won't resolve on Sentry's side. Investigate via the deploy job's
 
 ## Runbook
 
-**Verify an install change works locally**: open the dev server, paste into
-the console:
+**Local runs report nothing by default.** A page loaded over `http://` from a
+loopback host (the dev server, `vite preview`, the Playwright suite locally and
+in CI) does not start Sentry, so test runs stay out of the production issue
+list. The native apps also load from `localhost`, but over `capacitor://` (iOS)
+and `https://` (Android), and report as usual. The rule is `sentryEnvironment`
+in `src/lib/sentry-init.ts`.
+
+**Verify an install change works locally**: open the dev server, opt this
+browser in, reload, then throw:
+
+```js
+localStorage.setItem('cafelytic_sentry_local', '1'); location.reload();
+```
 
 ```js
 throw new Error('sentry wiring test ' + Date.now());
 ```
 
-Within ~30s the event should appear in the Sentry Issues view. Resolve the
-issue after testing so the release stays clean.
+Within ~30s the event should appear in the Sentry Issues view with the
+environment `development`. Resolve the issue after testing, and remove the
+flag (`localStorage.removeItem('cafelytic_sentry_local')`) when done.
 
 **Muting noisy errors**: in Sentry UI, open the issue, click "…" → "Ignore
 until it happens X times / for Y time". Prefer time-bounded ignores to

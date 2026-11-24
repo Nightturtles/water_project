@@ -127,7 +127,7 @@ Before signing out, on the test user:
 - All thirteen steps pass.
 - `#save-status-indicator` never reads "Couldn't save - retrying" on either device.
 - No console errors on either context. The app logs `[sync] realtime channel status (<channel>): <status>` only for `CHANNEL_ERROR` / `TIMED_OUT` (nothing for `SUBSCRIBED`). Such a warning is acceptable ONLY when intentionally induced in Step 12 (offline simulation) and the channel then recovers (updates resume without reload); an unexpected one outside Step 12, or one that never recovers, is a failure.
-- Sentry Feed shows no new issues tagged with the sync code paths (`src/lib/sync.ts`, `src/lib/storage.ts`).
+- Sentry Feed shows no new issues tagged with the sync code paths (`src/lib/sync.ts`, `src/lib/storage.ts`). On the dev server Sentry is off unless each context first runs `localStorage.setItem("cafelytic_sentry_local", "1")` and reloads (events then arrive with the environment `development`).
 - localStorage on both contexts is in sync with Supabase — for each Playwright context, `await page.evaluate(() => Object.keys(localStorage).sort())` and assert the two arrays are deep-equal.
 - After each Realtime step, `await page.evaluate(() => loadCustomTargetProfiles())` returns the same dict on both contexts (the JSON.stringify of which should be deep-equal). This is the strict "always identical" check from the user requirement.
 

@@ -1,6 +1,6 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: 7b5851f31e4de130293fb7fc533daa6306747bf027351f9adaa80317c1a6ea0a
+// source-hash: e27756742019f11a9b0d254c55fe4318f416a9c0472c2750489f33f269178135
 // body-hash: 5c4a739234b504851c689fa3417146ad9f849c4782a81b28dc01c61bf39ccbd8
 // deno-lint-ignore-file
 // deno-fmt-ignore-file

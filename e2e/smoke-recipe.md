@@ -66,7 +66,7 @@ The Recipe Builder's `#recipe-save-target-btn` always saves a *new* target profi
 
 ### 6. No stray Sentry errors
 
-- After running steps 1–5, check Sentry Feed filtered to the last 5 minutes — no new issues should appear with `index.html` or `recipe.html` in the URL tag.
+- After running steps 1–5, check Sentry Feed filtered to the last 5 minutes — no new issues should appear with `index.html` or `recipe.html` in the URL tag. On the dev server Sentry is off unless you first run `localStorage.setItem("cafelytic_sentry_local", "1")` and reload (events then arrive with the environment `development`); without that, rely on the console check.
 
 ## Exit criteria
 
