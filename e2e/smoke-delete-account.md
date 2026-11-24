@@ -31,8 +31,12 @@ account, so this is a manual gate by design.
    - Pick a password you don't reuse
    - Confirm the email when Supabase emails you
 3. Sign in, save one recipe, save one custom source-water profile, set a
-   theme, change one of the mineral selections. (You want non-empty data
-   across every cascaded table.)
+   theme, change one of the mineral selections. Then connect an AI app to
+   the throwaway account (MCP.md, "One-time setup" step 6), approve it on
+   the consent page (writes `mcp_app_consent`) and have it save one recipe
+   (writes `mcp_write_quota`). (You want non-empty data across every
+   cascaded table: a table that is empty before the delete is empty after
+   it whether or not its cascade works.)
 4. In the Supabase dashboard, open the SQL editor and confirm rows exist
    for this user across all seven tables:
 
@@ -47,12 +51,9 @@ account, so this is a manual gate by design.
    union all select 'mcp_app_consent', count(*) from public.mcp_app_consent where user_id = '<UID>';
    ```
 
-   The two `mcp_*` tables hold rows only once the throwaway account has
-   connected an AI app. To test their cascade, connect one (MCP.md, "One-time
-   setup" step 6), approve it on the consent page (writes `mcp_app_consent`)
-   and have it save one recipe (writes `mcp_write_quota`), so both counts
-   are non-zero here. If you skip that, both stay 0 before and after and
-   this run has not tested those two tables: say so in the result.
+   Both `mcp_*` counts must be non-zero here. If either is 0, go back to
+   step 3 and connect the AI app before running the deletion: do not run
+   it with those tables empty.
 
    Note the UID (from auth.users) and the counts.
 
