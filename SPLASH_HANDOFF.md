@@ -1,6 +1,6 @@
 # Handoff: native cold-start "dark screen" on first launch
 
-Status: **SOLVED** (branch `fix/native-splash-show-on-launch`, 2026-06-12). The
+Status: **SOLVED** (2026-06-12; merged as #178, the branch has since been deleted). The
 original problem statement and investigation history are preserved below the
 resolution for context.
 
@@ -45,14 +45,20 @@ investigation follows from this:
    ignores `hide()`'s `fadeOutDuration` for the launch splash.
 2. `src/lib/capacitor-bootstrap.ts` -> `hideSplashAfterPaint()`: still hides
    on `requestAnimationFrame` (so the splash fades into a rendered page), but
-   now with a 250ms `setTimeout` fallback. On Android 12+ the held launch
+   now with a 250ms `setTimeout` fallback, and never before
+   `MIN_SPLASH_VISIBLE_MS` (1000 ms after the WebView starts): whichever of
+   the rAF and the fallback fires first schedules the hide, which then waits
+   out whatever is left of that floor. On Android 12+ the held launch
    splash works by suspending the view hierarchy's first draw (`onPreDraw`
    returns false until `hide()` releases it), and rAF may never fire while
    drawing is suspended - without the fallback, splash and page would
-   deadlock waiting on each other.
+   deadlock waiting on each other. In that case the fallback, not a paint, is
+   what starts the hide.
 
-Load-time impact: none on the happy path. The hide fires at the same first
-paint that revealed the UI before; the gap just shows the branded Ca tile
+Load-time impact: none on a slow cold start, where the hide fires at the same
+first paint that revealed the UI before (or 250 ms after the module ran, when
+Android is holding the first draw); a fast start holds the splash until
+the one-second floor so it does not blink in and out. The gap just shows the branded Ca tile
 (correct light/dark variant, from the same LaunchScreen.storyboard iOS uses
 for the system launch screen) instead of a dark blank.
 
@@ -83,8 +89,8 @@ loading indicator, then the calculator UI appeared.
   first. The hang is the cold WKWebView parsing the ~628 KB `legacy-globals`
   bundle with no warm caches.
 
-Three attempts were made on PR #170 (closed, branch
-`fix/native-splash-cold-start` kept on the remote): holding the native splash
+Three attempts were made on PR #170 (closed; its branch
+`fix/native-splash-cold-start` has since been deleted from the remote): holding the native splash
 longer, a web-layer `#app-splash` overlay, and the overlay with hardcoded
 colors + a `window.__splashDebug` diagnostic. All reverted; see Resolution
 for why each was doomed.

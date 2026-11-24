@@ -29,7 +29,7 @@ Spec: [smoke-recipe.spec.ts](smoke-recipe.spec.ts) codifies both. The signed-in 
 
 The runbook's earlier framing of "click 'Done Editing' to save" was wrong: the source-edit-mode button only toggles the edit-mode UI, it doesn't persist anything. The actual auto-persist path is the per-ion `debouncedSave` call (300 ms) in `src/components/source-water-ui.ts`. On a saved preset, the post-reload init runs `activateSourcePreset` which overwrites the inputs with the preset's canonical values, so per-ion edits don't survive reload there. On the "custom" preset, `activateSourcePreset` returns early before touching inputs, so the debounced writes stick.
 
-- Click the **Custom** button in the source-water rail (`#source-presets [data-preset="custom"]`).
+- Expand the source-water rail with the **More options** toggle (`.source-more-toggle`), then click **+ Add Custom** (`#source-presets [data-preset="custom"]`).
 - Change `#src-calcium` to a non-default value (e.g. `15`).
 - Wait ~300ms for the debounce.
 - Reload. Assert `#src-calcium` shows `15`, not the original default.

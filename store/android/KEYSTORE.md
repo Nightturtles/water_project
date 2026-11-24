@@ -48,7 +48,7 @@ After it finishes, the file `cafelytic-upload.keystore` will exist at the path y
 
 Do this immediately, before doing anything else.
 
-1. **Primary copy.** 1Password (or your password manager): create a Secure Note titled "Cafelytic Play upload keystore." Attach the `.keystore` file, paste in both passwords, paste in the alias, paste in the local path you chose above.
+1. **Primary copy.** 1Password (or your password manager): create a Secure Note titled "Cafelytic Play upload keystore." Attach the `.keystore` file, paste in the keystore password (the key uses the same one), paste in the alias, paste in the local path you chose above.
 2. **Secondary copy.** An offline drive (USB or external SSD) stored somewhere physically separate from your laptop. Same contents as the password-manager note.
 
 If either backup is missing, the runbook is not done yet.
@@ -61,7 +61,7 @@ The `signingConfigs.release` block in `android/app/build.gradle` reads four env 
 export CAFELYTIC_RELEASE_KEYSTORE="$HOME/Documents/cafelytic-secrets/cafelytic-upload.keystore"
 export CAFELYTIC_RELEASE_KEYSTORE_PASSWORD="<keystore password from 1Password>"
 export CAFELYTIC_RELEASE_KEY_ALIAS="cafelytic-upload"
-export CAFELYTIC_RELEASE_KEY_PASSWORD="<key password from 1Password>"
+export CAFELYTIC_RELEASE_KEY_PASSWORD="<the same keystore password>"
 ```
 
 Reload the shell (`exec $SHELL`) and verify:

@@ -17,8 +17,10 @@
 //   9. Create a custom target profile on A; B sees it via Realtime. Delete on
 //      A; B's storage clears + tombstone present + Supabase row gone (the
 //      resurrection guard from commit 9f89a2e).
+//  13. A row written from outside the app (as a connected AI app's database
+//      function would) survives this device's next settings save.
 //
-// Steps 3, 5, 6, 8, 10, 11 are intentionally left as manual runbook entries:
+// Steps 3, 5, 6, 8, 10, 11, 12 are intentionally left as manual runbook entries:
 // they involve UI race conditions (modal interaction during Realtime push,
 // pagehide handler timing, etc.) that are too brittle to automate without
 // becoming flaky guards that get disabled and silently miss real regressions.

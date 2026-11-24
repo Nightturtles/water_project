@@ -1,8 +1,8 @@
 # Upload runbook
 
-End-to-end checklist for shipping a build to TestFlight (iOS) and to the Play Console Internal Testing track (Android). Run through this once accounts exist; ongoing uploads are just steps 6 and 7.
+End-to-end checklist for shipping a build to TestFlight (iOS) and to the Play Console Internal Testing track (Android). Steps 1-5 are one-time setup; ongoing uploads are just steps 6 and 7.
 
-The upload scripts under `scripts/` are written but **blocked on accounts** until steps 1-5 below are done. Running either script before that point exits non-zero with a clear hint about what's missing.
+Where this stands: the iOS path is in use (steps 1-3 are done and every release so far has gone out through step 6). The Android path has not had its first upload yet: steps 4, 5 and the keystore come first, and section 7 covers the first upload. Running either script before its setup is done exits non-zero with a clear hint about what's missing.
 
 ## 1. Apple Developer Program (one-time, $99/year)
 
@@ -61,7 +61,7 @@ The TestFlight upload script needs `ios/ExportOptions.plist` to know how to pack
 </plist>
 ```
 
-Add `ios/ExportOptions.plist` to `.gitignore` (it contains the team ID, which is mildly sensitive and is per-developer anyway).
+`ios/ExportOptions.plist` is already in `.gitignore` (it contains the team ID, which is mildly sensitive and is per-developer anyway), so a fresh checkout or worktree needs its own copy.
 
 ## 4. Google Play Console (one-time, $25)
 

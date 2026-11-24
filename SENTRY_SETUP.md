@@ -9,13 +9,14 @@ Production error telemetry for cafelytic.com.
   name is "cafelytic". The slug is what `@sentry/vite-plugin` and the Sentry
   CLI need; the display name is just a label.
 - Platform: Browser JavaScript (vanilla — no framework)
-- Install method: **bundled via Vite** (`@sentry/browser` npm package, initialized in `src/lib/sentry-init.ts`, imported first by `src/lib/legacy-globals.ts`; replaced the CDN Loader Script in Phase A PR h)
+- Install method: **bundled via Vite** (`@sentry/browser` npm package, initialized in `src/lib/sentry-init.ts`, imported near the top of `src/lib/legacy-globals.ts`; replaced the CDN Loader Script in Phase A PR h)
 
 ## DSN
 
 The DSN is a public identifier — it's embedded in the HTML served to every
 visitor and is safe to commit. The secret auth token (for source-map uploads
-and CLI) is not stored here and is not needed until Phase 3.
+and CLI) is not stored here: it is the `SENTRY_AUTH_TOKEN` GitHub Actions
+secret, read only by the deploy job (see Release tagging below).
 
 ```text
 https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4511243165433856
@@ -24,17 +25,21 @@ https://c99c13e5b1291bc31a11c864a400daca@o4511243157700608.ingest.us.sentry.io/4
 ## Where it's wired
 
 Sentry is initialized once in `src/lib/sentry-init.ts`, which is imported
-first by `src/lib/legacy-globals.ts` — the single `<script type="module">`
-entry every HTML page loads. There is no per-page Sentry snippet to mirror;
-adding a new entry point that includes `legacy-globals.ts` gets Sentry
-automatically.
+near the top of `src/lib/legacy-globals.ts` (after only `polyfills`, which the
+SDK needs on old WebViews, and the side-effect-free `constants` module) — the `<script type="module">` entry every HTML page
+loads except `oauth/consent.html`, whose own entry
+(`src/components/oauth-consent.ts`) imports `sentry-init` directly. There is
+no per-page Sentry snippet to mirror; a new entry point that includes
+`legacy-globals.ts` gets Sentry automatically, and one that does not must
+import `sentry-init` itself.
 
 ## SDK init options
 
 Options are passed directly to `Sentry.init({ ... })` in `src/lib/sentry-init.ts`
-using the bundled `@sentry/browser` SDK. The module is imported FIRST by
-`src/lib/legacy-globals.ts`, so init runs at module-evaluation time before any
-other module's top-level code can throw. (The old CDN Loader Script and its
+using the bundled `@sentry/browser` SDK. The module is imported ahead of every
+app module with side effects in `src/lib/legacy-globals.ts` (only `polyfills`
+and `constants` come first), so init runs at module-evaluation time before
+their top-level code can throw. (The old CDN Loader Script and its
 `window.sentryOnLoad` hook were removed in Phase A PR h; #132.)
 
 - `tracesSampleRate: 0.1` — 10% performance sampling (BrowserTracing is enabled in code via `Sentry.browserTracingIntegration()` in the `integrations` array).
@@ -68,8 +73,9 @@ TypeScript sources for that exact build.
 - `src/lib/sentry-init.ts` reads `window.SENTRY_RELEASE.id` and passes it to
   `Sentry.init` as `release`, so every event from that deploy is tagged with
   the same identifier the artifacts were uploaded under.
-- The deploy job in `.github/workflows/ci.yml` passes `GITHUB_SHA` to the
-  build, so the release name matches the deployed commit. Locally it
+- `vite.config.mts` names the release after the runner's built-in `GITHUB_SHA`
+  (the deploy job in `.github/workflows/ci.yml` only adds `SENTRY_AUTH_TOKEN`),
+  so the release name matches the deployed commit. Locally it
   defaults to the current `HEAD` SHA from the plugin's git auto-detection.
 
 ### Auth token
