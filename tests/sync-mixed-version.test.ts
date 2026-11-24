@@ -78,17 +78,48 @@ type Step = { device: number; op: string; key?: string; value?: number };
 
 const RECIPES = ["r1", "r2", "r3"] as const;
 const SETTING_OPS = ["mineral", "rail", "concentrate-spec", "concentrate"] as const;
+// One per database function a connected AI app writes these rows through.
+const AI_APP_OPS = [
+  "ai-concentrate-spec", // mcp_save_concentrate
+  "ai-mineral", // mcp_set_enabled, a mineral
+  "ai-concentrate", // mcp_set_enabled, a concentrate
+  "ai-recipe", // mcp_set_active_recipe
+  "ai-source-water", // mcp_set_active_source_water
+] as const;
 
 // A random sequence of user actions (recipe create / edit / delete / re-create
 // under the same name, source water, mineral selection, rail, Recipe
 // Concentrates) interleaved with sync events (a debounced push, a Realtime
 // event, a page load), each on a random device. Devices act on stale state
 // whenever their own sync events haven't come up yet.
-function makeScript(seed: number, deviceCount: number, steps: number, recipesOnly: boolean) {
+//
+// With aiApp, a connected AI app also writes now and then, straight to the
+// account and not through any device (the database functions in MCP.md). Its
+// steps are drawn after each ordinary step, so a script without it is the
+// same as it always was.
+function makeScript(
+  seed: number,
+  deviceCount: number,
+  steps: number,
+  recipesOnly: boolean,
+  aiApp = false,
+) {
   const rand = seededRandom(seed);
   const pick = <T>(xs: readonly T[]): T => xs[Math.floor(rand() * xs.length)]!;
   const script: Step[] = [];
+  const maybeAiApp = () => {
+    if (!aiApp || rand() >= 0.2) return;
+    const op = pick(AI_APP_OPS);
+    const key =
+      op === "ai-mineral"
+        ? pick(["gypsum", "magnesium-chloride", "epsom-salt"])
+        : op === "ai-recipe"
+          ? pick(["rao", "sey"])
+          : pick(["x", "y"]);
+    script.push({ device: -1, op, key, value: 1 + Math.floor(rand() * 90) });
+  };
   for (let i = 0; i < steps; i++) {
+    if (i > 0) maybeAiApp();
     const device = Math.floor(rand() * deviceCount);
     const roll = rand();
     if (roll < 0.45) {
@@ -162,6 +193,84 @@ function applyAction(step: Step): "add" | "remove" | "none" {
   return "none";
 }
 
+// Apply one write by the connected AI app, the way its database function
+// changes the row: one key or one id, everything else in the row left as it
+// is at that moment. Says which thing it touched (named as applyAction's
+// things are) and what it did to it.
+//
+// It only does what the real functions allow. mcp_save_concentrate stores a
+// spec with at least one mineral; mcp_set_enabled switches a concentrate on
+// only if its spec is fully set up (the specs the simulated devices save have
+// no minerals, so the AI app cannot switch those on), and switches one off
+// whatever its spec looks like.
+function applyAiAppWrite(step: Step): {
+  thing: string;
+  effect: "add" | "remove" | "none";
+  // Set when the write made a recipe the active one.
+  activeRecipe?: string;
+  // Set when the write chose the active source water.
+  sourceWater?: { key: string; calcium: number };
+} {
+  const key = step.key!;
+  let effect: "add" | "remove" | "none" = "none";
+  if (step.op === "ai-concentrate-spec") {
+    cloud.outsideWrite("user_settings", (row) => {
+      row.stock_concentrate_specs = {
+        ...(row.stock_concentrate_specs || {}),
+        [key]: {
+          label: key,
+          bottleMl: step.value,
+          doseGramsPerL: 4,
+          minerals: [{ mineralId: "gypsum", grams: 1 }],
+        },
+      };
+    });
+    return { thing: "concentrate-spec:" + key, effect: "add" };
+  }
+  if (step.op === "ai-mineral" || step.op === "ai-concentrate") {
+    const mineral = step.op === "ai-mineral";
+    const field = mineral ? "selected_minerals" : "selected_concentrates";
+    const id = mineral ? key : "stock:" + key;
+    const row = cloud.rows.user_settings;
+    const has = (row[field] || []).includes(id);
+    const spec = (row.stock_concentrate_specs || {})[key];
+    const fullySetUp =
+      !!spec &&
+      Number(spec.bottleMl) > 0 &&
+      Number(spec.doseGramsPerL) > 0 &&
+      Array.isArray(spec.minerals) &&
+      spec.minerals.length > 0;
+    if (!mineral && !has && !fullySetUp) {
+      return { thing: "concentrate:" + key, effect: "none" };
+    }
+    cloud.outsideWrite("user_settings", (r) => {
+      const rest = (r[field] || []).filter((x: string) => x !== id);
+      r[field] = has ? rest : [...rest, id];
+    });
+    return { thing: (mineral ? "mineral:" : "concentrate:") + key, effect: has ? "remove" : "add" };
+  }
+  if (step.op === "ai-recipe") {
+    cloud.outsideWrite("user_selections", (row) => {
+      row.target_preset = key;
+      const added: string[] = row.added_target_presets || [];
+      if (!added.includes(key)) {
+        row.added_target_presets = [...added, key];
+        effect = "add";
+      }
+    });
+    return { thing: "rail:" + key, effect, activeRecipe: key };
+  }
+  cloud.outsideWrite("user_selections", (row) => {
+    row.source_preset = "volvic";
+    row.source_water = { ...(row.source_water || {}), calcium: step.value };
+  });
+  return {
+    thing: "source-water",
+    effect: "none",
+    sourceWater: { key: "volvic", calcium: step.value! },
+  };
+}
+
 type Outcome = {
   converged: boolean;
   dirty: boolean;
@@ -185,8 +294,28 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
   const lastAction: Record<string, "add" | "remove"> = {};
   const added = new Set<string>();
   const removed = new Set<string>();
+  let chosenActiveRecipe: string | null = null;
+  let chosenSourceWater: { key: string; calcium: number } | null = null;
   const trace: string[] = [];
   for (const step of script) {
+    if (step.device < 0) {
+      const { thing, effect, activeRecipe, sourceWater } = applyAiAppWrite(step);
+      if (effect !== "none") {
+        lastAction[thing] = effect;
+        (effect === "add" ? added : removed).add(thing);
+      }
+      // No device in these scripts chooses the active recipe, so the AI
+      // app's last choice is what the account should end on. Tracked apart
+      // from the rail: making a recipe active that is already on the rail
+      // changes nothing there.
+      if (activeRecipe) chosenActiveRecipe = activeRecipe;
+      // The source water it chose stands until a device edits the Starting
+      // Water after it (below). Devices all agreeing on some other water is
+      // convergence, not the choice surviving, so it is counted on its own.
+      if (sourceWater) chosenSourceWater = sourceWater;
+      trace.push(`AI app ${step.op} ${step.key ?? ""} ${step.value ?? ""} -> ${effect}`);
+      continue;
+    }
     const d = devices[step.device]!;
     if (step.op === "push") await push(d).catch(() => {});
     else if (step.op === "realtime") await realtime(d);
@@ -196,6 +325,8 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
       act(d, () => {
         effect = applyAction(step);
       });
+      // A deliberate edit of the Starting Water after the AI app's choice.
+      if (step.op === "source-water") chosenSourceWater = null;
       if (effect !== "none") {
         const thing =
           (step.op === "save" || step.op === "delete" ? "recipe" : step.op) + ":" + step.key;
@@ -221,6 +352,10 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
     return JSON.stringify({
       recipes: localRecipes(d),
       water: storage.loadSourceWater().calcium,
+      // The key too: two devices can hold the same calcium under different
+      // source waters.
+      waterKey: storage.loadSourcePresetName(),
+      activeRecipe: storage.loadTargetPresetName(storage.loadBrewMethod()),
       minerals: storage.loadSelectedMinerals().slice().sort(),
       rail: storage.loadAddedTargetPresets().slice().sort(),
       specs: Object.keys(storage.loadStockConcentrateSpecs()).sort(),
@@ -245,7 +380,21 @@ async function run(versions: Version[], script: Step[]): Promise<Outcome> {
     converged: views.every((v) => v === views[0]),
     dirty: devices.some((d) => dirty(d)),
     neverQuiet: noisy >= MAX_ROUNDS,
-    lost: things.filter((t) => lastAction[t] === "add" && !exists(t)),
+    lost: things
+      .filter((t) => lastAction[t] === "add" && !exists(t))
+      .concat(
+        chosenActiveRecipe &&
+          storage.loadTargetPresetName(storage.loadBrewMethod()) !== chosenActiveRecipe
+          ? ["active-recipe:" + chosenActiveRecipe]
+          : [],
+      )
+      .concat(
+        chosenSourceWater &&
+          (storage.loadSourcePresetName() !== chosenSourceWater.key ||
+            storage.loadSourceWater().calcium !== chosenSourceWater.calcium)
+          ? ["source-water:" + chosenSourceWater.key]
+          : [],
+      ),
     broughtBack: things.filter((t) => lastAction[t] === "remove" && exists(t)),
     missing: [...added].filter((t) => !removed.has(t) && !exists(t)).sort(),
     deletedRowsLeft: cloud.profiles
@@ -308,28 +457,88 @@ const FLEETS: Array<{ baseline: Version[]; mixes: Version[][] }> = [
 
 const SEEDS = 60;
 
+// Run every seed's script on the all-v1.2 fleet and on each mix, and fail if
+// any total is higher for a mix. With SYNC_FLEET_TOTALS=1 in the environment
+// it also prints the totals, plus those of an all-current fleet for
+// reference (not gated: with no old device in it there is nothing to be "no
+// worse than").
+async function expectMixesNoWorse(
+  label: string,
+  fleet: { baseline: Version[]; mixes: Version[][] },
+  scriptFor: (seed: number) => Step[],
+): Promise<void> {
+  const report = !!process.env.SYNC_FLEET_TOTALS;
+  const allCurrent: Version[] = fleet.baseline.map(() => "current");
+  const baseline = zero();
+  const mixed = fleet.mixes.map(zero);
+  const current = zero();
+  const currentByKind: Record<string, number> = {};
+  for (let seed = 1; seed <= SEEDS; seed++) {
+    const script = scriptFor(seed);
+    addTo(baseline, await run(fleet.baseline, script));
+    for (let m = 0; m < fleet.mixes.length; m++) {
+      addTo(mixed[m]!, await run(fleet.mixes[m]!, script));
+    }
+    if (report) {
+      const outcome = await run(allCurrent, script);
+      addTo(current, outcome);
+      // What the all-current fleet still loses, by kind of thing: these are
+      // the conflicts the merge settles on purpose, and worth reading. Each
+      // thing once per run: one that was added, never removed and is gone is
+      // in both `lost` and `missing`.
+      new Set(outcome.lost.concat(outcome.missing, outcome.broughtBack)).forEach((thing) => {
+        const kind = thing.slice(0, thing.indexOf(":"));
+        currentByKind[kind] = (currentByKind[kind] || 0) + 1;
+      });
+    }
+  }
+  if (report) {
+    const rows: Array<[string, Totals]> = [[fleet.baseline.join(" + "), baseline]];
+    fleet.mixes.forEach((mix, m) => rows.push([mix.join(" + "), mixed[m]!]));
+    rows.push([allCurrent.join(" + "), current]);
+    console.log(
+      label +
+        "\n" +
+        rows.map(([name, t]) => "  " + name + ": " + JSON.stringify(t)).join("\n") +
+        "\n  all current, by kind: " +
+        JSON.stringify(currentByKind),
+    );
+  }
+  for (let m = 0; m < fleet.mixes.length; m++) {
+    const worse = (Object.keys(baseline) as Array<keyof Totals>)
+      .filter((k) => mixed[m]![k] > baseline[k])
+      .map((k) => `${k}: ${mixed[m]![k]} (v1.2 alone: ${baseline[k]})`);
+    expect(worse, fleet.mixes[m]!.join(" + ")).toEqual([]);
+  }
+}
+
 describe("a current device next to v1.2 devices is no worse than v1.2 devices alone", () => {
   for (const recipesOnly of [true, false]) {
     for (const fleet of FLEETS) {
       const n = fleet.baseline.length;
-      test(`${n} devices, ${recipesOnly ? "recipes" : "recipes and settings"}`, async () => {
-        const baseline = zero();
-        const mixed = fleet.mixes.map(zero);
-        for (let seed = 1; seed <= SEEDS; seed++) {
-          const script = makeScript(seed * 31 + n, n, 24, recipesOnly);
-          addTo(baseline, await run(fleet.baseline, script));
-          for (let m = 0; m < fleet.mixes.length; m++) {
-            addTo(mixed[m]!, await run(fleet.mixes[m]!, script));
-          }
-        }
-        for (let m = 0; m < fleet.mixes.length; m++) {
-          const worse = (Object.keys(baseline) as Array<keyof Totals>)
-            .filter((k) => mixed[m]![k] > baseline[k])
-            .map((k) => `${k}: ${mixed[m]![k]} (v1.2 alone: ${baseline[k]})`);
-          expect(worse, fleet.mixes[m]!.join(" + ")).toEqual([]);
-        }
+      const name = `${n} devices, ${recipesOnly ? "recipes" : "recipes and settings"}`;
+      test(name, async () => {
+        await expectMixesNoWorse(name, fleet, (seed) =>
+          makeScript(seed * 31 + n, n, 24, recipesOnly),
+        );
       });
     }
+  }
+});
+
+// The same bar with a third writer in the account: a connected AI app saving
+// concentrates and changing selections while the devices come and go. Old
+// devices undo its writes whenever they push a stale row; a current device
+// next to them must not make that, or anything else, worse.
+describe("with a connected AI app writing too, a mix is still no worse than v1.2 devices alone", () => {
+  for (const fleet of FLEETS) {
+    const n = fleet.baseline.length;
+    const name = `${n} devices, recipes and settings, AI app`;
+    test(name, async () => {
+      await expectMixesNoWorse(name, fleet, (seed) =>
+        makeScript(seed * 37 + n, n, 24, false, true),
+      );
+    });
   }
 });
 

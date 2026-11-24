@@ -1,7 +1,7 @@
 // GENERATED FILE - do not edit. Source: src/lib/mcp-core.ts
 // Regenerate with: npm run mcp:build
-// source-hash: 1df32358c37ea216ceed68a593c5c428755d31d40fb1637b210843e3ee1d2b55
-// body-hash: bd57e25248941433ceb98daf12aa4baad9caaefd0abdec8b80763ed7c531efcc
+// source-hash: 7b5851f31e4de130293fb7fc533daa6306747bf027351f9adaa80317c1a6ea0a
+// body-hash: 5c4a739234b504851c689fa3417146ad9f849c4782a81b28dc01c61bf39ccbd8
 // deno-lint-ignore-file
 // deno-fmt-ignore-file
 // src/lib/constants.ts
@@ -547,6 +547,8 @@ const KEYS = {
 	LAST_PUSHED_SELECTIONS: "cw_last_pushed_selections",
 	LAST_PUSHED_SOURCE_PROFILES: "cw_last_pushed_source_profiles",
 	LAST_PUSHED_TARGET_PROFILES: "cw_last_pushed_target_profiles",
+	PENDING_PUSH_SETTINGS: "cw_pending_push_settings",
+	PENDING_PUSH_SELECTIONS: "cw_pending_push_selections",
 	SYNCED_USER_ID: "cw_synced_user_id",
 	STARTER_MIGRATION_APPLIED: "cw_starter_migration_applied"
 };
@@ -585,6 +587,8 @@ const CATEGORY_C = [
 	KEYS.LAST_PUSHED_SELECTIONS,
 	KEYS.LAST_PUSHED_SOURCE_PROFILES,
 	KEYS.LAST_PUSHED_TARGET_PROFILES,
+	KEYS.PENDING_PUSH_SETTINGS,
+	KEYS.PENDING_PUSH_SELECTIONS,
 	KEYS.SYNCED_USER_ID,
 	KEYS.STARTER_MIGRATION_APPLIED
 ];

@@ -9,7 +9,9 @@
 // device is "live" at a time: use() swaps its image into the global
 // localStorage stub from tests/setup.js, so every operation here is fully
 // awaited before another device acts. That makes runs deterministic; it also
-// means this harness cannot produce two requests in flight at once.
+// means this harness cannot produce two requests in flight at once. The one
+// overlap it can stage is a write landing between a merged push's read and
+// its conditional write (FakeCloud.beforeConditionalWrite).
 //
 // Browser-global stubs come from tests/setup.js (logged in, localStorage).
 
@@ -31,6 +33,29 @@ export class FakeCloud {
   log: string[] = [];
   writes = 0;
   failNextProfileDelete = false;
+  // Run once, between a merged push's read and its conditional write: the one
+  // overlap this otherwise strictly sequential harness can stage.
+  beforeConditionalWrite: Array<() => void> = [];
+  // Called at the start of every write to one of the two single rows, a
+  // whole-row upsert or a merged update alike. Returning { error } makes that
+  // write fail with it.
+  onSingleRowWrite: ((table: string) => { error: unknown } | void) | null = null;
+  private outsideWrites = 0;
+
+  // A write that does not come from one of the simulated devices: what the
+  // database functions behind a connected AI app do (MCP.md). `change` edits
+  // the row in place; like those functions, the write stamps updated_at.
+  outsideWrite(table: "user_settings" | "user_selections", change: (row: any) => void): void {
+    const row = clone(this.rows[table]);
+    if (!row) throw new Error("no " + table + " row yet");
+    change(row);
+    this.outsideWrites++;
+    row.updated_at =
+      "2099-01-01T00:00:00." + String(this.outsideWrites).padStart(6, "0") + "+00:00";
+    this.rows[table] = row;
+    this.writes++;
+    this.log.push("outside write " + table);
+  }
 
   client() {
     return {
@@ -58,6 +83,10 @@ export class FakeCloud {
         return q;
       },
       upsert: async (payload: any) => {
+        if (single && this.onSingleRowWrite) {
+          const refused = this.onSingleRowWrite(t);
+          if (refused) return refused;
+        }
         this.writes++;
         if (single) {
           this.rows[t] = Object.assign({}, this.rows[t] || {}, clone(payload));
@@ -72,6 +101,40 @@ export class FakeCloud {
           }
         }
         return { error: null };
+      },
+      // A conditional update of one of the single rows, as the current sync
+      // code's merged push sends it: update(payload).eq("user_id", ...)
+      // .eq("updated_at", <the value it read>).select(). Writes only when
+      // every filter still matches the row, and returns the rows written.
+      update: (payload: any) => {
+        const filters: Array<[string, unknown]> = [];
+        const run = async () => {
+          if (this.onSingleRowWrite) {
+            const refused = this.onSingleRowWrite(t);
+            if (refused) return { data: null, error: refused.error };
+          }
+          this.beforeConditionalWrite.splice(0).forEach((fn) => fn());
+          const current = single ? this.rows[t] : null;
+          if (!current) return { data: [], error: null };
+          const matches = filters.every(([col, val]) =>
+            col === "user_id" ? true : (current[col] ?? null) === (val ?? null),
+          );
+          if (!matches) {
+            this.log.push("update " + t + " (refused: row changed)");
+            return { data: [], error: null };
+          }
+          this.writes++;
+          this.rows[t] = Object.assign({}, current, clone(payload));
+          this.log.push("update " + t);
+          return { data: [{ user_id: USER }], error: null };
+        };
+        const q: any = {
+          eq: (col: string, val: unknown) => (filters.push([col, val]), q),
+          is: (col: string, val: unknown) => (filters.push([col, val]), q),
+          select: () => q,
+          then: (resolve: any, reject: any) => run().then(resolve, reject),
+        };
+        return q;
       },
       delete: () => ({
         eq: () => ({

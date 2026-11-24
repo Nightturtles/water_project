@@ -56,6 +56,10 @@ export const KEYS = {
   LAST_PUSHED_SELECTIONS: "cw_last_pushed_selections",
   LAST_PUSHED_SOURCE_PROFILES: "cw_last_pushed_source_profiles",
   LAST_PUSHED_TARGET_PROFILES: "cw_last_pushed_target_profiles",
+  // The names of what a push of each single row changed, kept until a push of
+  // that row succeeds (sync.ts pushSingleRows). Names only, never values.
+  PENDING_PUSH_SETTINGS: "cw_pending_push_settings",
+  PENDING_PUSH_SELECTIONS: "cw_pending_push_selections",
   SYNCED_USER_ID: "cw_synced_user_id",
   STARTER_MIGRATION_APPLIED: "cw_starter_migration_applied",
 } as const;
@@ -98,13 +102,15 @@ export const CATEGORY_B: string[] = [
   KEYS.CREATOR_DISPLAY_NAME,
 ];
 
-// Category C — sync tracking (last-pushed snapshots, synced user id, the
-// starter-rail migration flag).
+// Category C — sync tracking (last-pushed snapshots, unconfirmed pushes,
+// synced user id, the starter-rail migration flag).
 export const CATEGORY_C: string[] = [
   KEYS.LAST_PUSHED_SETTINGS,
   KEYS.LAST_PUSHED_SELECTIONS,
   KEYS.LAST_PUSHED_SOURCE_PROFILES,
   KEYS.LAST_PUSHED_TARGET_PROFILES,
+  KEYS.PENDING_PUSH_SETTINGS,
+  KEYS.PENDING_PUSH_SELECTIONS,
   KEYS.SYNCED_USER_ID,
   KEYS.STARTER_MIGRATION_APPLIED,
 ];
