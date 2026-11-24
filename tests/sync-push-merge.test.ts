@@ -13,7 +13,8 @@
 //     push, a device with no base, and the conditional write's retry;
 //   - the three supports: one push at a time, a pull over an unpushed change,
 //     and a push whose answer never arrived;
-//   - the active recipe and brew method as one choice.
+//   - the active recipe and brew method as one choice;
+//   - unsaved target edits, merged per recipe inside the drafts map.
 //
 // Browser-global stubs come from tests/setup.js (logged in, localStorage).
 
@@ -1534,5 +1535,183 @@ describe("the active recipe and the brew method are one choice", () => {
     expect(selectionsRow().added_target_presets).toContain("sey");
     // The other removal is not this device's to undo.
     expect(selectionsRow().added_target_presets).not.toContain("onyx");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Unsaved target edits (drafts.target_draft_ions) are a map inside the drafts
+// map, one entry per recipe. They merge per recipe, so two devices editing
+// different recipes keep both edits.
+// ---------------------------------------------------------------------------
+
+describe("unsaved target edits merge per recipe", () => {
+  const draftsRow = (): Record<string, unknown> => settingsRow().drafts.target_draft_ions;
+
+  test("two devices editing different recipes keep both edits", async () => {
+    newCloud();
+    const [a, b] = await makeDevices(["current", "current"]);
+    act(a!, () => storage.saveTargetDraftIons("sca", { calcium: 11 }));
+    act(b!, () => storage.saveTargetDraftIons("lotus-light-bright", { calcium: 22 }));
+    await push(b!);
+    await push(a!);
+    expect(draftsRow()).toEqual({
+      sca: { calcium: 11 },
+      "lotus-light-bright": { calcium: 22 },
+    });
+
+    // Once the pushes have been heard, both devices show both edits and have
+    // nothing left to send.
+    await settle([a!, b!]);
+    for (const d of [a!, b!]) {
+      use(d);
+      expect(storage.loadTargetDraftIons(), d.name).toEqual(draftsRow());
+      expect(dirty(d), d.name).toBe(false);
+    }
+  });
+
+  test("the same recipe edited on both: the later push wins, as before", async () => {
+    newCloud();
+    const [a, b] = await makeDevices(["current", "current"]);
+    act(a!, () => storage.saveTargetDraftIons("sca", { calcium: 11 }));
+    act(b!, () => storage.saveTargetDraftIons("sca", { calcium: 22 }));
+    await push(b!);
+    await push(a!);
+    expect(draftsRow()).toEqual({ sca: { calcium: 11 } });
+  });
+
+  test("an edit discarded on one device goes, and the other device's edit stays", async () => {
+    newCloud();
+    const [a, b] = await makeDevices(["current", "current"]);
+    act(a!, () => storage.saveTargetDraftIons("sca", { calcium: 11 }));
+    await push(a!);
+    await settle([a!, b!]);
+    act(b!, () => storage.saveTargetDraftIons("lotus-light-bright", { calcium: 22 }));
+    act(a!, () => storage.clearTargetDraftIons("sca"));
+    await push(b!);
+    await push(a!);
+    expect(draftsRow()).toEqual({ "lotus-light-bright": { calcium: 22 } });
+    await settle([a!, b!]);
+    use(b!);
+    expect(storage.loadTargetDraftIons()).toEqual({ "lotus-light-bright": { calcium: 22 } });
+  });
+
+  // Pulls are unchanged: the account's map replaces the device's. That is
+  // what takes a discarded edit off the other device (the test above), and a
+  // device pushes before a Realtime pull, so its own edits are in the map it
+  // pulls.
+
+  test("next to a 1.2 device: when the current device pushes last, both edits are kept", async () => {
+    newCloud();
+    const [a, old] = await makeDevices(["current", "v1.2"]);
+    act(a!, () => storage.saveTargetDraftIons("sca", { calcium: 11 }));
+    act(old!, () => storage.saveTargetDraftIons("lotus-light-bright", { calcium: 22 }));
+    await push(old!);
+    await push(a!);
+    await settle([a!, old!]);
+    expect(draftsRow()).toEqual({
+      sca: { calcium: 11 },
+      "lotus-light-bright": { calcium: 22 },
+    });
+    for (const d of [a!, old!]) expect(dirty(d), d.name).toBe(false);
+  });
+
+  // The limit that remains: an installed 1.2 app still sends its whole map.
+  // A mix must end exactly as two 1.2 devices do.
+  test("next to a 1.2 device: when the 1.2 device pushes last, its map replaces the other, as before", async () => {
+    const sequence = async (versions: Version[]) => {
+      newCloud();
+      const [first, old] = await makeDevices(versions);
+      act(first!, () => storage.saveTargetDraftIons("sca", { calcium: 11 }));
+      act(old!, () => storage.saveTargetDraftIons("lotus-light-bright", { calcium: 22 }));
+      await push(first!);
+      await push(old!);
+      await settle([first!, old!]);
+      for (const d of [first!, old!]) expect(dirty(d), d.name).toBe(false);
+      return { ...settingsRow(), updated_at: null };
+    };
+    const baseline = await sequence(["v1.2", "v1.2"]);
+    expect(baseline.drafts.target_draft_ions).toEqual({ "lotus-light-bright": { calcium: 22 } });
+    expect(await sequence(["current", "v1.2"])).toEqual(baseline);
+  });
+
+  test("the rest of the drafts map still merges key by key", () => {
+    const out = settings(
+      { drafts: { recipe_dispense_mode: "manual", target_draft_ions: { sca: { calcium: 1 } } } },
+      { drafts: { recipe_dispense_mode: "stock", target_draft_ions: { sca: { calcium: 1 } } } },
+      {
+        drafts: {
+          recipe_dispense_mode: "manual",
+          recipe_stock_grams: { x: 2 },
+          target_draft_ions: { rao: { calcium: 3 } },
+        },
+      },
+    );
+    expect(out.drafts).toEqual({
+      recipe_dispense_mode: "stock",
+      recipe_stock_grams: { x: 2 },
+      target_draft_ions: { rao: { calcium: 3 } },
+    });
+  });
+
+  test("changesSince names the recipes, also when the base has no edits yet", () => {
+    expect(
+      changesSince(
+        SETTINGS_PUSH_KINDS,
+        { drafts: { target_draft_ions: { same: { calcium: 1 }, gone: { calcium: 1 } } } },
+        { drafts: { target_draft_ions: { same: { calcium: 1 }, sca: { calcium: 11 } } } },
+      ),
+    ).toEqual({
+      fields: [],
+      keys: { "drafts.target_draft_ions": ["gone", "sca"] },
+      items: {},
+    });
+    expect(
+      changesSince(
+        SETTINGS_PUSH_KINDS,
+        { drafts: {} },
+        { drafts: { recipe_dispense_mode: "stock", target_draft_ions: { sca: { calcium: 11 } } } },
+      ),
+    ).toEqual({
+      fields: [],
+      keys: { drafts: ["recipe_dispense_mode"], "drafts.target_draft_ions": ["sca"] },
+      items: {},
+    });
+  });
+
+  test("a push whose answer never arrived: an edit sent, then discarded, is removed from the account", async () => {
+    await oneSyncedDevice();
+    storage.saveTargetDraftIons("rao", { calcium: 3 });
+    await pushAllToCloud();
+    cloud.outsideWrite("user_settings", (row) => {
+      row.drafts.target_draft_ions["lotus-light-bright"] = { calcium: 22 };
+    });
+    loseNextAnswer("user_settings", true);
+    storage.saveTargetDraftIons("sca", { calcium: 11 });
+    await pushAllToCloud().catch(() => {});
+    expect(Object.keys(draftsRow()).sort()).toEqual(["lotus-light-bright", "rao", "sca"]);
+    expect(JSON.parse(g.localStorage.getItem("cw_pending_push_settings")).keys).toEqual({
+      "drafts.target_draft_ions": ["sca"],
+    });
+
+    // Local storage equals the base again: only the saved names say that
+    // "sca" is this device's to remove.
+    storage.clearTargetDraftIons("sca");
+    expect(hasUnpushedChanges()).toBe(true);
+    await pushAllToCloud();
+    expect(draftsRow()).toEqual({
+      rao: { calcium: 3 },
+      "lotus-light-bright": { calcium: 22 },
+    });
+    expect(hasUnpushedChanges()).toBe(false);
+  });
+
+  test("names saved by the previous version (the whole map) still send the whole map", () => {
+    const out = settings(
+      { drafts: { target_draft_ions: { sca: { calcium: 11 } } } },
+      { drafts: { target_draft_ions: { sca: { calcium: 11 } } } },
+      { drafts: { target_draft_ions: { rao: { calcium: 3 } } } },
+      { fields: [], keys: { drafts: ["target_draft_ions"] }, items: {} },
+    );
+    expect(out.drafts).toEqual({ target_draft_ions: { sca: { calcium: 11 } } });
   });
 });

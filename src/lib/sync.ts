@@ -340,7 +340,9 @@ export function snapshotForCompare(payload: Record<string, unknown>): string {
 //
 //   1. changesSince(base, local) names what differs from the base, the
 //      snapshot of the row this device last synced (LAST_PUSHED_*): whole
-//      fields, and inside maps and lists the keys and items.
+//      fields, and inside maps and lists the keys and items. One map goes a
+//      level further (NESTED_MAPS): the unsaved target edits inside drafts
+//      are named per recipe.
 //   2. The row is read, and applyChanges puts those changes onto it. Whatever
 //      this device did not change keeps the cloud's value.
 //   3. The result is written on condition that the row's updated_at is still
@@ -399,6 +401,18 @@ export const SETTINGS_PUSH_KINDS: Record<string, PushFieldKind> = {
   drafts: "dict",
 };
 
+// Maps that sit inside a "dict" field and are merged key by key themselves,
+// listed as field -> the keys that hold such a map. There is one:
+// drafts.target_draft_ions holds the unsaved target edits, one entry per
+// recipe, so two devices editing different recipes each send only their own
+// recipe's edit instead of the whole map. The recipes a device changed are
+// named in RowChanges.keys under "<field>.<key>" ("drafts.target_draft_ions").
+const NESTED_MAPS: Record<string, string[]> = { drafts: ["target_draft_ions"] };
+
+function nestedMaps(field: string): string[] {
+  return (ownValue(NESTED_MAPS, field) as string[] | undefined) || [];
+}
+
 export const SELECTIONS_PUSH_KINDS: Record<string, PushFieldKind> = {
   source_preset: "scalar",
   source_water: "scalar",
@@ -417,7 +431,8 @@ const PUSH_ROW_SKIP_FIELDS = ["user_id", "updated_at"];
 const PUSH_MAX_ATTEMPTS = 3;
 
 // What a device changed in a row: fields changed as a whole, and inside maps
-// and lists the keys and items added, edited or removed.
+// and lists the keys and items added, edited or removed. `keys` is by field
+// name, or by "<field>.<key>" for a map inside a map (NESTED_MAPS).
 export type RowChanges = {
   fields: string[];
   keys: Record<string, string[]>;
@@ -444,6 +459,13 @@ function listHas(list: unknown[], x: unknown): boolean {
   });
 }
 
+// The keys whose values differ between two maps, a key in only one included.
+function changedKeys(a: Record<string, unknown>, b: Record<string, unknown>): string[] {
+  return Object.keys(Object.assign({}, a, b)).filter(function (k) {
+    return !sameValue(ownValue(a, k), ownValue(b, k));
+  });
+}
+
 // What `local` changes relative to `base`. Pure; exported for unit tests.
 export function changesSince(
   kinds: Record<string, PushFieldKind>,
@@ -462,9 +484,25 @@ export function changesSince(
     } else if (sameValue(l, b)) {
       return;
     } else if (kind === "dict" && isPlainObject(l) && isPlainObject(b)) {
-      out.keys[field] = Object.keys(Object.assign({}, b, l)).filter(function (k) {
-        return !sameValue(ownValue(l, k), ownValue(b, k));
+      const own: string[] = [];
+      changedKeys(b, l).forEach(function (k) {
+        const lk = ownValue(l, k);
+        const bk = ownValue(b, k);
+        // A map inside this one: name what changed inside it. A base that
+        // has never held it counts as empty, so a first edit names its
+        // recipe rather than the whole map.
+        if (
+          nestedMaps(field).indexOf(k) !== -1 &&
+          isPlainObject(lk) &&
+          (bk === undefined || isPlainObject(bk))
+        ) {
+          const inner = changedKeys(bk || {}, lk);
+          if (inner.length > 0) out.keys[field + "." + k] = inner;
+        } else {
+          own.push(k);
+        }
       });
+      if (own.length > 0) out.keys[field] = own;
     } else if (kind === "set" && Array.isArray(l) && Array.isArray(b)) {
       const moved = l
         .filter(function (x) {
@@ -582,7 +620,14 @@ export function applyChanges(
     return (ownValue(changes.items, field) as unknown[] | undefined) || [];
   };
   const touched = function (field: string): boolean {
-    return whole(field) || keys(field).length > 0 || items(field).length > 0;
+    return (
+      whole(field) ||
+      keys(field).length > 0 ||
+      items(field).length > 0 ||
+      nestedMaps(field).some(function (k) {
+        return keys(field + "." + k).length > 0;
+      })
+    );
   };
   const out: Record<string, unknown> = {};
   Object.keys(local).forEach(function (field) {
@@ -607,7 +652,17 @@ export function applyChanges(
     } else if (kind === "set") {
       out[field] = applyItems(l, c, items(field));
     } else {
-      out[field] = applyKeys(l, c, keys(field));
+      const merged = applyKeys(l, c, keys(field));
+      // A map inside this one: the same again, one level down. Not if the
+      // device changed it as a whole: it is then named in keys(field), and
+      // applyKeys has already taken this device's copy.
+      const mine = isPlainObject(l) ? l : {};
+      nestedMaps(field).forEach(function (k) {
+        const inner = keys(field + "." + k);
+        if (inner.length === 0 || keys(field).indexOf(k) !== -1) return;
+        merged[k] = applyKeys(ownValue(mine, k), ownValue(merged, k), inner);
+      });
+      out[field] = merged;
     }
   });
   return out;
