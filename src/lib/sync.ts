@@ -500,7 +500,12 @@ export type OwnChanges = {
 // from this entry's push was made conditional on. Such a write, if the device
 // never heard back, may still be on its way: it lands if and only if the row
 // is still at that version when it arrives.
-type RowIntent = OwnChanges & { ids: string[]; sentIf: string[] };
+//
+// `open` holds the id of a push that is still running. What it is sending is
+// not in the row yet, so a pull cannot confirm it (see retireConfirmedByPull).
+// The id comes off when the push ends without success; a page that dies
+// mid-push leaves it there, and the entry then stays until a push succeeds.
+type RowIntent = OwnChanges & { ids: string[]; sentIf: string[]; open: string[] };
 
 // A row's version as its conditional writes name it. Every writer sets
 // updated_at, so it changes with every write.
@@ -508,12 +513,24 @@ function rowVersion(row: Record<string, unknown>): string {
   return row.updated_at === null || row.updated_at === undefined ? "" : String(row.updated_at);
 }
 
-// `stamp`, unless it is the same instant as the row's current updated_at, in
-// which case one millisecond after it.
+// The updated_at a conditional write sets: `stamp` (this device's clock) when
+// that is later than the row's current one, otherwise one millisecond past the
+// row's. Always later than what was read, never equal or earlier.
+//
+// The row's version must only ever move forward. A write that went unanswered
+// stays conditional on the version it was sent against, and is fenced off by
+// moving the row past that version (see strayWriteCouldLand). If a later write
+// could set the version back, because this device's clock is behind the one
+// that wrote the row, or because two saves fall in one millisecond, the row
+// could come to that version again and the old write would land after all.
+//
+// The database keeps microseconds and Date.parse drops them, so `b` can be up
+// to a millisecond before the row's real time; b + 1 is still past it, and so
+// is any `a` greater than `b`.
 function laterThan(stamp: unknown, current: unknown): unknown {
   const a = typeof stamp === "string" ? Date.parse(stamp) : NaN;
   const b = typeof current === "string" ? Date.parse(current) : NaN;
-  if (isNaN(a) || isNaN(b) || a !== b) return stamp;
+  if (isNaN(a) || isNaN(b) || a > b) return stamp;
   return new Date(b + 1).toISOString();
 }
 
@@ -542,6 +559,11 @@ function readRowIntents(key: string): RowIntent[] {
       items: isPlainObject(entry.items) ? (entry.items as Record<string, unknown[]>) : {},
       sentIf: Array.isArray(entry.sentIf)
         ? (entry.sentIf.filter(function (v) {
+            return typeof v === "string";
+          }) as string[])
+        : [],
+      open: Array.isArray(entry.open)
+        ? (entry.open.filter(function (v) {
             return typeof v === "string";
           }) as string[])
         : [],
@@ -590,7 +612,11 @@ function writeRowIntents(key: string, entries: RowIntent[]): void {
     const first = list[0] as RowIntent;
     const second = list[1] as RowIntent;
     const folded: RowIntent = Object.assign(
-      { ids: first.ids.concat(second.ids), sentIf: first.sentIf.concat(second.sentIf) },
+      {
+        ids: first.ids.concat(second.ids),
+        sentIf: first.sentIf.concat(second.sentIf),
+        open: first.open.concat(second.open),
+      },
       combineOwnChanges([first, second]),
     );
     list = [folded].concat(list.slice(2));
@@ -632,6 +658,124 @@ function noteSentIf(key: string, id: string, version: string | null): void {
   writeRowIntents(key, entries);
 }
 
+// The push with this id has ended without success. Its entry stays, and is no
+// longer that push's alone to settle.
+function closeRowIntent(key: string, id: string): void {
+  const entries = readRowIntents(key);
+  let changed = false;
+  entries.forEach(function (entry) {
+    if (entry.open.indexOf(id) === -1) return;
+    entry.open = entry.open.filter(function (x) {
+      return x !== id;
+    });
+    changed = true;
+  });
+  if (changed) writeRowIntents(key, entries);
+}
+
+// The fields, map keys and list items `own` names for which two copies of the
+// row differ (or, with `differing` false, agree). A list item counts as
+// differing when one copy has it and the other does not. Pure; exported for
+// unit tests.
+export function namesWhere(
+  own: OwnChanges,
+  one: Record<string, unknown>,
+  other: Record<string, unknown>,
+  differing: boolean,
+): OwnChanges {
+  const out: OwnChanges = { fields: [], keys: {}, items: {} };
+  const has = function (list: unknown, x: unknown): boolean {
+    return (
+      Array.isArray(list) &&
+      list.some(function (y) {
+        return sameValue(x, y);
+      })
+    );
+  };
+  out.fields = own.fields.filter(function (field) {
+    return !sameValue(ownValue(one, field), ownValue(other, field)) === differing;
+  });
+  Object.keys(own.keys).forEach(function (field) {
+    const a = ownValue(one, field);
+    const b = ownValue(other, field);
+    const A = isPlainObject(a) ? a : {};
+    const B = isPlainObject(b) ? b : {};
+    const left = (own.keys[field] || []).filter(function (k) {
+      return !sameValue(ownValue(A, k), ownValue(B, k)) === differing;
+    });
+    if (left.length > 0) out.keys[field] = left;
+  });
+  Object.keys(own.items).forEach(function (field) {
+    const a = ownValue(one, field);
+    const b = ownValue(other, field);
+    const left = (own.items[field] || []).filter(function (x) {
+      return (has(a, x) !== has(b, x)) === differing;
+    });
+    if (left.length > 0) out.items[field] = left;
+  });
+  return out;
+}
+
+function namesAnything(own: OwnChanges): boolean {
+  return (
+    own.fields.length > 0 || Object.keys(own.keys).length > 0 || Object.keys(own.items).length > 0
+  );
+}
+
+// A pull has read `cloud` and applied it. `before` and `after` are what the
+// device held for the row just before and just after that apply.
+//
+// Whatever is on record as changed here, and is now the same on the device
+// and in the account, is confirmed and comes off the record. Left on, it
+// would keep counting as this device's change, and the next push would send
+// it over whatever another writer has set since: the stale overwrite a merged
+// push exists to prevent. A pull that applies leaves the device holding the
+// row's value for nearly everything, so what stays named is what the row
+// lacks: a volume or draft key the account does not hold, or a field it holds
+// empty.
+//
+// Two kinds of entry are not settled that way:
+//   - One with a write that may still land, the row being still at the
+//     version that write was sent against. It is left whole: the next push
+//     has to move the row past that version first.
+//   - One whose push is still running (`open`). What that push is sending is
+//     not in the row yet, so nothing is confirmed. But a name the pull has
+//     just put the account's value over is no longer this device's choice,
+//     and comes off; a name the pull left alone stays, for the push to settle
+//     when it finishes (see pushRowInTurn, where the base is not recorded).
+// For any other entry no write is on its way: its writes were answered, or
+// were sent against a version the row has since left for good (laterThan).
+function retireConfirmedByPull(
+  pendingKey: string,
+  before: Record<string, unknown>,
+  after: Record<string, unknown>,
+  cloud: Record<string, unknown>,
+): void {
+  const entries = readRowIntents(pendingKey);
+  if (entries.length === 0) return;
+  const version = rowVersion(cloud);
+  const kept: RowIntent[] = [];
+  let changed = false;
+  entries.forEach(function (entry) {
+    const running = entry.open.length > 0;
+    if (!running && entry.sentIf.indexOf(version) !== -1) {
+      kept.push(entry);
+      return;
+    }
+    const left = running
+      ? namesWhere(entry, before, after, false)
+      : namesWhere(entry, after, cloud, true);
+    if (sameValue(left, { fields: entry.fields, keys: entry.keys, items: entry.items })) {
+      kept.push(entry);
+      return;
+    }
+    changed = true;
+    // A running push still needs its entry, to note what it sends against.
+    if (running || namesAnything(left)) kept.push(Object.assign({}, entry, left));
+  });
+  if (changed) writeRowIntents(pendingKey, kept);
+}
+
 // Retire the entries whose every id this push read. One synchronous
 // read-modify-write, so an entry another tab added since is kept.
 function retireRowIntents(key: string, known: string[]): void {
@@ -647,8 +791,13 @@ function retireRowIntents(key: string, known: string[]): void {
 
 // What `local` changes relative to `base`: the fields, and inside maps and
 // lists the keys and items. `also` names further fields regardless (a choice
-// that spans both rows). Fields with no base, and the delete lists, are sent
-// whole whatever happens and need no naming. Pure; exported for unit tests.
+// that spans both rows). Fields with no base are sent whole whatever happens
+// and need no naming.
+//
+// The delete lists are named by item too, though an ordinary push sends them
+// whole and never looks: the names are for a push that comes back with
+// nothing new, after a send that went unanswered (deleteListForQuietPush).
+// Pure; exported for unit tests.
 export function ownChangesOf(
   kinds: Record<string, PushFieldKind>,
   base: Record<string, unknown>,
@@ -662,7 +811,7 @@ export function ownChangesOf(
   Object.keys(local).forEach(function (field) {
     if (PUSH_ROW_SKIP_FIELDS.indexOf(field) !== -1) return;
     const kind = ownValue(kinds, field);
-    if (!kind || kind === "local" || !Object.prototype.hasOwnProperty.call(base, field)) return;
+    if (!kind || !Object.prototype.hasOwnProperty.call(base, field)) return;
     const l = local[field];
     const b = base[field];
     if (sameValue(l, b)) return;
@@ -672,7 +821,7 @@ export function ownChangesOf(
         if (!sameValue(ownValue(l, k), ownValue(b, k))) changed.push(k);
       });
       if (changed.length > 0) out.keys[field] = changed;
-    } else if (kind === "set" && Array.isArray(l) && Array.isArray(b)) {
+    } else if ((kind === "set" || kind === "local") && Array.isArray(l) && Array.isArray(b)) {
       const has = function (list: unknown[], x: unknown): boolean {
         return list.some(function (y) {
           return sameValue(x, y);
@@ -687,12 +836,41 @@ export function ownChangesOf(
             return !has(l, x);
           }),
         );
-      // Same members in another order: the whole list is the change.
+      // Same members in another order: the whole list is the change. (Not
+      // for a delete list, where order means nothing.)
       if (changed.length > 0) out.items[field] = changed;
-      else nameField(field);
-    } else {
+      else if (kind === "set") nameField(field);
+    } else if (kind !== "local") {
       nameField(field);
     }
+  });
+  return out;
+}
+
+// A delete list as a push with nothing new of its own writes it: the cloud's
+// list, with each item on record made to match the device. Everything else in
+// the list is left as the cloud has it.
+//
+// This is the one place a delete list is not sent whole. It is reached only
+// when a send that changed the list went unanswered and the device has since
+// put the list back as it was: a preset removed, the removal saved but its
+// answer lost, the preset then restored. The list now equals the base, so an
+// ordinary push sees nothing to send, the removal stays in the account, and
+// the next pull hides the preset again. Sending the whole list here instead
+// would undo removals other devices made meanwhile.
+function deleteListForQuietPush(local: unknown, cloud: unknown, ownItems: unknown[]): unknown[] {
+  const L = Array.isArray(local) ? local : [];
+  if (!Array.isArray(cloud)) return L.slice();
+  const has = function (list: unknown[], x: unknown): boolean {
+    return list.some(function (y) {
+      return sameValue(x, y);
+    });
+  };
+  const out = cloud.filter(function (x) {
+    return !has(ownItems, x) || has(L, x);
+  });
+  ownItems.forEach(function (x) {
+    if (has(L, x) && !has(out, x)) out.push(x);
   });
   return out;
 }
@@ -912,12 +1090,21 @@ async function pushSingleRow(
     // writes the fields on record and no others. In particular it does not
     // send this device's delete lists, which an ordinary push of this row
     // sends whole: a row visited only for its half of a pair must not undo a
-    // deletion another device made.
+    // deletion another device made. A delete list with items on record is
+    // written, but only those items are this device's to say.
     if (push.nothingNew) {
       const named = fieldsNamedBy(push.own, spec.groups);
       const only: Record<string, unknown> = {};
       named.forEach(function (field) {
-        if (Object.prototype.hasOwnProperty.call(merged, field)) only[field] = merged[field];
+        if (!Object.prototype.hasOwnProperty.call(merged, field)) return;
+        only[field] =
+          ownValue(spec.kinds, field) === "local"
+            ? deleteListForQuietPush(
+                local[field],
+                ownValue(cloud, field),
+                (ownValue(push.own.items, field) as unknown[] | undefined) || [],
+              )
+            : merged[field];
       });
       merged = only;
     }
@@ -1158,31 +1345,50 @@ function pushRowInTurn(
     const myId = newIntentId();
     if (base) {
       unconfirmed = earlier.concat([
-        Object.assign({ ids: [myId], sentIf: [] }, ownChangesOf(spec.kinds, base, local)),
+        Object.assign(
+          { ids: [myId], sentIf: [], open: [myId] },
+          ownChangesOf(spec.kinds, base, local),
+        ),
       ]);
       writeRowIntents(spec.pendingKey, unconfirmed);
     }
+    // This push ended without success: its entry stays on record, and from
+    // here a pull may settle it (retireConfirmedByPull).
+    const endedUnconfirmed = function (): void {
+      if (base && safeGetItem(KEYS.SYNCED_USER_ID) === userId) {
+        closeRowIntent(spec.pendingKey, myId);
+      }
+    };
     const known = unconfirmed.reduce(function (ids: string[], entry) {
       return ids.concat(entry.ids);
     }, []);
     const refreshesAtStart = baseRefreshCount(spec.baseKey);
 
-    const result = await pushSingleRow(spec, userId, local, base, {
-      own: combineOwnChanges(unconfirmed),
-      nothingNew: nothingNew,
-      hadEarlier: earlier.length > 0,
-      earlierSentIf: earlier.reduce(function (versions: string[], entry) {
-        return versions.concat(entry.sentIf);
-      }, []),
-      beforeWrite: function (version) {
-        // The write is about to go out. If the device signed out meanwhile,
-        // local storage is no longer this account's to write to.
-        if (safeGetItem(KEYS.SYNCED_USER_ID) === userId) {
-          noteSentIf(spec.pendingKey, myId, version);
-        }
-      },
-    });
-    if (result.error) return result;
+    let result: { error: unknown };
+    try {
+      result = await pushSingleRow(spec, userId, local, base, {
+        own: combineOwnChanges(unconfirmed),
+        nothingNew: nothingNew,
+        hadEarlier: earlier.length > 0,
+        earlierSentIf: earlier.reduce(function (versions: string[], entry) {
+          return versions.concat(entry.sentIf);
+        }, []),
+        beforeWrite: function (version) {
+          // The write is about to go out. If the device signed out meanwhile,
+          // local storage is no longer this account's to write to.
+          if (safeGetItem(KEYS.SYNCED_USER_ID) === userId) {
+            noteSentIf(spec.pendingKey, myId, version);
+          }
+        },
+      });
+    } catch (err) {
+      endedUnconfirmed();
+      throw err;
+    }
+    if (result.error) {
+      endedUnconfirmed();
+      return result;
+    }
     // The requests took time. If the device signed out or changed account
     // meanwhile, local storage was wiped and is not this push's to write.
     if (merge && safeGetItem(KEYS.SYNCED_USER_ID) !== userId) return result;
@@ -1210,8 +1416,38 @@ function pushRowInTurn(
       baseRefreshCount(spec.baseKey) === refreshesAtStart
     ) {
       safeSetItem(spec.baseKey, snapshot);
+      retireRowIntents(spec.pendingKey, known);
+      return result;
     }
+    // The base is not this push's snapshot, so it does not say what this push
+    // just wrote. If the device has since changed one of those things again
+    // (a setting put back while the save was out), it may now equal that
+    // other base, look untouched, and never be sent, with the account left
+    // holding what this push wrote. So whatever this push had on record, and
+    // the device no longer holds as it was sent, stays on record for the next
+    // push. A name a pull put the account's value over was taken off the
+    // record by that pull (retireConfirmedByPull) and is not kept here.
+    const sentAndChangedSince = namesWhere(
+      combineOwnChanges(
+        readRowIntents(spec.pendingKey).filter(function (entry) {
+          return entry.ids.every(function (id) {
+            return known.indexOf(id) !== -1;
+          });
+        }),
+      ),
+      spec.build(userId, ""),
+      local,
+      true,
+    );
     retireRowIntents(spec.pendingKey, known);
+    if (namesAnything(sentAndChangedSince)) {
+      writeRowIntents(
+        spec.pendingKey,
+        readRowIntents(spec.pendingKey).concat([
+          Object.assign({ ids: [newIntentId()], sentIf: [], open: [] }, sentAndChangedSince),
+        ]),
+      );
+    }
     return result;
   });
 }
@@ -1248,7 +1484,7 @@ function nameAsOwnChanges(pendingKey: string, fields: string[]): void {
   writeRowIntents(
     pendingKey,
     entries.concat([
-      { ids: [newIntentId()], sentIf: [], fields: fields.slice(), keys: {}, items: {} },
+      { ids: [newIntentId()], sentIf: [], open: [], fields: fields.slice(), keys: {}, items: {} },
     ]),
   );
 }
@@ -1699,14 +1935,10 @@ export async function pullFromCloud(options?: {
     const base = parsePushBase(raw);
     return base ? { base: base, local: local } : null;
   };
-  const settingsHeldUnsynced = heldUnsynced(
-    LAST_PUSHED_SETTINGS_KEY,
-    buildSettingsPayload(sessionUserId, ""),
-  );
-  const selectionsHeldUnsynced = heldUnsynced(
-    LAST_PUSHED_SELECTIONS_KEY,
-    buildSelectionsPayload(sessionUserId, ""),
-  );
+  const settingsBeforeApply = buildSettingsPayload(sessionUserId, "");
+  const selectionsBeforeApply = buildSelectionsPayload(sessionUserId, "");
+  const settingsHeldUnsynced = heldUnsynced(LAST_PUSHED_SETTINGS_KEY, settingsBeforeApply);
+  const selectionsHeldUnsynced = heldUnsynced(LAST_PUSHED_SELECTIONS_KEY, selectionsBeforeApply);
 
   // Apply user_settings
   if (settings) {
@@ -1836,37 +2068,41 @@ export async function pullFromCloud(options?: {
   // A row this device held unpushed changes to when the pull applied
   // (settingsHeldUnsynced / selectionsHeldUnsynced above) gets a base that
   // still shows what survived the apply as unsynced.
+  //
+  // What the pull has shown the account to hold also comes off the record of
+  // unconfirmed changes (retireConfirmedByPull).
   const refreshBase = function (
-    baseKey: string,
-    kinds: Record<string, PushFieldKind>,
+    spec: SingleRowSpec,
     held: { base: Record<string, unknown>; local: Record<string, unknown> } | null,
+    before: Record<string, unknown>,
     after: Record<string, unknown>,
     row: Record<string, unknown>,
   ): void {
     // Counted, so that a push whose requests were out while this ran knows
     // not to put its own, older snapshot over this base (pushRowInTurn).
-    noteBaseRefresh(baseKey);
+    noteBaseRefresh(spec.baseKey);
     safeSetItem(
-      baseKey,
+      spec.baseKey,
       held
-        ? stableStringify(baseAfterUnsyncedPull(kinds, held.base, held.local, after, row))
+        ? stableStringify(baseAfterUnsyncedPull(spec.kinds, held.base, held.local, after, row))
         : snapshotForCompare(after),
     );
+    retireConfirmedByPull(spec.pendingKey, before, after, row);
   };
   if (settings) {
     refreshBase(
-      LAST_PUSHED_SETTINGS_KEY,
-      SETTINGS_PUSH_KINDS,
+      SETTINGS_ROW,
       settingsHeldUnsynced,
+      settingsBeforeApply,
       buildSettingsPayload(sessionUserId, ""),
       settings,
     );
   }
   if (selections) {
     refreshBase(
-      LAST_PUSHED_SELECTIONS_KEY,
-      SELECTIONS_PUSH_KINDS,
+      SELECTIONS_ROW,
       selectionsHeldUnsynced,
+      selectionsBeforeApply,
       buildSelectionsPayload(sessionUserId, ""),
       selections,
     );
