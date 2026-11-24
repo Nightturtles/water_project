@@ -116,15 +116,27 @@ release won't resolve on Sentry's side. Investigate via the deploy job's
 
 ## Runbook
 
-**Verify an install change works locally**: open the dev server, paste into
-the console:
+**Local runs report nothing by default.** A page loaded over `http://` from a
+loopback host (the dev server, `vite preview`, the Playwright suite locally and
+in CI) does not start Sentry, so test runs stay out of the production issue
+list. The native apps also load from `localhost`, but over `capacitor://` (iOS)
+and `https://` (Android), and report as usual. The rule is `sentryEnvironment`
+in `src/lib/sentry-init.ts`.
+
+**Verify an install change works locally**: open the dev server, opt this
+browser in, reload, then throw:
+
+```js
+localStorage.setItem('cafelytic_sentry_local', '1'); location.reload();
+```
 
 ```js
 throw new Error('sentry wiring test ' + Date.now());
 ```
 
-Within ~30s the event should appear in the Sentry Issues view. Resolve the
-issue after testing so the release stays clean.
+Within ~30s the event should appear in the Sentry Issues view with the
+environment `development`. Resolve the issue after testing, and remove the
+flag (`localStorage.removeItem('cafelytic_sentry_local')`) when done.
 
 **Muting noisy errors**: in Sentry UI, open the issue, click "…" → "Ignore
 until it happens X times / for Y time". Prefer time-bounded ignores to

@@ -30,6 +30,7 @@
 // without a null guard. On web the module is effectively a no-op (every
 // side-effect is gated on Capacitor.isNativePlatform()).
 
+import "./polyfills";
 import * as constants from "./constants";
 import "./sentry-init";
 // analytics-init gates GA4 loading (hostname / webdriver / opt-out). Imported
