@@ -645,7 +645,7 @@ test.describe("smoke-sync — multi-device sync via storage helpers (Steps 1, 2,
   });
 
   test("Step 13: a save from a device that missed another writer's change keeps that change", async () => {
-    // The merged push (sync.ts pushSingleRow) against the real backend: the
+    // The merged push (sync.ts pushSingleRows) against the real backend: the
     // unit tests' fake cloud cannot show that the conditional write matches a
     // row whose updated_at the database set itself (microseconds, from now()).
     //
