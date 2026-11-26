@@ -27,7 +27,7 @@ Path: **App content → Data safety**.
 | App info and performance → Crash logs | Yes: the errors Sentry receives | No | No | Required | Analytics |
 | App info and performance → Diagnostics | Yes: Sentry's performance traces for a sample of page loads, and the page structure in the on-error replay | No | No | Required | Analytics |
 
-"Optional" is the form's "Users can choose whether this data is collected": sign-in, publishing and the Support form are all optional, and the app works without them. "Required" is "Data collection is required": a user cannot turn Sentry off.
+"Optional" is the form's "Users can choose whether this data is collected": sign-in, publishing and the Support form are all optional, and the app works without them. "Required" is "Data collection is required": the app has no setting that turns Sentry off. On the website the privacy page gives a browser-console command that does (`localStorage.setItem("cafelytic_no_sentry", "1")`, read by `sentryDisabled()` in `src/lib/sentry-init.ts`), but an installed app has no console, so its users cannot opt out and the Play answer stays Required.
 
 The form has no "Diagnostics" purpose. Its Analytics purpose is the one that covers this: "to monitor app health, to diagnose and fix bugs or crashes". Picking it does not mean the native apps run Google Analytics; they do not.
 
