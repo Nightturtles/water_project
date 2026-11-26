@@ -37,6 +37,9 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const OUTPUT_ROOT = resolve(REPO_ROOT, "store/screenshots");
 const PREVIEW_PORT = 4173;
 const PREVIEW_URL = `http://localhost:${PREVIEW_PORT}`;
+const WAIT = { timeout: 10000 };
+// CSS px left above a scene's scrollTo element: the native top bar plus a gap.
+const SCROLL_HEADROOM = 52;
 
 // Device specs match the sizes the store consoles accept.
 //
@@ -63,55 +66,79 @@ const DEVICES = {
   android: [{ name: "phone-1080x1920", width: 360, height: 640, scale: 3 }],
 };
 
-// Five canonical scenes. Each entry: file prefix, URL path, the localStorage
-// payload to inject before the page renders, and an optional post-load hook
-// that lets the page settle (waiting on a selector, scrolling into view, etc).
+// Five canonical scenes, all captured as the same signed-in demo account
+// (seed.cjs). Each entry: file prefix, URL path, the element to bring into
+// view (the phone viewport only reaches a page's first card, so the seeded
+// part is usually below the fold), and a `ready` check that waits for the
+// seeded data to be on screen. `ready` is what stops a scene from silently
+// capturing the page's default state: if a storage key is renamed or a
+// selector moves, the run fails here instead of writing a wrong PNG.
 const SCENES = [
   {
     id: "01-calculator",
-    title: "Calculator — recipe loaded",
+    title: "Calculator: a saved recipe selected, doses worked out",
     path: "/",
-    seed: (s) => ({
-      "cafelytic:active-recipe": JSON.stringify(s.SCENE_CALCULATOR_RECIPE),
-      "cafelytic:mineral-selection": JSON.stringify(s.SCENE_MINERAL_SELECTION),
-    }),
-    waitFor: "main",
+    scrollTo: `#profile-buttons [data-profile="${seed.USER_RECIPE_SLUG}"]`,
+    ready: async (page) => {
+      await page
+        .locator(`#profile-buttons .active[data-profile="${seed.USER_RECIPE_SLUG}"]`)
+        .waitFor(WAIT);
+      await page.locator("#results-container", { hasText: "Magnesium Chloride" }).waitFor(WAIT);
+    },
   },
   {
     id: "02-library",
-    title: "Recipe library browser",
+    title: "Recipe Library: the official catalog",
     path: "/library.html",
-    seed: (s) => ({
-      "cafelytic:library-cache": JSON.stringify(s.SCENE_LIBRARY_RECIPES),
-    }),
-    waitFor: "main",
+    scrollTo: ".rx-result-count",
+    ready: async (page) => {
+      // The catalog is read live (see routeSupabase); this is the one scene
+      // that needs the network.
+      await page.locator(".rx-recipe-card").nth(7).waitFor(WAIT);
+    },
   },
   {
     id: "03-minerals",
-    title: "Mineral selector — multiple enabled",
+    title: "Settings: four minerals on the shelf",
     path: "/minerals.html",
-    seed: (s) => ({
-      "cafelytic:mineral-selection": JSON.stringify(s.SCENE_MINERAL_SELECTION),
-    }),
-    waitFor: "main",
+    scrollTo: ".mineral-group-label",
+    ready: async (page) => {
+      await page.waitForFunction(
+        (ids) => {
+          const checked = [...document.querySelectorAll("main input[type=checkbox]:checked")]
+            .map((el) => el.value)
+            .filter((value) => !value.includes(":")); // concentrates are "kind:id"
+          return checked.length === ids.length && ids.every((id) => checked.includes(id));
+        },
+        seed.SELECTED_MINERALS,
+        WAIT,
+      );
+    },
   },
   {
     id: "04-recipe-builder",
-    title: "Recipe builder mid-edit",
+    title: "Recipe Builder: a recipe in progress",
     path: "/recipe.html",
-    seed: (s) => ({
-      "cafelytic:builder-draft": JSON.stringify(s.SCENE_BUILDER_DRAFT),
-    }),
-    waitFor: "main",
+    scrollTo: "section.card:has(#mineral-inputs)",
+    ready: async (page) => {
+      await page.waitForFunction(
+        (grams) =>
+          Object.entries(grams).every(
+            ([id, value]) => document.getElementById(`add-${id}`)?.value === value,
+          ),
+        seed.BUILDER_GRAMS,
+        WAIT,
+      );
+    },
   },
   {
-    id: "05-signed-in-nav",
-    title: "Signed-in nav with Delete account visible",
-    path: "/",
-    seed: (s) => ({
-      "cafelytic:auth-display": JSON.stringify(s.SCENE_SIGNED_IN_USER),
-    }),
-    waitFor: "main",
+    id: "05-delete-account",
+    title: "Settings, signed in: the Delete account section",
+    path: "/minerals.html",
+    scrollTo: "#delete-account-section",
+    ready: async (page) => {
+      await page.locator("#delete-account-section").waitFor({ state: "visible", ...WAIT });
+    },
   },
 ];
 
@@ -147,7 +174,7 @@ async function ensureBuild() {
 function startPreviewServer() {
   // vite preview serves dist/ from disk so this captures the same artifact
   // GitHub Pages would deploy. No analytics fire on localhost (see
-  // analytics-init.js), so capturing doesn't pollute the prod GA stream.
+  // src/lib/analytics-init.ts), so capturing doesn't pollute the prod GA stream.
   const child = spawn("npx", ["vite", "preview", "--port", String(PREVIEW_PORT)], {
     cwd: REPO_ROOT,
     stdio: ["ignore", "pipe", "inherit"],
@@ -171,6 +198,81 @@ function startPreviewServer() {
       if (!ready) rejectReady(new Error(`vite preview exited with ${code}`));
     });
   });
+}
+
+// The only Supabase request a capture run sends is the public read of the
+// official recipe catalog (rows with no owner), the same request any visitor's
+// page load makes. It is read live so the Library scene and the Calculator's
+// recipe rail show the catalog as it is today instead of a copy in this repo
+// that would go stale. Recipes published by users are answered with an empty
+// list: a store listing should not carry a user's recipe or display name.
+// Everything else (sign-in, sync, Edge Functions) is aborted, so a capture run
+// cannot read or write an account.
+async function routeSupabase(context) {
+  await context.route(/^https:\/\/[^/]+\.supabase\.co\//, (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    const isPublicRecipeRead =
+      request.method() === "GET" &&
+      url.pathname === "/rest/v1/target_profiles" &&
+      url.searchParams.get("is_public") === "eq.true";
+    if (!isPublicRecipeRead) return route.abort();
+    if (url.searchParams.get("user_id") === "is.null") return route.continue();
+    return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+  });
+}
+
+// Sign the page in as the demo user and write the demo account's storage,
+// before any page script runs.
+//
+// Signed in matters: signed out, the app keeps its transient keys in
+// sessionStorage and refuses the saved-recipe keys, and Settings hides the
+// Delete account section. Same approach as the e2e specs (e2e/_auth-stub.ts
+// pins the sync auth cache; e2e/smoke-delete-account.spec.ts answers
+// getSession()), with no credentials and no account behind it. Sync stays
+// idle: before it sends anything it asks the client for the user (getUser(),
+// left unpatched), which finds no stored session. routeSupabase is the
+// backstop if that ever changes.
+async function signInAndSeed(context) {
+  await context.addInitScript(
+    ({ user, entries }) => {
+      for (const [key, value] of entries) {
+        try {
+          window.localStorage.setItem(key, value);
+        } catch {
+          // Quota / disabled storage: the scene's `ready` check reports it.
+        }
+      }
+
+      // The synchronous "am I signed in?" cache storage.ts routes on.
+      // Non-writable so supabase-client.ts cannot reset it once its own
+      // session check finds no stored session.
+      const pin = (name, value) =>
+        Object.defineProperty(window, name, { value, writable: false, configurable: false });
+      pin("_cachedAuthUserId", user.id);
+      pin("_authStateResolved", true);
+      pin("isLoggedInSync", () => true);
+
+      // The async session check the nav and the Delete account section use.
+      // supabase-client.ts assigns window.supabaseClient unconditionally, so
+      // catch that assignment and patch the client it sets.
+      let client;
+      Object.defineProperty(window, "supabaseClient", {
+        configurable: true,
+        get() {
+          return client;
+        },
+        set(value) {
+          client = value;
+          if (value && value.auth) {
+            value.auth.getSession = () =>
+              Promise.resolve({ data: { session: { user } }, error: null });
+          }
+        },
+      });
+    },
+    { user: seed.DEMO_USER, entries: Object.entries(seed.DEMO_ACCOUNT_STORAGE) },
+  );
 }
 
 async function captureScene(browser, device, scene, platform) {
@@ -213,23 +315,33 @@ async function captureScene(browser, device, scene, platform) {
     });
   }, platform);
 
-  // Seed localStorage before the page script runs so the renderer reads the
-  // canonical state on first load. Mirrors the pattern used by e2e/_auth-stub.ts.
-  const seedEntries = Object.entries(scene.seed(seed));
-  await context.addInitScript((entries) => {
-    for (const [key, value] of entries) {
-      try {
-        window.localStorage.setItem(key, value);
-      } catch {
-        // Quota / disabled storage: a missing seed is preferable to a hard fail.
-      }
-    }
-  }, seedEntries);
+  await routeSupabase(context);
+  await signInAndSeed(context);
 
   const page = await context.newPage();
   await page.goto(`${PREVIEW_URL}${scene.path}`, { waitUntil: "networkidle" });
-  if (scene.waitFor) {
-    await page.waitForSelector(scene.waitFor, { timeout: 10000 });
+  try {
+    await scene.ready(page);
+  } catch (err) {
+    throw new Error(
+      `[${scene.id}] the seeded state is not on screen, so the capture would be wrong. ` +
+        "Check scripts/capture-screenshots-shared/seed.cjs against src/lib/storage-keys.ts " +
+        "and this scene's selectors" +
+        (scene.id === "02-library" ? " (this scene also needs network access)" : "") +
+        ".",
+      { cause: err },
+    );
+  }
+  if (scene.scrollTo) {
+    // Put the element just under the top bar. "instant" because the page
+    // sets smooth scrolling, which would still be moving at capture time.
+    await page
+      .locator(scene.scrollTo)
+      .first()
+      .evaluate((el, headroom) => {
+        el.scrollIntoView({ block: "start", behavior: "instant" });
+        window.scrollBy({ top: -headroom, behavior: "instant" });
+      }, SCROLL_HEADROOM);
   }
   // Small settle so any layout that depends on async layout (web fonts,
   // dynamic imports for chart libraries, etc.) finishes before the snap.
