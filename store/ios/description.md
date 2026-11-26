@@ -6,9 +6,9 @@ Cafelytic is a calculator for coffee brewing water. Dial in the mineral profile 
 
 Key features:
 
-- Mineral calculator. Set targets for calcium, magnesium, sodium, bicarbonate, chloride, and sulfate. Cafelytic computes the Recipe Concentrate doses needed to hit them from your source water.
+- Mineral calculator. Set targets for calcium, magnesium, potassium, sodium, bicarbonate, chloride, and sulfate. Cafelytic computes the Recipe Concentrate doses needed to hit them from your source water.
 - Source water support. Start from distilled, RO, or any tap water with a known mineral content.
-- Recipe library. Browse community recipes (Balanced, Bright, Heavy, SCA target water, and more), then save your own.
+- Recipe library. Browse house recipes, recipes from roasters and water brands, classic formulas like the SCA standard, and recipes shared by other users, then save your own.
 - Multi-mineral support. Choose from nine mineral salts; mix and match for the profile you want.
 - Recipe builder. Edit a recipe step by step with live computation of the resulting mineral profile.
 - Sync across devices. Sign in to save recipes to your account; the same recipes appear on every device you use.
