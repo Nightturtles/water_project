@@ -8,8 +8,8 @@ This file is the record of the answers. Only the owner enters them in the consol
 
 Update this list when a console changes.
 
-- **App Store Connect label:** Email Address, Other User Content, Crash Data and Performance Data, as this file recorded them for 1.2.2 (not read back from the console). **Still to add: Other Diagnostic Data** (decided 2026-11-25) **and User ID** (decided 2026-11-26); see below.
-- **Play Console form:** not submitted yet. Enter the table below as written.
+- **App Store Connect label:** Email Address, User ID, Other User Content, Crash Data, Performance Data and Other Diagnostic Data. The owner added User ID and Other Diagnostic Data on 2026-11-26; the other four are as this file recorded them for 1.2.2. None of it was read back from the console.
+- **Play Console form:** filled in by the owner on 2026-11-26, as the table below (not read back from the console).
 
 ## Play Console — Data safety form
 
@@ -17,15 +17,17 @@ Path: **App content → Data safety**.
 
 ### Data collection summary
 
-| Data type | Collected? | Shared with third parties? | Optional? | Purpose |
-|---|---|---|---|---|
-| Personal info → Name | Yes (the name typed into the Support form; nowhere else) | No (Resend delivers the email as a service provider) | Optional (the Support form is optional) | App functionality |
-| Personal info → Email address | Yes (account creation, sign-in; also the reply address typed into the Support form) | No | Required for sign-in; sign-in itself is optional for use of the app, and so is the Support form | Account management, App functionality |
-| Personal info → User IDs | Yes (the account's ID, and the creator display name a user chooses when they publish a recipe) | No | Optional (both exist only for a signed-in user, and sign-in is optional) | Account management, App functionality |
-| App activity → Other user-generated content | Yes (recipes the user saves, and the message typed into the Support form) | No | Optional (the app works without sign-in) | App functionality |
-| App activity → App interactions | Yes (Sentry: the clicks and page changes inside the masked session replay recorded when an error fires; nothing outside an error) | Sentry is the data processor; the data is not shared further | No | Analytics |
-| App info and performance → Crash logs | Yes (Sentry) | Sentry is the data processor; the data is not shared further | No | Analytics |
-| App info and performance → Diagnostics | Yes (Sentry: performance traces for a sample of page loads, and the page structure in the masked session replay recorded when an error fires) | Sentry is the data processor; the data is not shared further | No | Analytics |
+| Data type | Collected | Shared | Processed ephemerally | Required or optional | Purposes |
+|---|---|---|---|---|---|
+| Personal info → Name | Yes: the name typed into the Support form, nowhere else | No | No | Optional | App functionality |
+| Personal info → Email address | Yes: account creation and sign-in, and the reply address typed into the Support form | No | No | Optional | Account management, App functionality |
+| Personal info → User IDs | Yes: the account's ID, and the creator display name a user chooses when they publish a recipe | No | No | Optional | Account management, App functionality |
+| App activity → Other user-generated content | Yes: the recipes, source waters and concentrates a signed-in user saves, and the message typed into the Support form | No | No | Optional | App functionality |
+| App activity → App interactions | Yes: the clicks and page changes inside the masked session replay Sentry records when an error fires; nothing outside an error | No | No | Required | Analytics |
+| App info and performance → Crash logs | Yes: the errors Sentry receives | No | No | Required | Analytics |
+| App info and performance → Diagnostics | Yes: Sentry's performance traces for a sample of page loads, and the page structure in the on-error replay | No | No | Required | Analytics |
+
+"Optional" is the form's "Users can choose whether this data is collected": sign-in, publishing and the Support form are all optional, and the app works without them. "Required" is "Data collection is required": a user cannot turn Sentry off.
 
 The form has no "Diagnostics" purpose. Its Analytics purpose is the one that covers this: "to monitor app health, to diagnose and fix bugs or crashes". Picking it does not mean the native apps run Google Analytics; they do not.
 
@@ -49,9 +51,26 @@ Yes. All Supabase and Sentry traffic uses HTTPS.
 
 Yes — users can request data deletion in the app: **Settings → Delete account** triggers the `delete_account()` RPC shipped in PR 6, which removes the user row plus all owned recipes.
 
-### Data sharing
+### Collected, shared and ephemeral: how each answer was reached
 
-No data shared with third parties for marketing or analytics purposes. Sentry is named as a data processor (not third-party sharing) in the privacy policy. Resend, which delivers Support form messages and sign-in emails, is a service provider in the same sense. Connected AI apps are not declared as sharing; see the decisions below.
+Reasoned on 2026-11-26, when the owner filled in the form. Quotes are from Google's Data safety help page as read that day.
+
+**Collected: yes for all seven.** Google counts data as collected when the app sends it off the device, and that includes what a library or SDK in the app sends. So the three Sentry rows are collected even though the data never reaches Cafelytic's own database.
+
+**Shared: no for all seven.** Google defines sharing as "transferring user data collected from your app to a third party", and then lists transfers that do not count. Two of those cover everything here:
+
+- _Service providers._ A service provider "may only process user data on your behalf"; Google's example is "an analytics provider that processes user data from your app solely on your behalf". Supabase (database and sign-in), Resend (delivers Support form messages and sign-in emails) and Sentry (errors, traces and the on-error replay) each hold the data for Cafelytic and do not use it for themselves. This is why Name, Email address and the three Sentry rows are not shared. It rests on each provider's own data processing terms; if one starts using the data for its own purposes, the rows it receives become shared.
+- _User-initiated action._ "Transferring user data to a third party based on a specific user-initiated action, where the user reasonably expects the data to be shared." A recipe and its creator display name become visible to other users only when the user chooses to publish and types the name into the publish prompt. This is why User IDs and Other user-generated content are not shared, and it is the same reason connected AI apps are not (see the decisions below).
+
+One detail under User IDs: the publisher's account ID, an opaque UUID, travels with each published recipe to other users' apps (`src/lib/library-data.ts` selects `user_id`). It is never displayed; the app uses it to tell a user's own recipes from other people's. It goes out as part of the same publish action, and content shown to other users inside the app is not among the transfers Google lists as sharing (to a third-party server, to another app, through an SDK or a webview). If Google ever reads this differently, the change is to mark User IDs as shared, for App functionality.
+
+**Processed ephemerally: no for all seven.** Google's test is "accessing and using it while the data is only stored in memory and retained for no longer than necessary to service the specific request in real-time". Every row here is kept:
+
+- Email address, User IDs and saved recipes stay in the database until the user deletes them or the account.
+- The Support form's name, reply address and message are not saved in the database, but the email they arrive in stays in the info@cafelytic.com inbox, and Resend may keep its own delivery record.
+- Sentry stores errors, traces and replays for its retention period.
+
+No data is shared with third parties for marketing or advertising.
 
 ## App Store Connect — Privacy Nutrition Label
 
