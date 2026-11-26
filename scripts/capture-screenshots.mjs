@@ -119,7 +119,7 @@ const SCENES = [
     id: "04-recipe-builder",
     title: "Recipe Builder: a recipe in progress",
     path: "/recipe.html",
-    scrollTo: ".mineral-input-row",
+    scrollTo: "section.card:has(#mineral-inputs)",
     ready: async (page) => {
       await page.waitForFunction(
         (grams) =>

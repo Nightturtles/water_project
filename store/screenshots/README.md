@@ -42,7 +42,7 @@ Identical across all platforms so the store listings tell the same story. Every 
 | `01-calculator` | Calculator with the account's saved recipe ("Sunday Brew") selected and the doses for one gallon worked out |
 | `02-library` | Recipe Library showing the official catalog |
 | `03-minerals` | Settings: the mineral selector with four minerals enabled |
-| `04-recipe-builder` | Recipe Builder mid-edit: grams typed in for the same four minerals, with the resulting water below |
+| `04-recipe-builder` | Recipe Builder mid-edit: the Add Minerals card with grams typed in for the same four minerals (taller devices also show the resulting water below it) |
 | `05-delete-account` | Settings, signed in, scrolled to the Delete account section (proves to reviewers that the in-app deletion path exists, which Apple Guideline 5.1.1(v) requires) |
 
 Edit `scripts/capture-screenshots-shared/seed.cjs` to change the demo account. Re-run the capture script to regenerate. Each scene waits for its seeded data to be on screen and the run fails if it is not, so a renamed storage key or selector stops the run instead of capturing the page's default state.
