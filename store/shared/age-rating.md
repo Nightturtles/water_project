@@ -38,11 +38,11 @@ Resulting Apple rating: **4+**
 
 User-generated content note for the reviewer:
 
-> Recipes shared to the public library have a name field that any signed-in user can fill. Names are short (<200 chars) and shown to other users on the library page. We moderate reactively: anyone can report a name through the in-app Support page contact form, and inappropriate names are removed by a database-side query.
+> Signed-in users can publish recipes to a public library that all users can browse. A published recipe shows a name (up to 40 characters), an optional description (up to 200 characters), the creator's display name (up to 40 characters) and the mineral target values. There is no chat, direct messaging or comments. We moderate reactively: anyone can report a recipe through the in-app Support page contact form, and we remove inappropriate recipes by hand.
 
 ### What a published recipe carries
 
-Checked against the code on 2026-11-23 (app 1.2.2). The reviewer note above and the Play note below mention only the name and give its limit as 200 characters; rewording them is an open owner decision, so they are left as written.
+Checked against the code on 2026-11-23 (app 1.2.2). The reviewer note above and the Play note below were reworded to match on 2026-11-25; submissions through 1.2.2 went in with the older wording, which mentioned only the name.
 
 - **Name**: up to 40 characters.
 - **Description**: optional, up to 200 characters. The owner sets it from the edit dialog on their library card.
@@ -76,7 +76,7 @@ Resulting Play rating: **Everyone**, with an "Interactive Elements" disclosure o
 
 Interactivity note for the Play Console reviewer (paste into the relevant "Tell us about interaction features" prompt):
 
-> Signed-in users can publish recipes they save to a public library that all users can browse. There is no chat, direct messaging, comments, or any other channel for direct user-to-user communication. The shared field is the recipe name (under 200 chars) plus the mineral target values. Reactive moderation: anyone can report a name through the in-app Support page contact form, and inappropriate names are removed via a database-side query.
+> Signed-in users can publish recipes to a public library that all users can browse. A published recipe shows a name (up to 40 characters), an optional description (up to 200 characters), the creator's display name (up to 40 characters) and the mineral target values. There is no chat, direct messaging or comments. We moderate reactively: anyone can report a recipe through the in-app Support page contact form, and we remove inappropriate recipes by hand.
 
 ## Open moderation gap
 
@@ -85,6 +85,6 @@ Both stores' user-generated-content rules ask for more than the app has today:
 - **Apple** (App Review Guideline 1.2): a way to report offensive content with timely responses, and the ability to block abusive users, alongside filtering and published contact info.
 - **Google Play** (User Generated Content policy): apps with publicly accessible UGC "must implement in-app functionality to report users and content, and to block users", plus clear terms of use.
 
-Today there is no pre-publication filter, no per-recipe report action, and no user blocking: the only channel is the Support page contact form and email, and published text is removed by hand. Apple approved 1.0 and 1.1 with the reviewer notes above; 1.2, 1.2.1 and 1.2.2 have shipped since.
+Today there is no pre-publication filter, no per-recipe report action, and no user blocking: the only channel is the Support page contact form and email, and published text is removed by hand. Apple approved 1.0 and 1.1 with the older reviewer note (name only); 1.2, 1.2.1 and 1.2.2 have shipped since.
 
 **Decision (2026-11-06): deferred until a store review flags it.** Build in-app reporting (and user blocking, which Play requires) only if an Apple or Google review cites Guideline 1.2 or the UGC policy. No deadline is set for either platform until then.
