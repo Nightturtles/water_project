@@ -31,7 +31,7 @@ Each run writes PNGs under `store/screenshots/<platform>/<device>/<NN-scene>.png
 | iOS | iPad Pro 12.9" | 2048 × 2732 | 12.9" — required tablet set for the Universal build |
 | Android | Phone (360 pt wide) | 1080 × 1920 | Phone screenshots: Play needs at least two, with the long side at most 2.3 times the short side. 9:16 at 1080 px or more is the shape it asks for to recommend an app |
 
-The 1024 × 500 Play Store feature graphic is NOT script-generated; it's a Figma export. See `store/android/full-description.md` for the launch-graphic source link once it exists.
+The 1024 × 500 Play Store feature graphic is NOT script-generated; it is made by hand. The listing assets (feature graphic, 512 px icon) are kept locally in the gitignored `store/screenshots/android/listing/` folder, not in the repo.
 
 ## Five canonical scenes
 
@@ -50,6 +50,8 @@ Edit `scripts/capture-screenshots-shared/seed.cjs` to change the demo account. R
 The Library scene reads the official recipe catalog live from Supabase (the public read any visitor's page load makes), so it needs network access and shows the catalog as it is that day. Recipes published by users are left out, so no user's recipe or display name ends up on a store listing. Every other Supabase request is blocked: a capture run cannot sign in, sync, or write anything.
 
 An output folder from before this scene list changed may still hold `05-signed-in-nav.png`. Delete it; the script does not remove files it no longer writes.
+
+**Known gap:** the seed is currently not applied. `scripts/capture-screenshots.mjs` writes it under `cafelytic:*` storage keys, and the app reads only `cw_*` keys (`src/lib/storage-keys.ts`), so every scene captures its page's default, signed-out state. Scene `05-signed-in-nav` is also out of date: Delete account now lives on the Settings page (`minerals.html`), not in the nav, and the scene loads the Calculator. Until both are fixed (the script seeds the real keys, and scene 05 loads the Settings page signed in), treat its output as page-default captures and take the store screenshots by hand.
 
 ## Verifying
 

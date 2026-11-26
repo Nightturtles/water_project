@@ -48,7 +48,9 @@ await page.addInitScript(() => {
 });
 ```
 
-Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirstBody)` and assert the captured snapshot already carries a `light`/`dark`/`system` theme marker (on `className` or `dataset`). If the probe records a bare element, `theme-init.js` is landing too late — real FOUC.
+Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirstBody)` and assert the captured snapshot already carries `data-theme="light"` or `data-theme="dark"` (`theme-init.js` resolves `system` to one of the two at load and sets only that attribute, never a class). If the probe records a bare element, `theme-init.js` is landing too late — real FOUC.
+
+The spec proves the same thing a different way: it asserts `data-theme` is `light` or `dark` and pins the tag's shape (`theme-init.js` is a synchronous classic `<script>` in `<head>`: no `async`, `defer` or `type`).
 
 ### 6. Sentry is wired (production only)
 - Assert `window.Sentry && typeof window.Sentry.captureException === 'function'`.
@@ -58,4 +60,4 @@ Then after step 1's navigation, `await page.evaluate(() => window.__themeAtFirst
 
 - No console errors.
 - All assertions above pass.
-- No uncaught exceptions surfaced in Sentry within 30s after the run (check the Feed filtered to the last 5 minutes).
+- No uncaught exceptions surfaced in Sentry within 30s after the run (check the Feed filtered to the last 5 minutes). This applies to the prod smoke: on `http://localhost` Sentry does not start (see SENTRY_SETUP.md).

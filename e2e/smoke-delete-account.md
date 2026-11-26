@@ -31,10 +31,14 @@ account, so this is a manual gate by design.
    - Pick a password you don't reuse
    - Confirm the email when Supabase emails you
 3. Sign in, save one recipe, save one custom source-water profile, set a
-   theme, change one of the mineral selections. (You want non-empty data
-   across every cascaded table.)
+   theme, change one of the mineral selections. Then connect an AI app to
+   the throwaway account (MCP.md, "One-time setup" step 6), approve it on
+   the consent page (writes `mcp_app_consent`) and have it save one recipe
+   (writes `mcp_write_quota`). (You want non-empty data across every
+   cascaded table: a table that is empty before the delete is empty after
+   it whether or not its cascade works.)
 4. In the Supabase dashboard, open the SQL editor and confirm rows exist
-   for this user across all five tables:
+   for this user across all seven tables:
 
    ```sql
    select 'user_settings' as t, count(*) from public.user_settings where user_id = '<UID>'
@@ -42,8 +46,14 @@ account, so this is a manual gate by design.
    union all select 'target_profiles_owned', count(*) from public.target_profiles where user_id = '<UID>'
    union all select 'target_profiles_created', count(*) from public.target_profiles where creator_user_id = '<UID>'
    union all select 'user_selections', count(*) from public.user_selections where user_id = '<UID>'
-   union all select 'estimate_water_quota', count(*) from public.estimate_water_quota where user_id = '<UID>';
+   union all select 'estimate_water_quota', count(*) from public.estimate_water_quota where user_id = '<UID>'
+   union all select 'mcp_write_quota', count(*) from public.mcp_write_quota where user_id = '<UID>'
+   union all select 'mcp_app_consent', count(*) from public.mcp_app_consent where user_id = '<UID>';
    ```
+
+   Both `mcp_*` counts must be non-zero here. If either is 0, go back to
+   step 3 and connect the AI app before running the deletion: do not run
+   it with those tables empty.
 
    Note the UID (from auth.users) and the counts.
 

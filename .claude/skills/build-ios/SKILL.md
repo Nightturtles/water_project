@@ -7,7 +7,7 @@ description: Build the web bundle and open the native iOS app in Xcode for this 
 
 Take the latest web source, build it, sync it into the native iOS shell, and open Xcode so the user can run the app on a simulator or device.
 
-This is a Capacitor project: the iOS app is a thin native wrapper that loads the bundled `dist/` over `file://`. The iOS app only reflects web changes after `dist/` is rebuilt and `cap sync` copies it across — that is the whole reason this three-step sequence exists.
+This is a Capacitor project: the iOS app is a thin native wrapper that loads the `dist/` copy bundled inside the app (served locally at `capacitor://localhost`), not the live site. The iOS app only reflects web changes after `dist/` is rebuilt and `cap sync` copies it across — that is the whole reason this three-step sequence exists.
 
 ## Before you start
 

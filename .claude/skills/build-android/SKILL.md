@@ -7,7 +7,7 @@ description: Build the web bundle and open the native Android app in Android Stu
 
 Take the latest web source, build it, sync it into the native Android shell, and open Android Studio so the user can run the app on an emulator or device.
 
-This is a Capacitor project: the Android app is a thin native wrapper that loads the bundled `dist/` over `file://`. The Android app only reflects web changes after `dist/` is rebuilt and `cap sync` copies it across — that is the whole reason this three-step sequence exists.
+This is a Capacitor project: the Android app is a thin native wrapper that loads the `dist/` copy bundled inside the app (served locally at `https://localhost`), not the live site. The Android app only reflects web changes after `dist/` is rebuilt and `cap sync` copies it across — that is the whole reason this three-step sequence exists.
 
 ## Before you start
 
