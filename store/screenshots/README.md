@@ -51,8 +51,6 @@ The Library scene reads the official recipe catalog live from Supabase (the publ
 
 An output folder from before this scene list changed may still hold `05-signed-in-nav.png`. Delete it; the script does not remove files it no longer writes.
 
-**Known gap:** the seed is currently not applied. `scripts/capture-screenshots.mjs` writes it under `cafelytic:*` storage keys, and the app reads only `cw_*` keys (`src/lib/storage-keys.ts`), so every scene captures its page's default, signed-out state. Scene `05-signed-in-nav` is also out of date: Delete account now lives on the Settings page (`minerals.html`), not in the nav, and the scene loads the Calculator. Until both are fixed (the script seeds the real keys, and scene 05 loads the Settings page signed in), treat its output as page-default captures and take the store screenshots by hand.
-
 ## Verifying
 
 Before uploading to the stores:

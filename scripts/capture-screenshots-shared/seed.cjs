@@ -63,9 +63,6 @@ const USER_RECIPE = {
 };
 
 const DEMO_ACCOUNT_STORAGE = {
-  // Keeps a capture run out of the production Sentry project
-  // (src/lib/sentry-init.ts).
-  cafelytic_no_sentry: "1",
   // Marks the account as already on the eight-recipe starter rail. Without
   // it, the saved recipe below reads as "an account from before the starter
   // rail" and every library recipe is added to the rail
