@@ -3,4 +3,7 @@
     <!-- Dark-mode window backdrop. Mirrors the gray-50 token (dark) in style.css.
          Auto-applied by the DayNight theme when the system is in dark mode. -->
     <color name="windowBg">#0f172a</color>
+    <!-- Dark page color of the Android 12+ launch screen. Matches the dark
+         iOS splash (resources/splash-dark.svg). -->
+    <color name="splashBg">#0f172a</color>
 </resources>

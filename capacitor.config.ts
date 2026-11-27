@@ -39,6 +39,10 @@ const config: CapacitorConfig = {
       // The tile sits well within the central third of the source so it
       // survives the crop on every aspect ratio. iOS uses scaleAspectFill
       // via LaunchScreen.storyboard for the equivalent behavior.
+      //
+      // This only applies to Android 11 and older. Android 12+ never shows
+      // the splash PNG: the system draws one icon on a solid color, both
+      // set in android/app/src/main/res/values-v31/styles.xml.
       androidScaleType: "CENTER_CROP",
     },
     StatusBar: {
