@@ -5254,6 +5254,15 @@ body.platform-ios .site-nav {
 body.platform-ios {
   padding-top: env(safe-area-inset-top, 0px);
 }
+/* Android native: the strip stays, but the WebView draws edge to edge under
+   the status bar (Capacitor's SystemBars passes the window insets through on
+   WebView 140+ because the viewport is viewport-fit=cover), so grow the
+   sticky strip by the top inset. Its background then backs the status bar
+   and the brand sits below the clock. On older WebViews Capacitor pads the
+   window natively and reports a zero inset, so this adds nothing there. */
+body.is-capacitor:not(.platform-ios) .site-nav {
+  padding-top: calc(0.5rem + env(safe-area-inset-top, 0px));
+}
 
 /* --- Bottom bar --- */
 .bottom-nav {
