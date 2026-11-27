@@ -12,10 +12,15 @@
 // android/app/src/main/res/. Both commands write into the committed
 // platform trees, so verify the diff before committing.
 //
+// One output skips that second step: the Android 12+ launch-screen icon
+// is written straight into the Android tree, because @capacitor/assets
+// does not generate it.
+//
 // sharp is a direct devDependency, required below. The flatten step on
 // opaque outputs removes the alpha channel, which iOS requires for
 // app-icon PNGs (Apple rejects icons with transparency).
 
+const fs = require("node:fs");
 const path = require("node:path");
 const sharp = require("sharp");
 
@@ -34,12 +39,24 @@ const targets = [
   // them to every device aspect ratio without seeing through the edges.
   { name: "splash", size: 2732, flatten: "#fafaf7" },
   { name: "splash-dark", size: 2732, flatten: "#0f172a" },
+  // The Android 12+ launch-screen icon (see the comment in the SVG).
+  // 1152px is 288dp at the densest bucket; nodpi so Android scales the
+  // one file down rather than picking a per-density copy.
+  {
+    name: "android12-splash-icon",
+    size: 1152,
+    flatten: null,
+    out: "android/app/src/main/res/drawable-nodpi/splash_icon.png",
+  },
 ];
 
 async function main() {
   for (const t of targets) {
     const src = path.join(resourcesDir, `${t.name}.svg`);
-    const dst = path.join(resourcesDir, `${t.name}.png`);
+    const dst = t.out
+      ? path.resolve(__dirname, "..", t.out)
+      : path.join(resourcesDir, `${t.name}.png`);
+    fs.mkdirSync(path.dirname(dst), { recursive: true });
     // density=192 gives ~2.67x supersampling on a 1024 viewBox (renders at
     // ~2730 native, then resampled down to the target size for smoother
     // text edges than the default density=72 produces).

@@ -1,0 +1,28 @@
+<!--
+  Source for the Android 12+ launch-screen icon
+  (windowSplashScreenAnimatedIcon in values-v31/styles.xml). Android 12+
+  ignores the full-screen splash PNGs and draws one centered icon on a
+  solid color instead; without this file it falls back to the launcher
+  icon, a small bitmap that blurs when stretched to splash size.
+
+  The system treats the icon as a 288dp square and only shows what falls
+  inside the centered circle two thirds as wide (768 of this 1152
+  canvas), so the tile is scaled to 0.55 to keep its rounded corners
+  inside that circle. The tile itself is the same composition as
+  splash.svg, so the launch screen matches iOS. Transparent background:
+  the page color comes from windowSplashScreenBackground.
+
+  scripts/generate-asset-pngs.cjs rasterizes this straight into
+  android/app/src/main/res/drawable-nodpi/splash_icon.png
+  (@capacitor/assets does not know about this icon).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1152 1152">
+  <g transform="translate(294.4, 294.4) scale(0.55)">
+    <rect width="1024" height="1024" rx="160" fill="#111C2E" stroke="#4B8FE0" stroke-width="48"/>
+    <text x="180" y="240" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="140" fill="#3A5272">20</text>
+    <text x="512" y="640" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="440" font-weight="500" fill="#4B8FE0">Ca</text>
+    <text x="512" y="860" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="120">
+      <tspan fill="#4B8FE0">cafe</tspan><tspan fill="#E8EEF8">lytic</tspan>
+    </text>
+  </g>
+</svg>

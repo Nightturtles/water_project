@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!-- Android 12+ launch screen. From API 31 the system draws the launch
+         screen itself: one centered icon on a solid color. It ignores the
+         full-screen @drawable/splash and, left alone, uses the launcher
+         icon, which is a small bitmap that blurs at this size.
+
+         So this names a dedicated high-resolution icon (the same Ca tile
+         the iOS launch screen shows; source
+         resources/android12-splash-icon.svg) and the page color behind it
+         (cream in light mode, slate in dark, from values/ and
+         values-night/colors.xml).
+
+         Kept in values-v31 so Android 11 and older, where the splash is
+         still the full-screen image, are left exactly as they were. -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="android:background">@drawable/splash</item>
+        <item name="windowSplashScreenBackground">@color/splashBg</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/splash_icon</item>
+    </style>
+</resources>

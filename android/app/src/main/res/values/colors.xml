@@ -4,4 +4,8 @@
          navigations. Mirrors the gray-50 token (light) in style.css;
          values-night/ supplies the dark variant. Stops the black inter-page flash. -->
     <color name="windowBg">#f8fafc</color>
+    <!-- Page color of the Android 12+ launch screen (values-v31/styles.xml).
+         Matches the light iOS splash (resources/splash.svg) and
+         SplashScreen.backgroundColor in capacitor.config.ts. -->
+    <color name="splashBg">#fafaf7</color>
 </resources>
