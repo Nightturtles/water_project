@@ -42,6 +42,8 @@ const config: CapacitorConfig = {
       androidScaleType: "CENTER_CROP",
     },
     StatusBar: {
+      // Only the style before the web layer loads. initStatusBar() in
+      // src/lib/capacitor-bootstrap.ts then sets it from the app's own theme.
       style: "DEFAULT",
       // Android-only. iOS reads UIViewControllerBasedStatusBarAppearance
       // from Info.plist and the bar color from the WebView's safe-area
