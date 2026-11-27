@@ -87,7 +87,10 @@ function whatIsBehindTheBars(): "page" | "window" | "opaque" {
   const ua = navigator.userAgent;
   const android = Number(/Android (\d+)/.exec(ua)?.[1]);
   const webView = Number(/Chrome\/(\d+)/.exec(ua)?.[1]);
-  if (!(android >= 15)) return "opaque";
+  // A WebView may send the reduced User-Agent, which says "Android 10; K" on
+  // every device. Only Android 16 and newer do that, so it counts as new.
+  const reduced = /Android 10; K[;)]/.test(ua);
+  if (!(android >= 15) && !reduced) return "opaque";
   return webView >= 140 ? "page" : "window";
 }
 
