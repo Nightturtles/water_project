@@ -14,7 +14,7 @@
 // share sheet, deep-link listener) gate on Capacitor.isNativePlatform(), so
 // the public web continues to behave exactly as before this PR.
 
-import { Capacitor } from "@capacitor/core";
+import { Capacitor, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
 import { App, type URLOpenListenerEvent } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
@@ -33,9 +33,11 @@ import {
 // page over the network.
 const PRIVACY_POLICY_URL = "https://cafelytic.com/privacy";
 
-// Matches the launch background in capacitor.config.ts so the WebView paints
-// the same color the splash screen was showing, avoiding a flash on hand-off.
-const NATIVE_BG = "#fafaf7";
+// Status bar background per app theme, for Android 14 and older, the only
+// place the bar is a solid color (see whatIsBehindTheBars). Light matches
+// the launch background in capacitor.config.ts so the bar does not change color
+// on hand-off from the splash; dark matches --surface, the brand strip's color.
+const STATUS_BAR_BG = { light: "#fafaf7", dark: "#1e293b" };
 
 if (Capacitor.isNativePlatform()) {
   bootstrap();
@@ -49,9 +51,66 @@ function bootstrap(): void {
   bindPrivacyLinkInterceptor();
 }
 
+// The system bar icons must follow the app's resolved theme (data-theme on
+// <html>), not the device theme: the user can pick Light in Settings on a phone
+// in dark mode, and the page is what sits behind the bars. The native
+// "default" style follows the device, which left white icons on a white page
+// on Android. The native setting outlives page navigations, so each page only
+// has to apply its own theme and then follow changes to it.
 function initStatusBar(): void {
-  StatusBar.setStyle({ style: Style.Default }).catch(() => {});
-  StatusBar.setBackgroundColor({ color: NATIVE_BG }).catch(() => {});
+  const behind = whatIsBehindTheBars();
+  // Nothing to follow: the bars sit on the device-themed window background,
+  // and the default style already matches that.
+  if (behind === "window") return;
+  const sync = () => syncSystemBars(behind);
+  sync();
+  // data-theme is written by theme-init.js and applyTheme() (the Settings
+  // radios, and a device theme flip while the preference is "system").
+  // Watching the attribute covers every writer.
+  new MutationObserver(sync).observe(document.documentElement, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+}
+
+// What the system bars are drawn over, which decides whose theme their icons
+// must match:
+// - "page": iOS, and Android 15+ with WebView 140+, where the app draws edge
+//   to edge and the page shows through both bars.
+// - "window": Android 15+ with an older WebView. Capacitor insets the WebView
+//   there (its SystemBars plugin, WEBVIEW_VERSION_WITH_SAFE_AREA_FIX), so the
+//   bars show the native window background, which follows the device theme.
+// - "opaque": Android 14 and older. The status bar is a solid color this file
+//   sets; the navigation bar is the system's own, in the device theme.
+function whatIsBehindTheBars(): "page" | "window" | "opaque" {
+  if (Capacitor.getPlatform() !== "android") return "page";
+  const ua = navigator.userAgent;
+  const android = Number(/Android (\d+)/.exec(ua)?.[1]);
+  const webView = Number(/Chrome\/(\d+)/.exec(ua)?.[1]);
+  // A WebView may send the reduced User-Agent, which says "Android 10; K" on
+  // every device. Only Android 16 and newer do that, so it counts as new.
+  const reduced = /Android 10; K[;)]/.test(ua);
+  if (!(android >= 15) && !reduced) return "opaque";
+  return webView >= 140 ? "page" : "window";
+}
+
+function syncSystemBars(behind: "page" | "opaque"): void {
+  const dark = document.documentElement.getAttribute("data-theme") === "dark";
+  // In both enums "Dark" means a dark background, so light icons.
+  //
+  // Both plugins are told, because on Android each re-applies the style it
+  // remembers when the device theme changes: left at its default, the
+  // StatusBar plugin would put the device's style back.
+  StatusBar.setStyle({ style: dark ? Style.Dark : Style.Light }).catch(() => {});
+  if (behind === "opaque") {
+    const color = dark ? STATUS_BAR_BG.dark : STATUS_BAR_BG.light;
+    StatusBar.setBackgroundColor({ color }).catch(() => {});
+  }
+  SystemBars.setStyle({
+    style: dark ? SystemBarsStyle.Dark : SystemBarsStyle.Light,
+    // Omitting `bar` styles both; an opaque navigation bar keeps the default.
+    bar: behind === "page" ? undefined : SystemBarType.StatusBar,
+  }).catch(() => {});
 }
 
 // Minimum splash visibility. On fast devices the page is ready ~250ms after
