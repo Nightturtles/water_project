@@ -105,15 +105,17 @@
          Google Analytics (src/lib/capacitor-bootstrap.ts): app opens,
          sessions and the name of each page opened; the app-instance ID, a
          random ID for one installation (no IDFA, no IDFV); and the general
-         location Google derives from the IP address. Declared as not linked:
-         nothing ties them to an account. The reasoning is in
+         location Google derives from the IP address. Declared as linked: no
+         account is involved, but the app-instance ID ties the events from
+         one installation together, and Apple counts linkage through the
+         device. The reasoning is in
          store/shared/data-safety.md; change that file, this one and the
          App Store label together. -->
     <dict>
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeProductInteraction</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <false/>
+      <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -125,7 +127,7 @@
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeDeviceID</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <false/>
+      <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
@@ -137,7 +139,7 @@
       <key>NSPrivacyCollectedDataType</key>
       <string>NSPrivacyCollectedDataTypeCoarseLocation</string>
       <key>NSPrivacyCollectedDataTypeLinked</key>
-      <false/>
+      <true/>
       <key>NSPrivacyCollectedDataTypeTracking</key>
       <false/>
       <key>NSPrivacyCollectedDataTypePurposes</key>
