@@ -60,5 +60,16 @@
 			</array>
 		</dict>
 	</array>
+	<!-- Firebase Analytics: count app usage only. The page reports its own
+	     screen views (src/lib/capacitor-bootstrap.ts), so the SDK's automatic
+	     ones are off; no vendor ID, no ad personalization. The advertising ID
+	     is excluded at build time (capacitor.config.ts). Keep in step with
+	     AndroidManifest.xml and store/shared/data-safety.md. -->
+	<key>FirebaseAutomaticScreenReportingEnabled</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_IDFV_COLLECTION_ENABLED</key>
+	<false/>
+	<key>GOOGLE_ANALYTICS_DEFAULT_ALLOW_AD_PERSONALIZATION_SIGNALS</key>
+	<false/>
 </dict>
 </plist>

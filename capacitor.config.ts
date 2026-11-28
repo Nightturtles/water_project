@@ -9,6 +9,22 @@ const config: CapacitorConfig = {
   // the native app into a thin WebView shell over cafelytic.com, which
   // (a) defeats offline, (b) fails Apple 4.2, and (c) re-opens the CDN
   // load-order issues PR h just fixed.
+  experimental: {
+    ios: {
+      spm: {
+        // Package traits need Swift tools 6.1 (Xcode 16.3 or later).
+        swiftToolsVersion: "6.1",
+        packageOptions: {
+          // Avoids a SwiftPM package identity collision (plugin README).
+          "@capacitor-firebase/analytics": { symlink: true },
+        },
+        packageTraits: {
+          // Build Firebase Analytics without AdSupport, so no IDFA is read.
+          "@capacitor-firebase/analytics": ["AnalyticsWithoutAdIdSupport"],
+        },
+      },
+    },
+  },
   plugins: {
     SplashScreen: {
       // The splash must outlive the cold-start JS parse (a fresh install

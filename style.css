@@ -1714,7 +1714,8 @@ select:focus {
   font-size: 0.95rem;
 }
 
-.radio-option input[type="radio"] {
+.radio-option input[type="radio"],
+.radio-option input[type="checkbox"] {
   accent-color: var(--blue-600);
 }
 

@@ -65,8 +65,8 @@ the throwaway account.
 ### Step 1: Section visibility + copy
 Open Settings (More -> Settings on mobile, the Settings link in the top nav on
 desktop). Scroll to the bottom. Confirm:
-- "Delete account" is the last card, directly below the Theme section
-- It appears only while signed in (signed out, the page ends at Theme)
+- "Delete account" is the last card, directly below the Usage analytics section
+- It appears only while signed in (signed out, the page ends at Usage analytics)
 - The button text is exactly "Delete account" (capitalization matters for
   store-review compliance checklists)
 - It's styled as a subdued red destructive button, not a loud fill

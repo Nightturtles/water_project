@@ -120,6 +120,19 @@
       </div>
     </section>
 
+    <!-- Usage analytics: a per-device switch, on every platform.
+         Wired by mountAnalyticsSetting() in src/components/ui-shared.ts. -->
+    <section class="card" id="analytics-section">
+      <h2>Usage analytics</h2>
+      <p class="hint">Cafelytic counts visits and page views to see which features people use. No advertising ID is collected. This choice applies to this device only.</p>
+      <div class="radio-group">
+        <label class="radio-option">
+          <input type="checkbox" id="analytics-enabled" checked>
+          <span>Share usage data</span>
+        </label>
+      </div>
+    </section>
+
     <!-- Delete account: last section, shown only to signed-in users.
          Revealed + wired by mountDeleteAccountSetting() in src/components/ui-shared.ts. -->
     <section class="card" id="delete-account-section" hidden>

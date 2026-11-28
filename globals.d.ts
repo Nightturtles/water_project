@@ -320,6 +320,7 @@ declare global {
     // surface, since "haptic didn't fire" is invisible to the user.
     cwHaptic?: (style?: "light" | "medium" | "heavy") => void;
     cwNativeShare?: (opts: { title?: string; text?: string; url?: string }) => void;
+    cwSetNativeAnalyticsEnabled?: (enabled: boolean) => void;
     // Capacitor runtime object, present on iOS / Android once
     // src/lib/capacitor-bootstrap.ts imports @capacitor/core. On web the
     // import still runs (window.Capacitor IS defined), but

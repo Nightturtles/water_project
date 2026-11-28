@@ -11,3 +11,7 @@ capacitor-cordova-ios-plugins
 # Generated Config files
 App/App/capacitor.config.json
 App/App/config.xml
+
+# Capacitor CLI writes absolute-path symlinks here on every `cap sync`
+# (experimental.ios.spm.packageOptions in capacitor.config.ts).
+App/CapApp-SPM/symlinks/

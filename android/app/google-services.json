@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "342936571280",
+    "project_id": "cafelytic",
+    "storage_bucket": "cafelytic.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:342936571280:android:863d026316c0794f85f715",
+        "android_client_info": {
+          "package_name": "com.cafelytic.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDe5ih5WcEEUPH80Jyt6EluP7AVGj97xqQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
