@@ -14,7 +14,14 @@
 // share sheet, deep-link listener) gate on Capacitor.isNativePlatform(), so
 // the public web continues to behave exactly as before this PR.
 
-import { Capacitor, SystemBars, SystemBarsStyle, SystemBarType } from "@capacitor/core";
+import {
+  Capacitor,
+  registerPlugin,
+  SystemBars,
+  SystemBarsStyle,
+  SystemBarType,
+} from "@capacitor/core";
+import type { FirebaseAnalyticsPlugin } from "@capacitor-firebase/analytics";
 import { App, type URLOpenListenerEvent } from "@capacitor/app";
 import { Browser } from "@capacitor/browser";
 import { Haptics, ImpactStyle } from "@capacitor/haptics";
@@ -26,6 +33,7 @@ import {
   noteAuthCallbackAdopted,
   verifiedCallbackTokens,
 } from "./supabase-client";
+import { analyticsAllowed, deviceStorage, screenNameFor } from "./usage-analytics";
 
 // Public privacy-policy URL, registered with both app stores. Hard-coded
 // rather than derived from window.location.origin because on native the
@@ -39,6 +47,13 @@ const PRIVACY_POLICY_URL = "https://cafelytic.com/privacy";
 // on hand-off from the splash; dark matches --surface, the brand strip's color.
 const STATUS_BAR_BG = { light: "#fafaf7", dark: "#1e293b" };
 
+// Cache for nativeAnalytics(). Declared above the bootstrap() call below on
+// purpose: bootstrap() runs initNativeAnalytics() during module evaluation, and
+// a `let` further down the file would still be uninitialized then. The
+// production bundle happens to emit it as a hoisted `var`, which hid the
+// ordering; the dev server's unbundled module does not.
+let nativeAnalyticsPlugin: FirebaseAnalyticsPlugin | null = null;
+
 if (Capacitor.isNativePlatform()) {
   bootstrap();
 }
@@ -47,6 +62,7 @@ function bootstrap(): void {
   initStatusBar();
   hideSplashAfterPaint();
   exposeGlobals();
+  initNativeAnalytics();
   registerDeepLinkListener();
   bindPrivacyLinkInterceptor();
 }
@@ -159,6 +175,44 @@ function exposeGlobals(): void {
   window.cwNativeShare = (opts: { title?: string; text?: string; url?: string }) => {
     Share.share(opts).catch(() => {});
   };
+
+  // The Settings switch (mountAnalyticsSetting in ui-shared.ts) calls this so
+  // a change applies to the SDK straight away, not on the next page.
+  window.cwSetNativeAnalyticsEnabled = (enabled: boolean) => {
+    nativeAnalytics()
+      .setEnabled({ enabled })
+      .catch(() => {});
+  };
+}
+
+// The native half of @capacitor-firebase/analytics, looked up by the name its
+// iOS and Android code registers. The package's JS entry is deliberately not
+// imported (only its types are): that entry carries a web implementation built
+// on the Firebase JS SDK, which the website never uses (it has gtag.js) and
+// should not ship. Its cache, nativeAnalyticsPlugin, is declared at the top of
+// the file.
+function nativeAnalytics(): FirebaseAnalyticsPlugin {
+  nativeAnalyticsPlugin ??= registerPlugin<FirebaseAnalyticsPlugin>("FirebaseAnalytics");
+  return nativeAnalyticsPlugin;
+}
+
+// Usage analytics for the native apps (see usage-analytics.ts for why they do
+// not use gtag.js). The SDK counts active users and sessions by itself; the one
+// thing it cannot see is which page is open, because the whole app is a single
+// native screen. Each page is a full document load, so one screen view here per
+// load is one per page. The SDK's own screen reporting is switched off in
+// Info.plist and AndroidManifest.xml, or every launch would add a second,
+// unnamed view.
+//
+// The SDK remembers setEnabled across launches, but it is sent on every page
+// anyway so the SDK can never disagree with the device's opt-out flag (which
+// the `?no-analytics=1` web switch and a restored backup can also change).
+function initNativeAnalytics(): void {
+  const enabled = analyticsAllowed(deviceStorage());
+  const analytics = nativeAnalytics();
+  analytics.setEnabled({ enabled }).catch(() => {});
+  if (!enabled) return;
+  analytics.setCurrentScreen({ screenName: screenNameFor(location.pathname) }).catch(() => {});
 }
 
 // Intercept clicks on the in-app "Privacy policy" link and open it in

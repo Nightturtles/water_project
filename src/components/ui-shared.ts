@@ -25,6 +25,12 @@ import {
   saveCreatorDisplayName,
   loadThemePreference,
 } from "../lib/storage";
+import {
+  MEASUREMENT_ID,
+  analyticsOptedOut,
+  deviceStorage,
+  setAnalyticsOptOut,
+} from "../lib/usage-analytics";
 
 // --- Non-negative number input reader ---
 export function readNonNegative(el: HTMLInputElement): number {
@@ -1044,6 +1050,46 @@ async function mountDeleteAccountSetting(): Promise<void> {
   }
 }
 
+// Settings page: the "Usage analytics" switch. One per-device flag covers both
+// reporting paths (see src/lib/usage-analytics.ts): the website's gtag.js and
+// the native apps' Firebase SDK.
+//
+// Turning it off takes effect at once. On the website the `ga-disable-<id>`
+// window property is Google's own switch for a tag that is already loaded; the
+// flag then keeps the tag from loading on later pages. On native the SDK is
+// told directly. Turning it back on resumes with the next page.
+function mountAnalyticsSetting(): void {
+  const box = document.getElementById("analytics-enabled") as HTMLInputElement | null;
+  if (!box) return; // not the Settings page
+  const storage = deviceStorage();
+  if (!storage) {
+    // The browser blocks site storage, so there is nowhere to keep the choice.
+    // Nothing is being shared either: the website's gate reads the same
+    // storage and gives up before loading gtag.js (analytics-init.ts). Show
+    // that, rather than a switch that looks live and saves nothing.
+    box.checked = false;
+    box.disabled = true;
+    const note = document.createElement("p");
+    note.className = "hint";
+    note.id = "analytics-unavailable";
+    note.textContent =
+      "This browser is blocking site storage, so no usage data is shared and this choice cannot be saved here.";
+    box.closest(".radio-group")?.after(note);
+    return;
+  }
+  box.checked = !analyticsOptedOut(storage);
+  box.addEventListener("change", () => {
+    const enabled = box.checked;
+    if (!setAnalyticsOptOut(storage, !enabled)) {
+      // Storage refused the write: show the choice that is actually in force.
+      box.checked = !analyticsOptedOut(storage);
+      return;
+    }
+    (window as unknown as Record<string, unknown>)["ga-disable-" + MEASUREMENT_ID] = !enabled;
+    window.cwSetNativeAnalyticsEnabled?.(enabled);
+  });
+}
+
 async function _updateNavAuth(authWrap: HTMLElement, currentPage: string): Promise<void> {
   if (typeof window.supabaseClient === "undefined") return;
   try {
@@ -1750,6 +1796,7 @@ document.addEventListener("DOMContentLoaded", () => {
   // Settings page only: reveal + wire the "Delete account" section for
   // signed-in users (no-ops on every other page).
   mountDeleteAccountSetting();
+  mountAnalyticsSetting();
   showAccountDeletedFlashIfPending();
   injectAppStoreCallout();
 });

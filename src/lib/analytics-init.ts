@@ -4,6 +4,11 @@
 // bootstraps gtag.js. The gate keeps dev, automated-test, and opted-out traffic
 // out of Cafelytic's GA active-user count.
 //
+// Website only. The native apps load from a "localhost" origin, so the hostname
+// rule below keeps gtag.js off there, and it could not work anyway (see
+// usage-analytics.ts). They report through the Firebase Analytics SDK, started
+// from capacitor-bootstrap.ts.
+//
 // Phase 3: converted from the classic analytics-init.js IIFE. Loaded via
 // legacy-globals.ts (imported as a side-effect, right after sentry-init) rather
 // than the render-blocking <head> <script> it used to be. GA's own gtag/js tag
@@ -14,7 +19,7 @@
 // gtag) live in globals.d.ts.
 // =============================================================================
 
-const MEASUREMENT_ID = "G-BGJWVRGJJC";
+import { ANALYTICS_OPT_OUT_KEY, MEASUREMENT_ID } from "./usage-analytics";
 
 // Minimal structural shapes, typed to exactly what each helper touches, so both
 // the real DOM objects (Location / History / Storage) and the test's fakes
@@ -59,11 +64,11 @@ export function handleOptOutURLParam(
     if (v === "1") {
       optedOutNow = true;
       try {
-        storage.setItem("cafelytic_no_analytics", "1");
+        storage.setItem(ANALYTICS_OPT_OUT_KEY, "1");
       } catch (e) {}
     } else if (v === "0") {
       try {
-        storage.removeItem("cafelytic_no_analytics");
+        storage.removeItem(ANALYTICS_OPT_OUT_KEY);
       } catch (e) {}
     }
     params.delete("no-analytics");
@@ -90,7 +95,7 @@ export function shouldLoadAnalytics(env: AnalyticsEnv): boolean {
   }
   if (env.webdriver === true) return false;
   try {
-    if (env.storage.getItem("cafelytic_no_analytics") === "1") return false;
+    if (env.storage.getItem(ANALYTICS_OPT_OUT_KEY) === "1") return false;
   } catch (e) {}
   return true;
 }
