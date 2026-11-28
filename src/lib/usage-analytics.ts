@@ -30,6 +30,18 @@ interface FlagStorage {
   removeItem(key: string): void;
 }
 
+// The device's localStorage, or null where the browser refuses access to it.
+// Under a policy that blocks site storage, merely reading the `localStorage`
+// global throws a SecurityError, before any helper below could catch it, so
+// callers get the storage object through here.
+export function deviceStorage(): Storage | null {
+  try {
+    return typeof localStorage === "undefined" ? null : localStorage;
+  } catch (_) {
+    return null;
+  }
+}
+
 // True when this device has opted out. Storage that throws (privacy modes,
 // sandboxed frames) reads as "not opted out", matching analytics-init.ts.
 export function analyticsOptedOut(storage: Pick<FlagStorage, "getItem">): boolean {

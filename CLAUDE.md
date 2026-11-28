@@ -58,7 +58,7 @@ Usage is counted in one Google Analytics property through three streams. The web
 
 One per-device flag, `localStorage.cafelytic_no_analytics`, turns both paths off. Settings has a "Share usage data" switch for it (`mountAnalyticsSetting` in `src/components/ui-shared.ts`).
 
-To check native events, build with normal local signing (an unsigned simulator build cannot reach the keychain, and Firebase then has no installation ID), launch with `-FIRAnalyticsDebugEnabled` on iOS or `adb shell setprop debug.firebase.analytics.app com.cafelytic.app` on Android, and read the SDK's log: `xcrun simctl spawn <udid> log stream --level debug --predicate 'subsystem BEGINSWITH "com.google.firebase"'` (debug-level lines are not kept, so `log show` misses them) or `adb logcat -s FA FA-SVC` after `setprop log.tag.FA VERBOSE` and `setprop log.tag.FA-SVC VERBOSE`. "Successful upload" with code 204 means Google accepted the batch.
+To check native events, build with normal local signing (an unsigned simulator build cannot reach the keychain, and Firebase then has no installation ID), launch with `-FIRAnalyticsDebugEnabled` on iOS or `adb shell setprop debug.firebase.analytics.app com.cafelytic.app` on Android, and read the SDK's log: `xcrun simctl spawn <udid> log stream --level debug --predicate 'subsystem BEGINSWITH "com.google.firebase"'` (debug-level lines are not kept, so `log show` misses them) or `adb logcat -s FA FA-SVC` after `adb shell setprop log.tag.FA VERBOSE` and `adb shell setprop log.tag.FA-SVC VERBOSE`. "Successful upload" with code 204 means Google accepted the batch.
 
 ### Analytics on localhost
 

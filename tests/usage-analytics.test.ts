@@ -1,10 +1,11 @@
 // Unit tests for the helpers the website's gtag.js gate and the native apps'
 // Firebase reporting share (src/lib/usage-analytics.ts).
 
-import { describe, test, expect } from "vitest";
+import { afterEach, describe, test, expect } from "vitest";
 import {
   ANALYTICS_OPT_OUT_KEY,
   analyticsOptedOut,
+  deviceStorage,
   setAnalyticsOptOut,
   screenNameFor,
 } from "../src/lib/usage-analytics";
@@ -35,6 +36,32 @@ const throwingStorage = {
     throw new Error("blocked");
   },
 };
+
+describe("deviceStorage", () => {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  afterEach(() => {
+    if (original) Object.defineProperty(globalThis, "localStorage", original);
+    else delete (globalThis as { localStorage?: unknown }).localStorage;
+  });
+
+  test("returns the storage object when the browser allows it", () => {
+    const storage = makeStorage();
+    Object.defineProperty(globalThis, "localStorage", { configurable: true, value: storage });
+    expect(deviceStorage()).toBe(storage);
+  });
+
+  // With site storage blocked, reading the global itself throws, before a
+  // helper that takes the storage as an argument could catch anything.
+  test("returns null when reading the global throws", () => {
+    Object.defineProperty(globalThis, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("SecurityError");
+      },
+    });
+    expect(deviceStorage()).toBeNull();
+  });
+});
 
 describe("analyticsOptedOut", () => {
   test("is false with no flag", () => {

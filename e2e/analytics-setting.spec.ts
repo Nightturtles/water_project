@@ -44,6 +44,25 @@ test.describe("minerals.html — Usage analytics switch", () => {
     await expect(box).toBeChecked();
   });
 
+  // With site storage blocked, reading `localStorage` throws. The switch has
+  // nowhere to keep a choice, so it must not look live.
+  test("with storage blocked the switch is off, disabled and says why", async ({ page }) => {
+    await page.addInitScript(() => {
+      Object.defineProperty(window, "localStorage", {
+        configurable: true,
+        get() {
+          throw new DOMException("The operation is insecure.", "SecurityError");
+        },
+      });
+    });
+    await page.goto("/minerals.html");
+
+    const box = page.locator("#analytics-enabled");
+    await expect(box).toBeDisabled();
+    await expect(box).not.toBeChecked();
+    await expect(page.locator("#analytics-unavailable")).toContainText("blocking site storage");
+  });
+
   // The website's `?no-analytics=1` switch writes the same flag, so a device
   // opted out that way shows the switch off.
   test("a device opted out by the URL switch loads with the switch off", async ({ page }) => {

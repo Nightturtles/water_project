@@ -33,7 +33,7 @@ import {
   noteAuthCallbackAdopted,
   verifiedCallbackTokens,
 } from "./supabase-client";
-import { analyticsOptedOut, screenNameFor } from "./usage-analytics";
+import { analyticsOptedOut, deviceStorage, screenNameFor } from "./usage-analytics";
 
 // Public privacy-policy URL, registered with both app stores. Hard-coded
 // rather than derived from window.location.origin because on native the
@@ -46,6 +46,13 @@ const PRIVACY_POLICY_URL = "https://cafelytic.com/privacy";
 // the launch background in capacitor.config.ts so the bar does not change color
 // on hand-off from the splash; dark matches --surface, the brand strip's color.
 const STATUS_BAR_BG = { light: "#fafaf7", dark: "#1e293b" };
+
+// Cache for nativeAnalytics(). Declared above the bootstrap() call below on
+// purpose: bootstrap() runs initNativeAnalytics() during module evaluation, and
+// a `let` further down the file would still be uninitialized then. The
+// production bundle happens to emit it as a hoisted `var`, which hid the
+// ordering; the dev server's unbundled module does not.
+let nativeAnalyticsPlugin: FirebaseAnalyticsPlugin | null = null;
 
 if (Capacitor.isNativePlatform()) {
   bootstrap();
@@ -182,8 +189,8 @@ function exposeGlobals(): void {
 // iOS and Android code registers. The package's JS entry is deliberately not
 // imported (only its types are): that entry carries a web implementation built
 // on the Firebase JS SDK, which the website never uses (it has gtag.js) and
-// should not ship.
-let nativeAnalyticsPlugin: FirebaseAnalyticsPlugin | null = null;
+// should not ship. Its cache, nativeAnalyticsPlugin, is declared at the top of
+// the file.
 function nativeAnalytics(): FirebaseAnalyticsPlugin {
   nativeAnalyticsPlugin ??= registerPlugin<FirebaseAnalyticsPlugin>("FirebaseAnalytics");
   return nativeAnalyticsPlugin;
@@ -201,7 +208,8 @@ function nativeAnalytics(): FirebaseAnalyticsPlugin {
 // anyway so the SDK can never disagree with the device's opt-out flag (which
 // the `?no-analytics=1` web switch and a restored backup can also change).
 function initNativeAnalytics(): void {
-  const enabled = !analyticsOptedOut(localStorage);
+  const storage = deviceStorage();
+  const enabled = !(storage && analyticsOptedOut(storage));
   const analytics = nativeAnalytics();
   analytics.setEnabled({ enabled }).catch(() => {});
   if (!enabled) return;
