@@ -4,6 +4,7 @@
 import { afterEach, describe, test, expect } from "vitest";
 import {
   ANALYTICS_OPT_OUT_KEY,
+  analyticsAllowed,
   analyticsOptedOut,
   deviceStorage,
   setAnalyticsOptOut,
@@ -76,6 +77,24 @@ describe("analyticsOptedOut", () => {
 
   test("reads blocked storage as not opted out", () => {
     expect(analyticsOptedOut(throwingStorage)).toBe(false);
+  });
+});
+
+// What the native apps pass to the Firebase SDK's enable switch on every page.
+describe("analyticsAllowed", () => {
+  test("is true with readable storage and no opt-out", () => {
+    expect(analyticsAllowed(makeStorage())).toBe(true);
+  });
+
+  test("is false once the device has opted out", () => {
+    expect(analyticsAllowed(makeStorage({ [ANALYTICS_OPT_OUT_KEY]: "1" }))).toBe(false);
+  });
+
+  // No storage means the opt-out can be neither read nor saved. Collecting
+  // then could re-enable a device that had opted out, while Settings says
+  // nothing is shared.
+  test("is false when storage is unavailable", () => {
+    expect(analyticsAllowed(null)).toBe(false);
   });
 });
 

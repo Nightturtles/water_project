@@ -52,6 +52,16 @@ export function analyticsOptedOut(storage: Pick<FlagStorage, "getItem">): boolea
   }
 }
 
+// Whether usage data may be collected on this device, given what
+// deviceStorage() returned. With storage unavailable the answer is no: the
+// opt-out could not be read, and could not have been saved either, so nothing
+// is collected rather than risk collecting against a choice the device cannot
+// show. This is what the website already does (its gate gives up before
+// loading gtag.js), and what the Settings switch tells the user in that state.
+export function analyticsAllowed(storage: Pick<FlagStorage, "getItem"> | null): boolean {
+  return storage !== null && !analyticsOptedOut(storage);
+}
+
 // Record the choice. Returns false when storage refused the write, so the
 // caller can put the switch back instead of showing a choice that did not
 // stick.

@@ -33,7 +33,7 @@ import {
   noteAuthCallbackAdopted,
   verifiedCallbackTokens,
 } from "./supabase-client";
-import { analyticsOptedOut, deviceStorage, screenNameFor } from "./usage-analytics";
+import { analyticsAllowed, deviceStorage, screenNameFor } from "./usage-analytics";
 
 // Public privacy-policy URL, registered with both app stores. Hard-coded
 // rather than derived from window.location.origin because on native the
@@ -208,8 +208,7 @@ function nativeAnalytics(): FirebaseAnalyticsPlugin {
 // anyway so the SDK can never disagree with the device's opt-out flag (which
 // the `?no-analytics=1` web switch and a restored backup can also change).
 function initNativeAnalytics(): void {
-  const storage = deviceStorage();
-  const enabled = !(storage && analyticsOptedOut(storage));
+  const enabled = analyticsAllowed(deviceStorage());
   const analytics = nativeAnalytics();
   analytics.setEnabled({ enabled }).catch(() => {});
   if (!enabled) return;
